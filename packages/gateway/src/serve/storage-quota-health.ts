@@ -12,6 +12,7 @@
  */
 
 import type { UsageByStore } from '@centraid/backup';
+
 import { formatBytes } from './disk-health.js';
 import type { HealthProbe } from './health-registry.js';
 
@@ -40,15 +41,23 @@ export function createStorageQuotaHealthProbe(options: StorageQuotaHealthOptions
   return async () => {
     const connections = (await options.connections()).filter((c) => c.kind === 'provider');
     if (connections.length === 0) {
-      return { status: 'ok', detail: 'no provider-kind storage connections configured' };
+      return {
+        status: 'ok',
+        detail: 'no provider-kind storage connections configured',
+      };
     }
 
     const errors: string[] = [];
     const degraded: string[] = [];
     let meteredCount = 0;
 
-    for (const conn of connections) {
-      const { providerReported } = await options.usageFor(conn.connectionId);
+    const usage = await Promise.all(
+      connections.map(async (conn) => ({
+        conn,
+        providerReported: (await options.usageFor(conn.connectionId)).providerReported,
+      })),
+    );
+    for (const { conn, providerReported } of usage) {
       if (!providerReported) continue;
       for (const storeClass of STORE_CLASSES) {
         const report = providerReported[storeClass];
@@ -66,8 +75,14 @@ export function createStorageQuotaHealthProbe(options: StorageQuotaHealthOptions
     if (errors.length > 0) return { status: 'error', detail: errors.join('; ') };
     if (degraded.length > 0) return { status: 'degraded', detail: degraded.join('; ') };
     if (meteredCount === 0) {
-      return { status: 'ok', detail: 'unmetered — no provider-reported quota yet' };
+      return {
+        status: 'ok',
+        detail: 'unmetered — no provider-reported quota yet',
+      };
     }
-    return { status: 'ok', detail: `${meteredCount} metered store(s) within quota` };
+    return {
+      status: 'ok',
+      detail: `${meteredCount} metered store(s) within quota`,
+    };
   };
 }

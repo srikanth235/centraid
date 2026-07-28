@@ -323,7 +323,12 @@ export class BackupProviderError extends Error {
     message: string,
     details?: BackupProviderErrorDetails,
   ): BackupProviderError {
-    return new BackupProviderError({ status: CODE_STATUS[code], code, message, details });
+    return new BackupProviderError({
+      status: CODE_STATUS[code],
+      code,
+      message,
+      details,
+    });
   }
 }
 

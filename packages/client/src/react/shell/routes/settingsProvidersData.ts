@@ -1,6 +1,6 @@
+import type { CentraidAgentStatusEntry } from '../../../centraid-api.js';
 import { getAgentsStatus, getUserPrefs, saveUserPrefs } from '../../../gateway-client.js';
 import type { AgentRunnerKind, AgentsStatusDTO, ModelSubsystem } from '../../screen-contracts.js';
-import type { CentraidAgentStatusEntry } from '../../../centraid-api.js';
 
 // Providers (agents) console data. Centraid runs the user's installed
 // coding-agent CLIs in place; the gateway reports which are runnable on its
@@ -258,7 +258,12 @@ function toCard(entry: CentraidAgentStatusEntry): AgentsStatusDTO['cards'][numbe
     connected: entry.available,
     sessionReady: entry.available && caps?.reachable === true && caps.authRequired !== true,
     kind: entry.kind,
-    models: models.map((m) => ({ default: m.default, id: m.id, name: m.name, tier: m.tier })),
+    models: models.map((m) => ({
+      default: m.default,
+      id: m.id,
+      name: m.name,
+      tier: m.tier,
+    })),
     modelsLoading: entry.modelsStatus === 'loading' && models.length === 0,
     ...(caps?.configOptions ? { configOptions: caps.configOptions } : {}),
     ...(caps?.additionalDirectories ? { additionalDirectories: true } : {}),
@@ -380,7 +385,9 @@ export function setSubsystemRunnerLadder(
   subsystem: ModelSubsystem,
   kinds: AgentRunnerKind[],
 ): void {
-  void saveUserPrefs({ [runnerLadderPrefKey(subsystem)]: kinds.length > 0 ? kinds : null });
+  void saveUserPrefs({
+    [runnerLadderPrefKey(subsystem)]: kinds.length > 0 ? kinds : null,
+  });
 }
 
 /** Persist this agent's default model ('' clears the key, falling through to the backend default). */
@@ -398,7 +405,9 @@ export function setSubsystemModel(
 }
 
 export function setAgentConfigPin(kind: AgentRunnerKind, category: string, value: string): void {
-  void saveUserPrefs({ [configPrefKey(kind, 'default', category)]: value || null });
+  void saveUserPrefs({
+    [configPrefKey(kind, 'default', category)]: value || null,
+  });
 }
 
 export function setSubsystemConfigPin(
@@ -407,5 +416,7 @@ export function setSubsystemConfigPin(
   category: string,
   value: string,
 ): void {
-  void saveUserPrefs({ [configPrefKey(kind, subsystem, category)]: value || null });
+  void saveUserPrefs({
+    [configPrefKey(kind, subsystem, category)]: value || null,
+  });
 }

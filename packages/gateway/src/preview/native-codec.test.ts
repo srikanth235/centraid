@@ -2,6 +2,7 @@
 
 import sharp from 'sharp';
 import { describe, expect, test } from 'vitest';
+
 import { createNativeImagePreviewCodec } from './native-codec.js';
 
 async function png(w: number, h: number, r = 200, g = 50, b = 50): Promise<Buffer> {
@@ -18,7 +19,7 @@ describe('native-codec', () => {
     const source = await png(256, 128);
     const out = await codec.downscale(source, 'image/png', 64);
     expect(out).toBeTruthy();
-    expect(out!.mediaType).toMatch(/^image\//);
+    expect(out!.mediaType).toMatch(/^image\//u);
     expect(out!.bytes.length).toBeGreaterThan(10);
     expect(out!.width).toBeLessThanOrEqual(64);
     expect(out!.height).toBeLessThanOrEqual(64);

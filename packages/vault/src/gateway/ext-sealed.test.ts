@@ -5,13 +5,14 @@
 // hard refusal to make a sealed column searchable.
 
 import { beforeEach, describe, expect, test } from 'vitest';
+
 import { bootstrapVault, createGrant, enrollApp, type BootstrapResult } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
-import { createGateway, type Gateway } from './gateway.js';
-import { applyExtBand, extCommandDefinitions, seedExtDraft } from './ext.js';
-import { resealVaultKey } from './reseal.js';
 import { ExtSpecError, type ExtTableSpec } from '../schema/ext.js';
 import { isSealedValue, readSealKeyFingerprint } from '../schema/sealed.js';
+import { applyExtBand, extCommandDefinitions, seedExtDraft } from './ext.js';
+import { createGateway, type Gateway } from './gateway.js';
+import { resealVaultKey } from './reseal.js';
 import type { Credential } from './types.js';
 
 const APP = 'keypass';
@@ -38,7 +39,11 @@ describe('ext-sealed', () => {
     db = openVaultDb();
     boot = bootstrapVault(db, { ownerName: 'Priya' });
     gw = createGateway(db);
-    owner = { kind: 'device', deviceId: boot.deviceId, deviceKey: boot.deviceKey };
+    owner = {
+      kind: 'device',
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+    };
   });
 
   function installApp(spec: ExtTableSpec = CRED_TABLE): void {
@@ -49,7 +54,10 @@ describe('ext-sealed', () => {
   function addCredential(apiKey = 'ghp_secret_TOKEN_123'): string {
     const out = gw.invoke(owner, {
       command: `ext.${APP}.insert`,
-      input: { table: 'credential', values: { label: 'GitHub', api_key: apiKey } },
+      input: {
+        table: 'credential',
+        values: { label: 'GitHub', api_key: apiKey },
+      },
       purpose: PURPOSE,
     });
     expect(out.status).toBe('executed');
@@ -63,7 +71,13 @@ describe('ext-sealed', () => {
       applyExtBand(
         db,
         APP,
-        [{ ...CRED_TABLE, searchable: ['label', 'api_key'], sealed: ['api_key'] }],
+        [
+          {
+            ...CRED_TABLE,
+            searchable: ['label', 'api_key'],
+            sealed: ['api_key'],
+          },
+        ],
         'live',
       ),
     ).toThrow(ExtSpecError);
@@ -78,7 +92,7 @@ describe('ext-sealed', () => {
       ],
       sealed: ['secret_num'],
     };
-    expect(() => applyExtBand(db, APP, [spec], 'live')).toThrow(/must be text/);
+    expect(() => applyExtBand(db, APP, [spec], 'live')).toThrow(/must be text/u);
   });
 
   // ── the six enforcement points ──────────────────────────────────────────
@@ -103,8 +117,15 @@ describe('ext-sealed', () => {
       grantedByPartyId: boot.ownerPartyId,
       scopes: [{ schema: `ext.${APP}`, table: 'credential', verbs: 'read' }],
     });
-    const reader: Credential = { kind: 'app', appId: app.appId, signingKey: app.signingKey };
-    const res = gw.read(reader, { entity: `ext.${APP}.credential`, purpose: PURPOSE });
+    const reader: Credential = {
+      kind: 'app',
+      appId: app.appId,
+      signingKey: app.signingKey,
+    };
+    const res = gw.read(reader, {
+      entity: `ext.${APP}.credential`,
+      purpose: PURPOSE,
+    });
     expect(res.rows[0]?.['api_key']).toBe('«sealed»');
     expect(res.rows[0]?.['label']).toBe('GitHub');
   });
@@ -143,7 +164,11 @@ describe('ext-sealed', () => {
       grantedByPartyId: boot.ownerPartyId,
       scopes: [{ schema: `ext.${APP}`, table: 'credential', verbs: 'read' }],
     });
-    const reader: Credential = { kind: 'app', appId: app.appId, signingKey: app.signingKey };
+    const reader: Credential = {
+      kind: 'app',
+      appId: app.appId,
+      signingKey: app.signingKey,
+    };
     expect(() =>
       gw.reveal(reader, {
         entity: `ext.${APP}.credential`,
@@ -151,7 +176,7 @@ describe('ext-sealed', () => {
         columns: ['api_key'],
         purpose: PURPOSE,
       }),
-    ).toThrow(/no grant_scope covers ext\.keypass\.credential for verb reveal/);
+    ).toThrow(/no grant_scope covers ext\.keypass\.credential for verb reveal/u);
   });
 
   // ── retro-seal + rotation ───────────────────────────────────────────────

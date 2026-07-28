@@ -6,8 +6,10 @@
 // AutomationThreadScreen.test.tsx. Split from that file (500-line repo-hygiene
 // cap); shared fixtures in AutomationThreadScreen.test-fixtures.tsx.
 
+import { forEachSequentially } from '@centraid/test-kit/sequential';
 import { act } from 'react';
 import { describe, expect, it, vi } from 'vitest';
+
 import type { AutomationThreadBridgeProps } from '../screen-contracts.js';
 import {
   installThreadHarness,
@@ -35,11 +37,11 @@ describe('AutomationThreadScreen — live turn watch', () => {
       expect(watchTurn.mock.calls[0]?.[0]).toBe('r3');
 
       // Four bounded rejoins, each after its backoff.
-      for (const delay of [500, 1500, 4000, 10_000]) {
+      await forEachSequentially([500, 1500, 4000, 10_000], async (delay) => {
         await act(async () => {
           await vi.advanceTimersByTimeAsync(delay);
         });
-      }
+      });
       expect(watchTurn).toHaveBeenCalledTimes(5);
 
       // Bounded: it stops rather than hammering, and says so.

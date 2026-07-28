@@ -1,5 +1,3 @@
-import { fetch as expoFetch } from 'expo/fetch';
-
 import {
   authHeaders,
   consumeVaultChangeSse,
@@ -13,6 +11,7 @@ import {
   type VaultChangeCursor,
   type VaultChangeMessage,
 } from '@centraid/client/replica/native';
+import { fetch as expoFetch } from 'expo/fetch';
 
 /** The subset of `@react-native-async-storage/async-storage` the cursor uses. */
 export interface AsyncStorageLike {
@@ -124,17 +123,26 @@ export class NativeVaultChangeFeed implements ReplicaChangeFeedAdapter {
       }
       const response = await this.#streamFetch(this.streamUrl(this.#cursor), {
         method: 'GET',
-        headers: { ...authHeaders(this.#gatewayAuth.token), Accept: 'text/event-stream' },
+        headers: {
+          ...authHeaders(this.#gatewayAuth.token),
+          Accept: 'text/event-stream',
+        },
         signal: abort.signal,
       });
       if (!this.isCurrent(abort, generation)) return;
       if (response.status === 401 || response.status === 403) {
-        this.emit({ type: 'centraid:vault-rebootstrap', detail: { status: response.status } });
+        this.emit({
+          type: 'centraid:vault-rebootstrap',
+          detail: { status: response.status },
+        });
         this.#rebootstrapRequired = true;
         return;
       }
       if (response.status === 409 || response.status === 410) {
-        this.emit({ type: 'centraid:vault-rebootstrap', detail: { status: response.status } });
+        this.emit({
+          type: 'centraid:vault-rebootstrap',
+          detail: { status: response.status },
+        });
         this.#rebootstrapRequired = true;
         return;
       }
@@ -209,7 +217,10 @@ export class NativeVaultChangeFeed implements ReplicaChangeFeedAdapter {
   }
 
   private streamUrl(cursor: VaultChangeCursor): string {
-    const params = new URLSearchParams({ since: `${cursor.epoch}:${cursor.seq}`, stream: '1' });
+    const params = new URLSearchParams({
+      since: `${cursor.epoch}:${cursor.seq}`,
+      stream: '1',
+    });
     // Presence is significant: `shapeIds=` attests a persisted empty catalog.
     if (this.#shapeIds) params.set('shapeIds', this.#shapeIds.join(','));
     return `${this.#gatewayAuth.baseUrl}/centraid/_vault/changes?${params}`;

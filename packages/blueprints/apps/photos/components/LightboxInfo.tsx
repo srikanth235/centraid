@@ -1,3 +1,9 @@
+import { useEffect, useRef, useState } from 'react';
+
+import { buildActivity } from '../activity.ts';
+import { restoreAsset } from '../assets-actions.ts';
+import { renderFaces } from '../faces.ts';
+import { custodyMeta, exifRows, toLocalInputValue } from '../format.ts';
 // The lightbox's right-side info panel (bottom sheet on phone): editable
 // caption, an EXIF-extended Details grid, the real editable place picker,
 // custody/backup status, People chips (faces), Album chips, free-form Tag
@@ -9,17 +15,13 @@
 // CSS split: own bits in LightboxInfo.module.css; `.ph-faces` (faces.ts's
 // imperative host) + `lightbox-note`/`kit-*` stay global strings.
 import { armConfirm, toast } from '../kit.ts';
-import { restoreAsset } from '../assets-actions.ts';
-import { buildActivity } from '../activity.ts';
-import { renderFaces } from '../faces.ts';
-import { custodyMeta, exifRows, toLocalInputValue } from '../format.ts';
 // Every command on this panel edits the OPEN asset, so each is addressed at
 // the scope that asset is shown from (issue #599) rather than the chip
 // selection — including the album/tag/place ones, whose collection ids are only
 // meaningful inside that same scope.
 import { act, narrate } from '../outcomes.ts';
-import { useEffect, useRef, useState } from 'react';
 import type { Album, Asset, CustodyMeta, Place } from '../types.ts';
+
 import styles from './LightboxInfo.module.css';
 
 // Explicit tone → module-class map (never a computed `styles['custody-' + tone]`).
@@ -83,7 +85,7 @@ export function LightboxInfo({
   useEffect(() => {
     renderFaces(facesHostRef.current!, asset.asset_id, noteRef.current!);
     // (#360) this component remounts fresh per asset/refresh (keyed by renderSeq in the shell)
-  }, []);
+  }, [asset.asset_id]);
 
   return (
     <>
@@ -295,7 +297,10 @@ export function LightboxInfo({
             onClose();
             toast('Moved to trash — it leaves every album it was in.', {
               undoLabel: 'Undo',
-              onUndo: () => restoreAsset(asset.asset_id, refresh, { scope: asset.scope_id }),
+              onUndo: () =>
+                restoreAsset(asset.asset_id, refresh, {
+                  scope: asset.scope_id,
+                }),
             });
             await refresh();
           }

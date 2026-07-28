@@ -1,3 +1,6 @@
+import { Fragment } from 'react';
+import type { MouseEvent } from 'react';
+
 // The Google-Photos-style justified timeline (replaces Grid.jsx): sticky
 // month headers, day sub-labels, and rows packed edge-to-edge by
 // `justify()` (layout.ts) — real aspect ratios, no more rigid squares. The
@@ -15,13 +18,12 @@ import { restoreAsset, toggleFavorite } from '../assets-actions.ts';
 import { cls, dayKey, fmtDay, fmtMonth } from '../format.ts';
 import { CheckIcon, HeartIcon } from '../icons.tsx';
 import { justify } from '../layout.ts';
+import type { JustifiedTile } from '../layout.ts';
 import { mountMedia } from '../media.ts';
 import { act, narrate } from '../outcomes.ts';
 import { canWriteScope, scopeAttr } from '../scopes.ts';
-import { Fragment } from 'react';
-import type { MouseEvent } from 'react';
 import type { Asset } from '../types.ts';
-import type { JustifiedTile } from '../layout.ts';
+
 import styles from './Timeline.module.css';
 
 interface TileCommon {
@@ -56,7 +58,12 @@ function Tile({
   onToggleSelect,
   onOpen,
   scopeLabel,
-}: TileCommon & { asset: Asset; width: number; height: number; selected: boolean }) {
+}: TileCommon & {
+  asset: Asset;
+  width: number;
+  height: number;
+  selected: boolean;
+}) {
   const badge = scopeLabel(asset.scope_id);
   // A photo shown from a read-only audience can be looked at, not changed
   // (issue #599) — so the controls that would write are disabled here rather
@@ -87,7 +94,7 @@ function Tile({
           if (selectMode) onToggleSelect(assetKey(asset));
           else onOpen(assetKey(asset));
         }}
-      ></button>
+      />
       <span className={styles.tileScrim} aria-hidden="true" />
       {badge ? (
         // Only tiles from somewhere else are labelled: the member's own photos
@@ -95,7 +102,7 @@ function Tile({
         // all and a merged timeline reads as "mine, plus these".
         <span className={styles.tileScope}>{badge}</span>
       ) : null}
-      {!isTrash ? (
+      {isTrash ? null : (
         <button
           type="button"
           className={styles.tileCheck}
@@ -108,8 +115,8 @@ function Tile({
         >
           {selected ? <CheckIcon size={12} /> : null}
         </button>
-      ) : null}
-      {!isTrash ? (
+      )}
+      {isTrash ? null : (
         <button
           type="button"
           className={styles.tileHeart}
@@ -123,7 +130,7 @@ function Tile({
         >
           <HeartIcon size={16} filled={!!asset.favorite} />
         </button>
-      ) : null}
+      )}
       {inAlbum && !isTrash ? (
         <button
           type="button"
@@ -160,7 +167,11 @@ function Tile({
             onClick={async (e) => {
               e.stopPropagation();
               e.currentTarget.disabled = true;
-              if (!(await restoreAsset(asset.asset_id, refresh, { scope: asset.scope_id }))) {
+              if (
+                !(await restoreAsset(asset.asset_id, refresh, {
+                  scope: asset.scope_id,
+                }))
+              ) {
                 e.currentTarget.disabled = false;
               }
             }}

@@ -6,7 +6,7 @@
 
 import crypto from 'node:crypto';
 import type { DatabaseSync, SQLInputValue, StatementSync } from 'node:sqlite';
-import { canWrite, type GrantableRole } from '../serve/enrollment-store.js';
+
 import {
   compileFilters,
   compileReplicaHistoricalFilters,
@@ -20,6 +20,8 @@ import {
   type ConsentAllow,
   type ReplicaRow,
 } from '@centraid/vault';
+
+import { canWrite, type GrantableRole } from '../serve/enrollment-store.js';
 
 export const REPLICA_PROTOCOL_VERSION = 1 as const;
 export const REPLICA_MAX_VALUE_BYTES = 64 * 1024;
@@ -409,7 +411,13 @@ export function buildReplicaShapes(
       .createHmac('sha256', grantee.signing_key)
       .update(`replica-row-key\u0000${replicaEpoch}`)
       .digest('hex');
-    const shape = { shapeId, appId, purpose, entities, entityMap } as ReplicaServerShape;
+    const shape = {
+      shapeId,
+      appId,
+      purpose,
+      entities,
+      entityMap,
+    } as ReplicaServerShape;
     Object.defineProperty(shape, 'rowKeySecret', {
       value: rowKeySecret,
       enumerable: false,

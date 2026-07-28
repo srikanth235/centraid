@@ -1,5 +1,7 @@
-import { describe, expect, test } from 'vitest';
 import { fc } from '@centraid/test-kit/fast-check';
+import { forEachSequentially } from '@centraid/test-kit/sequential';
+import { describe, expect, test } from 'vitest';
+
 import { MemoryIntentStore } from './intent-store.js';
 import { IntentQueue } from './intents.js';
 
@@ -90,7 +92,8 @@ describe('replica intent generated-payload property', () => {
           action: 'create',
           input,
         });
-        for (let i = 0; i < 2; i += 1) {
+        // Each replay must observe the prior deduped durable row.
+        await forEachSequentially([0, 1], async () => {
           const again = await queue.enqueue({
             intentId,
             appId: 'notes',
@@ -98,7 +101,7 @@ describe('replica intent generated-payload property', () => {
             input: structuredClone(input),
           });
           expect(again).toStrictEqual(first);
-        }
+        });
         await expect(queue.list()).resolves.toHaveLength(1);
         queue.close();
       }),
@@ -110,7 +113,12 @@ describe('replica intent generated-payload property', () => {
     await fc.assert(
       fc.asyncProperty(intentIdArb, payloadArb, async (intentId, input) => {
         const queue = new IntentQueue(new MemoryIntentStore());
-        await queue.enqueue({ intentId, appId: 'notes', action: 'create', input });
+        await queue.enqueue({
+          intentId,
+          appId: 'notes',
+          action: 'create',
+          input,
+        });
         await expect(
           queue.enqueue({
             intentId,
@@ -129,7 +137,12 @@ describe('replica intent generated-payload property', () => {
     await fc.assert(
       fc.asyncProperty(intentIdArb, payloadArb, async (intentId, input) => {
         const queue = new IntentQueue(new MemoryIntentStore());
-        await queue.enqueue({ intentId, appId: 'notes', action: 'create', input });
+        await queue.enqueue({
+          intentId,
+          appId: 'notes',
+          action: 'create',
+          input,
+        });
         await expect(
           queue.enqueue({
             intentId,
@@ -148,7 +161,12 @@ describe('replica intent generated-payload property', () => {
     await fc.assert(
       fc.asyncProperty(intentIdArb, payloadArb, async (intentId, input) => {
         const queue = new IntentQueue(new MemoryIntentStore());
-        await queue.enqueue({ intentId, appId: 'notes', action: 'create', input });
+        await queue.enqueue({
+          intentId,
+          appId: 'notes',
+          action: 'create',
+          input,
+        });
         await expect(
           queue.enqueue({
             intentId,
@@ -173,14 +191,16 @@ describe('replica intent generated-payload property', () => {
         payloadArb,
         async (ids, input) => {
           const queue = new IntentQueue(new MemoryIntentStore());
-          for (const intentId of ids) {
+          // This property models an ordered client outbox; enqueue each intent
+          // before asserting the ledger contains the full sequence.
+          await forEachSequentially(ids, async (intentId) => {
             await queue.enqueue({
               intentId,
               appId: 'notes',
               action: 'create',
               input: { ...input, title: `${input.title}-${intentId}` },
             });
-          }
+          });
           await expect(queue.list()).resolves.toHaveLength(ids.length);
           queue.close();
         },
@@ -221,7 +241,12 @@ describe('replica intent generated-payload property', () => {
       fc.asyncProperty(intentIdArb, payloadArb, async (intentId, input) => {
         const queue = new IntentQueue(new MemoryIntentStore());
         await expect(queue.list()).resolves.toHaveLength(0);
-        await queue.enqueue({ intentId, appId: 'notes', action: 'create', input });
+        await queue.enqueue({
+          intentId,
+          appId: 'notes',
+          action: 'create',
+          input,
+        });
         await expect(queue.list()).resolves.toHaveLength(1);
         queue.close();
       }),

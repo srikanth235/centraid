@@ -1,4 +1,4 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import crypto from 'node:crypto';
 /*
  * The ext band over HTTP (issue #286 phase 2) — the successor to the
  * silo's seed-draft-data + publish-migrations coverage.
@@ -9,13 +9,14 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  * reset-data re-snapshots it, and a spec the vault refuses aborts the
  * publish with the vault untouched.
  */
-
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
-import { serve, type GatewayServeHandle } from '../serve/serve.ts';
+
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+
 import type { GatewayPaths } from '../paths.ts';
+import { serve, type GatewayServeHandle } from '../serve/serve.ts';
 
 let dataDir: string;
 let handle: GatewayServeHandle;
@@ -57,7 +58,10 @@ const EXT_V1 = {
 describe('ext-band-over-http', () => {
   beforeEach(async () => {
     dataDir = await tempDir(`gw-ext-${crypto.randomUUID()}-`);
-    handle = await serve({ initVaultName: "Owner's vault", paths: pathsUnder(dataDir) });
+    handle = await serve({
+      initVaultName: "Owner's vault",
+      paths: pathsUnder(dataDir),
+    });
   });
 
   afterEach(async () => {
@@ -70,11 +74,13 @@ describe('ext-band-over-http', () => {
     files: Record<string, string>,
   ): Promise<void> {
     const appDir = await (await handle.appsStore()).snapshotSessionAppDir(sessionId, 'gym');
-    for (const [rel, content] of Object.entries(files)) {
-      const abs = path.join(appDir, rel);
-      await fs.mkdir(path.dirname(abs), { recursive: true });
-      await fs.writeFile(abs, content);
-    }
+    await Promise.all(
+      Object.entries(files).map(async ([rel, content]) => {
+        const abs = path.join(appDir, rel);
+        await fs.mkdir(path.dirname(abs), { recursive: true });
+        await fs.writeFile(abs, content);
+      }),
+    );
   }
 
   async function publish(sessionId: string, message: string): Promise<Response> {
@@ -156,18 +162,26 @@ describe('ext-band-over-http', () => {
       'app.json': manifest(EXT_V1),
       'index.html': '<!doctype html>gym',
     });
-    const preview = await fetch(`${handle.url}/centraid/_draft/draft1/gym/`, { headers: auth() });
+    const preview = await fetch(`${handle.url}/centraid/_draft/draft1/gym/`, {
+      headers: auth(),
+    });
     expect(preview.status).toBe(200);
     // node:sqlite hands back null-prototype rows; spreading compares the column
     // data (which is the contract) without asserting the driver's prototype.
     expect(
-      ownerSql('SELECT notes FROM extdraft_gym_workout').map((row) => ({ ...row })),
+      ownerSql('SELECT notes FROM extdraft_gym_workout').map((row) => ({
+        ...row,
+      })),
     ).toStrictEqual([{ notes: 'live row' }]);
 
     // Draft writes stay scratch.
     const draftWrite = await plane.invokeAsAssistant({
       command: 'ext.gym.insert',
-      input: { table: 'workout', values: { notes: 'draft only' }, band: 'draft' },
+      input: {
+        table: 'workout',
+        values: { notes: 'draft only' },
+        band: 'draft',
+      },
       purpose: 'dpv:ServiceProvision',
     });
     expect(draftWrite.status).toBe('executed');
@@ -190,7 +204,7 @@ describe('ext-band-over-http', () => {
     });
     expect(close.status).toBe(200);
     expect(() => ownerSql('SELECT count(*) AS n FROM extdraft_gym_workout')).toThrow(
-      /no such table/,
+      /no such table/u,
     );
   });
 
@@ -213,11 +227,11 @@ describe('ext-band-over-http', () => {
     expect(pub.status).toBe(400);
     const body = (await pub.json()) as { error: string; message: string };
     expect(body.error).toBe('invalid_ext_spec');
-    expect(body.message).toMatch(/exactly one primaryKey/);
+    expect(body.message).toMatch(/exactly one primaryKey/u);
     // Nothing went live: no versions, no ext table.
     const versions = await store.listVersions('gym');
     expect(versions).toStrictEqual([]);
-    expect(() => ownerSql('SELECT 1 FROM ext_gym_bad')).toThrow(/no such table/);
+    expect(() => ownerSql('SELECT 1 FROM ext_gym_bad')).toThrow(/no such table/u);
   });
 
   test('purge-ext over HTTP drops the app ext band and its data', async () => {
@@ -252,6 +266,6 @@ describe('ext-band-over-http', () => {
     expect(body.purged).toStrictEqual(['workout']);
 
     // The physical table — and its rows — are gone for good.
-    expect(() => ownerSql('SELECT 1 FROM ext_gym_workout')).toThrow(/no such table/);
+    expect(() => ownerSql('SELECT 1 FROM ext_gym_workout')).toThrow(/no such table/u);
   });
 });

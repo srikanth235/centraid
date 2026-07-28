@@ -1,8 +1,9 @@
+import type { IconName } from '@centraid/design-tokens';
 import React, { useMemo } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import type { IconName } from '@centraid/design-tokens';
-import Icon from './Icon';
+
 import { radii, spacing, t, useTheme, type ThemeColors } from '../theme';
+import Icon from './Icon';
 
 export interface AppHeaderProps {
   title: string;

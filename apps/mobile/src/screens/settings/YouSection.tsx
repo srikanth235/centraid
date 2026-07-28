@@ -6,6 +6,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
+
 import { radii, spacing, t, useTheme, type ThemeColors } from '../../kit/theme';
 import {
   PROFILE_COLORS,
@@ -77,7 +78,12 @@ const makeStyles = (colors: ThemeColors) =>
       gap: spacing[3],
       padding: spacing[4],
     },
-    fieldLabel: { ...t('small'), color: colors.ink2, fontWeight: '500', marginTop: spacing[1] },
+    fieldLabel: {
+      ...t('small'),
+      color: colors.ink2,
+      fontWeight: '500',
+      marginTop: spacing[1],
+    },
     identity: { alignItems: 'center', flexDirection: 'row', gap: spacing[3] },
     input: {
       ...t('body'),

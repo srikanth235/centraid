@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+
 import type { GatewayRuntimeSnapshot } from './routes/gatewayData.js';
 
 // Live view of the main-process gateway heartbeat monitor: one read for

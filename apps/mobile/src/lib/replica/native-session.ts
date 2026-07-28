@@ -36,8 +36,12 @@ import {
 import { NativeReplicaStore } from './native-replica-store';
 import { SqliteIntentStore } from './sqlite-intent-store';
 
-export type NativeReadRequest = Omit<ReplicaReadRequest, 'shapeId'> & { shapeId?: string };
-export type NativeSearchRequest = Omit<ReplicaSearchRequest, 'shapeId'> & { shapeId?: string };
+export type NativeReadRequest = Omit<ReplicaReadRequest, 'shapeId'> & {
+  shapeId?: string;
+};
+export type NativeSearchRequest = Omit<ReplicaSearchRequest, 'shapeId'> & {
+  shapeId?: string;
+};
 
 export type NativeOptimisticMutation =
   | (Omit<Extract<OptimisticMutation, { op: 'upsert' }>, 'shapeId'> & {
@@ -192,7 +196,10 @@ export class NativeReplicaSession {
     if (!input.action) throw new ReplicaProtocolError('Replica action is required');
     const optimistic = (input.optimistic ?? []).map((mutation) => {
       const { purpose, shapeId, ...rest } = mutation;
-      return { ...rest, shapeId: this.resolveShapeId(appId, mutation.entity, shapeId, purpose) };
+      return {
+        ...rest,
+        shapeId: this.resolveShapeId(appId, mutation.entity, shapeId, purpose),
+      };
     }) as OptimisticMutation[];
     // Validate at enqueue time exactly as the web shell session does. The native
     // write path never re-checked, so an invalid optimistic mutation (e.g. a
@@ -211,7 +218,10 @@ export class NativeReplicaSession {
     const dependencies = this.#catalog
       .filter((shape) => shape.appId === appId)
       .flatMap((shape) =>
-        shape.entities.map((entity) => ({ shapeId: shape.shapeId, entity: entity.entity })),
+        shape.entities.map((entity) => ({
+          shapeId: shape.shapeId,
+          entity: entity.entity,
+        })),
       );
     const intent = await this.#coordinator.enqueue({
       ...(input.intentId ? { intentId: input.intentId } : {}),
@@ -224,7 +234,11 @@ export class NativeReplicaSession {
     const settled = terminalResult(intent);
     if (settled) return settled;
     if (!this.#isConnected()) {
-      return { intentId: intent.intentId, status: 'queued', reason: 'waiting for a connection' };
+      return {
+        intentId: intent.intentId,
+        status: 'queued',
+        reason: 'waiting for a connection',
+      };
     }
     const admitted = new Promise<NativeWriteResult>((resolve, reject) => {
       const waiters = this.#waiters.get(intent.intentId) ?? new Set<Waiter>();
@@ -386,7 +400,8 @@ export class NativeReplicaSession {
   };
 
   private async drainLoop(): Promise<void> {
-    while (!this.#closed && this.#isConnected()) {
+    const drainNextIntent = async (): Promise<void> => {
+      if (this.#closed || !this.#isConnected()) return;
       let intent: ReplicaIntent | undefined;
       try {
         intent = await this.#coordinator.claimNextIntent();
@@ -417,7 +432,7 @@ export class NativeReplicaSession {
           };
           await this.#coordinator.applyIntentOutcome(outcome);
           this.resolveWaiter(intent.intentId, outcome);
-          continue;
+          return drainNextIntent();
         }
         await this.#coordinator
           .markIntentTransportFailed(intent.intentId, errorMessage(error))
@@ -430,7 +445,9 @@ export class NativeReplicaSession {
         this.scheduleRetry();
         return;
       }
-    }
+      return drainNextIntent();
+    };
+    return drainNextIntent();
   }
 
   private scheduleRetry(): void {

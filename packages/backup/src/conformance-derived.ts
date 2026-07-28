@@ -11,6 +11,7 @@
  */
 
 import assert from 'node:assert/strict';
+
 import type { ConformanceCase, ConformanceHarness } from './conformance.js';
 
 const TEXT = new TextEncoder();
@@ -38,7 +39,9 @@ export function providerDerivedConformanceCases(
         withHarness(makeProvider, async ({ provider }) => {
           const caps = await provider.capabilities();
           if (!caps.capabilities.includes('derived')) return; // capability not offered — skip cleanly
-          const { targetId } = await provider.createTarget({ label: 'derived-roundtrip' });
+          const { targetId } = await provider.createTarget({
+            label: 'derived-roundtrip',
+          });
           const rw = await provider.openDataPlane(targetId, 'derived', 'read-write');
           // Display derivative key layout is the client's own; the provider
           // round-trips opaque bytes (thumb/preview/poster and future rungs).
@@ -61,7 +64,9 @@ export function providerDerivedConformanceCases(
         withHarness(makeProvider, async ({ provider }) => {
           const caps = await provider.capabilities();
           if (!caps.capabilities.includes('derived')) return; // skip cleanly
-          const { targetId } = await provider.createTarget({ label: 'derived-disjoint' });
+          const { targetId } = await provider.createTarget({
+            label: 'derived-disjoint',
+          });
           const derivedStore = await provider.openDataPlane(targetId, 'derived', 'read-write');
           // Write the SAME key to every granted store, then assert isolation:
           // no store can observe another's object under that shared key.
@@ -97,7 +102,9 @@ export function providerDerivedConformanceCases(
           if (!provider.requestGrant) return; // grant concept not offered — skip cleanly
           const caps = await provider.capabilities();
           if (!caps.capabilities.includes('derived')) return; // skip cleanly
-          const { targetId } = await provider.createTarget({ label: 'derived-grant' });
+          const { targetId } = await provider.createTarget({
+            label: 'derived-grant',
+          });
           const derivedGrant = await provider.requestGrant(targetId, 'derived', 'read-write');
           assert.equal(derivedGrant.store, 'derived', 'grant must echo the requested store class');
           assert.ok(derivedGrant.region.length > 0, 'region must be present');

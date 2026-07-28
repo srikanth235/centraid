@@ -92,23 +92,47 @@ export const ATLAS_PACK_LABELS: Readonly<Record<string, string>> = {
  */
 export const ATLAS_KIND_FRIENDLY: Readonly<Record<string, { name: string; blurb: string }>> = {
   // core — the spine every other pack hangs off.
-  'core.vault': { name: 'Vault', blurb: 'This vault itself — its name and identity.' },
-  'core.party': { name: 'People', blurb: 'Everyone you know — people and organisations.' },
+  'core.vault': {
+    name: 'Vault',
+    blurb: 'This vault itself — its name and identity.',
+  },
+  'core.party': {
+    name: 'People',
+    blurb: 'Everyone you know — people and organisations.',
+  },
   'core.party_identifier': {
     name: 'Identifiers',
     blurb: 'Emails, phones and handles for each person.',
   },
   'core.place': { name: 'Places', blurb: 'Locations that matter to you.' },
-  'core.event': { name: 'Events', blurb: 'Things that happened or will happen.' },
-  'core.account': { name: 'Accounts', blurb: 'Money accounts — bank, card, wallet.' },
-  'core.transaction': { name: 'Transactions', blurb: 'Money moving in and out of your accounts.' },
-  'core.content_item': { name: 'Content', blurb: "Files and media you've saved." },
+  'core.event': {
+    name: 'Events',
+    blurb: 'Things that happened or will happen.',
+  },
+  'core.account': {
+    name: 'Accounts',
+    blurb: 'Money accounts — bank, card, wallet.',
+  },
+  'core.transaction': {
+    name: 'Transactions',
+    blurb: 'Money moving in and out of your accounts.',
+  },
+  'core.content_item': {
+    name: 'Content',
+    blurb: "Files and media you've saved.",
+  },
   'core.content_derivative': {
     name: 'Derivatives',
     blurb: 'Thumbnails and previews made from content.',
   },
-  'core.document': { name: 'Documents', blurb: 'Your documents and their text.' },
-  'core.attachment': { name: 'Attachments', blurb: 'Files pinned to other things.' },
+  'core.document': {
+    name: 'Documents',
+    blurb: 'Your documents and their text.',
+  },
+  'core.attachment': {
+    name: 'Attachments',
+    blurb: 'Files pinned to other things.',
+  },
   'core.activity': { name: 'Activity', blurb: "A log of what you've done." },
   'core.observation': {
     name: 'Observations',
@@ -118,76 +142,190 @@ export const ATLAS_KIND_FRIENDLY: Readonly<Record<string, { name: string; blurb:
     name: 'Readings',
     blurb: 'The individual values inside an observation.',
   },
-  'core.link': { name: 'Links', blurb: "Connections you've drawn between things." },
-  'core.link_anchor': { name: 'Anchors', blurb: 'Where a link points inside a document.' },
-  'core.concept_scheme': { name: 'Vocabularies', blurb: 'Named sets of tags and categories.' },
-  'core.concept': { name: 'Concepts', blurb: 'The tags and categories themselves.' },
+  'core.link': {
+    name: 'Links',
+    blurb: "Connections you've drawn between things.",
+  },
+  'core.link_anchor': {
+    name: 'Anchors',
+    blurb: 'Where a link points inside a document.',
+  },
+  'core.concept_scheme': {
+    name: 'Vocabularies',
+    blurb: 'Named sets of tags and categories.',
+  },
+  'core.concept': {
+    name: 'Concepts',
+    blurb: 'The tags and categories themselves.',
+  },
   'core.tag': { name: 'Tags', blurb: 'Labels you put on things.' },
-  'core.collection': { name: 'Collections', blurb: "Groups of things you've gathered." },
-  'core.collection_entry': { name: 'Collection items', blurb: "What's inside each collection." },
+  'core.collection': {
+    name: 'Collections',
+    blurb: "Groups of things you've gathered.",
+  },
+  'core.collection_entry': {
+    name: 'Collection items',
+    blurb: "What's inside each collection.",
+  },
   'core.share_origin': {
     name: 'Shared with here',
     blurb: 'Where an item placed in this space came from, and who placed it.',
   },
   // health
-  'health.vital': { name: 'Vitals', blurb: 'Body readings — heart rate, weight, and more.' },
-  'health.workout': { name: 'Workouts', blurb: "Exercise sessions you've logged." },
-  'health.sleep_session': { name: 'Sleep', blurb: "Nights of sleep you've tracked." },
-  'health.medication_course': { name: 'Medications', blurb: 'Medicines you take and when.' },
-  'health.condition': { name: 'Conditions', blurb: "Health conditions you're tracking." },
+  'health.vital': {
+    name: 'Vitals',
+    blurb: 'Body readings — heart rate, weight, and more.',
+  },
+  'health.workout': {
+    name: 'Workouts',
+    blurb: "Exercise sessions you've logged.",
+  },
+  'health.sleep_session': {
+    name: 'Sleep',
+    blurb: "Nights of sleep you've tracked.",
+  },
+  'health.medication_course': {
+    name: 'Medications',
+    blurb: 'Medicines you take and when.',
+  },
+  'health.condition': {
+    name: 'Conditions',
+    blurb: "Health conditions you're tracking.",
+  },
   // finance
-  'finance.txn_split': { name: 'Splits', blurb: 'Parts of a transaction across categories.' },
+  'finance.txn_split': {
+    name: 'Splits',
+    blurb: 'Parts of a transaction across categories.',
+  },
   'finance.budget': { name: 'Budgets', blurb: "Spending limits you've set." },
   'finance.holding': { name: 'Holdings', blurb: 'Investments you own.' },
-  'finance.recurring_series': { name: 'Recurring', blurb: 'Payments that repeat on a schedule.' },
-  'finance.fx_rate': { name: 'Exchange rates', blurb: 'Currency conversion rates.' },
+  'finance.recurring_series': {
+    name: 'Recurring',
+    blurb: 'Payments that repeat on a schedule.',
+  },
+  'finance.fx_rate': {
+    name: 'Exchange rates',
+    blurb: 'Currency conversion rates.',
+  },
   // schedule
-  'schedule.calendar': { name: 'Calendars', blurb: 'Your calendars — work, home, and more.' },
-  'schedule.event_ext': { name: 'Event details', blurb: 'Extra scheduling detail on an event.' },
-  'schedule.attendee': { name: 'Guests', blurb: "Who's invited to each event." },
+  'schedule.calendar': {
+    name: 'Calendars',
+    blurb: 'Your calendars — work, home, and more.',
+  },
+  'schedule.event_ext': {
+    name: 'Event details',
+    blurb: 'Extra scheduling detail on an event.',
+  },
+  'schedule.attendee': {
+    name: 'Guests',
+    blurb: "Who's invited to each event.",
+  },
   'schedule.task': { name: 'Tasks', blurb: 'Things to do, with due dates.' },
-  'schedule.availability_rule': { name: 'Availability', blurb: "When you're free to meet." },
+  'schedule.availability_rule': {
+    name: 'Availability',
+    blurb: "When you're free to meet.",
+  },
   // social
-  'social.contact_card': { name: 'Contact cards', blurb: 'Address-book details for a person.' },
+  'social.contact_card': {
+    name: 'Contact cards',
+    blurb: 'Address-book details for a person.',
+  },
   'social.circle': { name: 'Circles', blurb: 'Groups of people in your life.' },
-  'social.circle_member': { name: 'Circle members', blurb: 'Who belongs to each circle.' },
+  'social.circle_member': {
+    name: 'Circle members',
+    blurb: 'Who belongs to each circle.',
+  },
   'social.thread': { name: 'Threads', blurb: 'Message threads with people.' },
-  'social.thread_participant': { name: 'Participants', blurb: "Who's in each thread." },
-  'social.message': { name: 'Messages', blurb: "Individual messages you've exchanged." },
+  'social.thread_participant': {
+    name: 'Participants',
+    blurb: "Who's in each thread.",
+  },
+  'social.message': {
+    name: 'Messages',
+    blurb: "Individual messages you've exchanged.",
+  },
   // knowledge
   'knowledge.note': { name: 'Notes', blurb: "Things you've written down." },
-  'knowledge.annotation': { name: 'Annotations', blurb: 'Notes pinned to a spot in something.' },
+  'knowledge.annotation': {
+    name: 'Annotations',
+    blurb: 'Notes pinned to a spot in something.',
+  },
   // media
   'media.media_asset': { name: 'Media', blurb: 'Your photos and videos.' },
   'media.face_region': { name: 'Faces', blurb: 'Faces found in your photos.' },
-  'media.asset_phash': { name: 'Fingerprints', blurb: 'Hashes for spotting duplicate photos.' },
+  'media.asset_phash': {
+    name: 'Fingerprints',
+    blurb: 'Hashes for spotting duplicate photos.',
+  },
   // home
-  'home.asset_item': { name: 'Belongings', blurb: 'Things you own around the home.' },
-  'home.warranty': { name: 'Warranties', blurb: 'Coverage on the things you own.' },
-  'home.maintenance_plan': { name: 'Maintenance', blurb: 'Upkeep schedules for your things.' },
+  'home.asset_item': {
+    name: 'Belongings',
+    blurb: 'Things you own around the home.',
+  },
+  'home.warranty': {
+    name: 'Warranties',
+    blurb: 'Coverage on the things you own.',
+  },
+  'home.maintenance_plan': {
+    name: 'Maintenance',
+    blurb: 'Upkeep schedules for your things.',
+  },
   'home.utility_meter': { name: 'Meters', blurb: 'Your utility meters.' },
-  'home.meter_reading': { name: 'Meter readings', blurb: 'Readings taken from your meters.' },
+  'home.meter_reading': {
+    name: 'Meter readings',
+    blurb: 'Readings taken from your meters.',
+  },
   // business
-  'business.client': { name: 'Clients', blurb: 'People and companies you work for.' },
-  'business.project': { name: 'Projects', blurb: "Work you're doing for clients." },
-  'business.time_entry': { name: 'Time entries', blurb: "Hours you've logged on work." },
-  'business.invoice': { name: 'Invoices', blurb: "Bills you've sent to clients." },
-  'business.invoice_line': { name: 'Invoice lines', blurb: 'The line items on an invoice.' },
+  'business.client': {
+    name: 'Clients',
+    blurb: 'People and companies you work for.',
+  },
+  'business.project': {
+    name: 'Projects',
+    blurb: "Work you're doing for clients.",
+  },
+  'business.time_entry': {
+    name: 'Time entries',
+    blurb: "Hours you've logged on work.",
+  },
+  'business.invoice': {
+    name: 'Invoices',
+    blurb: "Bills you've sent to clients.",
+  },
+  'business.invoice_line': {
+    name: 'Invoice lines',
+    blurb: 'The line items on an invoice.',
+  },
   // people
-  'people.profile': { name: 'Profiles', blurb: 'Personal notes about people you know.' },
+  'people.profile': {
+    name: 'Profiles',
+    blurb: 'Personal notes about people you know.',
+  },
   'people.important_date': {
     name: 'Important dates',
     blurb: 'Birthdays and anniversaries to remember.',
   },
   // locker
-  'locker.item': { name: 'Secrets', blurb: 'Passwords and codes kept under lock.' },
+  'locker.item': {
+    name: 'Secrets',
+    blurb: 'Passwords and codes kept under lock.',
+  },
   // tally
   'tally.friend': { name: 'Friends', blurb: 'People you split expenses with.' },
   'tally.group': { name: 'Groups', blurb: 'Groups you share expenses in.' },
   'tally.expense': { name: 'Expenses', blurb: "Shared costs you've recorded." },
-  'tally.expense_split': { name: 'Expense splits', blurb: 'Who owes what on each expense.' },
-  'tally.settlement': { name: 'Settlements', blurb: 'Payments that settle up debts.' },
-  'tally.obligation': { name: 'Obligations', blurb: 'Who owes whom, as running totals.' },
+  'tally.expense_split': {
+    name: 'Expense splits',
+    blurb: 'Who owes what on each expense.',
+  },
+  'tally.settlement': {
+    name: 'Settlements',
+    blurb: 'Payments that settle up debts.',
+  },
+  'tally.obligation': {
+    name: 'Obligations',
+    blurb: 'Who owes whom, as running totals.',
+  },
 };
 
 const ONTOLOGY_SET = new Set(ONTOLOGY_PACKS);

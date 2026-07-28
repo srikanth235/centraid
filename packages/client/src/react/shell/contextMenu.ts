@@ -1,5 +1,6 @@
-import type { ShellMenuAnchor } from './Sidebar.js';
 import { iconSvg } from './iconSvg.js';
+import type { ShellMenuAnchor } from './Sidebar.js';
+
 import styles from './contextMenu.module.css';
 
 // Context menu — the generic anchored popup menu, ported from the vanilla

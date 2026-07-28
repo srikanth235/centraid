@@ -1,16 +1,14 @@
-/*
- * `centraid-gateway service install|uninstall|status` owns the launchd and
- * systemd user-service lifecycle (#351). Generated units use absolute paths,
- * share gateway-logs/, and carry the issue #555 KeyStore credential. Dry-run
- * prints every write/command without mutating the host.
- */
+/** `centraid-gateway service` owns launchd/systemd user units; dry-run never mutates. */
 
-import { promises as fs } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+
+import { hostCredentialKey, keychainAccountFor } from './key-store.js';
 import { daemonLayoutFor } from './paths.js';
 import { resolveDaemonConfig } from './resolve-config.js';
+import { adoptKeyStoreCredential, type ServiceKeyCredential } from './service-credential.js';
 import {
   DEFAULT_LAUNCHD_LABEL,
   DEFAULT_SYSTEMD_UNIT_NAME,
@@ -21,8 +19,6 @@ import {
   systemdCredentialPath,
   type ServiceUnitSpec,
 } from './service-unit.js';
-import { hostCredentialKey, keychainAccountFor } from './key-store.js';
-import { adoptKeyStoreCredential, type ServiceKeyCredential } from './service-credential.js';
 
 type Fail = (message: string, code?: number) => never;
 
@@ -43,23 +39,23 @@ function parseServiceArgs(args: string[], fail: Fail): ServiceArgs {
   for (let i = 0; i < args.length; i++) {
     const flag = args[i];
     if (flag === undefined) continue;
-    const next = (): string => {
+    const readValue = (): string => {
       const v = args[++i];
       if (v === undefined) fail(`flag "${flag}" requires a value`, 2);
       return v;
     };
     switch (flag) {
       case '--config':
-        out.configPath = next();
+        out.configPath = readValue();
         break;
       case '--data-dir':
-        out.dataDir = next();
+        out.dataDir = readValue();
         break;
       case '--host':
-        out.host = next();
+        out.host = readValue();
         break;
       case '--port': {
-        const n = Number(next());
+        const n = Number(readValue());
         if (!Number.isInteger(n) || n < 0 || n > 65535) {
           fail(`--port must be an integer in [0, 65535]`, 2);
         }
@@ -67,7 +63,7 @@ function parseServiceArgs(args: string[], fail: Fail): ServiceArgs {
         break;
       }
       case '--label':
-        out.label = next();
+        out.label = readValue();
         break;
       case '--dry-run':
         out.dryRun = true;
@@ -79,10 +75,7 @@ function parseServiceArgs(args: string[], fail: Fail): ServiceArgs {
   return out;
 }
 
-/** This module's compiled sibling `cli.js` — the actual daemon entry, resolved
- *  from where THIS file was loaded from rather than `process.argv`, so it's
- *  correct whether invoked via the `centraid-gateway` bin, `node dist/cli/cli.js`,
- *  or a dev `tsx` run. */
+/** Resolve this module's compiled sibling instead of trusting `process.argv`. */
 function resolveCliEntry(): string {
   const here = import.meta.dirname;
   const ext = path.extname(import.meta.filename);
@@ -116,7 +109,9 @@ async function buildSpec(parsed: ServiceArgs, fail: Fail): Promise<PreparedServi
   const env: Record<string, string> = {
     ...(process.versions.electron ? { ELECTRON_RUN_AS_NODE: '1' } : {}),
     ...(process.env.CENTRAID_DESKTOP_ENDPOINT_ID?.trim()
-      ? { CENTRAID_DESKTOP_ENDPOINT_ID: process.env.CENTRAID_DESKTOP_ENDPOINT_ID.trim() }
+      ? {
+          CENTRAID_DESKTOP_ENDPOINT_ID: process.env.CENTRAID_DESKTOP_ENDPOINT_ID.trim(),
+        }
       : {}),
   };
   // Never a fresh `randomBytes(32)`: a headless `serve` has already wrapped
@@ -193,7 +188,10 @@ function run(
   args: string[],
   input?: string,
 ): { code: number; output: string } {
-  const result = spawnSync(command, args, { encoding: 'utf8', ...(input ? { input } : {}) });
+  const result = spawnSync(command, args, {
+    encoding: 'utf8',
+    ...(input ? { input } : {}),
+  });
   if (result.error) {
     fail(`failed to run "${command} ${args.join(' ')}": ${result.error.message}`, 1);
   }
@@ -281,11 +279,7 @@ async function launchdUninstall(parsed: ServiceArgs, fail: Fail): Promise<void> 
   );
 }
 
-/** Structured counterpart of {@link launchdStatus}'s JSON print — extracted
- *  so `centraid-gateway status` (status-admin.ts, issue #382) can fold the
- *  OS service state into its combined summary without shelling out twice.
- *  Never used by `service status` itself, which keeps printing exactly what
- *  it always has. */
+/** Structured status for the combined gateway status command. */
 export interface ServiceStatusInfo {
   label: string;
   installed: boolean;
@@ -413,7 +407,9 @@ async function systemdInstall(parsed: ServiceArgs, fail: Fail): Promise<void> {
     // Same ordering rule as the launchd path (#568 item E): prove the
     // credential reads this data dir's keys before committing it anywhere.
     await adoptKeyStoreCredential(fail, prepared.keyCredential);
-    await fs.mkdir(path.dirname(prepared.keyCredential.path), { recursive: true });
+    await fs.mkdir(path.dirname(prepared.keyCredential.path), {
+      recursive: true,
+    });
     const encrypted = run(
       fail,
       'systemd-creds',

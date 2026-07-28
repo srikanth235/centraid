@@ -1,4 +1,5 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
 /*
  * Issue #439 R2 — lazy-by-default restore, `--full` override, and the
  * metered-egress cost estimate, exercised at the SERVICE layer (where the
@@ -8,22 +9,27 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  * that one) purely to stay under the repo-hygiene line cap.
  */
 
-import { afterEach, describe, expect, test } from 'vitest';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
 import { openLocalBackupProvider, WAL_DB_FILES, type BackupProvider } from '@centraid/backup';
+import { forEachSequentially } from '@centraid/test-kit/sequential';
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { updateBlobStoreSettings, type BlobStore, type RemoteTier } from '@centraid/vault';
-import { openVaultRegistry, type VaultRegistry } from '../serve/vault-registry.js';
-import { HealthRegistry } from '../serve/health-registry.js';
-import { BackupService } from './backup-service.js';
-import type { BackupConfig } from './backup-config.js';
+import { afterEach, describe, expect, test } from 'vitest';
 
-const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
+import { HealthRegistry } from '../serve/health-registry.js';
+import { openVaultRegistry, type VaultRegistry } from '../serve/vault-registry.js';
+import type { BackupConfig } from './backup-config.js';
+import { BackupService } from './backup-service.js';
+
+const silentLogger = {
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+};
 
 const cleanups: Array<() => Promise<void> | void> = [];
 describe('backup-service-restore', () => {
   afterEach(async () => {
-    while (cleanups.length > 0) await cleanups.pop()?.();
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
   });
   interface Harness {
     service: BackupService;
@@ -56,7 +62,10 @@ describe('backup-service-restore', () => {
     const fixtureFile = path.join(fixtureDir, 'vault.db');
     await fs.writeFile(fixtureFile, 'v0');
 
-    const config: BackupConfig = { enabled: true, provider: { kind: 'local', dir: providerDir } };
+    const config: BackupConfig = {
+      enabled: true,
+      provider: { kind: 'local', dir: providerDir },
+    };
     const realProvider = openLocalBackupProvider({ rootDir: providerDir });
     const service = new BackupService({
       config,
@@ -77,7 +86,13 @@ describe('backup-service-restore', () => {
             baseTickMs: base.createdAtMs,
           })),
           ...(includeBlobEntry
-            ? [{ path: 'fixture.bin', kind: 'blob' as const, absolutePath: fixtureFile }]
+            ? [
+                {
+                  path: 'fixture.bin',
+                  kind: 'blob' as const,
+                  absolutePath: fixtureFile,
+                },
+              ]
             : []),
         ]);
       },
@@ -91,7 +106,11 @@ describe('backup-service-restore', () => {
    *  store operation dial it. */
   function declareRemoteTier(registry: VaultRegistry): void {
     updateBlobStoreSettings(registry.current().db, {
-      blob_store: { kind: 's3', endpoint: 'https://remote.invalid', bucket: 'r439' },
+      blob_store: {
+        kind: 's3',
+        endpoint: 'https://remote.invalid',
+        bucket: 'r439',
+      },
     });
   }
 
@@ -170,7 +189,11 @@ describe('backup-service-restore', () => {
     declareRemoteTier(h.registry);
     await h.service.runBackup(h.vaultId);
     const destDir = path.join(await tempDir('r439-full-override-dest'), 'restored');
-    const result = await h.service.restore({ vaultId: h.vaultId, destDir, full: true });
+    const result = await h.service.restore({
+      vaultId: h.vaultId,
+      destDir,
+      full: true,
+    });
     expect(result.previewsWarm).toBeUndefined();
   });
 

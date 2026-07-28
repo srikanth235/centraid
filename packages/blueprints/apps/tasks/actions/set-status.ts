@@ -9,12 +9,18 @@ export default async function setStatus({ body, ctx }: HandlerArgs): Promise<Act
   try {
     const outcome = await ctx.vault.invoke({
       command: 'schedule.set_task_status',
-      input: { task_id: String(input.task_id ?? ''), status: String(input.status ?? '') },
+      input: {
+        task_id: String(input.task_id ?? ''),
+        status: String(input.status ?? ''),
+      },
       purpose: 'dpv:ServiceProvision',
     });
     return { status: 200, body: outcome };
   } catch (err) {
     const e = err as { code?: string; message?: string };
-    return { status: 200, body: { status: 'denied', reason: e.message, code: e.code } };
+    return {
+      status: 200,
+      body: { status: 'denied', reason: e.message, code: e.code },
+    };
   }
 }

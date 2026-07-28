@@ -1,3 +1,5 @@
+import type { CSSProperties } from 'react';
+
 // The month canvas: a 6×7 Monday-first CSS grid (one flat grid — the 7
 // weekday-header spans plus 42 day cells are all direct children, so no
 // per-week wrapper row is needed). Up to 3 event pills per day (all-day /
@@ -5,9 +7,9 @@
 // day space starts a proposal prefilled there.
 import { bucketByDay, fmtRange, fmtTime, startOfWeek } from '../format.ts';
 import { localDayKey } from '../kit.ts';
-import { CalDot } from './Shared.tsx';
-import type { CSSProperties } from 'react';
 import type { AgEvent, DaySegment } from '../types.ts';
+import { CalDot } from './Shared.tsx';
+
 import styles from './MonthView.module.css';
 
 type ColorFor = (calendarId: string | null | undefined) => string | null;

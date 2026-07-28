@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+
 import { openVaultDb } from '../db.js';
 import { recordKnownStagedBlob } from './staging-record.js';
 

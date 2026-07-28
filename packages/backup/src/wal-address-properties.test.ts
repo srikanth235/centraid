@@ -1,5 +1,6 @@
-import { describe, expect, test } from 'vitest';
 import { fc } from '@centraid/test-kit/fast-check';
+import { describe, expect, test } from 'vitest';
+
 import {
   isWalGeneration,
   parseWalCloserKey,
@@ -81,7 +82,11 @@ describe('WAL address property', () => {
         hex32,
         fc.integer({ min: 0, max: 9_999_999_999_999 }),
         (vaultGeneration, journalGeneration, tickMs) => {
-          const key = walPairMarkerKey({ vaultGeneration, journalGeneration, tickMs });
+          const key = walPairMarkerKey({
+            vaultGeneration,
+            journalGeneration,
+            tickMs,
+          });
           expect(parseWalPairMarkerKey(key)).toStrictEqual({
             vaultGeneration,
             journalGeneration,
@@ -125,7 +130,7 @@ describe('WAL address property', () => {
     );
     fc.assert(
       fc.property(
-        fc.string({ minLength: 0, maxLength: 40 }).filter((s) => !/^[0-9a-f]{32}$/.test(s)),
+        fc.string({ minLength: 0, maxLength: 40 }).filter((s) => !/^[0-9a-f]{32}$/u.test(s)),
         (g) => {
           expect(isWalGeneration(g)).toBe(false);
         },

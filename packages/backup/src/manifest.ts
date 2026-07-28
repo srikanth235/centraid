@@ -12,6 +12,7 @@
  */
 
 import { createHash } from 'node:crypto';
+
 import {
   decrypt,
   deriveNonce,
@@ -409,7 +410,9 @@ export function openManifest(
     new Uint8Array(Buffer.from(parsed.sealedPayload, 'base64')),
     aad,
   );
-  const payload = JSON.parse(new TextDecoder().decode(plainBytes)) as { entries?: unknown };
+  const payload = JSON.parse(new TextDecoder().decode(plainBytes)) as {
+    entries?: unknown;
+  };
   if (!Array.isArray(payload.entries))
     throw new Error('manifest: sealed payload missing "entries"');
   const chunkIds = new Set(parsed.chunkIndex.map((chunk) => chunk.id));

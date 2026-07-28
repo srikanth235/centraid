@@ -22,13 +22,21 @@
  * handler-catalog system-prompt preamble, and attachment blob resolution.
  */
 
-import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { sendError, sendJson, readBody, MAX_BODY_BYTES } from './http-utils.js';
-import { buildExtraPrompt } from '../handlers/build-extra-prompt.js';
-import type { ConversationRunner } from '../conversation/runner.js';
+import path from 'node:path';
+
 import type { ConversationHistoryStore } from '../conversation/history.js';
+import type { ConversationRunner } from '../conversation/runner.js';
+import type { ConversationWorkspaceKind } from '../conversation/schema.js';
+import { isRunnerKind } from '../conversation/turn.js';
+import { buildExtraPrompt } from '../handlers/build-extra-prompt.js';
+import { appDataDir } from '../registry/app-paths.js';
+import { APP_MANIFEST_FILE, parseManifest, type Manifest } from '../registry/manifest.js';
+import type { Registry } from '../registry/registry.js';
+import type { RegistryEntry } from '../types.js';
+import { sendError, sendJson, readBody, MAX_BODY_BYTES } from './http-utils.js';
+import type { TurnLimiter } from './turn-limiter.js';
 import {
   driveTurnOverSse,
   parseAdditionalDirectories,
@@ -38,13 +46,6 @@ import {
   validateTurnAttachmentRefs,
   type TurnAttachmentRef,
 } from './turn-sse.js';
-import type { TurnLimiter } from './turn-limiter.js';
-import type { Registry } from '../registry/registry.js';
-import { appDataDir } from '../registry/app-paths.js';
-import type { RegistryEntry } from '../types.js';
-import { isRunnerKind } from '../conversation/turn.js';
-import { APP_MANIFEST_FILE, parseManifest, type Manifest } from '../registry/manifest.js';
-import type { ConversationWorkspaceKind } from '../conversation/schema.js';
 
 /**
  * Validate a chat-session id. Reject anything that could escape a

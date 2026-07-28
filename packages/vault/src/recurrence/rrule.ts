@@ -29,9 +29,9 @@ export function parseRrule(rrule: string): ParsedRrule | null {
   }
   const freq = parts.get('FREQ');
   if (freq !== 'DAILY' && freq !== 'WEEKLY' && freq !== 'MONTHLY' && freq !== 'YEARLY') return null;
-  const interval = Math.max(1, Number.parseInt(parts.get('INTERVAL') ?? '1', 10) || 1);
+  const interval = Math.max(1, Math.trunc(Number(parts.get('INTERVAL') ?? '1')) || 1);
   const countRaw = parts.get('COUNT');
-  const count = countRaw ? Math.max(1, Number.parseInt(countRaw, 10) || 0) || undefined : undefined;
+  const count = countRaw ? Math.max(1, Math.trunc(Number(countRaw)) || 0) || undefined : undefined;
   const until = parts.get('UNTIL') || undefined;
   const byDayRaw = parts.get('BYDAY');
   const byDay = byDayRaw
@@ -40,7 +40,13 @@ export function parseRrule(rrule: string): ParsedRrule | null {
         .map((d) => d.trim().toUpperCase())
         .filter((d): d is DayToken => (DAY_TOKENS as readonly string[]).includes(d)) as DayToken[])
     : undefined;
-  return { freq, interval, count, until, byDay: byDay && byDay.length > 0 ? byDay : undefined };
+  return {
+    freq,
+    interval,
+    count,
+    until,
+    byDay: byDay && byDay.length > 0 ? byDay : undefined,
+  };
 }
 
 const ICAL_INSTANT_RE =

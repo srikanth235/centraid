@@ -19,10 +19,10 @@
 // document lives — and purge with the document only once nothing else still
 // needs them (gateway/duties.ts sweepLifecycle's lapsedDocuments pass).
 
+import { MAX_INLINE_DATA_URI_CHARS, mintContentFromDataUri } from '../blob/mint.js';
 import type { Gateway } from '../gateway/gateway.js';
 import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
 import { cleanupPolyRefs } from '../schema/poly-refs.js';
-import { MAX_INLINE_DATA_URI_CHARS, mintContentFromDataUri } from '../blob/mint.js';
 import { setStarred, starredExistsSql } from './flags.js';
 import { assertInlineDataUriWithinBudget } from './inline-body-guard.js';
 import { RELATIONS_SCHEME_URI_SQL } from './links.js';
@@ -238,7 +238,11 @@ function addDocument(ctx: HandlerCtx): Record<string, unknown> {
     entityType: 'core.document',
     entityId: documentId,
   });
-  return { document_id: documentId, content_id: contentId, deduped: minted.deduped };
+  return {
+    document_id: documentId,
+    content_id: contentId,
+    deduped: minted.deduped,
+  };
 }
 
 const RENAME_DOCUMENT: CommandDefinition = {
@@ -259,7 +263,13 @@ const RENAME_DOCUMENT: CommandDefinition = {
     properties: { document_id: { type: 'string' } },
   },
   preconditions: [
-    { name: 'document_exists', sql: DOCUMENT_EXISTS_SQL, column: 'n', op: 'eq', value: 1 },
+    {
+      name: 'document_exists',
+      sql: DOCUMENT_EXISTS_SQL,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
   ],
   postconditions: [
     {
@@ -303,7 +313,13 @@ const MOVE_DOCUMENT: CommandDefinition = {
     properties: { document_id: { type: 'string' } },
   },
   preconditions: [
-    { name: 'document_exists', sql: DOCUMENT_EXISTS_SQL, column: 'n', op: 'eq', value: 1 },
+    {
+      name: 'document_exists',
+      sql: DOCUMENT_EXISTS_SQL,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
     {
       name: 'folder_exists_if_given',
       sql: `SELECT CASE WHEN :folder_id IS NULL THEN 1
@@ -354,12 +370,21 @@ const TRASH_DOCUMENT: CommandDefinition = {
   outputSchema: {
     type: 'object',
     required: ['document_id', 'purge_at'],
-    properties: { document_id: { type: 'string' }, purge_at: { type: 'string' } },
+    properties: {
+      document_id: { type: 'string' },
+      purge_at: { type: 'string' },
+    },
   },
   preconditions: [
     // Only a live document can be trashed — a double-delete fails loudly
     // instead of silently re-stamping the trash date.
-    { name: 'document_exists', sql: DOCUMENT_EXISTS_SQL, column: 'n', op: 'eq', value: 1 },
+    {
+      name: 'document_exists',
+      sql: DOCUMENT_EXISTS_SQL,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
   ],
   postconditions: [
     {
@@ -463,7 +488,13 @@ const STAR_DOCUMENT: CommandDefinition = {
   preconditions: [
     // A trashed document refuses state changes (same rule as rename/move),
     // but an already-starred one keeps its tag through trash and restore.
-    { name: 'document_exists', sql: DOCUMENT_EXISTS_SQL, column: 'n', op: 'eq', value: 1 },
+    {
+      name: 'document_exists',
+      sql: DOCUMENT_EXISTS_SQL,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
   ],
   postconditions: [
     {
@@ -501,7 +532,13 @@ const UNSTAR_DOCUMENT: CommandDefinition = {
     properties: { document_id: { type: 'string' } },
   },
   preconditions: [
-    { name: 'document_exists', sql: DOCUMENT_EXISTS_SQL, column: 'n', op: 'eq', value: 1 },
+    {
+      name: 'document_exists',
+      sql: DOCUMENT_EXISTS_SQL,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
   ],
   postconditions: [
     {
@@ -540,11 +577,20 @@ const EDIT_DOCUMENT: CommandDefinition = {
   outputSchema: {
     type: 'object',
     required: ['document_id', 'content_id'],
-    properties: { document_id: { type: 'string' }, content_id: { type: 'string' } },
+    properties: {
+      document_id: { type: 'string' },
+      content_id: { type: 'string' },
+    },
   },
   preconditions: [
     // A trashed document is frozen: restore first, then edit.
-    { name: 'document_exists', sql: DOCUMENT_EXISTS_SQL, column: 'n', op: 'eq', value: 1 },
+    {
+      name: 'document_exists',
+      sql: DOCUMENT_EXISTS_SQL,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
     {
       // Only text-editable media types take the structured body_text door;
       // a scanned PDF or image goes through replace_document_content.
@@ -579,7 +625,11 @@ const EDIT_DOCUMENT: CommandDefinition = {
 };
 
 function editDocument(ctx: HandlerCtx): Record<string, unknown> {
-  const input = ctx.input as { document_id: string; body_text: string; title?: string };
+  const input = ctx.input as {
+    document_id: string;
+    body_text: string;
+    title?: string;
+  };
   const doc = ctx.db
     .prepare(
       `SELECT d.current_content_id AS content_id, c.media_type AS media_type
@@ -639,10 +689,19 @@ const REPLACE_DOCUMENT_CONTENT: CommandDefinition = {
   outputSchema: {
     type: 'object',
     required: ['document_id', 'content_id'],
-    properties: { document_id: { type: 'string' }, content_id: { type: 'string' } },
+    properties: {
+      document_id: { type: 'string' },
+      content_id: { type: 'string' },
+    },
   },
   preconditions: [
-    { name: 'document_exists', sql: DOCUMENT_EXISTS_SQL, column: 'n', op: 'eq', value: 1 },
+    {
+      name: 'document_exists',
+      sql: DOCUMENT_EXISTS_SQL,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
     {
       name: 'exactly_one_source',
       sql: 'SELECT ((:data_uri IS NOT NULL) + (:staged_sha IS NOT NULL)) AS n',
@@ -755,10 +814,19 @@ const RESTORE_DOCUMENT_VERSION: CommandDefinition = {
   outputSchema: {
     type: 'object',
     required: ['document_id', 'content_id'],
-    properties: { document_id: { type: 'string' }, content_id: { type: 'string' } },
+    properties: {
+      document_id: { type: 'string' },
+      content_id: { type: 'string' },
+    },
   },
   preconditions: [
-    { name: 'document_exists', sql: DOCUMENT_EXISTS_SQL, column: 'n', op: 'eq', value: 1 },
+    {
+      name: 'document_exists',
+      sql: DOCUMENT_EXISTS_SQL,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
     {
       name: 'not_already_current',
       sql: IS_CURRENT_CONTENT_SQL,

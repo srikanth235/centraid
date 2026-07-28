@@ -107,7 +107,7 @@ export function curSymbolFor(cur: string | undefined = 'USD'): string {
 }
 // Parse a decimal-dollar string → integer cents.
 export function toCents(str: string | null | undefined): number {
-  const n = parseFloat(String(str));
+  const n = Number(String(str));
   if (!Number.isFinite(n)) return NaN;
   return Math.round(n * 100);
 }
@@ -146,7 +146,7 @@ export function resolveSplits(
   members: Member[],
 ): SplitEntry[] | null {
   const parts = members.map((m) => m.party_id).filter((id) => model.include.has(id));
-  if (parts.length === 0 || !(amountCents > 0)) return null;
+  if (parts.length === 0 || amountCents <= 0) return null;
   const out: SplitEntry[] = [];
   if (model.method === 'equal') {
     const per = Math.round(amountCents / parts.length);
@@ -167,14 +167,14 @@ export function resolveSplits(
   } else {
     // percent
     let pctSum = 0;
-    for (const id of parts) pctSum += parseFloat(model.percent[id] ?? '') || 0;
+    for (const id of parts) pctSum += Number(model.percent[id] ?? '') || 0;
     if (Math.abs(pctSum - 100) > 0.1) return null;
     let acc = 0;
     parts.forEach((id, i) => {
       const share =
         i === parts.length - 1
           ? amountCents - acc
-          : Math.round((amountCents * (parseFloat(model.percent[id] ?? '') || 0)) / 100);
+          : Math.round((amountCents * (Number(model.percent[id] ?? '') || 0)) / 100);
       out.push({ party_id: id, share_minor: share });
       acc += share;
     });
@@ -207,7 +207,7 @@ export function splitSumInfo(
     };
   }
   if (exp.method === 'percent') {
-    const sum = parts.reduce((a, m) => a + (parseFloat(exp.percent[m.party_id] ?? '') || 0), 0);
+    const sum = parts.reduce((a, m) => a + (Number(exp.percent[m.party_id] ?? '') || 0), 0);
     const bad = Math.abs(sum - 100) > 0.1;
     return { bad, text: sum.toFixed(0) + '% of 100%' + (bad ? '' : ' ✓') };
   }

@@ -1,13 +1,15 @@
 // governance: allow-repo-hygiene file-size-limit single cohesive screen (connect form + recovery-kit gate + per-vault hosted/local toggle) — one storage-connection flow, same call SettingsConnectionsScreen.tsx makes
 import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
-import { Button, IconButton } from '../ui/index.js';
+
 import { cx } from '../ui/cx.js';
-import styles from './SettingsStorageScreen.module.css';
+import { Button, IconButton } from '../ui/index.js';
+
 import a11y from '../styles/a11y.module.css';
-import drawerGroupCss from '../styles/drawerGroup.module.css';
 import controlsCss from '../styles/controls.module.css';
+import drawerGroupCss from '../styles/drawerGroup.module.css';
 import inlineEmptyCss from '../styles/inlineEmpty.module.css';
 import modalCss from '../styles/modal.module.css';
+import styles from './SettingsStorageScreen.module.css';
 
 // Settings → Storage (issue #436 §7): the owner surface collapsed to ONE
 // choice per vault — "On this device" or "Hosted". There is a single
@@ -339,7 +341,7 @@ export default function SettingsStorageScreen({
     return () => {
       mountedRef.current = false;
     };
-  }, [loadConnections, loadVaultBlobStore]);
+  }, [loadConnections, loadVaultBlobStore, refresh]);
 
   const withBusy = (id: string, fn: () => Promise<void>): void => {
     setBusyIds((s) => new Set(s).add(id));

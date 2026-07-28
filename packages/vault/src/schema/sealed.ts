@@ -44,6 +44,7 @@ import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes }
 import { renameSync } from 'node:fs';
 import path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
+
 import { KeyStore } from './key-store.js';
 
 /**
@@ -260,7 +261,10 @@ export function stampSealKeyFingerprint(vault: DatabaseSync, key: Buffer): void 
   const settings = JSON.parse(row.settings_json) as Record<string, unknown>;
   const bag = settings[SETTINGS_KEY] as { fingerprint?: string } | undefined;
   if (bag?.fingerprint === fp) return;
-  settings[SETTINGS_KEY] = { fingerprint: fp, stamped_at: new Date().toISOString() };
+  settings[SETTINGS_KEY] = {
+    fingerprint: fp,
+    stamped_at: new Date().toISOString(),
+  };
   vault.prepare('UPDATE core_vault SET settings_json = ?').run(JSON.stringify(settings));
 }
 

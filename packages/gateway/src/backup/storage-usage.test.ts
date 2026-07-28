@@ -1,4 +1,5 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import http from 'node:http';
+import type { AddressInfo } from 'node:net';
 /*
  * Coverage for the provider-usage poller (issue #367 §D1) against a REAL
  * in-process HTTP fake implementing just `GET /v1/storage/vaults/:id/usage`
@@ -7,9 +8,10 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  * calls. No mocked `fetch`.
  */
 
+import { forEachSequentially } from '@centraid/test-kit/sequential';
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import http from 'node:http';
-import type { AddressInfo } from 'node:net';
+
 import { openStorageConnectionStore, type StorageConnectionStore } from './storage-connections.js';
 import { StorageUsagePoller } from './storage-usage.js';
 
@@ -17,7 +19,7 @@ const cleanups: Array<() => Promise<void> | void> = [];
 describe('storage-usage', () => {
   afterEach(async () => {
     vi.restoreAllMocks();
-    while (cleanups.length > 0) await cleanups.pop()?.();
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
   });
 
   /** Minimal fake provider — one route, PROTOCOL.md's exact envelope + shape. */
@@ -25,7 +27,11 @@ describe('storage-usage', () => {
     apiKey: string;
     targetId: string;
     usage: { backup?: unknown; cas?: unknown };
-  }): Promise<{ url: string; requestCount: () => number; close: () => Promise<void> }> {
+  }): Promise<{
+    url: string;
+    requestCount: () => number;
+    close: () => Promise<void>;
+  }> {
     let requests = 0;
     const server = http.createServer((req, res) => {
       const auth = req.headers.authorization;
@@ -33,7 +39,11 @@ describe('storage-usage', () => {
         res.writeHead(401, { 'content-type': 'application/json' });
         res.end(
           JSON.stringify({
-            error: { type: 'invalid_request_error', code: 'auth_expired', message: 'bad key' },
+            error: {
+              type: 'invalid_request_error',
+              code: 'auth_expired',
+              message: 'bad key',
+            },
           }),
         );
         return;
@@ -47,7 +57,11 @@ describe('storage-usage', () => {
       res.writeHead(404, { 'content-type': 'application/json' });
       res.end(
         JSON.stringify({
-          error: { type: 'invalid_request_error', code: 'not_found', message: 'no route' },
+          error: {
+            type: 'invalid_request_error',
+            code: 'not_found',
+            message: 'no route',
+          },
         }),
       );
     });
@@ -93,7 +107,12 @@ describe('storage-usage', () => {
           quotaBytes: 10_000,
           period: { start: 0, end: 1 },
         },
-        cas: { bytesStored: 2000, objectCount: 9, quotaBytes: null, period: { start: 0, end: 1 } },
+        cas: {
+          bytesStored: 2000,
+          objectCount: 9,
+          quotaBytes: null,
+          period: { start: 0, end: 1 },
+        },
       },
     });
     const connectionId = await makeProviderConnection(store, fake.url, 'sk-test', 'target-1');
@@ -207,7 +226,12 @@ describe('storage-usage', () => {
       apiKey: 'sk-correct',
       targetId: 'target-1',
       usage: {
-        backup: { bytesStored: 1, objectCount: 1, quotaBytes: null, period: { start: 0, end: 1 } },
+        backup: {
+          bytesStored: 1,
+          objectCount: 1,
+          quotaBytes: null,
+          period: { start: 0, end: 1 },
+        },
       },
     });
     const connectionId = await makeProviderConnection(store, fake.url, 'sk-wrong', 'target-1');

@@ -56,7 +56,10 @@ export default async function faces({ input, ctx }: HandlerArgs) {
           confidence: r.confidence ?? null,
           confirmed: r.confirmed_by_party_id != null,
         })),
-        people: persons.map((p) => ({ party_id: p.party_id, name: p.display_name })),
+        people: persons.map((p) => ({
+          party_id: p.party_id,
+          name: p.display_name,
+        })),
       },
     };
   } catch (err) {
@@ -64,7 +67,10 @@ export default async function faces({ input, ctx }: HandlerArgs) {
     if (e.code === 'VAULT_CONSENT') {
       return { status: 200, body: { denied: true, reason: e.message } };
     }
-    return { status: 200, body: { regions: [], people: [], error: String(e.message ?? err) } };
+    return {
+      status: 200,
+      body: { regions: [], people: [], error: String(e.message ?? err) },
+    };
   }
 }
 

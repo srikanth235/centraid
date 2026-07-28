@@ -7,6 +7,7 @@ import {
   useReducer,
   useState,
 } from 'react';
+
 import type { ShellRoute } from '../../app-shell-context.js';
 import {
   canGoBack as canBack,

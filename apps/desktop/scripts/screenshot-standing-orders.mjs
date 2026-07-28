@@ -1,4 +1,10 @@
 #!/usr/bin/env node
+import crypto from 'node:crypto';
+import { promises as fs } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
+
 /**
  * One-off screenshot capture of the per-app "Standing orders" popover
  * landed in this PR. Drives the Electron renderer via Playwright's
@@ -17,11 +23,6 @@
  *   bun run scripts/screenshot-standing-orders.mjs
  */
 import { _electron } from 'playwright';
-import { DatabaseSync } from 'node:sqlite';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import os from 'node:os';
-import crypto from 'node:crypto';
 
 const __filename = import.meta.filename;
 const __dirname = import.meta.dirname;

@@ -76,11 +76,17 @@ export default {
     const rows = [];
     let resetTried = false;
     for (let page = 0; page < MAX_PAGES_PER_RUN; page += 1) {
-      const body = { page_size: 50, filter: { property: 'object', value: 'page' } };
+      const body = {
+        page_size: 50,
+        filter: { property: 'object', value: 'page' },
+      };
       if (start) body.start_cursor = String(start);
       let listing;
       try {
-        listing = await api(ctx, '/search', { method: 'POST', body: JSON.stringify(body) });
+        listing = await api(ctx, '/search', {
+          method: 'POST',
+          body: JSON.stringify(body),
+        });
       } catch (error) {
         const invalidCursor =
           start &&

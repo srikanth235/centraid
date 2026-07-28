@@ -39,13 +39,12 @@ export async function driveReplication(options: ReplicateDriverOptions): Promise
   const moved: string[] = [];
   let next = 0;
   const worker = async (): Promise<void> => {
-    for (;;) {
-      await options.qosWait();
-      const i = next++;
-      if (i >= queue.length) return;
-      const sha = queue[i]!;
-      if (await options.pushOne(sha)) moved.push(sha);
-    }
+    await options.qosWait();
+    const i = next++;
+    if (i >= queue.length) return;
+    const sha = queue[i]!;
+    if (await options.pushOne(sha)) moved.push(sha);
+    return worker();
   };
   const pool = Math.max(1, Math.min(options.concurrency, queue.length));
   await Promise.all(Array.from({ length: pool }, () => worker()));

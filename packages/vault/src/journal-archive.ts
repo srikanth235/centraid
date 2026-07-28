@@ -38,10 +38,11 @@
 // that never calls this never archives (window-gated AND call-gated), so
 // fresh dev vaults are unaffected either way.
 
-import { gunzipSync, gzipSync } from 'node:zlib';
 import type { DatabaseSync } from 'node:sqlite';
-import type { VaultDb } from './db.js';
+import { gunzipSync, gzipSync } from 'node:zlib';
+
 import { sha256OfBytes } from './blob/store.js';
+import type { VaultDb } from './db.js';
 import { nowIso, sha256Hex, uuidv7 } from './ids.js';
 
 /** Rows older than this are eligible for archival, unless overridden. */
@@ -171,7 +172,11 @@ function computeEligibleCluster(
     .prepare(
       `SELECT receipt_id, invocation_id, occurred_at FROM consent_receipt WHERE invocation_id IS NOT NULL`,
     )
-    .all() as { receipt_id: string; invocation_id: string; occurred_at: string }[];
+    .all() as {
+    receipt_id: string;
+    invocation_id: string;
+    occurred_at: string;
+  }[];
   const invRows = journal
     .prepare(
       `SELECT invocation_id, receipt_id FROM agent_command_invocation WHERE receipt_id IS NOT NULL`,
@@ -211,7 +216,7 @@ function computeEligibleCluster(
       if (!recs) continue;
       for (const rec of recs) {
         const t = receiptTime.get(rec);
-        const tooYoung = t === undefined || !(t < cutoff);
+        const tooYoung = t === undefined || t >= cutoff;
         const refs = referrers.get(rec) ?? new Set([inv]);
         const referrerNotYetEligible = [...refs].some((other) => !eligible.has(other));
         if (tooYoung || referrerNotYetEligible) {
@@ -355,7 +360,12 @@ function computeChainHash(args: {
 
 function insertManifest(
   journal: DatabaseSync,
-  args: { stream: JournalArchiveStream; seg: SegmentBuild; sha256: string; createdAt: string },
+  args: {
+    stream: JournalArchiveStream;
+    seg: SegmentBuild;
+    sha256: string;
+    createdAt: string;
+  },
 ): JournalArchiveManifestRow {
   const prev = lastManifestChain(journal);
   const manifestId = uuidv7();
@@ -461,8 +471,7 @@ export function runJournalArchival(
   options: JournalArchivalOptions = {},
 ): JournalArchivalResult {
   const windowDays = options.windowDays ?? DEFAULT_JOURNAL_ARCHIVE_WINDOW_DAYS;
-  if (!(windowDays > 0))
-    throw new Error('journal archival window must be a positive number of days');
+  if (windowDays <= 0) throw new Error('journal archival window must be a positive number of days');
   const now = options.now ?? nowIso();
   const cutoff = daysBeforeIso(now, windowDays);
   const journal = db.journal;

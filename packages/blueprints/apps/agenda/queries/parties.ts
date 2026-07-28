@@ -41,6 +41,10 @@ export default async function partiesHandler({ ctx }: HandlerArgs) {
     return { parties, me };
   } catch (err) {
     const e = err as { code?: string; message?: string };
-    return { parties: [], me: null, vaultDenied: { code: e.code, message: e.message } };
+    return {
+      parties: [],
+      me: null,
+      vaultDenied: { code: e.code, message: e.message },
+    };
   }
 }

@@ -1,4 +1,4 @@
-import { act } from 'react';
+import { act, useEffect } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -50,7 +50,10 @@ describe('useShellApps', () => {
 
   let ctl: ReturnType<typeof useShellApps>;
   function Harness(): null {
-    ctl = useShellApps();
+    const nextController = useShellApps();
+    useEffect(() => {
+      ctl = nextController;
+    }, [nextController]);
     return null;
   }
   async function mount(): Promise<void> {
@@ -111,7 +114,13 @@ describe('useShellApps', () => {
       // cached in the Store must pick it up via this reconciliation, since
       // nothing else calls setUserApps() after a rename.
       store.set('home.userApps', [
-        { id: 'agenda', name: 'Agenda', desc: 'Old desc', iconKey: 'Todo', color: '#old' },
+        {
+          id: 'agenda',
+          name: 'Agenda',
+          desc: 'Old desc',
+          iconKey: 'Todo',
+          color: '#old',
+        },
       ]);
       listApps.mockResolvedValue([
         {
@@ -137,7 +146,9 @@ describe('useShellApps', () => {
       // Reproduces the DRAFT-demotion bug: pins live in a non-vault-scoped
       // store, so a switch to an empty vault made every pin look orphaned,
       // and the prune destroyed them permanently.
-      const api = (vaultId: string) => ({ getGatewayAuth: async () => ({ baseUrl: '', vaultId }) });
+      const api = (vaultId: string) => ({
+        getGatewayAuth: async () => ({ baseUrl: '', vaultId }),
+      });
       (window as unknown as { CentraidApi: unknown }).CentraidApi = api('A');
       store.set('home.userApps', [{ id: 'notes', name: 'Notes', iconKey: 'Todo', color: '#1' }]);
       listApps.mockResolvedValue([{ id: 'notes', name: 'Notes', kind: 'app', hasIndex: false }]);
@@ -163,7 +174,12 @@ describe('useShellApps', () => {
       await mount();
       await act(async () => {
         ctl.setUserApps([
-          { id: 'x', name: 'X', iconKey: 'Todo', color: '#3' } as unknown as UserAppMeta,
+          {
+            id: 'x',
+            name: 'X',
+            iconKey: 'Todo',
+            color: '#3',
+          } as unknown as UserAppMeta,
         ]);
       });
       expect((store.get('home.userApps') as UserAppMeta[])[0]?.id).toBe('x');

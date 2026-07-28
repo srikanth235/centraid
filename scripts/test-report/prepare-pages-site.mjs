@@ -111,11 +111,11 @@ async function appendSeries({ historyDir, summary, slug, date, runId, runUrl, re
   const files = (await readdir(historyDir).catch(() => []))
     .filter((file) => file.endsWith('.json') && file !== 'index.json')
     .sort();
-  const entries = [];
-  for (const file of files) {
-    const loaded = await readJson(path.join(historyDir, file), null);
-    if (loaded?.slug) entries.push(summarizeEntry(loaded));
-  }
+  const entries = (
+    await Promise.all(files.map((file) => readJson(path.join(historyDir, file), null)))
+  )
+    .filter((loaded) => loaded?.slug)
+    .map((loaded) => summarizeEntry(loaded));
   entries.sort((a, b) => (a.slug < b.slug ? 1 : a.slug > b.slug ? -1 : 0));
   await writeFile(
     path.join(historyDir, 'index.json'),
@@ -147,15 +147,17 @@ function summarizeEntry(record) {
 /** Series entries whose archived HTML is still on disk (the rest were pruned). */
 async function retainedSlugs(series) {
   const kept = new Set();
-  for (const entry of Array.isArray(series) ? series : []) {
-    if (!entry?.reportPath) continue;
-    try {
-      await stat(path.join(siteDir, entry.reportPath, 'index.html'));
-      kept.add(entry.slug);
-    } catch {
-      // pruned
-    }
-  }
+  await Promise.all(
+    (Array.isArray(series) ? series : []).map(async (entry) => {
+      if (!entry?.reportPath) return;
+      try {
+        await stat(path.join(siteDir, entry.reportPath, 'index.html'));
+        kept.add(entry.slug);
+      } catch {
+        // pruned
+      }
+    }),
+  );
   return kept;
 }
 
@@ -167,7 +169,9 @@ async function pruneRuns(runsDir, keep) {
     .sort()
     .toReversed();
   const stale = entries.slice(keep);
-  for (const name of stale) await rm(path.join(runsDir, name), { recursive: true, force: true });
+  await Promise.all(
+    stale.map((name) => rm(path.join(runsDir, name), { recursive: true, force: true })),
+  );
   return stale;
 }
 
@@ -180,20 +184,22 @@ async function listSlots(base) {
     } catch {
       return;
     }
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      // Dated archives and the JSON series are listed from the history index.
-      if (!prefix && entry.name === 'history') continue;
-      if (entry.name === 'runs') continue;
-      const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
-      const indexPath = path.join(dir, entry.name, 'index.html');
-      try {
-        await stat(indexPath);
-        found.push(rel);
-      } catch {
-        await walk(path.join(dir, entry.name), rel);
-      }
-    }
+    await Promise.all(
+      entries.map(async (entry) => {
+        if (!entry.isDirectory()) return;
+        // Dated archives and the JSON series are listed from the history index.
+        if (!prefix && entry.name === 'history') return;
+        if (entry.name === 'runs') return;
+        const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+        const indexPath = path.join(dir, entry.name, 'index.html');
+        try {
+          await stat(indexPath);
+          found.push(rel);
+        } catch {
+          await walk(path.join(dir, entry.name), rel);
+        }
+      }),
+    );
   }
   await walk(base, '');
   return found.sort();

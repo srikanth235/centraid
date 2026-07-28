@@ -95,11 +95,11 @@ export function resolveInvitation(input: ResolveInvitationInput): InvitationDeci
   // resolves an id (or an exact label, for the CLI's `--member`) and 404s
   // otherwise, so a typo can never mint a phantom member with live access.
   const existing =
-    requestedMember !== undefined
-      ? members.find(requestedMember)
-      : newMemberLabel
+    requestedMember === undefined
+      ? newMemberLabel
         ? undefined
-        : callerMember;
+        : callerMember
+      : members.find(requestedMember);
   if (requestedMember !== undefined && !existing) {
     return {
       status: 404,
@@ -124,7 +124,11 @@ export function resolveInvitation(input: ResolveInvitationInput): InvitationDeci
   }
   for (const grant of grants) {
     if (input.vaultName(grant.vaultId) === undefined) {
-      return { status: 404, error: 'not_found', message: 'unknown vault in grants' };
+      return {
+        status: 404,
+        error: 'not_found',
+        message: 'unknown vault in grants',
+      };
     }
   }
 

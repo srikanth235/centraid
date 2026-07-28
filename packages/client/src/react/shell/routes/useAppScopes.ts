@@ -17,6 +17,8 @@
 //     plane (404) or the call fails. An older gateway must keep working exactly
 //     as it did before this issue.
 
+import type { InlineScope } from '@centraid/blueprints/apps/inline-types';
+
 import { auth } from '../../../gateway-client-core.js';
 import { listAppScopes, type AppScopeEntry } from '../../../gateway-client-vault.js';
 import {
@@ -24,7 +26,6 @@ import {
   replicaIdentityForGatewayAuth,
 } from '../../../replica/shell-session.js';
 import type { ReplicaIdentity } from '../../../replica/types.js';
-import type { InlineScope } from '@centraid/blueprints/apps/inline-types';
 import { useAsyncData, type AsyncState } from '../useAsyncData.js';
 
 /**
@@ -62,7 +63,12 @@ function toResolved(entry: AppScopeEntry, gatewayId: string): ResolvedAppScope {
 async function ambientScope(): Promise<ResolvedAppScope[]> {
   const gatewayAuth = await addressedGatewayAuth();
   const identity = replicaIdentityForGatewayAuth(gatewayAuth);
-  return [{ scope: { id: identity.vaultId, label: 'Library', canWrite: true }, identity }];
+  return [
+    {
+      scope: { id: identity.vaultId, label: 'Library', canWrite: true },
+      identity,
+    },
+  ];
 }
 
 /**

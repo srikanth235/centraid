@@ -1,7 +1,7 @@
-import React from 'react';
-import Svg, { Path } from 'react-native-svg';
 import { icons } from '@centraid/design-tokens';
 import type { IconName } from '@centraid/design-tokens';
+import React from 'react';
+import Svg, { Path } from 'react-native-svg';
 
 export interface IconProps {
   name: IconName;

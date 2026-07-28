@@ -16,8 +16,8 @@ import { parkedListPath, parkedDecisionPath } from './conversation-client.js';
 /**
  * Probe a tool result for a vault `InvokeOutcome` — bare, or nested under
  * `output`. Returns the outcome object (with its `status`) or null.
- * @param {unknown} x
- * @returns {{ status: string, [k: string]: unknown } | null}
+ * @param {unknown} x The tool result to inspect.
+ * @returns {{ status: string, [k: string]: unknown } | null} The nested or bare outcome.
  */
 export function outcomeOf(x) {
   if (!x || typeof x !== 'object') return null;
@@ -37,8 +37,8 @@ export function shortVal(v) {
 
 /**
  * Turn a parked-invocation entry into a human title + detail line for a card.
- * @param {{ command?: string, caller?: string, input?: Record<string, unknown> }} entry
- * @returns {{ title: string, detail: string }}
+ * @param {{ command?: string, caller?: string, input?: Record<string, unknown> }} entry The parked invocation.
+ * @returns {{ title: string, detail: string }} The card title and detail text.
  */
 export function describeParked(entry) {
   const input = entry.input || {};
@@ -54,9 +54,9 @@ export function describeParked(entry) {
 /**
  * Look up a freshly-parked invocation on the consent surface. Returns the
  * matching entry, or null when it's no longer pending (handled elsewhere).
- * @param {string} invocationId
- * @param {{ fetchJson: (url: string, opts?: object) => Promise<{ ok: boolean, status: number, body: any }> }} deps
- * @returns {Promise<any | null>}
+ * @param {string} invocationId The parked invocation identifier.
+ * @param {{ fetchJson: (url: string, opts?: object) => Promise<{ ok: boolean, status: number, body: any }> }} deps The injected transport.
+ * @returns {Promise<any | null>} The matching parked entry, if still pending.
  */
 export async function fetchParkedEntry(invocationId, deps) {
   const r = await deps.fetchJson(parkedListPath());
@@ -67,10 +67,10 @@ export async function fetchParkedEntry(invocationId, deps) {
 /**
  * Post the owner's decision on one parked invocation; returns the raw
  * `InvokeOutcome`. Throws with the server's message on a non-ok response.
- * @param {string} invocationId
- * @param {boolean} approve
- * @param {{ fetchJson: (url: string, opts?: object) => Promise<{ ok: boolean, status: number, body: any }> }} deps
- * @returns {Promise<any>}
+ * @param {string} invocationId The parked invocation identifier.
+ * @param {boolean} approve Whether the owner approved the write.
+ * @param {{ fetchJson: (url: string, opts?: object) => Promise<{ ok: boolean, status: number, body: any }> }} deps The injected transport.
+ * @returns {Promise<any>} The gateway's resulting invocation outcome.
  */
 export async function confirmParked(invocationId, approve, deps) {
   const r = await deps.fetchJson(parkedDecisionPath(invocationId), {
@@ -89,8 +89,8 @@ export async function confirmParked(invocationId, approve, deps) {
 /**
  * Normalize an approve `InvokeOutcome` into the card's settle shape:
  * `{ ok: true, receipt }` on executed/replayed, `{ ok: false, note }` otherwise.
- * @param {{ status?: string, receiptId?: string, reason?: string } | null} outcome
- * @returns {{ ok: true, receipt: string } | { ok: false, note: string }}
+ * @param {{ status?: string, receiptId?: string, reason?: string } | null} outcome The approval outcome.
+ * @returns {{ ok: true, receipt: string } | { ok: false, note: string }} The card settle state.
  */
 export function normalizeApproveOutcome(outcome) {
   if (outcome && outcome.status === 'executed') {
@@ -99,5 +99,8 @@ export function normalizeApproveOutcome(outcome) {
   if (outcome && outcome.status === 'replayed') {
     return { ok: true, receipt: 'already applied' };
   }
-  return { ok: false, note: (outcome && outcome.reason) || 'The vault refused this write.' };
+  return {
+    ok: false,
+    note: (outcome && outcome.reason) || 'The vault refused this write.',
+  };
 }

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import {
   formatInterval,
   PRESET_MODES,
@@ -53,12 +54,28 @@ describe(resourceCompareRows, () => {
     const byKey = (k: string): Record<string, string> | undefined =>
       rows.find((r) => r.key === k)?.values;
 
-    expect(byKey('cpu')).toStrictEqual({ conserve: '50%', balanced: '75%', performance: '100%' });
-    expect(byKey('workers')).toStrictEqual({ conserve: '2', balanced: '8', performance: '12' });
+    expect(byKey('cpu')).toStrictEqual({
+      conserve: '50%',
+      balanced: '75%',
+      performance: '100%',
+    });
+    expect(byKey('workers')).toStrictEqual({
+      conserve: '2',
+      balanced: '8',
+      performance: '12',
+    });
     expect(byKey('memory')?.balanced).toBe('2.0 GB');
     expect(byKey('memory')?.performance).toBe('4.5 GB');
-    expect(byKey('pool')).toStrictEqual({ conserve: 'none', balanced: '2', performance: '4' });
-    expect(byKey('sweep')).toStrictEqual({ conserve: '2 h', balanced: '1 h', performance: '1 h' });
+    expect(byKey('pool')).toStrictEqual({
+      conserve: 'none',
+      balanced: '2',
+      performance: '4',
+    });
+    expect(byKey('sweep')).toStrictEqual({
+      conserve: '2 h',
+      balanced: '1 h',
+      performance: '1 h',
+    });
     expect(byKey('durability')).toStrictEqual({
       conserve: 'Relaxed',
       balanced: 'Full',

@@ -20,8 +20,8 @@
  *   2  — bad usage (missing arg, unknown subcommand)
  */
 
-import path from 'node:path';
 import { statSync } from 'node:fs';
+import path from 'node:path';
 
 function printJson(value: unknown): void {
   process.stdout.write(JSON.stringify(value) + '\n');

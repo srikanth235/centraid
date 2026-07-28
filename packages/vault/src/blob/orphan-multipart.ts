@@ -30,18 +30,16 @@ export async function cleanupOrphanedMultipartUploads(
       .map((upload) => identity(upload)),
   );
   const cutoff = nowMs - (options.graceMs ?? ORPHAN_MULTIPART_GRACE_MS);
-  let aborted = 0;
-  for (const upload of await options.transfer.listTemporaryUploads()) {
+  const uploads = await options.transfer.listTemporaryUploads();
+  const abandoned = uploads.filter((upload) => {
     const initiatedMs = Date.parse(upload.initiatedAt);
-    if (!Number.isFinite(initiatedMs) || initiatedMs >= cutoff || active.has(identity(upload))) {
-      continue;
-    }
-    try {
-      await options.transfer.abortTemporaryUpload(upload.tempId, upload.uploadId);
-      aborted += 1;
-    } catch {
-      // Best-effort GC: one provider race/failure must not block custody drain.
-    }
-  }
-  return aborted;
+    return Number.isFinite(initiatedMs) && initiatedMs < cutoff && !active.has(identity(upload));
+  });
+  const results = await Promise.allSettled(
+    abandoned.map(async (upload) =>
+      options.transfer.abortTemporaryUpload(upload.tempId, upload.uploadId),
+    ),
+  );
+  // Best-effort GC: one provider race/failure must not block custody drain.
+  return results.filter((result) => result.status === 'fulfilled').length;
 }

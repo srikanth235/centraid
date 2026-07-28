@@ -1,5 +1,7 @@
 import http from 'node:http';
+
 import { describe, expect, it } from 'vitest';
+
 import {
   GATEWAY_HEADERS_TIMEOUT_MS,
   GATEWAY_KEEP_ALIVE_TIMEOUT_MS,

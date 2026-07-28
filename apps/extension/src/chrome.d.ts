@@ -72,7 +72,11 @@ declare const chrome: {
     create: (properties: { id: string; title: string; contexts: string[] }) => void;
     onClicked: ChromeEvent<
       (
-        info: { menuItemId: string | number; selectionText?: string; pageUrl?: string },
+        info: {
+          menuItemId: string | number;
+          selectionText?: string;
+          pageUrl?: string;
+        },
         tab?: ChromeTab,
       ) => void
     >;

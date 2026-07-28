@@ -4,6 +4,7 @@
 import { GROUP_ICONS, first } from '../format.ts';
 import type { Friend, NewGroupModel } from '../types.ts';
 import { ModalBackdrop } from './Shared.tsx';
+
 import styles from './GroupModal.module.css';
 import shared from './shared.module.css';
 

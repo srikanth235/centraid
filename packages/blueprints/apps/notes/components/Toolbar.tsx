@@ -4,10 +4,12 @@
 // cancels); delete arms on first click (kit armConfirm) like every other
 // blueprint delete control.
 import { useState } from 'react';
+
 import { I } from '../icons.ts';
 import { Icon } from './Shared.tsx';
-import styles from './Toolbar.module.css';
+
 import shared from './shared.module.css';
+import styles from './Toolbar.module.css';
 
 // kit.ts's armConfirm swaps a button's textContent for the armed label —
 // fine for text buttons, but it would wipe this icon-only button's SVG

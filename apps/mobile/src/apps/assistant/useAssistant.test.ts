@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
+
 import type { AssistantConfig } from '../../lib/assistant';
 
 const assistant = vi.hoisted(() => ({
-  saveAssistantSelection: vi.fn(),
+  saveAssistantSelection: vi.fn<typeof import('../../lib/assistant').saveAssistantSelection>(),
 }));
 
-vi.mock('../../lib/assistant', () => ({
+vi.mock(import('../../lib/assistant'), () => ({
   saveAssistantSelection: assistant.saveAssistantSelection,
 }));
 
@@ -42,12 +43,12 @@ function config(over: Partial<AssistantConfig> = {}): AssistantConfig {
 describe('nextProviderConsent', () => {
   it('keeps earlier approvals when a consent-gated failover asks for another provider', () => {
     const first = nextProviderConsent(undefined, 'claude-code');
-    expect(first).toEqual(['claude-code']);
-    expect(nextProviderConsent(first, 'copilot')).toEqual(['claude-code', 'copilot']);
+    expect(first).toStrictEqual(['claude-code']);
+    expect(nextProviderConsent(first, 'copilot')).toStrictEqual(['claude-code', 'copilot']);
   });
 
   it('does not repeat a provider the owner already approved', () => {
-    expect(nextProviderConsent(['codex'], 'codex')).toEqual(['codex']);
+    expect(nextProviderConsent(['codex'], 'codex')).toStrictEqual(['codex']);
   });
 });
 
@@ -79,7 +80,7 @@ describe('preflightedRunnerSelection', () => {
 
   it('turns a failed model preference write into a surfaced error result', async () => {
     assistant.saveAssistantSelection.mockRejectedValueOnce(new Error('prefs unavailable'));
-    await expect(persistAssistantSelection('codex', 'model', 'gpt-5')).resolves.toEqual({
+    await expect(persistAssistantSelection('codex', 'model', 'gpt-5')).resolves.toStrictEqual({
       ok: false,
       error: 'prefs unavailable',
     });

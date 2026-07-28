@@ -1,5 +1,6 @@
-import { describe, expect, test } from 'vitest';
 import { fc } from '@centraid/test-kit/fast-check';
+import { describe, expect, test } from 'vitest';
+
 import { validateJson } from './json-schema.js';
 
 /**
@@ -122,7 +123,10 @@ describe('vault json-schema property', () => {
     );
     fc.assert(
       fc.property(
-        fc.array(fc.integer({ min: -50, max: 50 }), { minLength: 1, maxLength: 8 }),
+        fc.array(fc.integer({ min: -50, max: 50 }), {
+          minLength: 1,
+          maxLength: 8,
+        }),
         (arr) => {
           fc.pre(arr.some((n) => n < 0));
           expect(validateJson(schema, arr).length).toBeGreaterThan(0);

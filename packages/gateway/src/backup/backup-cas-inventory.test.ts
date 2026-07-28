@@ -1,7 +1,8 @@
 // CAS inventory collector unit tests (issue #545 B7) — mocked storage connections.
 
-import { afterEach, describe, expect, test } from 'vitest';
 import { bootstrapVault, openVaultDb, updateBlobStoreSettings } from '@centraid/vault';
+import { afterEach, describe, expect, test } from 'vitest';
+
 import { collectCasInventory } from './backup-cas-inventory.js';
 
 const opened: ReturnType<typeof openVaultDb>[] = [];
@@ -38,7 +39,7 @@ describe('backup-cas-inventory', () => {
       verifyBucket: true,
     });
     expect(result.configured).toBe(true);
-    expect(result.error).toMatch(/storage connection/i);
+    expect(result.error).toMatch(/storage connection/iu);
   });
 
   test('collectCasInventory reports not configured for derived when derivedPrefix is absent', async () => {

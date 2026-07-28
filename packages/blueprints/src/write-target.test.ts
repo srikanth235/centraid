@@ -8,6 +8,7 @@
 // so the shapes it returns are declared locally.
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+
 import { describe, expect, it } from 'vitest';
 
 interface Scope {
@@ -40,15 +41,27 @@ const resolve = (selectedScopeId: string | null, list: readonly Scope[] = scopes
 
 describe('resolveWriteTarget (#599)', () => {
   it('sends an "All" selection to the member’s own scope', () => {
-    expect(resolve(null)).toEqual({ disabled: false, scopeId: 'own', label: 'Library' });
+    expect(resolve(null)).toStrictEqual({
+      disabled: false,
+      scopeId: 'own',
+      label: 'Library',
+    });
   });
 
   it('sends the own chip to the own scope', () => {
-    expect(resolve('own')).toEqual({ disabled: false, scopeId: 'own', label: 'Library' });
+    expect(resolve('own')).toStrictEqual({
+      disabled: false,
+      scopeId: 'own',
+      label: 'Library',
+    });
   });
 
   it('sends a writable audience chip to that audience', () => {
-    expect(resolve('family')).toEqual({ disabled: false, scopeId: 'family', label: 'Family' });
+    expect(resolve('family')).toStrictEqual({
+      disabled: false,
+      scopeId: 'family',
+      label: 'Family',
+    });
   });
 
   it('blocks a read-only audience and names it in the reason', () => {
@@ -59,7 +72,10 @@ describe('resolveWriteTarget (#599)', () => {
 
   it('blocks a selection naming a scope that is no longer mounted', () => {
     const target = resolve('gone');
-    expect(target).toEqual({ disabled: true, reason: 'That space isn’t open right now.' });
+    expect(target).toStrictEqual({
+      disabled: true,
+      reason: 'That space isn’t open right now.',
+    });
   });
 
   it('blocks "All" when the own scope is not among the mounted scopes', () => {
@@ -68,17 +84,20 @@ describe('resolveWriteTarget (#599)', () => {
       ownScopeId: 'own',
       selectedScopeId: null,
     });
-    expect(target).toEqual({ disabled: true, reason: 'Your own space isn’t open right now.' });
+    expect(target).toStrictEqual({
+      disabled: true,
+      reason: 'Your own space isn’t open right now.',
+    });
   });
 
   it('blocks the own scope when it is itself read-only', () => {
     const frozen = [{ id: 'own', label: 'Library', canWrite: false }, family];
-    expect(resolve('own', frozen)).toEqual({
+    expect(resolve('own', frozen)).toStrictEqual({
       disabled: true,
       reason: 'You can’t add to Library yet.',
     });
     // "All" resolves through the same branch, so it is blocked identically.
-    expect(resolve(null, frozen)).toEqual(resolve('own', frozen));
+    expect(resolve(null, frozen)).toStrictEqual(resolve('own', frozen));
   });
 
   it('never says "vault" in a reason a user reads', () => {
@@ -86,6 +105,6 @@ describe('resolveWriteTarget (#599)', () => {
       .filter((t): t is { disabled: true; reason: string } => t.disabled)
       .map((t) => t.reason);
     expect(reasons).toHaveLength(3);
-    for (const reason of reasons) expect(reason).not.toMatch(/\bvault\b/i);
+    for (const reason of reasons) expect(reason).not.toMatch(/\bvault\b/iu);
   });
 });

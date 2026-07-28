@@ -162,20 +162,23 @@ export async function rewriteAutomationManifestNames(
   } catch {
     return; // no automations/ subdir — nothing to do.
   }
-  for (const name of names) {
-    if (name.startsWith('.') || name.startsWith('_')) continue;
-    const manifestPath = path.join(autoRoot, name, 'automation.json');
-    // readFile naturally fails for non-directories and missing manifests,
-    // so we don't need a separate `isDirectory()` check via Dirent.
-    let raw: string;
-    try {
-      raw = await fs.readFile(manifestPath, 'utf8');
-    } catch {
-      continue;
-    }
-    const next = applyManifestName(raw, newName, opts);
-    if (next !== null) await fs.writeFile(manifestPath, next);
-  }
+  await Promise.all(
+    names
+      .filter((name) => !name.startsWith('.') && !name.startsWith('_'))
+      .map(async (name) => {
+        const manifestPath = path.join(autoRoot, name, 'automation.json');
+        // readFile naturally fails for non-directories and missing manifests,
+        // so we don't need a separate `isDirectory()` check via Dirent.
+        let raw: string;
+        try {
+          raw = await fs.readFile(manifestPath, 'utf8');
+        } catch {
+          return;
+        }
+        const next = applyManifestName(raw, newName, opts);
+        if (next !== null) await fs.writeFile(manifestPath, next);
+      }),
+  );
 }
 
 function escapeHtml(s: string): string {

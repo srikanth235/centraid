@@ -1,13 +1,14 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import { msUntilTonight, type ResourceProfileDTO } from './resource-summary.js';
 import ResourceModeCard, {
   parseResourceModePref,
   RESOURCE_MODE_PREF_KEY,
   type ResourceMode,
   type ResourceModeCardProps,
 } from './ResourceModeCard.js';
-import { msUntilTonight, type ResourceProfileDTO } from './resource-summary.js';
 
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
@@ -262,9 +263,10 @@ describe('screens/ResourceModeCard', () => {
     });
 
     it('reveals durations and pauses with the chosen ms', async () => {
-      const onPause = vi
-        .fn<NonNullable<ResourceModeCardProps['onPause']>>()
-        .mockResolvedValue({ paused: true, until: new Date(2026, 6, 23, 15, 0, 0).toISOString() });
+      const onPause = vi.fn<NonNullable<ResourceModeCardProps['onPause']>>().mockResolvedValue({
+        paused: true,
+        until: new Date(2026, 6, 23, 15, 0, 0).toISOString(),
+      });
       const el = await mount({
         loadMode: vi.fn<ResourceModeCardProps['loadMode']>().mockResolvedValue('auto'),
         saveMode: vi.fn<ResourceModeCardProps['saveMode']>(),
@@ -311,7 +313,10 @@ describe('screens/ResourceModeCard', () => {
       const el = await mount({
         loadMode: vi.fn<ResourceModeCardProps['loadMode']>().mockResolvedValue('auto'),
         saveMode: vi.fn<ResourceModeCardProps['saveMode']>(),
-        backgroundPause: { paused: true, until: new Date(2026, 6, 23, 14, 5, 0).toISOString() },
+        backgroundPause: {
+          paused: true,
+          until: new Date(2026, 6, 23, 14, 5, 0).toISOString(),
+        },
         onPause: vi.fn<NonNullable<ResourceModeCardProps['onPause']>>(),
         onResume,
       });
@@ -340,7 +345,10 @@ describe('screens/ResourceModeCard', () => {
         root?.render(
           <ResourceModeCard
             {...props}
-            backgroundPause={{ paused: true, until: new Date(2026, 6, 23, 9, 30, 0).toISOString() }}
+            backgroundPause={{
+              paused: true,
+              until: new Date(2026, 6, 23, 9, 30, 0).toISOString(),
+            }}
           />,
         );
       });

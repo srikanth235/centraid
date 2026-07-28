@@ -7,8 +7,10 @@ import type {
   RefObject,
   ClipboardEventHandler,
 } from 'react';
+
 import Icon from '../ui/Icon.js';
 import SessionStatusStrip from './SessionStatusStrip.js';
+
 import styles from './ChatComposer.module.css';
 
 export interface ChatComposerProps {

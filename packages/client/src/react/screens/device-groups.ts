@@ -9,12 +9,12 @@
  * device row, and their access is read back off the bindings they inherited.
  */
 
+import { isRevokedDevice } from '../../device-roster.js';
 import type {
   CentraidGatewayDevice,
   GatewayMember,
   GatewayVaultGrant,
 } from '../../gateway-client.js';
-import { isRevokedDevice } from '../../device-roster.js';
 
 export interface MemberGroup {
   memberId: string;
@@ -34,7 +34,7 @@ function rolesFromDevices(devices: readonly CentraidGatewayDevice[]): GatewayVau
     if (isRevokedDevice(device) || byVault.has(device.vaultId)) continue;
     byVault.set(device.vaultId, {
       vaultId: device.vaultId,
-      ...(device.vaultName !== undefined ? { vaultName: device.vaultName } : {}),
+      ...(device.vaultName === undefined ? {} : { vaultName: device.vaultName }),
       role: device.role as GatewayVaultGrant['role'],
     });
   }

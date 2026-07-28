@@ -7,15 +7,15 @@
 // title, floating Home key. Both surfaces load independently (useInsights), so a
 // gateway serving one but not the other still shows what it has.
 
+import { palette } from '@centraid/design-tokens';
+import { Feather } from '@expo/vector-icons';
 import React, { useMemo } from 'react';
 import { RefreshControl, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
 import Svg, { Circle, Defs, LinearGradient, Path, Stop } from 'react-native-svg';
-import { palette } from '@centraid/design-tokens';
 
-import { useTheme, type ThemeColors } from '../../kit/theme';
 import HomeKey from '../../kit/components/HomeKey';
+import { useTheme, type ThemeColors } from '../../kit/theme';
 import {
   formatBytes,
   formatCount,
@@ -199,7 +199,9 @@ function HealthHero({
               <View
                 style={[
                   styles.eventBadge,
-                  { backgroundColor: e.level === 'error' ? colors.danger : palette.amber },
+                  {
+                    backgroundColor: e.level === 'error' ? colors.danger : palette.amber,
+                  },
                 ]}
               />
               <View style={styles.eventBody}>

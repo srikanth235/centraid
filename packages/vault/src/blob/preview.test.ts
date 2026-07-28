@@ -8,12 +8,13 @@
 // reports its yield in the receipt.
 
 import { beforeEach, describe, expect, test } from 'vitest';
+
 import { bootstrapVault, type BootstrapResult } from '../bootstrap.js';
+import { registerMediaCommands } from '../commands/media.js';
 import { openVaultDb, type VaultDb } from '../db.js';
+import { leaseNextEnrichmentRequest, queueDeviceEnrichmentRequest } from '../enrich/leases.js';
 import { createGateway, Gateway } from '../gateway/gateway.js';
 import type { Credential } from '../gateway/types.js';
-import { registerMediaCommands } from '../commands/media.js';
-import { leaseNextEnrichmentRequest, queueDeviceEnrichmentRequest } from '../enrich/leases.js';
 import { backfillPreviews, type PreviewCodec } from './preview.js';
 import { shaOfBlobUri } from './store.js';
 
@@ -47,7 +48,7 @@ const stubCodec: PreviewCodec = {
     // A deterministic, canonical 21-byte (→28 char, unpadded) placeholder.
     return Buffer.alloc(21, source.length & 0xff)
       .toString('base64')
-      .replace(/=+$/, '');
+      .replace(/=+$/u, '');
   },
 };
 
@@ -62,7 +63,11 @@ describe('preview', () => {
     boot = bootstrapVault(db, { ownerName: 'Priya' });
     gw = createGateway(db);
     registerMediaCommands(gw);
-    owner = { kind: 'device', deviceId: boot.deviceId, deviceKey: boot.deviceKey };
+    owner = {
+      kind: 'device',
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+    };
   });
 
   /** Stage `bytes` as an original and claim it as a media asset — a client-less

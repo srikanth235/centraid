@@ -1,5 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
+
 import { describe, expect, test } from 'vitest';
+
 import { dbSizeBreakdown } from './table-stats.js';
 
 describe('table-stats', () => {

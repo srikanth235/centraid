@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
 import type { AutomationTurnStreamEvent } from '@centraid/app-engine';
+import { describe, expect, it } from 'vitest';
+
 import { RunEventBus } from './run-event-bus.js';
 
 describe(RunEventBus, () => {

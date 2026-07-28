@@ -1,21 +1,27 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import type { DatabaseSync } from 'node:sqlite';
+
+import { ensureConversationLedger } from '@centraid/app-engine';
 // Sweep wiring for the conversation-ledger archival engine (issue #438
 // decision 7): the daily archival block in `runSweep` must invoke conversation
 // archival alongside journal archival and roll ONE shared journal generation
 // when either engine wrote or pruned rows.
-
+import { forEachSequentially } from '@centraid/test-kit/sequential';
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterEach, describe, expect, test } from 'vitest';
-import type { DatabaseSync } from 'node:sqlite';
-import { ensureConversationLedger } from '@centraid/app-engine';
+
 import { openVaultPlane } from './vault-plane.js';
 
-const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
+const silentLogger = {
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+};
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const cleanups: Array<() => Promise<void> | void> = [];
 describe('vault-plane-conversation-archival', () => {
   afterEach(async () => {
-    while (cleanups.length > 0) await cleanups.pop()?.();
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
   });
   function seedAgedAutomation(journal: DatabaseSync, now: number): void {
     const daysAgo = (d: number): number => now - d * DAY_MS;
@@ -78,7 +84,11 @@ describe('vault-plane-conversation-archival', () => {
     // phase B pruned the raw rows in the same pass.
     const archiveRows = plane.db.journal
       .prepare(`SELECT seq_from, seq_to, pruned_at FROM conversation_archive`)
-      .all() as { seq_from: number; seq_to: number; pruned_at: number | null }[];
+      .all() as {
+      seq_from: number;
+      seq_to: number;
+      pruned_at: number | null;
+    }[];
     expect(archiveRows).toHaveLength(1);
     expect(archiveRows[0]).toMatchObject({ seq_from: 0, seq_to: 1 });
     expect(archiveRows[0]!.pruned_at).not.toBeNull();

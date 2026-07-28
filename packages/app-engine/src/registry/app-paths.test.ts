@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { ASSISTANT_APP_ID, isValidAppId, isValidAppOrAssistantId } from './app-paths.js';
 
 describe(isValidAppId, () => {

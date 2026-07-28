@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
+
 import type { AutomationEditorData } from '../screen-contracts.js';
 import { Icon } from '../ui/index.js';
+
 import styles from './AutomationEditorScreen.module.css';
 
 type RunnerOption = NonNullable<AutomationEditorData['agentRunners']>[number];
@@ -93,11 +95,15 @@ export function AutomationEditorAgentPicker({
               aria-label="Automation model"
               value={model ?? ''}
               onChange={(event) =>
-                onChange({ runner: runner ?? null, model: event.target.value || null })
+                onChange({
+                  runner: runner ?? null,
+                  model: event.target.value || null,
+                })
               }
             >
               <option value="">
-                Use default{effectiveDefaultModel ? ` (${effectiveDefaultModel})` : ''}
+                Use default
+                {effectiveDefaultModel ? ` (${effectiveDefaultModel})` : ''}
               </option>
               {model && !selected?.models.some((option) => option.id === model) ? (
                 <option value={model}>{model}</option>

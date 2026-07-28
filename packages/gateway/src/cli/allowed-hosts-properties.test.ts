@@ -1,5 +1,6 @@
-import { describe, expect, test } from 'vitest';
 import { fc } from '@centraid/test-kit/fast-check';
+import { describe, expect, test } from 'vitest';
+
 import { mergeAllowedHosts, parseAllowedHostsEnv } from './allowed-hosts.js';
 
 /**
@@ -10,7 +11,7 @@ import { mergeAllowedHosts, parseAllowedHostsEnv } from './allowed-hosts.js';
  */
 describe('allowed-hosts properties', () => {
   const hostToken = fc
-    .stringMatching(/^[A-Za-z0-9][A-Za-z0-9.-]{0,24}$/)
+    .stringMatching(/^[A-Za-z0-9][A-Za-z0-9.-]{0,24}$/u)
     .filter((s) => s.trim().length > 0);
 
   test('parseAllowedHostsEnv yields lowercased non-empty tokens only', () => {

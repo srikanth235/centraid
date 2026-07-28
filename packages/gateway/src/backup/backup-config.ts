@@ -53,7 +53,10 @@ export function validateBackupConfig(value: unknown): BackupConfig {
   if (typeof value.enabled !== 'boolean') {
     throw new BackupConfigError('`enabled` is required and must be a boolean');
   }
-  const out: BackupConfig = { enabled: value.enabled, provider: validateProvider(value.provider) };
+  const out: BackupConfig = {
+    enabled: value.enabled,
+    provider: validateProvider(value.provider),
+  };
   if (value.keyringPath !== undefined) {
     if (typeof value.keyringPath !== 'string' || value.keyringPath.length === 0) {
       throw new BackupConfigError('`keyringPath` must be a non-empty string when set');

@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
+
 import {
   readReplicaChanges,
   readReplicaIntentOutcome,
@@ -6,6 +7,7 @@ import {
   type ReplicaChangeEntry,
   type ReplicaCursor,
 } from '@centraid/vault';
+
 import {
   buildReplicaShapes,
   REPLICA_MAX_VALUE_BYTES,
@@ -273,7 +275,12 @@ export function projectReplicaPage(
     const rowFor = (entity: string, rowId: string) => {
       const key = rowKey(entity, rowId);
       if (!rows.has(key)) {
-        rows.set(key, reader.readRow(entity, rowId, { maxValueBytes: REPLICA_MAX_VALUE_BYTES }));
+        rows.set(
+          key,
+          reader.readRow(entity, rowId, {
+            maxValueBytes: REPLICA_MAX_VALUE_BYTES,
+          }),
+        );
       }
       return rows.get(key);
     };
@@ -329,10 +336,18 @@ export function projectReplicaPage(
         const rowId = shaped?.rowId ?? replicaWireRowId(shape, last.entity, last.rowId);
         const wire: ReplicaChangeWire = shaped
           ? { op: 'upsert', ...shaped }
-          : { op: 'delete', shapeId: shape.shapeId, entity: last.entity, rowId };
+          : {
+              op: 'delete',
+              shapeId: shape.shapeId,
+              entity: last.entity,
+              rowId,
+            };
         const projectedOp = wire.op === 'delete' ? 'delete' : last.op;
         const affectedKey = `${rowId}\u0000${projectedOp}`;
-        const wake = affected.get(affectedKey) ?? { op: projectedOp, shapeIds: [] };
+        const wake = affected.get(affectedKey) ?? {
+          op: projectedOp,
+          shapeIds: [],
+        };
         wake.shapeIds.push(shape.shapeId);
         affected.set(affectedKey, wake);
         changes.set(changeKey(shape.shapeId, last.entity, last.rowId), wire);

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
-import { Transform } from 'node:stream';
 import type { DatabaseSync } from 'node:sqlite';
+import { Transform } from 'node:stream';
+
 import type { BackupPolicy } from '../backup-policy.js';
 import { VaultBlobHashMismatchError, VaultBlobSessionError } from '../errors.js';
 import { uuidv7 } from '../ids.js';
@@ -94,7 +95,10 @@ export async function streamThroughOnce(
     // the final CAS object carries STANDARD_IA for an eligible large original.
     // The original's staging row is only written below, after custody, so the
     // media type + size are handed in directly for the resolver.
-    const storageClass = remote.storageClassFor?.(sha, 'cas', { mediaType, byteSize: received });
+    const storageClass = remote.storageClassFor?.(sha, 'cas', {
+      mediaType,
+      byteSize: received,
+    });
     await remote.transfer.copyTemporaryToSha(tempId, sha, storageClass);
     const final = await remote.store.stat(sha);
     if (!final) throw new Error(`provider did not HEAD-confirm ${sha}`);

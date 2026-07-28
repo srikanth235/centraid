@@ -17,6 +17,7 @@
 
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+
 import { loadSealKey, readSealKeyFingerprint, sealKeyFingerprint } from './schema/sealed.js';
 import { resolveEntity } from './schema/tables.js';
 
@@ -39,7 +40,12 @@ export interface RestoredPairReport {
   journal: { integrity: string; foreignKeyViolations: number };
   /** Receipts whose (object_type, object_id) names a vault table row that is absent. */
   receiptsChecked: number;
-  danglingReceipts: { receiptId: string; action: string; objectType: string; objectId: string }[];
+  danglingReceipts: {
+    receiptId: string;
+    action: string;
+    objectType: string;
+    objectId: string;
+  }[];
   /** Whether the restored seal key is present and unseals (issue #439 R5). */
   sealKey: { verdict: SealKeyVerdict; expected?: string };
 }
@@ -66,7 +72,10 @@ function checkSealKey(
     key = recoveryKey;
   }
   if (!key) return { verdict: 'missing', expected };
-  return { verdict: sealKeyFingerprint(key) === expected ? 'ok' : 'mismatch', expected };
+  return {
+    verdict: sealKeyFingerprint(key) === expected ? 'ok' : 'mismatch',
+    expected,
+  };
 }
 
 function checkFile(file: string): {
@@ -79,7 +88,11 @@ function checkFile(file: string): {
     | { integrity_check: string }
     | undefined;
   const fks = db.prepare('PRAGMA foreign_key_check').all();
-  return { db, integrity: integ?.integrity_check ?? 'no result', foreignKeyViolations: fks.length };
+  return {
+    db,
+    integrity: integ?.integrity_check ?? 'no result',
+    foreignKeyViolations: fks.length,
+  };
 }
 
 function pkOf(db: DatabaseSync, physical: string): string | undefined {
@@ -106,7 +119,12 @@ export function verifyRestoredPair(
         `SELECT receipt_id, action, object_type, object_id FROM consent_receipt
          WHERE object_id IS NOT NULL AND decision = 'allow'`,
       )
-      .all() as { receipt_id: string; action: string; object_type: string; object_id: string }[];
+      .all() as {
+      receipt_id: string;
+      action: string;
+      object_type: string;
+      object_id: string;
+    }[];
     const existsStmt = new Map<string, { pk: string; physical: string } | null>();
     for (const row of rows) {
       const ref = resolveEntity(row.object_type, vault.db);
@@ -136,8 +154,14 @@ export function verifyRestoredPair(
     journal.db.close();
   }
   return {
-    vault: { integrity: vault.integrity, foreignKeyViolations: vault.foreignKeyViolations },
-    journal: { integrity: journal.integrity, foreignKeyViolations: journal.foreignKeyViolations },
+    vault: {
+      integrity: vault.integrity,
+      foreignKeyViolations: vault.foreignKeyViolations,
+    },
+    journal: {
+      integrity: journal.integrity,
+      foreignKeyViolations: journal.foreignKeyViolations,
+    },
     receiptsChecked,
     danglingReceipts,
     sealKey,

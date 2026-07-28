@@ -1,12 +1,14 @@
 import { type JSX } from 'react';
-import { cx } from '../ui/cx.js';
+
 import {
   ALERT_PRESETS,
   buildAlertHistoryRows,
   thresholdLabel,
   type GatewayRuntimeSnapshot,
 } from '../shell/routes/gatewayData.js';
+import { cx } from '../ui/cx.js';
 import AlertHistoryPanel from './AlertHistoryPanel.js';
+
 import styles from './GatewayScreen.module.css';
 
 // Gateway → Alerts tab, extracted verbatim from GatewayScreen (issue #528

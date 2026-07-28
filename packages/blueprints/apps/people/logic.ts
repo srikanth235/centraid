@@ -1,3 +1,4 @@
+import { PALETTE, listColor, daysSince, daysUntilAnnual, statusOf } from './format.ts';
 // Non-visual business logic: vault IO (write/act), row derivation, selection,
 // the kebab/move-to-list popover (stays plain DOM, built with kit's
 // `h()`/`popItem()` — no React root needed there), every person/list write,
@@ -19,7 +20,6 @@ import {
   runBulk as runBulkBase,
   toast,
 } from './kit.ts';
-import { PALETTE, listColor, daysSince, daysUntilAnnual, statusOf } from './format.ts';
 import type {
   DashboardData,
   DetailPerson,
@@ -163,7 +163,10 @@ export function createLogic({
               closePopover();
               movePerson(p, c.list_id, c.name);
             },
-            { disabled: p.list_id === c.list_id, dotColor: listColor(c.list_id) },
+            {
+              disabled: p.list_id === c.list_id,
+              dotColor: listColor(c.list_id),
+            },
           ),
         ),
       );
@@ -192,7 +195,10 @@ export function createLogic({
   }
 
   async function movePerson(p: Person | DetailPerson, listId: string | null, name: string) {
-    const input = { party_id: p.party_id, ...(listId == null ? {} : { list_id: listId }) };
+    const input = {
+      party_id: p.party_id,
+      ...(listId == null ? {} : { list_id: listId }),
+    };
     const outcome = await act('move-person', input);
     if (!narrate(outcome)) return;
     toast(`Moved to ${name} · receipted.`);
@@ -201,7 +207,11 @@ export function createLogic({
   }
 
   async function logInteraction(p: DetailPerson, kind: string, text: string) {
-    const outcome = await act('log-interaction', { party_id: p.party_id, kind, text });
+    const outcome = await act('log-interaction', {
+      party_id: p.party_id,
+      kind,
+      text,
+    });
     if (!narrate(outcome)) return;
     toast(`Logged · receipted.`);
     await refresh();
@@ -285,7 +295,10 @@ export function createLogic({
   }
   async function loadDetail(id: string) {
     try {
-      const res = await window.centraid.read<{ person?: DetailPerson; vaultDenied?: unknown }>({
+      const res = await window.centraid.read<{
+        person?: DetailPerson;
+        vaultDenied?: unknown;
+      }>({
         query: 'person',
         input: { party_id: id },
       });

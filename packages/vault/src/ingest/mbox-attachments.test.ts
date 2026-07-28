@@ -3,15 +3,16 @@
 // discard releases the hold so the TTL sweep reclaims the bytes.
 
 import { beforeEach, describe, expect, test } from 'vitest';
-import { bootstrapVault, type BootstrapResult } from '../bootstrap.js';
-import { openVaultDb, type VaultDb } from '../db.js';
+
 import { sweepBlobStaging } from '../blob/staging.js';
 import { blobUriFor, sha256OfBytes } from '../blob/store.js';
+import { bootstrapVault, type BootstrapResult } from '../bootstrap.js';
+import { openVaultDb, type VaultDb } from '../db.js';
+import type { Identity } from '../gateway/types.js';
 import { parseMbox } from './mbox.js';
+import { PUBLISHERS } from './publishers.js';
 import { stageFile } from './stage-file.js';
 import { discardBatch, publishBatch } from './staging.js';
-import { PUBLISHERS } from './publishers.js';
-import type { Identity } from '../gateway/types.js';
 
 const PNG_BYTES = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
@@ -72,7 +73,10 @@ describe('mbox-attachments', () => {
   });
 
   test('stage → publish: attachment bytes claim onto the message with an edge', () => {
-    const staged = stageFile(db, owner, { filename: 'mail.mbox', data: mboxWithAttachment() });
+    const staged = stageFile(db, owner, {
+      filename: 'mail.mbox',
+      data: mboxWithAttachment(),
+    });
     const sha = sha256OfBytes(PNG_BYTES);
     // Staged with the batch hold — the review pause outlasts any TTL.
     const hold = db.vault
@@ -100,14 +104,19 @@ describe('mbox-attachments', () => {
     // Claimed: the staging row is gone, the bytes stay (a content item owns them).
     // node:sqlite hands back null-prototype rows; spreading compares the column
     // data (which is the contract) without asserting the driver's prototype.
-    expect({ ...db.vault.prepare('SELECT count(*) AS n FROM blob_staging').get() }).toStrictEqual({
+    expect({
+      ...db.vault.prepare('SELECT count(*) AS n FROM blob_staging').get(),
+    }).toStrictEqual({
       n: 0,
     });
     expect(db.blobs.hasSync(sha)).toBe(true);
   });
 
   test('stage → discard: hold releases and the TTL sweep reclaims the bytes', () => {
-    const staged = stageFile(db, owner, { filename: 'mail.mbox', data: mboxWithAttachment() });
+    const staged = stageFile(db, owner, {
+      filename: 'mail.mbox',
+      data: mboxWithAttachment(),
+    });
     const sha = sha256OfBytes(PNG_BYTES);
     discardBatch(db, owner, staged.batchId);
     db.vault.prepare('UPDATE blob_staging SET staged_at = ?').run('2000-01-01T00:00:00.000Z');

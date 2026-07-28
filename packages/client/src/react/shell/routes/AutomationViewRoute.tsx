@@ -1,4 +1,5 @@
 import { type JSX, useRef } from 'react';
+
 import {
   auth,
   deleteAutomation,
@@ -12,28 +13,28 @@ import {
   streamAutomationConversationTurn,
   uploadConversationAttachment,
 } from '../../../gateway-client.js';
-import AutomationThreadScreen, {
-  type AutomationThreadDataEx,
-} from '../../screens/AutomationThreadScreen.js';
+import { providerConsentWire, withProviderConsent } from '../../providerConsent.js';
 import type {
   AgentsStatusDTO,
   AsstModelPickerDTO,
   AsstMsgDTO,
   BuilderAttachmentRef,
 } from '../../screen-contracts.js';
+import AutomationThreadScreen, {
+  type AutomationThreadDataEx,
+} from '../../screens/AutomationThreadScreen.js';
 import { useShellActions } from '../actions.js';
 import PageScroll from '../PageScroll.js';
 import { openWebhookReveal } from '../webhookReveal.js';
-import { deriveAutomationHero } from './automationsData.js';
-import { decideConsentItem, loadAutomationThreadData } from './automationThreadData.js';
-import { loadTurnTrace, watchTurnMessages } from './automationTurnWatch.js';
 import {
   automationLiveMessages,
   createAutomationLiveTrace,
   reduceAutomationTurnEvent,
 } from './automationLiveMessages.js';
+import { deriveAutomationHero } from './automationsData.js';
+import { decideConsentItem, loadAutomationThreadData } from './automationThreadData.js';
+import { loadTurnTrace, watchTurnMessages } from './automationTurnWatch.js';
 import { loadProviders, resolveReportedRunnerKind } from './settingsProvidersData.js';
-import { providerConsentWire, withProviderConsent } from '../../providerConsent.js';
 
 export function automationPicker(
   status: AgentsStatusDTO,
@@ -132,7 +133,9 @@ async function askAutomationWithConsent(input: {
   // Approvals accumulate across this ask: consent for provider A then a
   // failover to B must resend BOTH, or the server re-asks for A forever (#567).
   let approvedProviders: string[] = [];
-  for (;;) {
+  // A consent request changes the credentials for the next transport attempt,
+  // so this is a serial retry state machine rather than parallel asks.
+  const requestTurn = async (): Promise<string | null> => {
     let requiredProvider: string | undefined;
     const result = await streamAutomationConversationTurn(
       input.automationRef,
@@ -171,7 +174,9 @@ async function askAutomationWithConsent(input: {
     });
     if (!approved) return null;
     approvedProviders = withProviderConsent(approvedProviders, requiredProvider);
-  }
+    return requestTurn();
+  };
+  return requestTurn();
 }
 
 // The RUN SCREEN's route wrapper. It wires exactly the reading surface:
@@ -279,7 +284,9 @@ export default function AutomationViewRoute({
           const row = rowRef.current;
           if (!row) return null;
           try {
-            const { turnId } = await runAutomationNow({ automationId: row.ref });
+            const { turnId } = await runAutomationNow({
+              automationId: row.ref,
+            });
             showToast('Run started');
             return turnId;
           } catch (err) {
@@ -291,7 +298,10 @@ export default function AutomationViewRoute({
           const row = rowRef.current;
           if (!row) return false;
           try {
-            await setAutomationEnabled({ automationId: row.ref, enabled: next });
+            await setAutomationEnabled({
+              automationId: row.ref,
+              enabled: next,
+            });
             return true;
           } catch (err) {
             showToast(
@@ -398,7 +408,9 @@ export default function AutomationViewRoute({
           });
           if (!ok) return false;
           try {
-            const { webhook } = await rotateAutomationWebhookSecret({ automationId: row.ref });
+            const { webhook } = await rotateAutomationWebhookSecret({
+              automationId: row.ref,
+            });
             await openWebhookReveal(webhook, {
               note: "This secret is shown once. Update your caller now — you won't see it again.",
               title: 'New webhook secret',

@@ -27,6 +27,8 @@
 
 import { readdirSync, rmSync, existsSync } from 'node:fs';
 import path from 'node:path';
+
+import type { RuntimeLogger, VaultBridge, VaultWorkspace } from '@centraid/app-engine';
 import {
   uuidv7,
   VaultSchemaAheadError,
@@ -35,9 +37,9 @@ import {
   type PreviewCodec,
   type KeyStore,
 } from '@centraid/vault';
-import type { RuntimeLogger, VaultBridge, VaultWorkspace } from '@centraid/app-engine';
-import { openVaultPlane, VaultPlane, type InstallScopeBlock } from './vault-plane.js';
+
 import { vaultContext } from './vault-context.js';
+import { openVaultPlane, VaultPlane, type InstallScopeBlock } from './vault-plane.js';
 
 /**
  * Minimum time between retry attempts for a directory whose mount failed
@@ -246,7 +248,11 @@ export class VaultRegistry {
           // operator moving/removing one of the directories.
           const message = `duplicate vault id ${plane.boot.vaultId} at ${dir} — skipped`;
           this.logger.warn(`vault registry: ${message}`);
-          this.failedMountsByDir.set(dir, { message, atMs: nowMs, schemaAhead: false });
+          this.failedMountsByDir.set(dir, {
+            message,
+            atMs: nowMs,
+            schemaAhead: false,
+          });
           plane.stop();
           continue;
         }

@@ -1,17 +1,17 @@
 import { File } from 'expo-file-system';
 
-import type { NativeReplicaSession } from '../replica/native-session';
+import { Store } from '../../storage';
 import { authHeader } from '../gateway';
-import { withDrainLock } from './drain-lock';
+import type { NativeReplicaSession } from '../replica/native-session';
 import { generateDeviceDerivatives } from './derivatives-native';
+import { withDrainLock } from './drain-lock';
 import { sha256OfFile } from './enqueue';
 import { expoFileSource } from './expo-native';
 import { replaySettledUploadFollowups } from './followup';
 import { UploadForegroundService } from './foreground-service';
 import { createNativeDigest } from './native-digest';
-import { UploadQueue } from './native-queue';
 import { LAST_SUCCESSFUL_SYNC_KEY, nativeUploadPolicy } from './native-policy';
-import { Store } from '../../storage';
+import { UploadQueue } from './native-queue';
 
 export interface DeviceMediaInput {
   localUri: string;

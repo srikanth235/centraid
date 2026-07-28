@@ -1,9 +1,10 @@
 /* Gateway backup target/fencing state in gateway.db (issue #555). */
 
 import { createHmac, randomBytes } from 'node:crypto';
+
+import { GatewayDatabase } from '../serve/gateway-db.js';
 import type { ProviderPolicySyncState } from './backup-provider-observability.js';
 import type { BackupReconciliationState } from './backup-reconciliation.js';
-import { GatewayDatabase } from '../serve/gateway-db.js';
 
 export interface BackupTargetState {
   targetId: string;

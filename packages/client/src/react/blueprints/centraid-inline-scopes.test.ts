@@ -1,7 +1,8 @@
+import type { InlineAppModule, InlineScope } from '@centraid/blueprints/apps/inline-types';
 // The multi-scope inline facade (issue #599): one app mounted over the
 // member's own scope plus every audience they belong to.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { InlineAppModule, InlineScope } from '@centraid/blueprints/apps/inline-types';
+
 import type { ReplicaInvalidation } from '../../replica/types.js';
 import {
   addInlineScope,
@@ -11,22 +12,27 @@ import {
   type InlineScopeSession,
 } from './centraid-inline.js';
 
-const doFetch = vi.fn();
-const readJson = vi.fn();
-vi.mock('../../gateway-client-core.js', () => ({
-  auth: vi.fn(async () => ({ baseUrl: 'https://gw.test', token: 'tok' })),
+const { doFetch, readJson } = vi.hoisted(() => ({
+  doFetch: vi.fn<typeof import('../../gateway-client-core.js').doFetch>(),
+  readJson: vi.fn<(res: Response, op: string) => Promise<unknown>>(),
+}));
+vi.mock(import('../../gateway-client-core.js') as Promise<unknown>, async () => ({
+  auth: vi.fn<typeof import('../../gateway-client-core.js').auth>(async () => ({
+    baseUrl: 'https://gw.test',
+    token: 'tok',
+  })),
   authHeaders: (token: string | undefined, ct?: string) => ({
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(ct ? { 'Content-Type': ct } : {}),
   }),
-  doFetch: (...args: unknown[]) => doFetch(...args),
-  readJson: (...args: unknown[]) => readJson(...args),
   VAULT_HEADER: 'x-centraid-vault',
+  doFetch,
+  readJson: <T>(...args: Parameters<typeof readJson>) => readJson(...args) as Promise<T>,
 }));
 
 interface Fake extends InlineScopeSession {
   writes: unknown[];
-  emit(invalidation: ReplicaInvalidation): void;
+  emit: (invalidation: ReplicaInvalidation) => void;
 }
 
 function fakeSession(): Fake {
@@ -35,23 +41,29 @@ function fakeSession(): Fake {
   return {
     writes,
     emit(invalidation: ReplicaInvalidation) {
-      for (const listener of [...subscribers]) listener([invalidation]);
+      for (const listener of subscribers.slice()) listener([invalidation]);
     },
-    read: vi.fn(async () => ({ rows: [], cursor: { epoch: 'e', seq: 1 } })),
-    search: vi.fn(async () => ({ rows: [], cursor: { epoch: 'e', seq: 1 } })),
-    write: vi.fn(async (_appId: string, input: unknown) => {
+    read: vi.fn<InlineScopeSession['read']>(async () => ({
+      rows: [],
+      cursor: { epoch: 'e', seq: 1 },
+      dependency: { shapeId: 's', entity: 'media.media_asset' },
+    })),
+    search: vi.fn<InlineScopeSession['search']>(async () => ({
+      rows: [],
+      cursor: { epoch: 'e', seq: 1 },
+      dependency: { shapeId: 's', entity: 'media.media_asset' },
+    })),
+    write: vi.fn<InlineScopeSession['write']>(async (_appId, input) => {
       writes.push(input);
       return { intentId: 'i-1', status: 'executed' };
     }),
-    subscribe: vi.fn(
-      (_appId: string, _deps: unknown, listener: (inv: readonly ReplicaInvalidation[]) => void) => {
-        subscribers.push(listener);
-        return () => {
-          const i = subscribers.indexOf(listener);
-          if (i >= 0) subscribers.splice(i, 1);
-        };
-      },
-    ),
+    subscribe: vi.fn<InlineScopeSession['subscribe']>((_appId, _deps, listener) => {
+      subscribers.push(listener);
+      return () => {
+        const i = subscribers.indexOf(listener);
+        if (i >= 0) subscribers.splice(i, 1);
+      };
+    }),
   } as unknown as Fake;
 }
 
@@ -64,7 +76,7 @@ function tellScope(name: string): InlineAppModule['queries'] {
   return {
     [name]: {
       default: ({ ctx }: { ctx: unknown }) =>
-        (ctx as { vault: { read(r: unknown): Promise<unknown> } }).vault
+        (ctx as { vault: { read: (r: unknown) => Promise<unknown> } }).vault
           .read({ entity: 'media.media_asset' })
           .then(() => ({ ok: true })),
     },
@@ -94,7 +106,7 @@ describe('multi-scope inline client', () => {
       { scope: own, session: fakeSession() },
       { scope: family, session: fakeSession() },
     ]);
-    expect(client.scopes.map((s) => s.id)).toEqual(['vault-own', 'vault-family']);
+    expect(client.scopes.map((s) => s.id)).toStrictEqual(['vault-own', 'vault-family']);
   });
 
   it('read addresses the primary scope, and a named scope when asked', async () => {
@@ -105,11 +117,11 @@ describe('multi-scope inline client', () => {
       { scope: family, session: familySession },
     ]);
     await client.read({ query: 'library' });
-    expect(ownSession.read).toHaveBeenCalledTimes(1);
+    expect(ownSession.read).toHaveBeenCalledOnce();
     expect(familySession.read).not.toHaveBeenCalled();
 
     await client.read({ query: 'library', scope: 'vault-family' });
-    expect(familySession.read).toHaveBeenCalledTimes(1);
+    expect(familySession.read).toHaveBeenCalledOnce();
   });
 
   it('refuses a scope that is not mounted rather than falling back', async () => {
@@ -123,7 +135,9 @@ describe('multi-scope inline client', () => {
     const ownSession = fakeSession();
     const brokenSession = fakeSession();
     (brokenSession.read as ReturnType<typeof vi.fn>).mockRejectedValue(
-      Object.assign(new Error('audience is unreachable'), { code: 'VAULT_ERROR' }),
+      Object.assign(new Error('audience is unreachable'), {
+        code: 'VAULT_ERROR',
+      }),
     );
     const client = build([
       { scope: own, session: ownSession },
@@ -146,8 +160,11 @@ describe('multi-scope inline client', () => {
       { scope: own, session: ownSession },
       { scope: family, session: familySession },
     ]);
-    const results = await client.readAll({ query: 'library', scopes: ['vault-family'] });
-    expect(results.map((r) => r.scope)).toEqual(['vault-family']);
+    const results = await client.readAll({
+      query: 'library',
+      scopes: ['vault-family'],
+    });
+    expect(results.map((r) => r.scope)).toStrictEqual(['vault-family']);
     expect(ownSession.read).not.toHaveBeenCalled();
   });
 
@@ -158,7 +175,11 @@ describe('multi-scope inline client', () => {
       { scope: own, session: ownSession },
       { scope: family, session: familySession },
     ]);
-    await client.write({ action: 'upload', input: { a: 1 }, scope: 'vault-family' });
+    await client.write({
+      action: 'upload',
+      input: { a: 1 },
+      scope: 'vault-family',
+    });
     expect(familySession.writes).toHaveLength(1);
     expect(ownSession.writes).toHaveLength(0);
   });
@@ -185,11 +206,23 @@ describe('multi-scope inline client', () => {
     ]);
     const seen: Array<string | undefined> = [];
     const stop = client.onChange((detail) => seen.push(detail.scope));
-    familySession.emit({ shapeId: 's', entity: 'media.media_asset', source: 'canonical' });
-    ownSession.emit({ shapeId: 's', entity: 'media.media_asset', source: 'canonical' });
-    expect(seen).toEqual(['vault-family', 'vault-own']);
+    familySession.emit({
+      shapeId: 's',
+      entity: 'media.media_asset',
+      source: 'canonical',
+    });
+    ownSession.emit({
+      shapeId: 's',
+      entity: 'media.media_asset',
+      source: 'canonical',
+    });
+    expect(seen).toStrictEqual(['vault-family', 'vault-own']);
     stop();
-    familySession.emit({ shapeId: 's', entity: 'media.media_asset', source: 'canonical' });
+    familySession.emit({
+      shapeId: 's',
+      entity: 'media.media_asset',
+      source: 'canonical',
+    });
     expect(seen).toHaveLength(2);
   });
 
@@ -203,13 +236,20 @@ describe('multi-scope inline client', () => {
     expect(addInlineScope(client, { scope: family, session: familySession })).toBe(true);
     // The arrival is announced on the change channel, tagged with the NEW scope,
     // so the app refetches exactly that one instead of re-reading everything.
-    expect(seen).toEqual([
+    expect(seen).toStrictEqual([
       expect.objectContaining({ source: 'scope-added', scope: 'vault-family' }),
     ]);
-    expect(client.scopes.map((s) => s.id)).toEqual(['vault-own', 'vault-family']);
+    expect(client.scopes.map((s) => s.id)).toStrictEqual(['vault-own', 'vault-family']);
 
-    familySession.emit({ shapeId: 's', entity: 'media.media_asset', source: 'canonical' });
-    expect(seen.at(-1)).toMatchObject({ scope: 'vault-family', source: 'canonical' });
+    familySession.emit({
+      shapeId: 's',
+      entity: 'media.media_asset',
+      source: 'canonical',
+    });
+    expect(seen.at(-1)).toMatchObject({
+      scope: 'vault-family',
+      source: 'canonical',
+    });
   });
 
   it('addInlineScope ignores an object it did not build', () => {
@@ -219,9 +259,11 @@ describe('multi-scope inline client', () => {
   it('the online-read fallback names the scope so the gateway cannot answer for another', async () => {
     const offline = fakeSession();
     (offline.read as ReturnType<typeof vi.fn>).mockRejectedValue(
-      Object.assign(new Error('needs the online vault'), { code: 'ONLINE_ONLY' }),
+      Object.assign(new Error('needs the online vault'), {
+        code: 'ONLINE_ONLY',
+      }),
     );
-    doFetch.mockResolvedValue({ ok: true });
+    doFetch.mockResolvedValue(new Response());
     readJson.mockResolvedValue({ ok: true });
     const client = build([
       { scope: own, session: fakeSession() },

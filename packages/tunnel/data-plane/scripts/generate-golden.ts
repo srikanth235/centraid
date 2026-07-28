@@ -2,7 +2,9 @@ import { createCipheriv, createHash, createHmac } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { deflateRawSync, zstdCompressSync } from 'node:zlib';
+
 import { cbsfFrameAad } from '@centraid/blob-format';
+
 import { deriveDataKey, type Keyring } from '../../backup/src/crypto.ts';
 import { sealManifest } from '../../backup/src/manifest.ts';
 import { sealWalSegment, type WalSegmentAddress } from '../../backup/src/wal-format.ts';
@@ -97,7 +99,13 @@ const walSealed = sealWalSegment(dataKey, vaultId, walAddress, walPlain);
 const keyring: Keyring = {
   version: 1,
   active: 1,
-  epochs: [{ epoch: 1, key: masterKey.toString('base64'), createdAt: '2026-07-18T00:00:00.000Z' }],
+  epochs: [
+    {
+      epoch: 1,
+      key: masterKey.toString('base64'),
+      createdAt: '2026-07-18T00:00:00.000Z',
+    },
+  ],
 };
 const chunkId = createHash('sha256').update('golden chunk').digest('hex');
 const entries = [

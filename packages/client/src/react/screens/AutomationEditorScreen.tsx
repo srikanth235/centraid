@@ -1,6 +1,7 @@
+import type { IconName } from '@centraid/design-tokens';
 // governance: allow-repo-hygiene file-size-limit (#325) single cohesive screen component (Name/Instructions/trigger-picker/tabs form for one surface); splitting would fragment one visual unit
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type JSX } from 'react';
-import type { IconName } from '@centraid/design-tokens';
+
 import { relativeRunLabel } from '../../app-format.js';
 import { glyphForId, hueForId } from '../../automation-identity.js';
 import { cronNextRuns, cronRunLabel, resolveCronTimezone } from '../../cron.js';
@@ -10,12 +11,13 @@ import type {
   AutomationEditorBridgeProps,
   AutomationEditorData,
 } from '../screen-contracts.js';
-import { Button, Icon, IconButton } from '../ui/index.js';
 import { cx } from '../ui/cx.js';
-import au from '../styles/automation.module.css';
+import { Button, Icon, IconButton } from '../ui/index.js';
 import AutomationCompilePane from './AutomationCompilePane.js';
-import { AutomationEditorConnectorsPicker } from './AutomationEditorConnectorsPicker.js';
 import { AutomationEditorAgentPicker } from './AutomationEditorAgentPicker.js';
+import { AutomationEditorConnectorsPicker } from './AutomationEditorConnectorsPicker.js';
+
+import au from '../styles/automation.module.css';
 import styles from './AutomationEditorScreen.module.css';
 
 // The COMPILE SCREEN — one of the two automation surfaces, and the only one
@@ -151,7 +153,11 @@ function whereClauseOf(row: WhereRowDraft): { column: string; op: string; value?
   if (NUMERIC_OPS.has(row.op)) {
     const t = row.value.trim();
     const n = Number(t);
-    return { column, op: row.op, value: t !== '' && Number.isFinite(n) ? n : t };
+    return {
+      column,
+      op: row.op,
+      value: t !== '' && Number.isFinite(n) ? n : t,
+    };
   }
   return { column, op: row.op, value: coerceScalar(row.value) };
 }
@@ -386,9 +392,17 @@ export default function AutomationEditorScreen({
   const [model, setModel] = useState<string | null | undefined>(undefined);
   const [triggers, setTriggers] = useState<TriggerDraft[]>([]);
   const [entityTypes, setEntityTypes] = useState<string[]>([]);
-  const [mention, setMention] = useState<{ start: number; query: string } | null>(null);
+  const [mention, setMention] = useState<{
+    start: number;
+    query: string;
+  } | null>(null);
   const [mentionHits, setMentionHits] = useState<
-    Array<{ type: string; id: string; title: string | null; subtitle: string | null }>
+    Array<{
+      type: string;
+      id: string;
+      title: string | null;
+      subtitle: string | null;
+    }>
   >([]);
   const [enabled, setEnabled] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -529,7 +543,7 @@ export default function AutomationEditorScreen({
       active = false;
       window.clearTimeout(timer);
     };
-  }, [mention, onSearchEntities]);
+  }, [mention, onSearchEntities, mentionIdle]);
 
   const refreshCatalog = useCallback(async (): Promise<void> => {
     if (!loadConnectorCatalog) {
@@ -868,7 +882,10 @@ export default function AutomationEditorScreen({
           trigger.kind === 'cron' && trigger.expr.trim()
             ? cronNextRuns(trigger.expr.trim(), 3, new Date(), cronTz).map((dt) =>
                 cronTz
-                  ? cronRunLabel(dt, { timeZone: cronTz, viewerTimeZone: viewerTz })
+                  ? cronRunLabel(dt, {
+                      timeZone: cronTz,
+                      viewerTimeZone: viewerTz,
+                    })
                   : relativeRunLabel(dt),
               )
             : [];

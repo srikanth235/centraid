@@ -1,6 +1,5 @@
-import { describe, expect, test } from 'vitest';
-
 import { OnlineOnlyError, type ReplicaSnapshot } from '@centraid/client/replica/native';
+import { describe, expect, test } from 'vitest';
 
 import { NativeReplicaStore } from './native-replica-store';
 import { NodeSqliteDriver } from './node-sqlite-driver';
@@ -61,7 +60,10 @@ describe(NativeReplicaStore, () => {
         epoch: 'replica-1',
         seq: 2,
       });
-      const wire = await store.readWire({ shapeId: 'shape-photos', entity: 'core.content_item' });
+      const wire = await store.readWire({
+        shapeId: 'shape-photos',
+        entity: 'core.content_item',
+      });
       expect(wire.rows[0]?.values.title).toBe('Moonlit campsite');
       expect(wire.rows[0]?.oversizedFields).toStrictEqual(['caption']);
     } finally {
@@ -73,7 +75,10 @@ describe(NativeReplicaStore, () => {
     const store = NativeReplicaStore.create(new NodeSqliteDriver(), 'vault-a');
     try {
       await store.bootstrap(snapshot());
-      const result = await store.read({ shapeId: 'shape-photos', entity: 'core.content_item' });
+      const result = await store.read({
+        shapeId: 'shape-photos',
+        entity: 'core.content_item',
+      });
       const row = result.rows[0]!;
       expect(row.title).toBe('Moonlit campsite');
       expect(() => row.caption).toThrow(OnlineOnlyError);

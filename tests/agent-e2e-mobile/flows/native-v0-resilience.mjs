@@ -66,5 +66,8 @@ await runFlow('native-v0-resilience', async (ctx) => {
   ctx.note(
     'Five native tabs survived navigation and a process restart; complete the documented network matrix on this device.',
   );
-  return { pass: true, notes: 'native five-tab shell and process-restart smoke passed' };
+  return {
+    pass: true,
+    notes: 'native five-tab shell and process-restart smoke passed',
+  };
 });

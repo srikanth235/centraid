@@ -2,13 +2,17 @@ import { randomBytes } from 'node:crypto';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
-import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest';
+
 import { tempDir } from '@centraid/test-kit/temp-dir';
+import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest';
+
 import { createTunnelClient, tunnelRequest, type TunnelClient } from './client.js';
+import type { DesktopTunnelOptions } from './desktop-tunnel.js';
 import { DeviceStore } from './device-store.js';
 import {
   startGatewayEndpoint,
   type GatewayEndpointHandle,
+  type GatewayEndpointOptions,
   type GatewayPairResponse,
 } from './gateway-endpoint.js';
 import { startNativeDesktopTunnel } from './native-relay.js';
@@ -19,8 +23,10 @@ describe.skipIf(process.env.CENTRAID_RUN_NATIVE_TUNNEL !== '1')('native gateway 
   let server: http.Server;
   let endpoint: GatewayEndpointHandle;
   let client: TunnelClient;
-  const boxedAuthorize = vi.fn(() => false);
-  const boxedPair = vi.fn((): GatewayPairResponse => ({ ok: false }));
+  const boxedAuthorize = vi.fn<GatewayEndpointOptions['authorize']>(() => false);
+  const boxedPair = vi.fn<GatewayEndpointOptions['pair']>(
+    (): GatewayPairResponse => ({ ok: false }),
+  );
   const controlCalls: Array<{ path: string; endpointId: string }> = [];
 
   beforeAll(async () => {
@@ -36,12 +42,19 @@ describe.skipIf(process.env.CENTRAID_RUN_NATIVE_TUNNEL !== '1')('native gateway 
           controlCalls.push({ path: url.pathname, endpointId });
           res.setHeader('content-type', 'application/json');
           if (url.pathname.endsWith('/authorize')) {
-            res.end(JSON.stringify({ allowed: true, headers: { 'x-native-device': endpointId } }));
+            res.end(
+              JSON.stringify({
+                allowed: true,
+                headers: { 'x-native-device': endpointId },
+              }),
+            );
             return;
           }
           const chunks: Buffer[] = [];
           for await (const chunk of req) chunks.push(Buffer.from(chunk));
-          const request = JSON.parse(Buffer.concat(chunks).toString()) as { ticketId?: string };
+          const request = JSON.parse(Buffer.concat(chunks).toString()) as {
+            ticketId?: string;
+          };
           res.end(
             JSON.stringify({
               ok: request.ticketId === 'ticket',
@@ -64,7 +77,10 @@ describe.skipIf(process.env.CENTRAID_RUN_NATIVE_TUNNEL !== '1')('native gateway 
     const port = (server.address() as AddressInfo).port;
     endpoint = await startGatewayEndpoint({
       secretKey: randomBytes(32),
-      upstream: () => ({ baseUrl: `http://127.0.0.1:${port}`, token: 'gateway-token' }),
+      upstream: () => ({
+        baseUrl: `http://127.0.0.1:${port}`,
+        token: 'gateway-token',
+      }),
       authorize: boxedAuthorize,
       pair: boxedPair,
       nativeControl: { secret: CONTROL_SECRET },
@@ -110,7 +126,7 @@ describe.skipIf(process.env.CENTRAID_RUN_NATIVE_TUNNEL !== '1')('native gateway 
         method: 'GET',
         target: '/revoked-live-connection',
       }),
-    ).rejects.toThrow(/reason: b"revoked"/);
+    ).rejects.toThrow(/reason: b"revoked"/u);
     connection.close(0n, []);
   }, 30_000);
 
@@ -122,7 +138,7 @@ describe.skipIf(process.env.CENTRAID_RUN_NATIVE_TUNNEL !== '1')('native gateway 
       baseUrl: `http://127.0.0.1:${port}`,
       token: 'desktop-gateway-token',
     };
-    const paired = vi.fn();
+    const paired = vi.fn<NonNullable<DesktopTunnelOptions['onPaired']>>();
     const desktop = await startNativeDesktopTunnel({
       secretKey: randomBytes(32),
       deviceStore: DeviceStore.open(path.join(dir, 'devices.json')),

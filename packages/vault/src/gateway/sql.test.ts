@@ -1,15 +1,16 @@
-import { tempDirSync } from '@centraid/test-kit/temp-dir';
+import { rmSync } from 'node:fs';
 // The owner's whole-model SQL surface: read-only by construction (lexical
 // gate + query_only execution on disk vaults), owner-only at identity, row
 // capped, receipted. The queries in here look like what the vault
 // assistant actually writes — joins, CTEs, window functions.
 
-import { rmSync } from 'node:fs';
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+
+import { bootstrapVault, enrollApp, type BootstrapResult } from '../bootstrap.js';
 import { registerKnowledgeCommands } from '../commands/knowledge.js';
 import { registerLinkCommands } from '../commands/links.js';
 import { registerPartyCommands } from '../commands/parties.js';
-import { bootstrapVault, enrollApp, type BootstrapResult } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { createGateway, Gateway } from './gateway.js';
 import { readOnlySqlRefusal } from './sql.js';
@@ -29,7 +30,11 @@ function setup(dir?: string): void {
   registerKnowledgeCommands(gw);
   registerPartyCommands(gw);
   registerLinkCommands(gw);
-  owner = { kind: 'device', deviceId: boot.deviceId, deviceKey: boot.deviceKey };
+  owner = {
+    kind: 'device',
+    deviceId: boot.deviceId,
+    deviceKey: boot.deviceKey,
+  };
 }
 
 describe('sql', () => {
@@ -71,7 +76,10 @@ describe('sql', () => {
         .get(result.receiptId) as { decision: string; object_type: string };
       // node:sqlite hands back null-prototype rows; spreading compares the column
       // data (which is the contract) without asserting the driver's prototype.
-      expect({ ...receipt }).toStrictEqual({ decision: 'allow', object_type: 'vault.sql' });
+      expect({ ...receipt }).toStrictEqual({
+        decision: 'allow',
+        object_type: 'vault.sql',
+      });
     });
 
     test('recursive CTEs and window functions work (multi-hop questions)', () => {
@@ -101,13 +109,17 @@ describe('sql', () => {
     });
 
     test('a broken statement surfaces the SQLite message for self-correction', () => {
-      expect(() => gw.sql(owner, { sql: `SELECT * FROM no_such_table` })).toThrow(/no_such_table/);
+      expect(() => gw.sql(owner, { sql: `SELECT * FROM no_such_table` })).toThrow(/no_such_table/u);
     });
 
     test('only the owner-device credential may call it (receipted deny)', () => {
       const app = enrollApp(db, { name: 'snoop' });
-      const cred: Credential = { kind: 'app', appId: app.appId, signingKey: app.signingKey };
-      expect(() => gw.sql(cred, { sql: 'SELECT 1' })).toThrow(/owner/);
+      const cred: Credential = {
+        kind: 'app',
+        appId: app.appId,
+        signingKey: app.signingKey,
+      };
+      expect(() => gw.sql(cred, { sql: 'SELECT 1' })).toThrow(/owner/u);
       const deny = db.journal
         .prepare(
           `SELECT decision FROM consent_receipt WHERE object_type = 'vault.sql' ORDER BY receipt_id DESC LIMIT 1`,
@@ -133,7 +145,10 @@ describe('sql', () => {
     test('reads (including FTS MATCH + vault_content_text) work', () => {
       const outcome = gw.invoke(owner, {
         command: 'knowledge.create_note',
-        input: { title: 'Money things', body_text: 'the quarterly budget plan' },
+        input: {
+          title: 'Money things',
+          body_text: 'the quarterly budget plan',
+        },
         purpose: PURPOSE,
       });
       expect(outcome.status).toBe('executed');

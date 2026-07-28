@@ -1,10 +1,12 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
 // governance: allow-repo-hygiene file-size-limit (#408) the engine's behavior suite — snapshot/restore/verify roundtrips plus the /1 WAL+PITR+determinism cases all share the same provider/keyring/tempdir fixtures; splitting by topic would duplicate the fixture plumbing in every shard
 import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { describe, expect, test } from 'vitest';
+
 import { ALGO_STORE, ALGO_ZSTD, unframeChunkPayload } from './compress.js';
 import {
   activeMasterKey,
@@ -18,11 +20,15 @@ import {
 import { createSnapshot, restoreSnapshot, verifySnapshot, type SourceEntry } from './engine.js';
 import { LocalBackupProvider } from './local-provider.js';
 import { openManifest, READABLE_SNAPSHOT_FORMATS, SNAPSHOT_FORMAT_V2 } from './manifest.js';
-import { partBuffer } from './parts.js';
 import type { ObjectStore } from './object-store.js';
+import { partBuffer } from './parts.js';
 import type { BackupProvider, StoreClass } from './provider.js';
 
-const CURRENT = { gatewayVersion: '0.1.0', vaultUserVersion: '1', ontologyVersion: '1.2' };
+const CURRENT = {
+  gatewayVersion: '0.1.0',
+  vaultUserVersion: '1',
+  ontologyVersion: '1.2',
+};
 const APP_META = {
   gatewayVersion: '0.1.0',
   vaultUserVersion: '1',
@@ -151,8 +157,16 @@ async function buildSourceTree(sourceDir: string): Promise<SourceEntry[]> {
       kind: 'blob',
       absolutePath: path.join(sourceDir, 'blobs', 'ab', 'cdef'),
     },
-    { path: 'apps.bundle', kind: 'git-bundle', absolutePath: path.join(sourceDir, 'apps.bundle') },
-    { path: 'seal.key', kind: 'seal-key', absolutePath: path.join(sourceDir, 'seal.key') },
+    {
+      path: 'apps.bundle',
+      kind: 'git-bundle',
+      absolutePath: path.join(sourceDir, 'apps.bundle'),
+    },
+    {
+      path: 'seal.key',
+      kind: 'seal-key',
+      absolutePath: path.join(sourceDir, 'seal.key'),
+    },
   ];
 }
 
@@ -212,11 +226,16 @@ describe('createSnapshot / restoreSnapshot roundtrip', () => {
     expect(result.seq).toBe(1);
     expect(result.entries.sort()).toStrictEqual(entries.map((e) => e.path).sort());
 
-    for (const entry of entries) {
-      const original = await fs.readFile(entry.absolutePath);
-      const restored = await fs.readFile(path.join(destDir, ...entry.path.split('/')));
-      expect(restored.equals(original)).toBe(true);
-    }
+    const restoredPairs = await Promise.all(
+      entries.map(async (entry) => {
+        const [original, restored] = await Promise.all([
+          fs.readFile(entry.absolutePath),
+          fs.readFile(path.join(destDir, ...entry.path.split('/'))),
+        ]);
+        return { original, restored };
+      }),
+    );
+    restoredPairs.forEach(({ original, restored }) => expect(restored.equals(original)).toBe(true));
 
     const marker = JSON.parse(
       await fs.readFile(path.join(destDir, 'RESTORE_QUARANTINE.json'), 'utf8'),
@@ -323,7 +342,7 @@ describe('createSnapshot / restoreSnapshot roundtrip', () => {
         destDir,
         current: CURRENT,
       }),
-    ).rejects.toThrow(/not empty/);
+    ).rejects.toThrow(/not empty/u);
   });
 
   test('restoreSnapshot refuses a newer vaultUserVersion than the running code', async () => {
@@ -348,7 +367,7 @@ describe('createSnapshot / restoreSnapshot roundtrip', () => {
         destDir,
         current: CURRENT,
       }),
-    ).rejects.toThrow(/newer/);
+    ).rejects.toThrow(/newer/u);
   });
 
   test('restoreSnapshot refuses an unknown format', async () => {
@@ -385,7 +404,7 @@ describe('createSnapshot / restoreSnapshot roundtrip', () => {
         destDir,
         current: CURRENT,
       }),
-    ).rejects.toThrow(/unknown format/);
+    ).rejects.toThrow(/unknown format/u);
   });
 
   test('restoreSnapshot rejects a snapshot whose manifest hash does not verify', async () => {
@@ -416,7 +435,7 @@ describe('createSnapshot / restoreSnapshot roundtrip', () => {
         destDir,
         current: CURRENT,
       }),
-    ).rejects.toThrow(/hash mismatch/);
+    ).rejects.toThrow(/hash mismatch/u);
   });
 });
 
@@ -524,9 +543,11 @@ function makeSqliteDbFile(filePath: string, vals: string[]): void {
 function readSqliteRows(filePath: string): string[] {
   const conn = new DatabaseSync(filePath);
   try {
-    return (conn.prepare('SELECT val FROM rows ORDER BY id').all() as { val: string }[]).map(
-      (r) => r.val,
-    );
+    return (
+      conn.prepare('SELECT val FROM rows ORDER BY id').all() as {
+        val: string;
+      }[]
+    ).map((r) => r.val);
   } finally {
     conn.close();
   }
@@ -546,7 +567,9 @@ describe('/1 snapshots: db entries carry sha256 + walGeneration + baseTickMs', (
   async function buildSqliteFixture(): Promise<Fixture & { genByPath: Map<string, string> }> {
     const rootDir = await tempDir('backup-engine-provider-');
     const provider = new SpyProvider(new LocalBackupProvider({ rootDir }));
-    const { targetId } = await provider.createTarget({ label: 'engine-v2-test' });
+    const { targetId } = await provider.createTarget({
+      label: 'engine-v2-test',
+    });
     const keyringDir = await tempDir('backup-engine-keyring-');
     const keyring = await createKeyring(path.join(keyringDir, 'keyring.json'));
     const sourceDir = await tempDir('backup-engine-source-');
@@ -555,7 +578,7 @@ describe('/1 snapshots: db entries carry sha256 + walGeneration + baseTickMs', (
     makeSqliteDbFile(path.join(sourceDir, 'journal.db'), ['j1']);
     // Closing the last connection checkpoints and deletes the WAL — the base
     // file is WAL-quiet, exactly the state the shipper snapshots from.
-    await expect(fs.access(path.join(sourceDir, 'vault.db-wal'))).rejects.toThrow(/ENOENT/);
+    await expect(fs.access(path.join(sourceDir, 'vault.db-wal'))).rejects.toThrow(/ENOENT/u);
     await fs.writeFile(path.join(sourceDir, 'seal.key'), pseudoRandomBuffer(32, 5));
 
     const entries: SourceEntry[] = [
@@ -577,7 +600,11 @@ describe('/1 snapshots: db entries carry sha256 + walGeneration + baseTickMs', (
         // together, and restore refuses a pair that cannot show it.
         baseTickMs: BASE_TICK,
       },
-      { path: 'seal.key', kind: 'seal-key', absolutePath: path.join(sourceDir, 'seal.key') },
+      {
+        path: 'seal.key',
+        kind: 'seal-key',
+        absolutePath: path.join(sourceDir, 'seal.key'),
+      },
     ];
     const genByPath = new Map([
       ['vault.db', GEN_VAULT],
@@ -674,7 +701,7 @@ describe('/1 snapshots: db entries carry sha256 + walGeneration + baseTickMs', (
         generation: 1,
         appMeta: APP_META,
       }),
-    ).rejects.toThrow(/bases are from DIFFERENT ticks/);
+    ).rejects.toThrow(/bases are from DIFFERENT ticks/u);
   });
 
   test('a /1 snapshot with NO base ticks at all is refused (it cannot prove coherence)', async () => {
@@ -690,7 +717,7 @@ describe('/1 snapshots: db entries carry sha256 + walGeneration + baseTickMs', (
         generation: 1,
         appMeta: APP_META,
       }),
-    ).rejects.toThrow(/missing a valid base tick/);
+    ).rejects.toThrow(/missing a valid base tick/u);
   });
 
   test('a WRONG sha256 in the db entry fails the restore before any replay', async () => {
@@ -718,10 +745,10 @@ describe('/1 snapshots: db entries carry sha256 + walGeneration + baseTickMs', (
         destDir,
         current: CURRENT,
       }),
-    ).rejects.toThrow(/"vault\.db" hash mismatch/);
+    ).rejects.toThrow(/"vault\.db" hash mismatch/u);
     // The restore aborted before completing: no quarantine marker was written.
     await expect(fs.access(path.join(destDir, 'RESTORE_QUARANTINE.json'))).rejects.toThrow(
-      /ENOENT/,
+      /ENOENT/u,
     );
   });
 
@@ -753,7 +780,7 @@ describe('/1 snapshots: db entries carry sha256 + walGeneration + baseTickMs', (
     // what the previous manifest recorded — the coarse-timestamp filesystem,
     // made deterministic. ONLY `walGeneration` differs.
     const pinned = new Date(BASE_TICK);
-    for (const entry of entries) await fs.utimes(entry.absolutePath, pinned, pinned);
+    await Promise.all(entries.map((entry) => fs.utimes(entry.absolutePath, pinned, pinned)));
     const rolled = entries.map((e) =>
       e.kind === 'db' ? { ...e, walGeneration: `${e.walGeneration!.slice(0, 30)}ff` } : e,
     );
@@ -804,7 +831,7 @@ describe('/1 snapshots: db entries carry sha256 + walGeneration + baseTickMs', (
     // different, the fast path is never reached, and this test would pass
     // against the very bug it exists to catch.
     const pinned = new Date(BASE_TICK);
-    for (const entry of entries) await fs.utimes(entry.absolutePath, pinned, pinned);
+    await Promise.all(entries.map((entry) => fs.utimes(entry.absolutePath, pinned, pinned)));
 
     await createSnapshot({
       provider,
@@ -827,7 +854,7 @@ describe('/1 snapshots: db entries carry sha256 + walGeneration + baseTickMs', (
     await expect(fileSha256(vaultDb)).resolves.not.toBe(staleSha);
     // Re-pin: the rewrite reset the mtime. Now BOTH bases present the identical
     // (size, mtime) stat — the coarse-mtime collision this guards against.
-    for (const entry of entries) await fs.utimes(entry.absolutePath, pinned, pinned);
+    await Promise.all(entries.map((entry) => fs.utimes(entry.absolutePath, pinned, pinned)));
 
     const next = await Promise.all(
       entries.map(async (e) =>
@@ -911,7 +938,7 @@ describe('snapshot format gate', () => {
         destDir,
         current: CURRENT,
       }),
-    ).rejects.toThrow(/unknown format "centraid-snapshot\/9"/);
+    ).rejects.toThrow(/unknown format "centraid-snapshot\/9"/u);
   });
 });
 
@@ -1034,7 +1061,7 @@ describe('point-in-time snapshot row selection', () => {
     // After both → the newest (seq 2).
     expect((await restoreAt(2_500_000)).equals(f.contentV2)).toBe(true);
     // Before every snapshot → refuse, never "helpfully" restore something newer.
-    await expect(restoreAt(500_000)).rejects.toThrow(/no snapshot exists at or before/);
+    await expect(restoreAt(500_000)).rejects.toThrow(/no snapshot exists at or before/u);
   });
 
   test('seq + pointInTimeMs: a base NEWER than the requested instant is refused, not served', async () => {
@@ -1045,7 +1072,7 @@ describe('point-in-time snapshot row selection', () => {
     // and a base cannot be rewound: serving it would answer "the state at T"
     // with a state that only existed later. Refuse.
     await expect(restoreWith(f, { seq: 2, pointInTimeMs: 1_500_000 })).rejects.toThrow(
-      /seq 2 has a base at .* NEWER than the requested point in time/,
+      /seq 2 has a base at .* NEWER than the requested point in time/u,
     );
 
     // The combination stays legal where it means something: an explicitly
@@ -1255,13 +1282,23 @@ describe('entropy-gated compression (/2, #405 §1)', () => {
       destDir,
       current: CURRENT,
     });
-    for (const entry of entries) {
-      const original = await fs.readFile(entry.absolutePath);
-      const restored = await fs.readFile(path.join(destDir, ...entry.path.split('/')));
-      expect(restored.equals(original)).toBe(true);
-    }
+    const restoredPairs = await Promise.all(
+      entries.map(async (entry) => {
+        const [original, restored] = await Promise.all([
+          fs.readFile(entry.absolutePath),
+          fs.readFile(path.join(destDir, ...entry.path.split('/'))),
+        ]);
+        return { original, restored };
+      }),
+    );
+    restoredPairs.forEach(({ original, restored }) => expect(restored.equals(original)).toBe(true));
 
-    const verified = await verifySnapshot({ provider, targetId, keyring, vaultId: 'vault-1' });
+    const verified = await verifySnapshot({
+      provider,
+      targetId,
+      keyring,
+      vaultId: 'vault-1',
+    });
     expect(verified.missing).toStrictEqual([]);
     expect(verified.corrupt).toStrictEqual([]);
   });
@@ -1336,11 +1373,16 @@ describe('entropy-gated compression (/2, #405 §1)', () => {
     // And the stored object really was compressed (proving the id is
     // compression-independent, not "compression didn't run"): unseal it and
     // confirm the zstd frame byte, while the id still recomputes over raw.
-    for (const id of blobEntry.chunks) {
-      const sealed = decrypt(dataKey, await store.get(`chunks/${id}`));
+    const sealedChunks = await Promise.all(
+      blobEntry.chunks.map(async (id) => ({
+        id,
+        sealed: decrypt(dataKey, await store.get(`chunks/${id}`)),
+      })),
+    );
+    sealedChunks.forEach(({ id, sealed }) => {
       expect(sealed[0]).toBe(ALGO_ZSTD);
       const plain = unframeChunkPayload(sealed);
       expect(chunkId(dedupKey, plain)).toBe(id);
-    }
+    });
   });
 });

@@ -10,6 +10,7 @@
 import { randomBytes } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+
 import { connectionsFile, LOCAL_GATEWAY_ID } from './gateway-paths.js';
 import { clearGatewayCredentials } from './gateway-secrets.js';
 import {
@@ -23,8 +24,9 @@ import {
 } from './gateway-store-core.js';
 import { ensureIrohProxy } from './iroh-dialer.js';
 
+export { defaultAvatarColor } from './gateway-store-core.js';
+
 export type GatewayProfile = GatewayProfileShape;
-export { defaultAvatarColor };
 
 export interface ResolvedGateway {
   readonly profile: GatewayProfile;
@@ -84,7 +86,10 @@ async function writeProfiles(profiles: readonly GatewayProfile[]): Promise<void>
   const file = connectionsFile();
   await fs.mkdir(path.dirname(file), { recursive: true });
   const temp = `${file}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`;
-  await fs.writeFile(temp, `${JSON.stringify(profiles, null, 2)}\n`, { mode: 0o600, flag: 'wx' });
+  await fs.writeFile(temp, `${JSON.stringify(profiles, null, 2)}\n`, {
+    mode: 0o600,
+    flag: 'wx',
+  });
   try {
     await fs.rename(temp, file);
     await fs.chmod(file, 0o600);

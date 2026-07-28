@@ -17,9 +17,10 @@
  * gateway data directory at all.
  */
 
+import path from 'node:path';
+
 import { platformDefaultDataDir } from '@centraid/gateway';
 import { app } from 'electron';
-import path from 'node:path';
 
 /** Device-local id for the one gateway hosted on this machine. */
 export const LOCAL_GATEWAY_ID = 'local';

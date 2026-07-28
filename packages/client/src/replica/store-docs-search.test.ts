@@ -82,7 +82,11 @@ describe('store-docs-search', () => {
         });
         expect(
           store
-            .search({ shapeId: 'shape-docs', entity: 'core.document', query: 'invoice' })
+            .search({
+              shapeId: 'shape-docs',
+              entity: 'core.document',
+              query: 'invoice',
+            })
             .rows.map((row) => row.values.document_id),
         ).toStrictEqual(['doc-invoice']);
 
@@ -108,7 +112,11 @@ describe('store-docs-search', () => {
           ],
         });
         expect(
-          store.search({ shapeId: 'shape-docs', entity: 'core.document', query: 'lease' }).rows,
+          store.search({
+            shapeId: 'shape-docs',
+            entity: 'core.document',
+            query: 'lease',
+          }).rows,
         ).toHaveLength(0);
       } finally {
         store.close();

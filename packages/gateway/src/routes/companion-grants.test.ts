@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { companionModuleState } from './companion-grants.js';
 
 describe('Companion module grant state', () => {

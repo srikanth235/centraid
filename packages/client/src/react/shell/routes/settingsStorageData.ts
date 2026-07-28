@@ -26,7 +26,11 @@ import type {
 // "blocked by the gate" from "not a valid home" from "just failed".
 
 function toRowDTO(c: StorageConnectionDTO): StorageConnectionRowDTO {
-  return { id: c.id, name: c.name, ...(c.baseUrl ? { baseUrl: c.baseUrl } : {}) };
+  return {
+    id: c.id,
+    name: c.name,
+    ...(c.baseUrl ? { baseUrl: c.baseUrl } : {}),
+  };
 }
 
 export async function loadStorageConnectionsData(): Promise<StorageConnectionRowDTO[]> {
@@ -47,7 +51,11 @@ export async function createStorageConnection(
     return { ok: true, value: toRowDTO(connection) };
   } catch (err) {
     if (err instanceof RecoveryKitNotConfirmedError) {
-      return { ok: false, code: 'recovery_kit_not_confirmed', message: err.message };
+      return {
+        ok: false,
+        code: 'recovery_kit_not_confirmed',
+        message: err.message,
+      };
     }
     if (err instanceof ProviderNotHomeProfileError) {
       const missing =
@@ -60,7 +68,11 @@ export async function createStorageConnection(
         message: `This provider can’t be a home for your data.${missing} A home needs to keep snapshots, store your sealed files, meter usage, and prove restores work.`,
       };
     }
-    return { ok: false, code: 'error', message: err instanceof Error ? err.message : String(err) };
+    return {
+      ok: false,
+      code: 'error',
+      message: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 
@@ -98,7 +110,10 @@ export async function testStorageConnection(id: string): Promise<StorageTestResu
 export async function loadVaultBlobStoreData(): Promise<VaultBlobStoreDTO> {
   const settings = await getVaultBlobStore();
   return settings.kind === 's3'
-    ? { kind: 's3', ...(settings.connectionId ? { connectionId: settings.connectionId } : {}) }
+    ? {
+        kind: 's3',
+        ...(settings.connectionId ? { connectionId: settings.connectionId } : {}),
+      }
     : { kind: 'fs' };
 }
 
@@ -119,9 +134,17 @@ export async function attachVaultConnection(
     };
   } catch (err) {
     if (err instanceof RecoveryKitNotConfirmedError) {
-      return { ok: false, code: 'recovery_kit_not_confirmed', message: err.message };
+      return {
+        ok: false,
+        code: 'recovery_kit_not_confirmed',
+        message: err.message,
+      };
     }
-    return { ok: false, code: 'error', message: err instanceof Error ? err.message : String(err) };
+    return {
+      ok: false,
+      code: 'error',
+      message: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 
@@ -130,6 +153,9 @@ export async function attachVaultConnection(
 export async function detachVaultConnection(): Promise<VaultBlobStoreDTO> {
   const settings = await detachVaultStorageConnection();
   return settings.kind === 's3'
-    ? { kind: 's3', ...(settings.connectionId ? { connectionId: settings.connectionId } : {}) }
+    ? {
+        kind: 's3',
+        ...(settings.connectionId ? { connectionId: settings.connectionId } : {}),
+      }
     : { kind: 'fs' };
 }

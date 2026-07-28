@@ -16,11 +16,12 @@
 
 import { startRuntimeHttpServer } from '@centraid/app-engine';
 import { WEBHOOK_ROUTE_PREFIX } from '@centraid/automation';
+import { ROUTES } from '@centraid/protocol';
+
 import { OAUTH_CALLBACK_PATH } from '../routes/connections-routes.js';
+import { buildGateway, type BuildGatewayOptions, type BuiltGateway } from './build-gateway.js';
 import { WEB_SESSION_REDEEM_PATH } from './web-app-sessions.js';
 import { startWebUiServer } from './web-ui-server.js';
-import { buildGateway, type BuildGatewayOptions, type BuiltGateway } from './build-gateway.js';
-import { ROUTES } from '@centraid/protocol';
 
 export interface ServeOptions extends BuildGatewayOptions {
   /** HTTP bind host. Defaults to `127.0.0.1` (loopback). */

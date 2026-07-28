@@ -1,12 +1,9 @@
 import type { BlobCache } from './cache.js';
-import type { LocalBlobStore } from './local.js';
 import { remoteEncryptionKey, type RemoteTier } from './custody-types.js';
-import type { ReplicaStore } from './replica-index.js';
-import { resolveWriteStore } from './store-routing.js';
-import type { BlobStore } from './store.js';
+import type { LocalBlobStore } from './local.js';
 import type { MultipartPart, RemoteBlobTransfer } from './remote-transfer.js';
 import { verifyRemoteSealedObject } from './remote-verify.js';
-import { sealBlob, sealBlobStream } from './seal.js';
+import type { ReplicaStore } from './replica-index.js';
 import {
   DEFAULT_FRAME_SIZE,
   encodeHeader,
@@ -15,6 +12,9 @@ import {
   sealDirectory,
   sealStoredFrame,
 } from './seal-frames.js';
+import { sealBlob, sealBlobStream } from './seal.js';
+import { resolveWriteStore } from './store-routing.js';
+import type { BlobStore } from './store.js';
 import type { OutboxRow, BlobTransferState } from './transfer-state.js';
 
 const PART_BYTES = 16 * 1024 * 1024;
@@ -79,15 +79,21 @@ async function confirmFinal(
       if (sample > 0) {
         const ranges = [
           { start: 0, end: sample - 1 },
-          { start: Math.max(0, row.byte_size - sample), end: row.byte_size - 1 },
+          {
+            start: Math.max(0, row.byte_size - sample),
+            end: row.byte_size - 1,
+          },
         ];
-        for (const range of ranges) {
-          const [remoteBytes, localBytes] = await Promise.all([
-            store.get(row.sha256, range),
-            Promise.resolve(deps.local.getSync(row.sha256, range)),
-          ]);
-          if (!remoteBytes || !localBytes || !remoteBytes.equals(localBytes)) return false;
-        }
+        const samples = await Promise.all(
+          ranges.map(async (range) => {
+            const [remoteBytes, localBytes] = await Promise.all([
+              store.get(row.sha256, range),
+              Promise.resolve(deps.local.getSync(row.sha256, range)),
+            ]);
+            return !!remoteBytes && !!localBytes && remoteBytes.equals(localBytes);
+          }),
+        );
+        if (!samples.every(Boolean)) return false;
       }
     }
   } catch {
@@ -158,7 +164,10 @@ async function uploadViaDurableFinalMultipart(
   const totalParts = encryptionKey
     ? Math.max(1, frameCount)
     : Math.ceil(row.byte_size / PART_BYTES);
-  for (let partNumber = 1; partNumber <= totalParts; partNumber += 1) {
+  // Persist each completed part before moving on: a crash must leave a prefix
+  // the next drain can resume, never an unrecorded concurrent set of uploads.
+  const uploadNextPart = async (partNumber: number): Promise<void> => {
+    if (partNumber > totalParts) return;
     if (!saved.has(partNumber)) {
       let bytes: Buffer;
       if (encryptionKey) {
@@ -191,7 +200,9 @@ async function uploadViaDurableFinalMultipart(
         [...saved].map(([number, etag]) => ({ partNumber: number, etag })),
       );
     }
-  }
+    return uploadNextPart(partNumber + 1);
+  };
+  await uploadNextPart(1);
   const parts = [...saved]
     .filter(([number]) => number <= totalParts)
     .map(([number, etag]) => ({ partNumber: number, etag }))

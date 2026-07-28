@@ -102,7 +102,9 @@ function estimateBreakdown(db: DatabaseSync): TableSizeEntry[] {
   const entries: TableSizeEntry[] = [];
   for (const { name } of tables) {
     try {
-      const row = db.prepare(`SELECT COUNT(*) AS n FROM "${name}"`).get() as { n: number };
+      const row = db.prepare(`SELECT COUNT(*) AS n FROM "${name}"`).get() as {
+        n: number;
+      };
       entries.push({ table: name, rows: row.n });
     } catch {
       // A shadow table for a virtual module that refuses a bare COUNT(*)
@@ -116,7 +118,13 @@ function estimateBreakdown(db: DatabaseSync): TableSizeEntry[] {
 export function dbSizeBreakdown(db: DatabaseSync): DbSizeBreakdown {
   const { pageCount, pageSize, fileBytesTotal } = fileTotals(db);
   try {
-    return { method: 'dbstat', fileBytesTotal, pageSize, pageCount, tables: dbstatBreakdown(db) };
+    return {
+      method: 'dbstat',
+      fileBytesTotal,
+      pageSize,
+      pageCount,
+      tables: dbstatBreakdown(db),
+    };
   } catch {
     return {
       method: 'estimate',

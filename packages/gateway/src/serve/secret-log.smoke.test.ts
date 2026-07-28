@@ -1,3 +1,7 @@
+import crypto from 'node:crypto';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
+
 /**
  * Secret-in-logs / token leakage smoke (#496 G3).
  * Drives a real `serve()` instance and asserts error/auth paths never echo
@@ -6,9 +10,7 @@
  */
 import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import crypto from 'node:crypto';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
+
 import type { GatewayPaths } from '../paths.js';
 import { serve, type GatewayServeHandle } from './serve.js';
 
@@ -30,11 +32,11 @@ function pathsUnder(dir: string, logs: string): GatewayPaths {
 async function readAllLogs(): Promise<string> {
   try {
     const names = await fs.readdir(logsDir);
-    const chunks: string[] = [];
-    for (const name of names) {
-      if (!name.endsWith('.jsonl')) continue;
-      chunks.push(await fs.readFile(path.join(logsDir, name), 'utf8'));
-    }
+    const chunks = await Promise.all(
+      names
+        .filter((name) => name.endsWith('.jsonl'))
+        .map((name) => fs.readFile(path.join(logsDir, name), 'utf8')),
+    );
     return chunks.join('\n');
   } catch {
     return '';
@@ -81,11 +83,11 @@ describe('secret-log.smoke', () => {
     expect(res.status).toBeLessThan(500);
     const body = await res.text();
     expect(body).not.toContain(ADMIN);
-    expect(body).not.toMatch(/Bearer\s+secret-log-admin/i);
+    expect(body).not.toMatch(/Bearer\s+secret-log-admin/iu);
 
     const logs = await readAllLogs();
     expect(logs).not.toContain(ADMIN);
-    expect(logs).not.toMatch(/Bearer\s+secret-log-admin/i);
+    expect(logs).not.toMatch(/Bearer\s+secret-log-admin/iu);
   });
 
   test('error path with seal-key-shaped payload does not reflect raw key material in body or logs', async () => {

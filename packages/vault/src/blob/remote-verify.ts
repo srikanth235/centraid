@@ -1,4 +1,3 @@
-import type { BlobStore } from './store.js';
 import {
   decodeHeader,
   decodeTrailer,
@@ -7,6 +6,7 @@ import {
   TRAILER_BYTES,
   unsealFrame,
 } from './seal.js';
+import type { BlobStore } from './store.js';
 
 /** Verify provider identity plus the authenticated directory and first frame. */
 export async function verifyRemoteSealedObject(input: {

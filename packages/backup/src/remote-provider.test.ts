@@ -1,4 +1,6 @@
+import { forEachSequentially } from '@centraid/test-kit/sequential';
 import { afterEach, describe, expect, test } from 'vitest';
+
 import { providerConformanceCases, type ConformanceHarness } from './conformance.js';
 import { BackupProviderError } from './provider.js';
 import { RemoteBackupProvider } from './remote-provider.js';
@@ -13,7 +15,7 @@ const cleanups: Array<() => Promise<void>> = [];
 
 describe('remote-provider', () => {
   afterEach(async () => {
-    while (cleanups.length > 0) await cleanups.pop()?.();
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
   });
 
   async function fixture(): Promise<{
@@ -22,15 +24,24 @@ describe('remote-provider', () => {
   }> {
     const gateway = await startFakeProviderServer();
     cleanups.push(gateway.close);
-    const provider = new RemoteBackupProvider({ baseUrl: gateway.url, apiKey: gateway.apiKey });
+    const provider = new RemoteBackupProvider({
+      baseUrl: gateway.url,
+      apiKey: gateway.apiKey,
+    });
     return { gateway, provider };
   }
 
   describe('RemoteBackupProvider against the fake gateway', () => {
     test('auth: missing/wrong bearer is rejected with auth_expired', async () => {
       const { gateway } = await fixture();
-      const bad = new RemoteBackupProvider({ baseUrl: gateway.url, apiKey: 'wrong-key' });
-      await expect(bad.capabilities()).rejects.toMatchObject({ code: 'auth_expired', status: 401 });
+      const bad = new RemoteBackupProvider({
+        baseUrl: gateway.url,
+        apiKey: 'wrong-key',
+      });
+      await expect(bad.capabilities()).rejects.toMatchObject({
+        code: 'auth_expired',
+        status: 401,
+      });
     });
 
     test('envelope: capabilities unwraps the {data} envelope', async () => {
@@ -90,7 +101,10 @@ describe('remote-provider', () => {
           format: 'centraid-snapshot/2',
           appMeta: {},
         }),
-      ).rejects.toMatchObject({ code: 'conflict_generation', details: { currentGeneration: 3 } });
+      ).rejects.toMatchObject({
+        code: 'conflict_generation',
+        details: { currentGeneration: 3 },
+      });
     });
 
     test('credential modes round-trip through the fake S3 data plane', async () => {
@@ -120,7 +134,10 @@ describe('remote-provider', () => {
 
       const store = await provider.openDataPlane(targetId, 'cas', 'read-write');
       await store.put('blobs/a', new Uint8Array([1, 2, 3]));
-      const inventory = await provider.listInventory(targetId, { store: 'cas', limit: 1 });
+      const inventory = await provider.listInventory(targetId, {
+        store: 'cas',
+        limit: 1,
+      });
       expect(inventory.objects).toMatchObject([{ key: 'blobs/a', sizeBytes: 3, state: 'live' }]);
 
       const audit = await provider.listEvents(targetId);
@@ -141,10 +158,10 @@ describe('remote-provider', () => {
       );
       for (const request of [putReq!, getReq!]) {
         expect(request.headers.authorization).toMatch(
-          /^AWS4-HMAC-SHA256 Credential=AKIAFAKETEST\//,
+          /^AWS4-HMAC-SHA256 Credential=AKIAFAKETEST\//u,
         );
-        expect(request.headers.authorization).toMatch(/Signature=[0-9a-f]{64}/);
-        expect(request.headers['x-amz-content-sha256']).toMatch(/^[0-9a-f]{64}$/);
+        expect(request.headers.authorization).toMatch(/Signature=[0-9a-f]{64}/u);
+        expect(request.headers['x-amz-content-sha256']).toMatch(/^[0-9a-f]{64}$/u);
         expect(request.headers['x-amz-security-token']).toBe('fakeSessionToken');
       }
     });
@@ -153,7 +170,11 @@ describe('remote-provider', () => {
       const { provider } = await fixture();
       const { targetId } = await provider.createTarget({ label: 't' });
       const store = await provider.openDataPlane(targetId, 'backup', 'read-write');
-      for (let i = 0; i < 5; i++) await store.put(`chunks/p${i}`, new Uint8Array([i]));
+      await Promise.all(
+        Array.from({ length: 5 }, async (_, index) =>
+          store.put(`chunks/p${index}`, new Uint8Array([index])),
+        ),
+      );
       const keys: string[] = [];
       for await (const object of store.list('chunks/')) keys.push(object.key);
       expect(keys.sort()).toStrictEqual([
@@ -204,7 +225,10 @@ describe('remote-provider', () => {
     async function makeHarness(): Promise<ConformanceHarness> {
       const gateway = await startFakeProviderServer();
       return {
-        provider: new RemoteBackupProvider({ baseUrl: gateway.url, apiKey: gateway.apiKey }),
+        provider: new RemoteBackupProvider({
+          baseUrl: gateway.url,
+          apiKey: gateway.apiKey,
+        }),
         cleanup: gateway.close,
         seedPruneEvent: gateway.seedPruneEvent,
       };

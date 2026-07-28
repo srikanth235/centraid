@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { spawnSync } from 'node:child_process';
 /**
  * Ensure the browser Iroh WASM artifact exists (issue #468 K15).
  * The binary is gitignored; CI and clean checkouts must build it via
@@ -6,7 +7,6 @@
  * or a prior build), skip the expensive rustc step.
  */
 import { existsSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 
 const root = path.dirname(import.meta.dirname);

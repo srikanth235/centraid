@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+
 import {
   appEntry,
   cleanupEnv,
@@ -33,13 +34,32 @@ test.afterEach(async () => {
 
 const TURN_FRAMES = [
   { data: { type: 'assistant.start' }, delayMs: 20 },
-  { data: { type: 'assistant.delta', delta: 'Scaffolding your app…' }, delayMs: 20 },
   {
-    data: { type: 'tool.start', toolCallId: 'w1', toolName: 'write', args: { path: 'index.html' } },
+    data: { type: 'assistant.delta', delta: 'Scaffolding your app…' },
     delayMs: 20,
   },
-  { data: { type: 'tool.result', toolCallId: 'w1', toolName: 'write', ok: true }, delayMs: 20 },
-  { data: { type: 'assistant.delta', delta: ' Done — preview is live.' }, delayMs: 20 },
+  {
+    data: {
+      type: 'tool.start',
+      toolCallId: 'w1',
+      toolName: 'write',
+      args: { path: 'index.html' },
+    },
+    delayMs: 20,
+  },
+  {
+    data: {
+      type: 'tool.result',
+      toolCallId: 'w1',
+      toolName: 'write',
+      ok: true,
+    },
+    delayMs: 20,
+  },
+  {
+    data: { type: 'assistant.delta', delta: ' Done — preview is live.' },
+    delayMs: 20,
+  },
   { data: { type: 'final', text: 'Done.' }, delayMs: 20 },
 ];
 
@@ -79,7 +99,9 @@ test('4.1 + 4.2 — composer opens the builder and the initial turn streams a to
     await expect(
       page.getByTestId('builder-ai-text').filter({ hasText: 'preview is live' }),
     ).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId('tool-group').first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('tool-group').first()).toBeVisible({
+      timeout: 15_000,
+    });
   } finally {
     await closeApp(app);
   }
@@ -101,13 +123,15 @@ test.skip('4.4 — Publish posts to the gateway and returns to home on success',
       .poll(
         () =>
           gateway.calls.some(
-            (c) => c.method === 'POST' && /\/centraid\/_apps\/.*\/publish$/.test(c.pathname),
+            (c) => c.method === 'POST' && /\/centraid\/_apps\/.*\/publish$/u.test(c.pathname),
           ),
         { timeout: 15_000 },
       )
       .toBe(true);
     // A successful publish lands the app on home (builder unmounts).
-    await expect(page.getByTestId('apps-grid')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('apps-grid')).toBeVisible({
+      timeout: 15_000,
+    });
     await expect(page.getByTestId('builder-body')).toHaveCount(0);
   } finally {
     await closeApp(app);
@@ -127,9 +151,12 @@ test('4.5 — a failed Publish surfaces an error and does not claim success', as
       .poll(() => gateway.calls.some((c) => c.method === 'POST' && c.pathname.endsWith('/publish')))
       .toBe(true);
     // …and the chat surfaced a failure status (no "Published vN" success toast).
-    await expect(page.getByTestId('builder-chat-scroll')).toContainText(/could.?n.?t|fail|error/i, {
-      timeout: 15_000,
-    });
+    await expect(page.getByTestId('builder-chat-scroll')).toContainText(
+      /could.?n.?t|fail|error/iu,
+      {
+        timeout: 15_000,
+      },
+    );
   } finally {
     await closeApp(app);
   }
@@ -221,18 +248,20 @@ test('6.6 — Cloud Logs renders entries and filters by level + search', async (
     await page.getByTestId('cloud-rail-item').filter({ hasText: 'Logs' }).click();
 
     // Both lines show initially.
-    await expect(page.getByTestId('cloud-logs-row')).toHaveCount(2, { timeout: 10_000 });
+    await expect(page.getByTestId('cloud-logs-row')).toHaveCount(2, {
+      timeout: 10_000,
+    });
 
     // Filter to errors only → the info line drops out.
     await page
       .getByTestId('cloud-logs-chip')
-      .filter({ hasText: /^Error/i })
+      .filter({ hasText: /^Error/iu })
       .click();
     await expect(page.getByTestId('cloud-logs-row')).toHaveCount(1);
     await expect(page.getByTestId('cloud-logs-row')).toContainText('kaboom');
 
     // Back to All, then narrow by free-text search.
-    await page.getByTestId('cloud-logs-chip').filter({ hasText: /^All$/i }).click();
+    await page.getByTestId('cloud-logs-chip').filter({ hasText: /^All$/iu }).click();
     await page.getByTestId('cloud-logs-search').fill('cleanly');
     await expect(page.getByTestId('cloud-logs-row')).toHaveCount(1);
     await expect(page.getByTestId('cloud-logs-row')).toContainText('started up');

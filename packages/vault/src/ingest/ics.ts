@@ -81,7 +81,13 @@ export function parseIcs(text: string): IcsEvent[] {
     const prop = parseLine(line);
     if (!prop) continue;
     if (prop.name === 'BEGIN' && prop.value.toUpperCase() === 'VEVENT') {
-      current = { status: 'confirmed', description: null, dtend: null, startTz: null, rrule: null };
+      current = {
+        status: 'confirmed',
+        description: null,
+        dtend: null,
+        startTz: null,
+        rrule: null,
+      };
       continue;
     }
     if (prop.name === 'END' && prop.value.toUpperCase() === 'VEVENT') {

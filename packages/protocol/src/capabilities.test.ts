@@ -3,6 +3,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+
 import { DEFAULT_GATEWAY_CAPABILITIES, isGatewayCapabilities } from './capabilities.js';
 
 // Titled in prose, not `describe(DEFAULT_GATEWAY_CAPABILITIES)`: the constant

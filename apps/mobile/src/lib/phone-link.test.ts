@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { parsePairingInput, parsePairQr } from './phone-link-parse';
 
 function encodeGwPair(payload: {
@@ -33,7 +34,10 @@ describe(parsePairingInput, () => {
       ticket: 'ep-ticket',
       code: 'ABCD',
     });
-    expect(parsePairQr(raw)).toStrictEqual({ ticket: 'ep-ticket', code: 'ABCD' });
+    expect(parsePairQr(raw)).toStrictEqual({
+      ticket: 'ep-ticket',
+      code: 'ABCD',
+    });
   });
 
   it('parses headless centraid-gw-pair one-line tickets', () => {

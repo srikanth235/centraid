@@ -110,7 +110,10 @@ function partyFkColumns(ctx: HandlerCtx): FkRef[] {
 }
 
 function mergeParty(ctx: HandlerCtx): Record<string, unknown> {
-  const input = ctx.input as { survivor_party_id: string; merged_party_id: string };
+  const input = ctx.input as {
+    survivor_party_id: string;
+    merged_party_id: string;
+  };
   const survivor = input.survivor_party_id;
   const merged = input.merged_party_id;
   let repointed = 0;

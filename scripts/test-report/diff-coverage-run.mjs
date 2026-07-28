@@ -28,6 +28,7 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+
 import { isInstrumentableSource } from './diff-coverage.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');

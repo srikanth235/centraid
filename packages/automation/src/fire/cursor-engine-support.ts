@@ -1,6 +1,6 @@
 import type { AutomationTriggerCursor, AutomationTriggerStore } from '@centraid/app-engine';
-import type { Host } from './host.js';
-import type { Row } from '../scaffold/app.js';
+
+import { resolveCronTimezone } from '../cron-timezone.js';
 import {
   CONDITION_DEFAULT_EVERY,
   DATA_DEFAULT_EVERY,
@@ -8,7 +8,8 @@ import {
   isDeniedTriggerCursorEntity,
   type Trigger,
 } from '../manifest/manifest.js';
-import { resolveCronTimezone } from '../cron-timezone.js';
+import type { Row } from '../scaffold/app.js';
+import type { Host } from './host.js';
 
 export const DEFAULT_TRIGGER_CATCH_UP_CAP = 50;
 
@@ -168,7 +169,10 @@ export function registrationsFor(row: Row, defaultTimeZone?: string | null): Cur
 /** Every `(automation, trigger index)` slot the desired set declares. */
 export function retentionKeysFor(rows: ReadonlyArray<Row>): CursorRetentionKey[] {
   return rows.flatMap((row) =>
-    row.triggers.map((_trigger, triggerIndex) => ({ automationId: row.ref, triggerIndex })),
+    row.triggers.map((_trigger, triggerIndex) => ({
+      automationId: row.ref,
+      triggerIndex,
+    })),
   );
 }
 

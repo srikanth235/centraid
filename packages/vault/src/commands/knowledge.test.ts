@@ -1,4 +1,5 @@
 import { assert, beforeEach, describe, expect, test } from 'vitest';
+
 import { bootstrapVault, type BootstrapResult } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { createGateway, Gateway } from '../gateway/gateway.js';
@@ -17,11 +18,19 @@ describe('knowledge', () => {
     boot = bootstrapVault(db, { ownerName: 'Priya' });
     gw = createGateway(db);
     registerKnowledgeCommands(gw);
-    owner = { kind: 'device', deviceId: boot.deviceId, deviceKey: boot.deviceKey };
+    owner = {
+      kind: 'device',
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+    };
   });
 
   function invoke(command: string, input: Record<string, unknown>) {
-    return gw.invoke(owner, { command, input, purpose: 'dpv:ServiceProvision' });
+    return gw.invoke(owner, {
+      command,
+      input,
+      purpose: 'dpv:ServiceProvision',
+    });
   }
 
   function createNotebook(name: string, parent?: string): string {
@@ -101,14 +110,27 @@ describe('knowledge', () => {
       body_text: 'v1',
       format: 'markdown',
     });
-    const outcome = invoke('knowledge.edit_note', { note_id, body_text: 'v2', pinned: 1 });
+    const outcome = invoke('knowledge.edit_note', {
+      note_id,
+      body_text: 'v2',
+      pinned: 1,
+    });
     expect(outcome.status).toBe('executed');
     const note = db.vault
       .prepare(
         'SELECT title, format, pinned, body_content_id FROM knowledge_note WHERE note_id = ?',
       )
-      .get(note_id) as { title: string; format: string; pinned: number; body_content_id: string };
-    expect(note).toMatchObject({ title: 'Draft', format: 'markdown', pinned: 1 });
+      .get(note_id) as {
+      title: string;
+      format: string;
+      pinned: number;
+      body_content_id: string;
+    };
+    expect(note).toMatchObject({
+      title: 'Draft',
+      format: 'markdown',
+      pinned: 1,
+    });
     expect(note.body_content_id).not.toBe(body_content_id);
     const media = db.vault
       .prepare('SELECT media_type FROM core_content_item WHERE content_id = ?')
@@ -117,7 +139,10 @@ describe('knowledge', () => {
   });
 
   test('edit_note records a revises link when the body actually changes (issue #352)', () => {
-    const { note_id, body_content_id: v1 } = createNote({ title: 'Draft', body_text: 'v1' });
+    const { note_id, body_content_id: v1 } = createNote({
+      title: 'Draft',
+      body_text: 'v1',
+    });
     const revisesLinkCount = () =>
       (
         db.vault
@@ -151,7 +176,10 @@ describe('knowledge', () => {
   });
 
   test('edit_note on an unknown note is refused by precondition', () => {
-    const outcome = invoke('knowledge.edit_note', { note_id: 'ghost', title: 'New' });
+    const outcome = invoke('knowledge.edit_note', {
+      note_id: 'ghost',
+      title: 'New',
+    });
     expect(outcome.status).toBe('failed');
     assert(outcome.status === 'failed');
     expect(outcome.predicate).toContain('note_is_live');
@@ -160,7 +188,11 @@ describe('knowledge', () => {
   test('move_note refiles, is single-placement, and omitting notebook_id unfiles', () => {
     const travel = createNotebook('Travel');
     const work = createNotebook('Work');
-    const { note_id } = createNote({ title: 'Itinerary', body_text: 'x', notebook_id: travel });
+    const { note_id } = createNote({
+      title: 'Itinerary',
+      body_text: 'x',
+      notebook_id: travel,
+    });
 
     const moved = invoke('knowledge.move_note', { note_id, notebook_id: work });
     expect(moved.status).toBe('executed');
@@ -182,7 +214,10 @@ describe('knowledge', () => {
       .get(note_id) as { n: number };
     expect(none.n).toBe(0);
 
-    const badTarget = invoke('knowledge.move_note', { note_id, notebook_id: 'no-such-notebook' });
+    const badTarget = invoke('knowledge.move_note', {
+      note_id,
+      notebook_id: 'no-such-notebook',
+    });
     expect(badTarget.status).toBe('failed');
   });
 
@@ -281,7 +316,10 @@ describe('knowledge', () => {
     // The body bytes are rented again.
     const body = db.vault
       .prepare('SELECT deleted_at, purge_at FROM core_content_item WHERE content_id = ?')
-      .get(body_content_id) as { deleted_at: string | null; purge_at: string | null };
+      .get(body_content_id) as {
+      deleted_at: string | null;
+      purge_at: string | null;
+    };
     expect(body.deleted_at).toBeNull();
     // Placement survived the round trip; the note is editable again.
     const placements = db.vault
@@ -332,7 +370,11 @@ describe('knowledge', () => {
   test('delete_notebook unfiles member notes without destroying them; children block it', () => {
     const parent = createNotebook('Projects');
     const child = createNotebook('Archive', parent);
-    const { note_id } = createNote({ title: 'Plan', body_text: 'v1', notebook_id: child });
+    const { note_id } = createNote({
+      title: 'Plan',
+      body_text: 'v1',
+      notebook_id: child,
+    });
 
     // A notebook with children is refused until they go first.
     expect(invoke('knowledge.delete_notebook', { notebook_id: parent }).status).toBe('failed');
@@ -368,13 +410,22 @@ describe('knowledge', () => {
     const photo = invoke('media.add_asset', { data_uri: PIXEL });
     expect(photo.status).toBe('executed');
     const assetId = (photo as { output: { asset_id: string } }).output.asset_id;
-    expect(invoke('media.add_to_album', { album_id: collectionId, asset_id: assetId }).status).toBe(
-      'executed',
-    );
-    // …and filed into from the notebook surface: same collection, mixed types.
-    const note = createNote({ title: 'Packing list', body_text: 'adapters, coats' });
     expect(
-      invoke('knowledge.move_note', { note_id: note.note_id, notebook_id: collectionId }).status,
+      invoke('media.add_to_album', {
+        album_id: collectionId,
+        asset_id: assetId,
+      }).status,
+    ).toBe('executed');
+    // …and filed into from the notebook surface: same collection, mixed types.
+    const note = createNote({
+      title: 'Packing list',
+      body_text: 'adapters, coats',
+    });
+    expect(
+      invoke('knowledge.move_note', {
+        note_id: note.note_id,
+        notebook_id: collectionId,
+      }).status,
     ).toBe('executed');
     const members = db.vault
       .prepare(

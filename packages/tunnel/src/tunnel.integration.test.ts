@@ -1,9 +1,11 @@
-import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import crypto from 'node:crypto';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
+
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+
 import { createTunnelClient, startLocalProxy, tunnelRequest } from './client.js';
 import type { TunnelClient } from './client.js';
 import { startDesktopTunnel } from './desktop-tunnel.js';
@@ -67,12 +69,20 @@ describe('device store', () => {
     const dir = tempDirSync('centraid-tunnel-');
     const file = path.join(dir, 'devices.json');
     const store = DeviceStore.open(file);
-    const a = store.add({ name: 'Pixel', platform: 'android', endpointId: 'ep-a' });
+    const a = store.add({
+      name: 'Pixel',
+      platform: 'android',
+      endpointId: 'ep-a',
+    });
     store.add({ name: 'iPhone', platform: 'ios', endpointId: 'ep-b' });
     expect(DeviceStore.open(file).list()).toHaveLength(2);
 
     // Re-pairing the same endpoint replaces, never duplicates.
-    const a2 = store.add({ name: 'Pixel 9', platform: 'android', endpointId: 'ep-a' });
+    const a2 = store.add({
+      name: 'Pixel 9',
+      platform: 'android',
+      endpointId: 'ep-a',
+    });
     expect(store.list()).toHaveLength(2);
     expect(store.findByEndpointId('ep-a')?.name).toBe('Pixel 9');
     expect(a2.deviceId).not.toBe(a.deviceId);
@@ -119,10 +129,16 @@ describe('tunnel end to end', () => {
       const connection = await stranger.connect(desktop.ticket());
       // The desktop closes with CLOSE_UNAUTHORIZED; the first stream use fails.
       await expect(async () => {
-        await tunnelRequest(connection, { method: 'GET', target: '/centraid/demo/' });
+        await tunnelRequest(connection, {
+          method: 'GET',
+          target: '/centraid/demo/',
+        });
         await connection.closed();
-        await tunnelRequest(connection, { method: 'GET', target: '/centraid/demo/' });
-      }).rejects.toThrow();
+        await tunnelRequest(connection, {
+          method: 'GET',
+          target: '/centraid/demo/',
+        });
+      }).rejects.toThrow(Error);
     } finally {
       await stranger.close();
     }
@@ -138,7 +154,7 @@ describe('tunnel end to end', () => {
       deviceName: 'Mallory',
       platform: 'ios',
     });
-    expect(wrong).toEqual({ ok: false, error: 'invalid_code' });
+    expect(wrong).toStrictEqual({ ok: false, error: 'invalid_code' });
 
     const ok = await phone.pair(payload!.ticket, {
       code: payload!.code,
@@ -146,7 +162,8 @@ describe('tunnel end to end', () => {
       platform: 'ios',
     });
     expect(ok.ok).toBe(true);
-    if (ok.ok) expect(ok.desktopName).toBe('Test Desktop');
+    if (!ok.ok) throw new Error('expected successful pairing');
+    expect(ok.desktopName).toBe('Test Desktop');
     expect(store.findByEndpointId(phone.endpointId)?.name).toBe('Test iPhone');
 
     // One-time: the code is consumed.
@@ -155,7 +172,7 @@ describe('tunnel end to end', () => {
       deviceName: 'Replay',
       platform: 'ios',
     });
-    expect(replay).toEqual({ ok: false, error: 'invalid_code' });
+    expect(replay).toStrictEqual({ ok: false, error: 'invalid_code' });
   });
 
   it('forwards GET/POST with the bearer attached, through the localhost proxy', async () => {
@@ -166,18 +183,20 @@ describe('tunnel end to end', () => {
 
       const html = await fetch(`${base}/centraid/demo/`);
       expect(html.status).toBe(200);
-      expect(await html.text()).toContain('app.js');
+      await expect(html.text()).resolves.toContain('app.js');
 
       // The ES-module subresource case that defeated the asset-inliner.
       const moduleResponse = await fetch(`${base}/centraid/demo/app.js`);
       expect(moduleResponse.status).toBe(200);
-      expect(await moduleResponse.text()).toContain('kit.js');
+      await expect(moduleResponse.text()).resolves.toContain('kit.js');
 
       const post = await fetch(`${base}/centraid/_tool/centraid_write`, {
         method: 'POST',
         body: 'hello-through-the-pipe',
       });
-      expect(await post.json()).toEqual({ echoed: 'hello-through-the-pipe' });
+      await expect(post.json()).resolves.toStrictEqual({
+        echoed: 'hello-through-the-pipe',
+      });
 
       // Concurrent requests multiplex over one QUIC connection.
       const results = await Promise.all([
@@ -185,7 +204,7 @@ describe('tunnel end to end', () => {
         fetch(`${base}/centraid/demo/app.js`),
         fetch(`${base}/centraid/_tool/x`, { method: 'POST', body: 'z' }),
       ]);
-      expect(results.map((r) => r.status)).toEqual([200, 200, 200]);
+      expect(results.map((r) => r.status)).toStrictEqual([200, 200, 200]);
     } finally {
       await proxy.close();
       connection.close(0n, []);
@@ -201,11 +220,16 @@ describe('tunnel end to end', () => {
       expect(response.headers.get('content-type')).toBe('text/event-stream');
       const reader = response.body!.getReader();
       const arrivals: Array<{ at: number; text: string }> = [];
-      for (;;) {
+      const readNext = async (): Promise<void> => {
         const { done, value } = await reader.read();
-        if (done) break;
-        arrivals.push({ at: Date.now() - startedAt, text: Buffer.from(value).toString('utf8') });
-      }
+        if (done) return;
+        arrivals.push({
+          at: Date.now() - startedAt,
+          text: Buffer.from(value).toString('utf8'),
+        });
+        return readNext();
+      };
+      await readNext();
       expect(arrivals.length).toBeGreaterThanOrEqual(2);
       // The second event must arrive ~120ms after the first — streamed, not buffered.
       expect(arrivals.at(-1)!.at - arrivals[0]!.at).toBeGreaterThanOrEqual(80);
@@ -219,7 +243,10 @@ describe('tunnel end to end', () => {
     const device = store.findByEndpointId(phone.endpointId);
     expect(device).toBeTruthy();
     const connection = await phone.connect(desktop.ticket());
-    const first = await tunnelRequest(connection, { method: 'GET', target: '/centraid/demo/' });
+    const first = await tunnelRequest(connection, {
+      method: 'GET',
+      target: '/centraid/demo/',
+    });
     expect(first.status).toBe(200);
 
     desktop.revokeDevice(device!.deviceId);
@@ -230,7 +257,7 @@ describe('tunnel end to end', () => {
       await tunnelRequest(again, { method: 'GET', target: '/centraid/demo/' });
       await again.closed();
       await tunnelRequest(again, { method: 'GET', target: '/centraid/demo/' });
-    }).rejects.toThrow();
+    }).rejects.toThrow(Error);
   });
 
   it('answers 503 when the gateway is not running', async () => {

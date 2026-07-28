@@ -1,12 +1,13 @@
 import { palette } from '@centraid/design-tokens';
+
 import { isAutomationTemplate } from '../../../app-format.js';
+import type { TemplateEntry } from '../../../app-shell-context.js';
 import {
   cloneTemplate as gwCloneTemplate,
   installTemplate as gwInstallTemplate,
   listAutomations,
   listTemplates,
 } from '../../../gateway-client.js';
-import type { TemplateEntry } from '../../../app-shell-context.js';
 
 // Template catalog data layer — ports the vanilla loadAvailableTemplates
 // (app-cards.ts) + loadAutomationTemplates (app-automations-templates.ts) +

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { fingerprintOf, UpdatePoller } from './update-check.js';
 
 const fp = (n: number): string => fingerprintOf([{ mtimeMs: n, size: 100 }, null]);

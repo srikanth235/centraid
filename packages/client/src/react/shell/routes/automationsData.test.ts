@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
+
+import { listAutomationTurns, listAutomations } from '../../../gateway-client.js';
 import {
   buildOverviewData,
   collectAutomationRuns,
@@ -6,7 +8,6 @@ import {
   triggerOriginLabel,
   type AutomationFeedEntry,
 } from './automationsData.js';
-import { listAutomationTurns, listAutomations } from '../../../gateway-client.js';
 
 // buildOverviewData is pure; stub the gateway module so importing it doesn't
 // run gateway-client-core's load-time window.CentraidApi side-effect. `vi.mock`
@@ -81,19 +82,34 @@ describe(buildOverviewData, () => {
   it('projects compile lifecycle labels into the fleet row', () => {
     const compiling = buildOverviewData(
       [row({ enabled: false })],
-      [entry({ endedAt: undefined, ok: false, triggerKind: 'compile' } as never)],
+      [
+        entry({
+          endedAt: undefined,
+          ok: false,
+          triggerKind: 'compile',
+        } as never),
+      ],
     );
-    expect(compiling.rows[0]).toMatchObject({ statusKind: 'running', statusLabel: 'Compiling…' });
+    expect(compiling.rows[0]).toMatchObject({
+      statusKind: 'running',
+      statusLabel: 'Compiling…',
+    });
     expect(compiling.rows[0]?.lastRunOk).toBeNull();
 
     const ready = buildOverviewData([row()], [entry({ triggerKind: 'compile' } as never)]);
-    expect(ready.rows[0]).toMatchObject({ statusKind: 'success', statusLabel: 'Plan ready' });
+    expect(ready.rows[0]).toMatchObject({
+      statusKind: 'success',
+      statusLabel: 'Plan ready',
+    });
 
     const failed = buildOverviewData(
       [row({ enabled: false })],
       [entry({ error: 'no plan', ok: false, triggerKind: 'compile' } as never)],
     );
-    expect(failed.rows[0]).toMatchObject({ statusKind: 'failed', statusLabel: 'Compile failed' });
+    expect(failed.rows[0]).toMatchObject({
+      statusKind: 'failed',
+      statusLabel: 'Compile failed',
+    });
   });
 
   it('uses the empty-state subtitle when there are no rows', () => {
@@ -116,26 +132,26 @@ describe(buildOverviewData, () => {
       [row()],
       [entry({ triggerKind: 'scheduled', triggerOrigin: 'data' } as never)],
     );
-    expect(dataRun.runs[0]?.metaLabel).toMatch(/^Data · /);
+    expect(dataRun.runs[0]?.metaLabel).toMatch(/^Data · /u);
     expect(dataRun.runs[0]?.metaLabel).not.toContain('data ·');
 
     const webhookRun = buildOverviewData(
       [row()],
       [entry({ triggerKind: 'scheduled', triggerOrigin: 'webhook' } as never)],
     );
-    expect(webhookRun.runs[0]?.metaLabel).toMatch(/^Webhook · /);
+    expect(webhookRun.runs[0]?.metaLabel).toMatch(/^Webhook · /u);
 
     const manualRun = buildOverviewData(
       [row()],
       [entry({ triggerKind: 'manual', triggerOrigin: undefined } as never)],
     );
-    expect(manualRun.runs[0]?.metaLabel).toMatch(/^Manual · /);
+    expect(manualRun.runs[0]?.metaLabel).toMatch(/^Manual · /u);
 
     const cronRun = buildOverviewData(
       [row()],
       [entry({ triggerKind: 'scheduled', triggerOrigin: undefined } as never)],
     );
-    expect(cronRun.runs[0]?.metaLabel).toMatch(/^Cron · /);
+    expect(cronRun.runs[0]?.metaLabel).toMatch(/^Cron · /u);
   });
 });
 
@@ -183,14 +199,18 @@ describe(deriveAutomationHero, () => {
 
   it('labels data/condition triggers honestly instead of "Cron schedule"/"Manual only"', () => {
     const dataTrig = deriveAutomationHero(
-      viewRow({ triggers: [{ kind: 'data', entities: ['core.content_derivative'] } as never] }),
+      viewRow({
+        triggers: [{ kind: 'data', entities: ['core.content_derivative'] } as never],
+      }),
       GATEWAY_ORIGIN,
     );
     expect(dataTrig.kindEyebrow).toBe('Data trigger');
     expect(dataTrig.when).toBe('On data changes');
 
     const condTrig = deriveAutomationHero(
-      viewRow({ triggers: [{ kind: 'condition', entity: 'core.event' } as never] }),
+      viewRow({
+        triggers: [{ kind: 'condition', entity: 'core.event' } as never],
+      }),
       GATEWAY_ORIGIN,
     );
     expect(condTrig.kindEyebrow).toBe('Condition');
@@ -228,10 +248,15 @@ describe(deriveAutomationHero, () => {
     expect(withEvery.conditionDetail).toBeNull();
 
     const withoutEvery = deriveAutomationHero(
-      viewRow({ triggers: [{ kind: 'data', entities: ['core.event'] } as never] }),
+      viewRow({
+        triggers: [{ kind: 'data', entities: ['core.event'] } as never],
+      }),
       GATEWAY_ORIGIN,
     );
-    expect(withoutEvery.dataDetail).toStrictEqual({ entities: ['core.event'], everyLabel: null });
+    expect(withoutEvery.dataDetail).toStrictEqual({
+      entities: ['core.event'],
+      everyLabel: null,
+    });
   });
 
   it('derives conditionDetail with a readable where clause for a structured condition', () => {
@@ -259,7 +284,13 @@ describe(deriveAutomationHero, () => {
   it('passes a plain-string where clause through unchanged', () => {
     const hero = deriveAutomationHero(
       viewRow({
-        triggers: [{ kind: 'condition', entity: 'core.event', where: 'status = overdue' } as never],
+        triggers: [
+          {
+            kind: 'condition',
+            entity: 'core.event',
+            where: 'status = overdue',
+          } as never,
+        ],
       }),
       GATEWAY_ORIGIN,
     );

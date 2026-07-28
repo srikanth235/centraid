@@ -6,6 +6,7 @@
 // from Chrome.module.css (scoped chrome) + the global kit-* vocabulary
 // (kit.css, loaded once by the route host).
 import type { KeyboardEvent, ReactNode } from 'react';
+
 import styles from './Chrome.module.css';
 
 export interface ChromeProps {

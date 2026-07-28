@@ -1,7 +1,8 @@
 import { act } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import { createRoot, type Root } from 'react-dom/client';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
 import type { VaultBridgeProps, VaultData } from '../screen-contracts.js';
 import VaultScreen from './VaultScreen.js';
 

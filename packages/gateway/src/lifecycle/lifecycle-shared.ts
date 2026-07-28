@@ -6,14 +6,16 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import path from 'node:path';
-import { AppScaffoldError } from '@centraid/blueprints';
-import { ExtSpecError } from '@centraid/vault';
+
 import { ManifestError } from '@centraid/automation';
 import type * as automation from '@centraid/automation';
-import { WorktreeStore, WorktreeStoreError } from '../worktree-store/index.js';
+import { AppScaffoldError } from '@centraid/blueprints';
+import { ExtSpecError } from '@centraid/vault';
+
 import { validateManifestAt } from '../routes/apps-store-routes.js';
-import { applyExtOnPublish, type ExtBandOps } from './ext-band.js';
 import { sendJson, writeFileMap, type FileMapEntry } from '../routes/route-helpers.js';
+import { WorktreeStore, WorktreeStoreError } from '../worktree-store/index.js';
+import { applyExtOnPublish, type ExtBandOps } from './ext-band.js';
 
 export interface LifecycleRouteOptions {
   /** Git store backing app code. Sessions/publishes ride through it. */
@@ -281,7 +283,10 @@ export function sendLifecycleError(res: ServerResponse, err: unknown): true {
   if (err instanceof ExtSpecError) {
     // A declared ext table the vault refuses (bad shape, unsupported
     // change) aborts the publish (issue #286 phase 2) — a bad request.
-    return sendJson(res, 400, { error: 'invalid_ext_spec', message: err.message });
+    return sendJson(res, 400, {
+      error: 'invalid_ext_spec',
+      message: err.message,
+    });
   }
   if (err instanceof WorktreeStoreError) {
     const status =

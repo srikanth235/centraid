@@ -87,15 +87,19 @@ export default async function historyHandler({ input, ctx }: HandlerArgs) {
     const assertedAtOf = new Map<string, string>(); // content_id -> the outgoing edge's valid_from
     if (revisesConceptId) {
       const seen = new Set([doc.current_content_id]);
-      let cur = doc.current_content_id;
-      for (let step = 0; step < MAX_CHAIN_STEPS; step += 1) {
+      const followNext = async (cur: string, step: number): Promise<void> => {
+        if (step >= MAX_CHAIN_STEPS) return;
         const links = await ctx.vault.read({
           entity: 'core.link',
           where: [
             { column: 'from_type', op: 'eq', value: 'core.content_item' },
             { column: 'from_id', op: 'eq', value: cur },
             { column: 'to_type', op: 'eq', value: 'core.content_item' },
-            { column: 'relation_concept_id', op: 'eq', value: revisesConceptId },
+            {
+              column: 'relation_concept_id',
+              op: 'eq',
+              value: revisesConceptId,
+            },
             { column: 'valid_to', op: 'is-null' },
           ],
           orderBy: { column: 'valid_from', dir: 'desc' },
@@ -103,12 +107,13 @@ export default async function historyHandler({ input, ctx }: HandlerArgs) {
           purpose,
         });
         const next = ((links.rows ?? []) as unknown as LinkRow[])[0];
-        if (!next || seen.has(next.to_id)) break;
+        if (!next || seen.has(next.to_id)) return;
         assertedAtOf.set(cur, next.valid_from);
         chainIds.push(next.to_id);
         seen.add(next.to_id);
-        cur = next.to_id;
-      }
+        return followNext(next.to_id, step + 1);
+      };
+      await followNext(doc.current_content_id, 0);
     }
 
     const contents = await ctx.vault.read({

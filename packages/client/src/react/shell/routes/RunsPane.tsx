@@ -1,6 +1,8 @@
 import { type JSX, useEffect, useState } from 'react';
+
 import { formatDuration, relativeTime } from '../../../app-format.js';
 import { listAutomationTurns, pinAutomationTurn } from '../../../gateway-client.js';
+
 import styles from './RunsPane.module.css';
 
 // The per-order run-history list inside the app-settings popover — the React

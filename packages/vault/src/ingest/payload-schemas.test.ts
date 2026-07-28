@@ -8,6 +8,7 @@
 // command's input schema violation would.
 
 import { beforeEach, describe, expect, test } from 'vitest';
+
 import { bootstrapVault, type BootstrapResult } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import type { Identity } from '../gateway/types.js';
@@ -33,7 +34,10 @@ describe('payload-schemas', () => {
   /** Stage + immediately publish one hand-built candidate — bypasses every
    * file parser so the payload shape is exactly what the test asserts. */
   function publishOne(candidate: StageCandidate) {
-    const connectionId = ensureConnectionTx(db.vault, { kind: 'test', label: 'schema-gate' });
+    const connectionId = ensureConnectionTx(db.vault, {
+      kind: 'test',
+      label: 'schema-gate',
+    });
     const now = new Date().toISOString();
     const { batchId } = stageBatchTx(
       db.vault,
@@ -67,7 +71,11 @@ describe('payload-schemas', () => {
         'SELECT amount_minor, currency, direction FROM core_transaction WHERE external_id = ?',
       )
       .get('txn-ok-1');
-    expect(txn).toMatchObject({ amount_minor: 184250, currency: 'INR', direction: 'debit' });
+    expect(txn).toMatchObject({
+      amount_minor: 184250,
+      currency: 'INR',
+      direction: 'debit',
+    });
   });
 
   test('valid party payload still publishes exactly as before', () => {
@@ -86,7 +94,10 @@ describe('payload-schemas', () => {
     const party = db.vault
       .prepare('SELECT display_name, sort_name FROM core_party WHERE display_name = ?')
       .get('Ravi Kumar');
-    expect(party).toMatchObject({ display_name: 'Ravi Kumar', sort_name: 'Kumar, Ravi' });
+    expect(party).toMatchObject({
+      display_name: 'Ravi Kumar',
+      sort_name: 'Kumar, Ravi',
+    });
   });
 
   test('a decimal-string amount is rejected before any SQL executes', () => {
@@ -111,8 +122,8 @@ describe('payload-schemas', () => {
     expect(result.created).toBe(0);
     expect(result.failed).toHaveLength(1);
     expect(result.failed[0]).toMatchObject({ externalId: 'txn-bad-amount' });
-    expect(result.failed[0]!.error).toMatch(/TransactionPayload payload failed schema validation/);
-    expect(result.failed[0]!.error).toMatch(/amountMinor/);
+    expect(result.failed[0]!.error).toMatch(/TransactionPayload payload failed schema validation/u);
+    expect(result.failed[0]!.error).toMatch(/amountMinor/u);
     const after = db.vault.prepare('SELECT count(*) AS n FROM core_transaction').get() as {
       n: number;
     };
@@ -136,8 +147,8 @@ describe('payload-schemas', () => {
     });
     expect(result.created).toBe(0);
     expect(result.failed).toHaveLength(1);
-    expect(result.failed[0]!.error).toMatch(/PartyPayload payload failed schema validation/);
-    expect(result.failed[0]!.error).toMatch(/missing required "fn"/);
+    expect(result.failed[0]!.error).toMatch(/PartyPayload payload failed schema validation/u);
+    expect(result.failed[0]!.error).toMatch(/missing required "fn"/u);
     // Nothing landed beyond the owner party bootstrapVault already minted.
     const parties = db.vault.prepare('SELECT count(*) AS n FROM core_party').get() as { n: number };
     expect(parties.n).toBe(1);
@@ -158,8 +169,8 @@ describe('payload-schemas', () => {
     });
     expect(result.created).toBe(0);
     expect(result.failed).toHaveLength(1);
-    expect(result.failed[0]!.error).toMatch(/LockerItemPayload payload failed schema validation/);
-    expect(result.failed[0]!.error).toMatch(/missing required "notes"/);
+    expect(result.failed[0]!.error).toMatch(/LockerItemPayload payload failed schema validation/u);
+    expect(result.failed[0]!.error).toMatch(/missing required "notes"/u);
     const item = db.vault
       .prepare('SELECT count(*) AS n FROM locker_item WHERE title = ?')
       .get('Test Login') as { n: number };

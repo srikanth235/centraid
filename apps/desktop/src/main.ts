@@ -1,5 +1,7 @@
-import { app, BrowserWindow, dialog, nativeImage, shell } from 'electron';
 import path from 'node:path';
+
+import { app, BrowserWindow, dialog, nativeImage, shell } from 'electron';
+
 import {
   installApplicationMenu,
   installDeepLinkProtocol,
@@ -14,8 +16,8 @@ import {
   stopGatewayMonitor,
 } from './main/gateway-monitor.js';
 import { registerIpcHandlers } from './main/ipc.js';
-import { applyLaunchAtLogin } from './main/login-item.js';
 import { markLocalGatewaysDisposed, shutdownAllLocalGatewaysExcept } from './main/local-gateway.js';
+import { applyLaunchAtLogin } from './main/login-item.js';
 import { ensurePhoneLink, shutdownPhoneLink } from './main/phone-link.js';
 import { registerPowerContextListeners } from './main/power-context-push.js';
 import { startReminderMonitor, stopReminderMonitor } from './main/reminder-monitor.js';

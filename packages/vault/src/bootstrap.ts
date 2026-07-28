@@ -4,10 +4,11 @@
 // graduate to typed commands themselves; the rows they write are identical.
 
 import { randomBytes } from 'node:crypto';
+
 import type { VaultDb } from './db.js';
+import type { FilterClause, Risk } from './gateway/types.js';
 import { nowIso, uuidv7 } from './ids.js';
 import { ONTOLOGY_VERSION } from './schema/migrate.js';
-import type { FilterClause, Risk } from './gateway/types.js';
 
 export interface BootstrapResult {
   vaultId: string;
@@ -28,10 +29,19 @@ interface SeedConcept {
 
 // SKOS seed vocabulary: DPV purposes, PROV/SKOS relations, AS2 activity kinds.
 const SEED_SCHEMES: Record<string, { uri: string; title: string }> = {
-  purposes: { uri: 'https://w3id.org/dpv#Purpose', title: 'Consent purposes (DPV)' },
+  purposes: {
+    uri: 'https://w3id.org/dpv#Purpose',
+    title: 'Consent purposes (DPV)',
+  },
   relations: { uri: 'urn:duaility:relations', title: 'Link relation types' },
-  'activity-kinds': { uri: 'urn:duaility:activity-kinds', title: 'Activity kinds' },
-  'spend-categories': { uri: 'urn:duaility:spend-categories', title: 'Spend categories' },
+  'activity-kinds': {
+    uri: 'urn:duaility:activity-kinds',
+    title: 'Activity kinds',
+  },
+  'spend-categories': {
+    uri: 'urn:duaility:spend-categories',
+    title: 'Spend categories',
+  },
   flags: { uri: 'urn:duaility:flags', title: 'Agent flags' },
   // Machine-tag vocabularies (issue #299) — concepts arrive on demand from
   // the enrichment publishers; only the scheme rows seed. Pre-v10 vaults
@@ -40,9 +50,17 @@ const SEED_SCHEMES: Record<string, { uri: string; title: string }> = {
   doctype: { uri: 'urn:centraid:doctype', title: 'Document types (machine)' },
 };
 const SEED_CONCEPTS: SeedConcept[] = [
-  { scheme: 'purposes', notation: 'dpv:ServiceProvision', label: 'Service provision' },
+  {
+    scheme: 'purposes',
+    notation: 'dpv:ServiceProvision',
+    label: 'Service provision',
+  },
   { scheme: 'purposes', notation: 'dpv:Billing', label: 'Billing' },
-  { scheme: 'purposes', notation: 'dpv:HealthMonitoring', label: 'Health monitoring' },
+  {
+    scheme: 'purposes',
+    notation: 'dpv:HealthMonitoring',
+    label: 'Health monitoring',
+  },
   { scheme: 'relations', notation: 'same-as', label: 'Same as' },
   { scheme: 'relations', notation: 'about', label: 'About' },
   { scheme: 'relations', notation: 'works-for', label: 'Works for' },
@@ -207,7 +225,12 @@ export function enrollApp(
 
 export function enrollAgent(
   db: VaultDb,
-  options: { name: string; modelRef: string; version?: string; displayName?: string },
+  options: {
+    name: string;
+    modelRef: string;
+    version?: string;
+    displayName?: string;
+  },
 ): { agentId: string; partyId: string } {
   const now = nowIso();
   const partyId = uuidv7();

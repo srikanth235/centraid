@@ -6,6 +6,7 @@
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+
 import { WorktreeStore, WorktreeStoreError } from '../worktree-store/index.js';
 
 /** Text extensions a draft file write accepts — mirrors agent-harness. */
@@ -45,20 +46,27 @@ async function walk(root: string, rel: string, out: DraftFile[]): Promise<void> 
   } catch {
     return;
   }
-  for (const e of entries) {
-    if (e.name.startsWith('.')) continue;
+  const visitEntry = async (index: number): Promise<void> => {
+    const e = entries[index];
+    if (e === undefined) return;
+    if (e.name.startsWith('.')) return visitEntry(index + 1);
     const r = rel ? path.posix.join(rel, e.name) : e.name;
     if (e.isDirectory()) {
       await walk(root, r, out);
-      continue;
+      return visitEntry(index + 1);
     }
-    if (!e.isFile()) continue;
-    if (!EDITABLE_EXT.has(path.extname(e.name).toLowerCase())) continue;
+    if (!e.isFile()) return visitEntry(index + 1);
+    if (!EDITABLE_EXT.has(path.extname(e.name).toLowerCase())) return visitEntry(index + 1);
     const abs = path.join(root, r);
     const stat = await fs.stat(abs).catch(() => null);
-    if (!stat || stat.size > MAX_DRAFT_FILE_BYTES) continue;
-    out.push({ path: r, content: await fs.readFile(abs, 'utf8').catch(() => '') });
-  }
+    if (!stat || stat.size > MAX_DRAFT_FILE_BYTES) return visitEntry(index + 1);
+    out.push({
+      path: r,
+      content: await fs.readFile(abs, 'utf8').catch(() => ''),
+    });
+    return visitEntry(index + 1);
+  };
+  await visitEntry(0);
 }
 
 export async function writeDraftFile(

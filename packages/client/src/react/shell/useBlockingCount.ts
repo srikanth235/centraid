@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+
 import { getBlocking } from '../../gateway-client.js';
 
 const POLL_MS = 60_000;

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import {
   conversationToJson,
   conversationToMarkdown,
@@ -19,7 +20,14 @@ const CONV: ExportableConversation = {
       payload: {
         kind: 'user',
         text: 'plan the budget',
-        attachments: [{ hash: 'abc', mime: 'image/png', filename: 'chart.png', sizeBytes: 42 }],
+        attachments: [
+          {
+            hash: 'abc',
+            mime: 'image/png',
+            filename: 'chart.png',
+            sizeBytes: 42,
+          },
+        ],
       },
     },
     {
@@ -42,7 +50,12 @@ const CONV: ExportableConversation = {
         text: 'Here is your budget.',
         turnId: 'turn-1',
         feedback: null,
-        usage: { model: 'sonnet', inputTokens: 100, outputTokens: 20, costUsd: 0.0087 },
+        usage: {
+          model: 'sonnet',
+          inputTokens: 100,
+          outputTokens: 20,
+          costUsd: 0.0087,
+        },
       },
     },
   ],
@@ -81,6 +94,6 @@ describe(exportFilename, () => {
   it('slugs the title and stamps the date with the right extension', () => {
     expect(exportFilename(CONV, 'markdown')).toBe('quarterly-budget-review-2026-07-02.md');
     expect(exportFilename(CONV, 'json')).toBe('quarterly-budget-review-2026-07-02.json');
-    expect(exportFilename({ ...CONV, title: '' }, 'markdown')).toMatch(/^conversation-.*\.md$/);
+    expect(exportFilename({ ...CONV, title: '' }, 'markdown')).toMatch(/^conversation-.*\.md$/u);
   });
 });

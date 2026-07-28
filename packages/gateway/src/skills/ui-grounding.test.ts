@@ -1,6 +1,7 @@
 // UI grounding blocks for builder turns (issue #545 B7).
 
 import { describe, expect, test } from 'vitest';
+
 import { buildUiGroundingBlocks } from './ui-grounding.js';
 
 describe('ui-grounding', () => {

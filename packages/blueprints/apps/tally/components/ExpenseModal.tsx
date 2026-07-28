@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+
 // The add/edit expense form: description, amount, category, group/paid-by
 // selects, the equal/exact/percent split method and one row per member with
 // its include-toggle and (for exact/percent) its own input. `exp` is
@@ -17,9 +19,9 @@ import {
   toCents,
 } from '../format.ts';
 import { I } from '../icons.ts';
-import type { ReactNode } from 'react';
 import type { ExpenseModel, Group, Member } from '../types.ts';
 import { ArmedButton, Icon, KitAvatar, ModalBackdrop } from './Shared.tsx';
+
 import styles from './ExpenseModal.module.css';
 import shared from './shared.module.css';
 

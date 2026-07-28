@@ -7,6 +7,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, vi } from 'vitest';
+
 import type { AutomationThreadBridgeProps } from '../screen-contracts.js';
 import AutomationThreadScreen, { type AutomationThreadDataEx } from './AutomationThreadScreen.js';
 

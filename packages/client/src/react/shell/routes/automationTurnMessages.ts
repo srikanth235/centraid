@@ -160,7 +160,12 @@ export function automationTurnMessages(
     answers++;
     const live = liveText.get(item.ordinal) ?? '';
     if (item.endedAt === undefined) {
-      messages.push({ kind: 'ai', streaming: true, text: live, msgId: `${item.itemId}:ai` });
+      messages.push({
+        kind: 'ai',
+        streaming: true,
+        text: live,
+        msgId: `${item.itemId}:ai`,
+      });
       return;
     }
     const text = item.ok
@@ -246,7 +251,12 @@ export function automationTurnMessages(
     answers++;
     const live = liveText.get(item.ordinal) ?? '';
     if (item.endedAt === undefined) {
-      messages.push({ kind: 'ai', streaming: true, text: live, msgId: `${item.itemId}:ai` });
+      messages.push({
+        kind: 'ai',
+        streaming: true,
+        text: live,
+        msgId: `${item.itemId}:ai`,
+      });
       continue;
     }
     const text = item.ok

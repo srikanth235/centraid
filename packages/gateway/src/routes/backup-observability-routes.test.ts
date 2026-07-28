@@ -1,13 +1,15 @@
-import { Readable } from 'node:stream';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { afterEach, describe, expect, test, vi } from 'vitest';
+import { Readable } from 'node:stream';
+
 import { bootstrapVault, openVaultDb, readBackupPolicy } from '@centraid/vault';
+import { afterEach, describe, expect, test, vi } from 'vitest';
+
+import { failedCasOnlyReconciliation } from '../backup/backup-cas-reconciliation.js';
+import { failedReconciliation } from '../backup/backup-reconciliation.js';
 import type { BackupService } from '../backup/backup-service.js';
 import type { BackupTargetState } from '../backup/backup-state.js';
-import { failedReconciliation } from '../backup/backup-reconciliation.js';
-import { failedCasOnlyReconciliation } from '../backup/backup-cas-reconciliation.js';
-import type { VaultRegistry } from '../serve/vault-registry.js';
 import type { VaultPlane } from '../serve/vault-plane.js';
+import type { VaultRegistry } from '../serve/vault-registry.js';
 import { makeBackupRouteHandler } from './backup-routes.js';
 
 const opened: ReturnType<typeof openVaultDb>[] = [];
@@ -36,7 +38,10 @@ describe('backup-observability-routes', () => {
     } as unknown as ServerResponse;
     return {
       res,
-      result: () => ({ status: res.statusCode, body: raw ? JSON.parse(raw) : undefined }),
+      result: () => ({
+        status: res.statusCode,
+        body: raw ? JSON.parse(raw) : undefined,
+      }),
     };
   }
 
@@ -64,7 +69,11 @@ describe('backup-observability-routes', () => {
       isRunning: () => false,
       ...serviceOver,
     } as unknown as BackupService;
-    return { db, plane, handler: makeBackupRouteHandler({ vaults, backupService: service }) };
+    return {
+      db,
+      plane,
+      handler: makeBackupRouteHandler({ vaults, backupService: service }),
+    };
   }
 
   test('backup status exposes persisted policy echo and reconciliation evidence', async () => {
@@ -148,14 +157,20 @@ describe('backup-observability-routes', () => {
       error: 'provider minimum RPO is one hour',
       errorCode: 'policy_unmet',
     }));
-    const target: BackupTargetState = { targetId: 'target', label: 'opaque', generation: 1 };
+    const target: BackupTargetState = {
+      targetId: 'target',
+      label: 'opaque',
+      generation: 1,
+    };
     const { db, plane, handler } = harness(target, {
       refreshWalSchedule,
       syncPolicy,
     } as Partial<BackupService>);
     const out = response();
     await handler(
-      request('/centraid/_gateway/backup/policy/vault-a', 'PUT', { rpoSeconds: 900 }),
+      request('/centraid/_gateway/backup/policy/vault-a', 'PUT', {
+        rpoSeconds: 900,
+      }),
       out.res,
     );
     expect(out.result()).toMatchObject({
@@ -176,7 +191,11 @@ describe('backup-observability-routes', () => {
     const verifyAgainstBucket = vi.fn<BackupService['verifyAgainstBucket']>(
       async () => reconciliation,
     );
-    const target: BackupTargetState = { targetId: 'target', label: 'opaque', generation: 1 };
+    const target: BackupTargetState = {
+      targetId: 'target',
+      label: 'opaque',
+      generation: 1,
+    };
     const { handler } = harness(target, {
       verifyAgainstBucket,
     } as Partial<BackupService>);
@@ -185,7 +204,10 @@ describe('backup-observability-routes', () => {
     expect(verifyAgainstBucket).toHaveBeenCalledWith('vault-a');
     expect(out.result()).toMatchObject({
       status: 200,
-      body: { vaultId: 'vault-a', reconciliation: { mode: 'bucket', status: 'error' } },
+      body: {
+        vaultId: 'vault-a',
+        reconciliation: { mode: 'bucket', status: 'error' },
+      },
     });
   });
 
@@ -211,7 +233,10 @@ describe('backup-observability-routes', () => {
       body: {
         configured: false,
         vaults: [
-          { vaultId: 'vault-a', reconciliation: { status: 'error', cas: { configured: true } } },
+          {
+            vaultId: 'vault-a',
+            reconciliation: { status: 'error', cas: { configured: true } },
+          },
         ],
       },
     });
@@ -224,7 +249,10 @@ describe('backup-observability-routes', () => {
     expect(verifyAgainstBucket).toHaveBeenCalledWith('vault-a');
     expect(verifyOut.result()).toMatchObject({
       status: 200,
-      body: { vaultId: 'vault-a', reconciliation: { status: 'error', mode: 'bucket' } },
+      body: {
+        vaultId: 'vault-a',
+        reconciliation: { status: 'error', mode: 'bucket' },
+      },
     });
   });
 });

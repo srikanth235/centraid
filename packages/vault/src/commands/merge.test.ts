@@ -3,12 +3,13 @@
 // with primary demotion, the external-id map — and deletes the duplicate.
 
 import { beforeEach, describe, expect, test } from 'vitest';
+
 import { bootstrapVault, type BootstrapResult } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { createGateway, Gateway } from '../gateway/gateway.js';
+import type { Credential, InvokeOutcome } from '../gateway/types.js';
 import { registerPartyCommands } from './parties.js';
 import { registerPeopleCommands } from './people.js';
-import type { Credential, InvokeOutcome } from '../gateway/types.js';
 
 let db: VaultDb;
 let gw: Gateway;
@@ -22,7 +23,11 @@ describe('merge', () => {
     gw = createGateway(db);
     registerPartyCommands(gw);
     registerPeopleCommands(gw);
-    owner = { kind: 'device', deviceId: boot.deviceId, deviceKey: boot.deviceKey };
+    owner = {
+      kind: 'device',
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+    };
   });
 
   function addParty(name: string, email?: string): string {
@@ -105,7 +110,7 @@ describe('merge', () => {
     const other = addParty('Someone Else');
     const outcome = merge(other, boot.ownerPartyId);
     expect(outcome.status).toBe('failed');
-    expect((outcome as { reason: string }).reason).toMatch(/merged_is_not_the_owner/);
+    expect((outcome as { reason: string }).reason).toMatch(/merged_is_not_the_owner/u);
   });
 
   test('self-merge is refused by contract', () => {

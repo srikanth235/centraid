@@ -1,3 +1,7 @@
+import crypto from 'node:crypto';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
+
 /**
  * Authz matrix smoke (#496 G1): table-driven role/session × critical routes
  * against a real `serve()` daemon. Complements the denser per-route suites
@@ -5,9 +9,7 @@
  */
 import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import crypto from 'node:crypto';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
+
 import type { GatewayPaths } from '../paths.js';
 import { serve, type GatewayServeHandle } from './serve.js';
 
@@ -145,11 +147,10 @@ describe('authz-matrix.smoke', () => {
       authorization: c.authorization,
       method: c.method,
     });
-    if (typeof c.expect === 'function') {
-      expect(c.expect(status), `status ${status} for ${c.route}`).toBe(true);
-    } else {
-      expect(status).toBe(c.expect);
-    }
+    expect(
+      typeof c.expect === 'function' ? c.expect(status) : status === c.expect,
+      `status ${status} for ${c.route}`,
+    ).toBe(true);
   });
 
   /*

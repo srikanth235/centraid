@@ -10,6 +10,7 @@
 // claims, and variants of an unservable parent.
 
 import type { DatabaseSync } from 'node:sqlite';
+
 import {
   BINARY_DERIVATIVE_SQL,
   isBinaryDerivative,

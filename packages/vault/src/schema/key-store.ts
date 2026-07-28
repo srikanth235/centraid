@@ -182,7 +182,10 @@ export class KeyStore {
     const file = this.file(name);
     const scheme = this.protector?.scheme ?? FILE_SCHEME;
     const payload = this.protector?.protect(secret) ?? Buffer.from(secret);
-    const envelope: KeyEnvelope = { scheme, payload: payload.toString('base64') };
+    const envelope: KeyEnvelope = {
+      scheme,
+      payload: payload.toString('base64'),
+    };
     const bytes = Buffer.from(`${KEY_STORE_ENVELOPE_MAGIC}${JSON.stringify(envelope)}\n`, 'utf8');
     atomicWrite(file, bytes, this.beforeCommit);
   }

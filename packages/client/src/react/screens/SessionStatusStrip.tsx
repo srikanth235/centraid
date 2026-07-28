@@ -1,4 +1,5 @@
 import type { JSX, ReactNode } from 'react';
+
 import styles from './SessionStatusStrip.module.css';
 
 export interface SessionStatusStripProps {

@@ -17,10 +17,11 @@ import { randomBytes } from 'node:crypto';
 import { promises as fs, createWriteStream } from 'node:fs';
 import { createServer } from 'node:net';
 import path from 'node:path';
-import { createTunnelClient, tunnelRequest } from '../../../packages/tunnel/dist/index.js';
+
 import { daemonKeyStore } from '../../../packages/gateway/dist/cli/key-store.js';
 import { landlordBearerForEndpointSecret } from '../../../packages/gateway/dist/cli/landlord-auth.js';
 import { daemonLayoutFor } from '../../../packages/gateway/dist/cli/paths.js';
+import { createTunnelClient, tunnelRequest } from '../../../packages/tunnel/dist/index.js';
 import { defaultRunId, writeFlowVerdict } from '../../agent-e2e-shared/harness.mjs';
 
 const __dirname = import.meta.dirname;
@@ -32,14 +33,17 @@ const RUNS_DIR = path.join(__dirname, '..', 'runs');
 // Exported so lib/docker-harness.mjs (cross-network-relay flow) can reuse
 // the exact same scoped build instead of re-deriving the turbo filter set.
 export async function ensureBuilt() {
-  const missing = [];
-  for (const file of [GATEWAY_CLI, TUNNEL_DIST]) {
-    try {
-      await fs.access(file);
-    } catch {
-      missing.push(path.relative(REPO_ROOT, file));
-    }
-  }
+  const checked = await Promise.all(
+    [GATEWAY_CLI, TUNNEL_DIST].map(async (file) => {
+      try {
+        await fs.access(file);
+        return undefined;
+      } catch {
+        return path.relative(REPO_ROOT, file);
+      }
+    }),
+  );
+  const missing = checked.filter(Boolean);
   if (missing.length === 0) return;
   console.log(`[harness] missing ${missing.join(', ')} — running scoped build…`);
   // Scoped to what this tier actually runs, but the daemon imports
@@ -78,15 +82,20 @@ async function killAndWait(pid, { timeoutMs = 8000 } = {}) {
     // Already gone.
   }
   const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
+  const waitForExit = async () => {
     if (!pidAlive(pid)) return;
+    if (Date.now() - start >= timeoutMs) {
+      try {
+        process.kill(pid, 'SIGKILL');
+      } catch {
+        // Won the race.
+      }
+      return;
+    }
     await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-  try {
-    process.kill(pid, 'SIGKILL');
-  } catch {
-    // Won the race.
-  }
+    return waitForExit();
+  };
+  return waitForExit();
 }
 
 async function reserveLoopbackPort() {
@@ -143,7 +152,7 @@ async function spawnDaemon(
   child.stderr.on('data', scan);
 
   const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
+  const waitForReadiness = async () => {
     if (child.exitCode !== null) {
       throw new Error(`daemon exited ${child.exitCode} before ready — see ${logFile}`);
     }
@@ -170,12 +179,16 @@ async function spawnDaemon(
       }
       return { pid: child.pid, ...wanted, endpointTicket: info.endpointTicket };
     }
+    if (Date.now() - start >= timeoutMs) {
+      await killAndWait(child.pid);
+      throw new Error(
+        `daemon not ready in ${timeoutMs}ms (url=${wanted.url} endpoint=${wanted.endpointId}) — see ${logFile}`,
+      );
+    }
     await new Promise((resolve) => setTimeout(resolve, 150));
-  }
-  await killAndWait(child.pid);
-  throw new Error(
-    `daemon not ready in ${timeoutMs}ms (url=${wanted.url} endpoint=${wanted.endpointId}) — see ${logFile}`,
-  );
+    return waitForReadiness();
+  };
+  return waitForReadiness();
 }
 
 /** Run one admin CLI command against the run's data dir; returns stdout. */
@@ -339,9 +352,15 @@ export async function runFlow(slug, fn, { fresh = false } = {}) {
           // request, wait for the close, and issue another. One of the two
           // MUST throw for an unauthorized device key.
           try {
-            await tunnelRequest(connection, { method: 'GET', target: '/centraid/_vault/vaults' });
+            await tunnelRequest(connection, {
+              method: 'GET',
+              target: '/centraid/_vault/vaults',
+            });
             await connection.closed();
-            await tunnelRequest(connection, { method: 'GET', target: '/centraid/_vault/vaults' });
+            await tunnelRequest(connection, {
+              method: 'GET',
+              target: '/centraid/_vault/vaults',
+            });
           } catch {
             return; // refused — expected
           }
@@ -374,7 +393,7 @@ export async function runFlow(slug, fn, { fresh = false } = {}) {
   } catch (e) {
     error = e;
   } finally {
-    for (const device of devices) await device.close().catch(() => {});
+    await Promise.all(devices.map(async (device) => device.close().catch(() => {})));
     await killAndWait(state.gateway?.pid);
     if (previousCredentialRoot === undefined) {
       delete process.env.CENTRAID_KEYSTORE_CREDENTIAL_ROOT;

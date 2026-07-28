@@ -1,6 +1,8 @@
-import { describe, expect, it } from 'vitest';
 import { promises as fs } from 'node:fs';
+
 import { tempDir } from '@centraid/test-kit/temp-dir';
+import { describe, expect, it } from 'vitest';
+
 import { measureStorageLatency } from './storage-latency.js';
 
 describe('storage-latency', () => {

@@ -1,7 +1,9 @@
 import { useEffect, useRef, type JSX } from 'react';
+
 import type { CentraidChangelogRelease } from '../../centraid-api.js';
 import { changelogNotesToHtml } from '../shell/changelogMarkdown.js';
 import { useChangelog } from '../shell/useChangelog.js';
+
 import styles from './WhatsNewModal.module.css';
 
 const X_SVG = (
@@ -30,7 +32,11 @@ function formatDate(iso: string | null): string {
   if (!iso) return '';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+  return d.toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
 }
 
 function ReleaseSection({

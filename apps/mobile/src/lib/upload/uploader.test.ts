@@ -1,14 +1,13 @@
-import { tempDirSync } from '@centraid/test-kit/temp-dir';
+import { rmSync } from 'node:fs';
 // Drainer behaviour: the URL gate, dedupe, resume reconciliation, retry
 // classification, and the network-policy seam.
+import path from 'node:path';
 
-import { rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { frameCountFor, partCountFor, sealedSizeFor } from './cbsf';
 import { webCryptoUploadCrypto } from './crypto';
-import { DirectTransferError, type DirectTransferClient } from './gateway-client';
 import {
   FAKE_GATEWAY,
   FakeGateway,
@@ -17,6 +16,7 @@ import {
   fakeBlobStoreFetch,
 } from './fake-direct-transfer';
 import { bytesFileSource } from './file-source';
+import { DirectTransferError, type DirectTransferClient } from './gateway-client';
 import { NodeSqliteFileDriver } from './node-sqlite-driver';
 import { UploadQueueStore } from './store';
 import { UploadDrainer, type PartPutter } from './uploader';
@@ -52,7 +52,7 @@ function drainer(
   overrides: Partial<{
     putPart: PartPutter;
     client: DirectTransferClient;
-    policy: { canTransfer(): boolean };
+    policy: { canTransfer: () => boolean };
   }> = {},
 ): UploadDrainer {
   return new UploadDrainer({
@@ -71,7 +71,7 @@ function drainer(
 describe('uploader', () => {
   beforeEach(() => {
     dir = tempDirSync('centraid-drain-');
-    driver = new NodeSqliteFileDriver(join(dir, 'uploads.db'));
+    driver = new NodeSqliteFileDriver(path.join(dir, 'uploads.db'));
     store = UploadQueueStore.create(driver);
     killer = new Killer();
     provider = new FakeProvider(killer);
@@ -90,7 +90,10 @@ describe('uploader', () => {
       expect(summary).toMatchObject({ settled: 1, failed: 0, halted: false });
       const item = store.bySha(SHA)!;
       expect(item.state).toBe('settled');
-      expect(item.receipt).toMatchObject({ casAck: 'replicated', custody: 'remote-only' });
+      expect(item.receipt).toMatchObject({
+        casAck: 'replicated',
+        custody: 'remote-only',
+      });
     });
 
     describe('the URL gate', () => {
@@ -120,7 +123,7 @@ describe('uploader', () => {
         await drainer({ client: evil, putPart }).drainOnce();
 
         expect(putPart, 'no bytes may leave before the URL is pinned').toHaveBeenCalledTimes(0);
-        expect(store.bySha(SHA)?.lastError).toMatch(/not the active provider/);
+        expect(store.bySha(SHA)?.lastError).toMatch(/not the active provider/u);
       });
 
       it.each([
@@ -138,7 +141,12 @@ describe('uploader', () => {
             upload: {
               kind: 'multipart',
               uploadId: 'u1',
-              parts: [{ partNumber: 1, url: `${href}?X-Amz-Signature=a&X-Amz-Expires=900` }],
+              parts: [
+                {
+                  partNumber: 1,
+                  url: `${href}?X-Amz-Signature=a&X-Amz-Expires=900`,
+                },
+              ],
             },
           }),
           recordPart: async () => undefined,
@@ -262,14 +270,22 @@ describe('uploader', () => {
         recordPart: async () => undefined,
         complete: async () => ({}),
       };
-      for (let attempt = 0; attempt < 5; attempt += 1) await drainer({ client: flaky }).drainOnce();
+      const drainAttempt = async (attempt: number): Promise<void> => {
+        if (attempt >= 5) return;
+        await drainer({ client: flaky }).drainOnce();
+        return drainAttempt(attempt + 1);
+      };
+      await drainAttempt(0);
       expect(store.bySha(SHA)?.state).toBe('failed');
     });
 
     it('halts cleanly when policy denies transfer, leaving the item recoverable', async () => {
       enqueue();
       const putPart = vi.fn<PartPutter>(async () => '"etag"');
-      const summary = await drainer({ putPart, policy: { canTransfer: () => false } }).drainOnce();
+      const summary = await drainer({
+        putPart,
+        policy: { canTransfer: () => false },
+      }).drainOnce();
       expect(summary.halted).toBe(true);
       expect(putPart).toHaveBeenCalledTimes(0);
       expect(store.bySha(SHA)?.state).toBe('pending');
@@ -281,7 +297,7 @@ describe('uploader', () => {
       driver.run('UPDATE upload_item SET plaintext_size = 999 WHERE sha256 = ?', [SHA]);
       await drainer().drainOnce();
       expect(store.bySha(SHA)?.state).toBe('failed');
-      expect(store.bySha(SHA)?.lastError).toMatch(/expected 999/);
+      expect(store.bySha(SHA)?.lastError).toMatch(/expected 999/u);
     });
   });
 });

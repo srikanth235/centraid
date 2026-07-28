@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { restampReleaseDate } from './restamp-rollout.mjs';
 
 describe('restampReleaseDate (I8)', () => {
@@ -16,10 +17,10 @@ describe('restampReleaseDate (I8)', () => {
     const yml = 'version: 0.2.0\npath: x.zip\n';
     const { text, releaseDate } = restampReleaseDate(yml, 0, now);
     expect(releaseDate).toBe('2026-07-22T12:00:00.000Z');
-    expect(text).toMatch(/releaseDate:/);
+    expect(text).toMatch(/releaseDate:/u);
   });
 
   it('rejects negative hours', () => {
-    expect(() => restampReleaseDate('version: 1\n', -1, now)).toThrow(/hours/);
+    expect(() => restampReleaseDate('version: 1\n', -1, now)).toThrow(/hours/u);
   });
 });

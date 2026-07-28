@@ -30,8 +30,9 @@
 import crypto from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import path from 'node:path';
+
 import {
   AnalyticsStore,
   InsightsStore,
@@ -45,6 +46,7 @@ import {
   type TurnStreamEvent,
 } from '@centraid/app-engine';
 import * as automation from '@centraid/automation';
+
 import { journalConversationStore } from '../journal-stores.js';
 import type { WorktreeStore } from '../worktree-store/index.js';
 import { parseProviderConsent, readJson, sendError, sendJson } from './route-helpers.js';
@@ -331,7 +333,10 @@ export function makeAutomationsRouteHandler(
       if (sub === 'source' && method === 'GET') {
         const ref = automation.parseRef(url.searchParams.get('ref') ?? '');
         if (!ref)
-          return sendJson(res, 400, { error: 'bad_request', message: 'source needs ?ref=' });
+          return sendJson(res, 400, {
+            error: 'bad_request',
+            message: 'source needs ?ref=',
+          });
         const dir = path.join(codeAppsDir(), ref.appId, 'automations', ref.automationId);
         const read = (file: string): Promise<string | null> =>
           readFile(path.join(dir, file), 'utf8').catch(() => null);
@@ -345,7 +350,10 @@ export function makeAutomationsRouteHandler(
       if (sub === 'turn-now' && method === 'POST') {
         const ref = url.searchParams.get('ref') ?? '';
         if (!automation.parseRef(ref)) {
-          return sendJson(res, 400, { error: 'bad_request', message: 'turn-now needs ?ref=' });
+          return sendJson(res, 400, {
+            error: 'bad_request',
+            message: 'turn-now needs ?ref=',
+          });
         }
         const turnId = `${ref}:${Date.now()}:${crypto.randomUUID().slice(0, 8)}`;
         opts.runAutomation({ automationRef: ref, turnId });

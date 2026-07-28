@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
 import {
   formatBudgetSummary,
   formatFriendlyMs,
@@ -118,11 +119,26 @@ describe('resource-summary', () => {
 
     it('lists resolved knobs in friendly units', () => {
       const rows = resolvedKnobRows(sample);
-      expect(rows).toContainEqual({ label: 'Workers × heap', value: '2 × 1280 MB' });
-      expect(rows).toContainEqual({ label: 'SQLite durability', value: 'FULL' });
-      expect(rows).toContainEqual({ label: 'Vault sweep', value: 'every 5 min' });
-      expect(rows).toContainEqual({ label: 'Outbox idle poll', value: 'every 1s' });
-      expect(rows).toContainEqual({ label: 'Compression', value: 'brotli q6 · gzip q7' });
+      expect(rows).toContainEqual({
+        label: 'Workers × heap',
+        value: '2 × 1280 MB',
+      });
+      expect(rows).toContainEqual({
+        label: 'SQLite durability',
+        value: 'FULL',
+      });
+      expect(rows).toContainEqual({
+        label: 'Vault sweep',
+        value: 'every 5 min',
+      });
+      expect(rows).toContainEqual({
+        label: 'Outbox idle poll',
+        value: 'every 1s',
+      });
+      expect(rows).toContainEqual({
+        label: 'Compression',
+        value: 'brotli q6 · gzip q7',
+      });
     });
   });
 });

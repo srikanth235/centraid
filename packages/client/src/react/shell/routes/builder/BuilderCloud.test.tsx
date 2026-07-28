@@ -3,14 +3,15 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const api = vi.hoisted(() => ({
-  appLiveUrl: vi.fn(),
-  appLogs: vi.fn(),
-  deleteAutomation: vi.fn(),
-  listAutomations: vi.fn(),
-  listVersions: vi.fn(),
-  readAutomationTurn: vi.fn(),
-  runAutomationNow: vi.fn(),
-  setAutomationEnabled: vi.fn(),
+  appLiveUrl: vi.fn<typeof import('../../../../gateway-client.js').appLiveUrl>(),
+  appLogs: vi.fn<typeof import('../../../../gateway-client.js').appLogs>(),
+  deleteAutomation: vi.fn<typeof import('../../../../gateway-client.js').deleteAutomation>(),
+  listAutomations: vi.fn<typeof import('../../../../gateway-client.js').listAutomations>(),
+  listVersions: vi.fn<typeof import('../../../../gateway-client.js').listVersions>(),
+  readAutomationTurn: vi.fn<typeof import('../../../../gateway-client.js').readAutomationTurn>(),
+  runAutomationNow: vi.fn<typeof import('../../../../gateway-client.js').runAutomationNow>(),
+  setAutomationEnabled:
+    vi.fn<typeof import('../../../../gateway-client.js').setAutomationEnabled>(),
 }));
 
 vi.mock(import('../../../../gateway-client.js'), () => api);
@@ -117,25 +118,30 @@ describe('BuilderCloud', () => {
       ],
     });
     api.listAutomations.mockReset().mockResolvedValue([automationRow()]);
-    api.setAutomationEnabled.mockReset().mockResolvedValue({ enabled: false });
+    api.setAutomationEnabled.mockReset().mockResolvedValue({ ok: true });
     api.runAutomationNow.mockReset().mockResolvedValue({ turnId: 'turn-1' });
     api.readAutomationTurn.mockReset().mockResolvedValue({
       turnId: 'turn-1',
       conversationId: 'conversation-1',
-      automationRef: 'invoice-watcher/invoice-watcher',
+      seq: 1,
+      automationId: 'invoice-watcher/invoice-watcher',
+      triggerKind: 'manual',
       startedAt: 100,
       endedAt: 125,
       ok: true,
+      pinned: false,
     });
-    api.deleteAutomation.mockReset().mockResolvedValue({ deleted: true });
+    api.deleteAutomation.mockReset().mockResolvedValue({ ok: true });
     vi.spyOn(window, 'open').mockReturnValue(null);
     vi.stubGlobal(
       'confirm',
-      vi.fn(() => true),
+      vi.fn<typeof confirm>(() => true),
     );
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
-      value: { writeText: vi.fn().mockResolvedValue(undefined) },
+      value: {
+        writeText: vi.fn<Clipboard['writeText']>().mockResolvedValue(undefined),
+      },
     });
   });
 

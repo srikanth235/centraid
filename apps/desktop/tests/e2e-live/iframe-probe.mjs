@@ -13,6 +13,7 @@
 // Run with: node apps/desktop/tests/e2e-live/iframe-probe.mjs
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+
 import { launchApp, navTo } from './driver.mjs';
 
 const __dirname = import.meta.dirname;
@@ -43,7 +44,9 @@ async function main() {
     // → Discover → the Agenda app template (known h1 + a benign, always-
     // wired view-toggle button — see packages/blueprints/apps/agenda).
     await navTo(page, 'Discover');
-    const agendaCard = page.locator('button[data-kind="app"]', { hasText: 'Agenda' });
+    const agendaCard = page.locator('button[data-kind="app"]', {
+      hasText: 'Agenda',
+    });
     await agendaCard.first().waitFor({ state: 'visible', timeout: 20_000 });
     await agendaCard.first().click();
 

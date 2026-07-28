@@ -31,33 +31,34 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react';
+
+import type { InlineScope, InlineAppProps } from '../inline-types.ts';
 import { assetKey } from './asset-key.ts';
-import { debounce, observeWidth, readFailed } from './kit.ts';
-import { ALBUMS, DUPLICATES, FAVORITES, TRASH } from './constants.ts';
-import { $ } from './dom.ts';
-import { createDuplicates } from './duplicates.tsx';
-import { DEFAULT_ZOOM, gridWidthFallback, ZOOM_LEVELS } from './layout.ts';
-import { createLightbox } from './lightbox.tsx';
-import { createLibraryStore } from './library-store.ts';
-import { createRefetchScheduler, readLibraryScopes, stopLiveReads } from './library-reads.ts';
-import { notice, setWriteTargetResolver } from './outcomes.ts';
-import { mountedScopes, ownScopeId, photoWriteTarget } from './scopes.ts';
-import { createPicker } from './picker.tsx';
-import { createSearch } from './search.ts';
-import { createSidebar } from './sidebar.tsx';
-import { createSlideshow } from './slideshow.tsx';
-import { applyUploadTarget, runUpload, wireUpload } from './upload.ts';
-import { createVisibility } from './visibility.ts';
+import { Chrome, type ChromeSlots } from './Chrome.tsx';
 import { AlbumGridView } from './components/AlbumGrid.tsx';
 import { EnrichmentPanel } from './components/Enrichment.tsx';
 import { MemoriesStrip } from './components/Memories.tsx';
 import { SelectionBarView } from './components/SelectionBar.tsx';
 import { TimelineBody } from './components/Timeline.tsx';
 import { ToolbarView } from './components/Toolbar.tsx';
-import { Chrome, type ChromeSlots } from './Chrome.tsx';
-import type { Album, Asset, LibraryData, MemoryCard, Place } from './types.ts';
-import type { InlineScope } from '../inline-types.ts';
-import type { InlineAppProps } from '../inline-types.ts';
+import { ALBUMS, DUPLICATES, FAVORITES, TRASH } from './constants.ts';
+import { $ } from './dom.ts';
+import { createDuplicates } from './duplicates.tsx';
+import { debounce, observeWidth, readFailed } from './kit.ts';
+import { DEFAULT_ZOOM, gridWidthFallback, ZOOM_LEVELS } from './layout.ts';
+import { createRefetchScheduler, readLibraryScopes, stopLiveReads } from './library-reads.ts';
+import { createLibraryStore } from './library-store.ts';
+import { createLightbox } from './lightbox.tsx';
+import { notice, setWriteTargetResolver } from './outcomes.ts';
+import { createPicker } from './picker.tsx';
+import { mountedScopes, ownScopeId, photoWriteTarget } from './scopes.ts';
+import { createSearch } from './search.ts';
+import { createSidebar } from './sidebar.tsx';
+import { createSlideshow } from './slideshow.tsx';
+import type { Album, Asset, MemoryCard, Place } from './types.ts';
+import { applyUploadTarget, runUpload, wireUpload } from './upload.ts';
+import { createVisibility } from './visibility.ts';
+
 import styles from './Chrome.module.css';
 
 // The vault tables the library projection reads — the change-subscription filter
@@ -119,7 +120,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
   useLayoutEffect(() => {
     const el = rootElRef.current;
     if (el) {
-      const forced = el.getAttribute('data-app-width') === 'narrow';
+      const forced = el.dataset.appWidth === 'narrow';
       setNarrow(forced || el.clientWidth < 860);
     }
     const raf = requestAnimationFrame(() => setReady(true));
@@ -137,7 +138,9 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     const setSlot = (key: SlotKey, node: ReactNode): void => {
       setSlots((prev) => ({ ...prev, [key]: node }));
     };
-    const mk = (key: SlotKey) => ({ render: (node: ReactNode) => setSlot(key, node) });
+    const mk = (key: SlotKey) => ({
+      render: (node: ReactNode) => setSlot(key, node),
+    });
     const toolbarRoot = mk('toolbar');
     const mainRoot = mk('main');
     const selectionBarRoot = mk('selectionBar');
@@ -165,7 +168,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     let selectAnchor: string | null = null;
     const selectedIds = new Set<string>();
     let zoomIndex = DEFAULT_ZOOM;
-    let paneWidth = gridWidthFallback(typeof window !== 'undefined' ? window.innerWidth : 1280);
+    let paneWidth = gridWidthFallback(typeof window === 'undefined' ? 1280 : window.innerWidth);
     let libraryTruncated = false;
     let lastFreshLoadAt = 0;
     let recordNextLoad = false;
@@ -259,7 +262,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       ) {
         selectedAlbum = null;
       }
-      for (const key of [...selectedIds]) {
+      for (const key of selectedIds) {
         if (!assets.some((a) => assetKey(a) === key)) selectedIds.delete(key);
       }
       if (recordNextLoad) lastFreshLoadAt = Date.now();
@@ -302,7 +305,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
 
     // ---- memories ----
     function buildMemories(): MemoryCard[] {
-      if (rootElRef.current?.getAttribute('data-show-memories') === 'hide') return [];
+      if (rootElRef.current?.dataset.showMemories === 'hide') return [];
       const cards: MemoryCard[] = [];
       const favs = assets.filter((a) => a.favorite);
       if (favs.length > 0) {
@@ -375,13 +378,19 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         };
       }
       if (selectedAlbum === DUPLICATES) {
-        return { title: 'Duplicates', sub: 'Near-duplicate clusters in your library' };
+        return {
+          title: 'Duplicates',
+          sub: 'Near-duplicate clusters in your library',
+        };
       }
       const countSub = q
         ? `${n} match${n === 1 ? '' : 'es'} “${q}”`
         : `${n} photo${n === 1 ? '' : 's'}`;
       if (selectedAlbum === TRASH) {
-        return { title: 'Trash', sub: q ? countSub : `${n} in trash · auto-purge after 30 days` };
+        return {
+          title: 'Trash',
+          sub: q ? countSub : `${n} in trash · auto-purge after 30 days`,
+        };
       }
       if (selectedAlbum === FAVORITES) return { title: 'Favorites', sub: countSub };
       if (typeof selectedAlbum === 'string' && selectedAlbum.startsWith('tag:')) {
@@ -495,7 +504,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
             selectedIds={selectedIds}
             onEnterSelectMode={enterSelectMode}
             onToggleSelect={toggleSelect}
-            onOpen={lightbox.openLightbox}
+            onOpen={handleOpenLightbox}
             onShowMore={async (e) => {
               e.currentTarget.disabled = true;
               // Only the scopes sitting AT the merged horizon are re-queried,
@@ -668,6 +677,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       refresh,
       slideshow,
     });
+    const handleOpenLightbox = lightbox.openLightbox;
     const { openPicker, closePicker } = createPicker({
       pickerRoot,
       getAlbums: () => albums,
@@ -786,7 +796,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     // #scrollPane whose clientWidth includes its own padding).
     function measurePane(): void {
       const el = $('grid');
-      const w = el?.clientWidth || (typeof window !== 'undefined' ? window.innerWidth : 0);
+      const w = el?.clientWidth || (typeof window === 'undefined' ? 0 : window.innerWidth);
       if (w > 0 && Math.abs(w - paneWidth) > 1) {
         paneWidth = w;
         renderMain();
@@ -851,7 +861,13 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     <div
       ref={setRoot}
       className={styles.appRoot}
-      style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, minHeight: 0 }}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        flex: 1,
+        minWidth: 0,
+        minHeight: 0,
+      }}
     >
       <Chrome narrow={narrow} ready={ready} slots={slots} />
     </div>

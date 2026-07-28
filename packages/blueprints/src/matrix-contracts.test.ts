@@ -3,6 +3,7 @@
  * App id + scaffold file-map contract is the public surface for builders.
  */
 import { describe, expect, it } from 'vitest';
+
 import { scaffoldAppFiles, validateAppId } from './scaffold-files.js';
 import { AppScaffoldError } from './scaffold-types.js';
 
@@ -35,6 +36,10 @@ describe('blueprint scaffold contracts', () => {
       name: string;
       manifestVersion: number;
     };
-    expect(appJson).toMatchObject({ id: 'contracts-app', name: 'Contracts', manifestVersion: 1 });
+    expect(appJson).toMatchObject({
+      id: 'contracts-app',
+      name: 'Contracts',
+      manifestVersion: 1,
+    });
   });
 });

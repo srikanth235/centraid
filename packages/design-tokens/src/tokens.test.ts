@@ -3,16 +3,17 @@
  * Tokens are a known trap zone (hardcoded CSS drift); pin brand + palette shape.
  */
 import { describe, expect, test } from 'vitest';
+
 import { BRAND, palette, radii, spacing, themes } from './index.js';
 
 describe('tokens', () => {
   test('brand teal is a stable hex identity color', () => {
-    expect(BRAND).toMatch(/^#[0-9a-fA-F]{6}$/);
+    expect(BRAND).toMatch(/^#[0-9a-fA-F]{6}$/u);
   });
 
   test('palette exposes required color keys used by shell chrome', () => {
-    expect(palette.forest).toMatch(/^#/);
-    expect(palette.teal).toMatch(/^#/);
+    expect(palette.forest).toMatch(/^#/u);
+    expect(palette.teal).toMatch(/^#/u);
     expect(Object.keys(palette).length).toBeGreaterThan(5);
   });
 

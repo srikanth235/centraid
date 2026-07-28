@@ -16,7 +16,9 @@ export async function requestPersistentStorage(): Promise<void> {
 }
 
 export function purgeTunnelCaches(): void {
-  navigator.serviceWorker?.controller?.postMessage({ type: 'centraid:purge-tunnel-cache' });
+  navigator.serviceWorker?.controller?.postMessage({
+    type: 'centraid:purge-tunnel-cache',
+  });
   // A newly opened page may not be controlled yet. Delete the origin caches
   // directly as well so a consent downgrade cannot depend on SW timing.
   if ('caches' in globalThis) {
@@ -50,11 +52,11 @@ export function isUpdateAvailable(): boolean {
 }
 
 export function onSwUpdateAvailable(
-  callback: (msg: { available: boolean; version: string }) => void,
+  listener: (msg: { available: boolean; version: string }) => void,
 ): () => void {
-  updateListeners.add(callback);
-  if (updateAvailable) callback({ available: true, version: 'web' });
-  return () => updateListeners.delete(callback);
+  updateListeners.add(listener);
+  if (updateAvailable) listener({ available: true, version: 'web' });
+  return () => updateListeners.delete(listener);
 }
 
 function markUpdateAvailable(): void {

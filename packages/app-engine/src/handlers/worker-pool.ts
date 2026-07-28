@@ -25,6 +25,7 @@
  */
 
 import { Worker } from 'node:worker_threads';
+
 import { isConstrainedWorkerHost, type WorkerHostCapacity } from './worker-admission.js';
 
 /** Resource caps mirrored from the pre-pool spawn (handler-runner.ts). */
@@ -50,7 +51,7 @@ export function workerResourceLimitsFromEnv(
   const fallbackYoung = constrained ? 16 : DEFAULT_LIMITS.maxYoungGenerationSizeMb;
   const parse = (raw: string | undefined, fallback: number, ceiling: number): number => {
     if (raw === undefined || raw === '') return fallback;
-    const value = Number.parseInt(raw, 10);
+    const value = Math.trunc(Number(raw));
     return Number.isFinite(value) && value >= 8 ? Math.min(value, ceiling) : fallback;
   };
   return {
@@ -80,7 +81,7 @@ export function workerPoolSizeFromEnv(env: NodeJS.ProcessEnv = process.env): num
       ? 0
       : DEFAULT_WORKER_POOL_SIZE;
   if (raw === undefined || raw === '') return fallback;
-  const n = Number.parseInt(raw, 10);
+  const n = Math.trunc(Number(raw));
   if (!Number.isFinite(n) || n < 0) return fallback;
   // A very large pool defeats the point (idle memory) — cap it.
   return Math.min(n, 8);

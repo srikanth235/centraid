@@ -3,11 +3,13 @@
 // into the callbacks app.tsx wired to logic.ts — the React port of app.js's
 // `LockerSidebar` Lit component.
 import type { ReactNode } from 'react';
+
 import { CAT_ORDER, CATS } from '../format.ts';
 import type { Nav } from '../types.ts';
 import { Icon, CatIcon } from './Shared.tsx';
-import styles from './Sidebar.module.css';
+
 import shared from './shared.module.css';
+import styles from './Sidebar.module.css';
 
 function NavItem({
   icon,

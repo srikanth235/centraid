@@ -2,9 +2,10 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import type { GatewayRuntimeSnapshot } from '../shell/routes/gatewayData.js';
+import GatewayScreen, { type GatewayScreenProps } from './GatewayScreen.js';
 import type { GatewayHealthDTO } from './SettingsDiagnosticsScreen.js';
-import GatewayScreen from './GatewayScreen.js';
 
 const T0 = Date.UTC(2026, 6, 11, 12, 0, 0);
 const NOW = T0 + 3_600_000; // one hour into the session
@@ -32,7 +33,14 @@ const base: GatewayRuntimeSnapshot = {
   outages: [{ startedAt: NOW - 10_000, endedAt: NOW - 5000, alertedAt: NOW - 8000 }],
   alert: { enabled: true, thresholdSeconds: 120 },
   pollIntervalMs: 5000,
-  alertHistory: [{ at: NOW - 5000, kind: 'recovered', durationMs: 5000, previousSession: false }],
+  alertHistory: [
+    {
+      at: NOW - 5000,
+      kind: 'recovered',
+      durationMs: 5000,
+      previousSession: false,
+    },
+  ],
 };
 
 function makeHealth(over: Partial<GatewayHealthDTO> = {}): GatewayHealthDTO {
@@ -197,8 +205,8 @@ describe('GatewayScreen interactions', () => {
   });
 
   it('moves the down-alert preset/switch controls under the Alerts tab', async () => {
-    const onSeconds = vi.fn();
-    const onEnabled = vi.fn();
+    const onSeconds = vi.fn<GatewayScreenProps['onAlertSecondsChange']>();
+    const onEnabled = vi.fn<GatewayScreenProps['onAlertsEnabledChange']>();
     await act(async () => {
       root.render(
         <GatewayScreen
@@ -227,11 +235,11 @@ describe('GatewayScreen interactions', () => {
   });
 
   it('switching to the Components tab mounts the diagnostics screen', async () => {
-    const loadHealth = vi
-      .fn()
-      .mockResolvedValue(
-        makeHealth({ components: [{ component: 'vaults', status: 'ok', errorCount: 0 }] }),
-      );
+    const loadHealth = vi.fn<GatewayScreenProps['loadHealth']>().mockResolvedValue(
+      makeHealth({
+        components: [{ component: 'vaults', status: 'ok', errorCount: 0 }],
+      }),
+    );
     await act(async () => {
       root.render(
         <GatewayScreen snapshot={base} now={NOW} {...stubProps} loadHealth={loadHealth} />,
@@ -255,7 +263,7 @@ describe('GatewayScreen interactions', () => {
   });
 
   it('jumps from a failing component straight into a focused Logs search', async () => {
-    const loadHealth = vi.fn().mockResolvedValue(
+    const loadHealth = vi.fn<GatewayScreenProps['loadHealth']>().mockResolvedValue(
       makeHealth({
         status: 'error',
         components: [
@@ -303,7 +311,9 @@ describe('GatewayScreen interactions', () => {
   });
 
   it('restarts the gateway and clears back to idle on success', async () => {
-    const onRestartGateway = vi.fn().mockResolvedValue({ ok: true });
+    const onRestartGateway = vi
+      .fn<GatewayScreenProps['onRestartGateway']>()
+      .mockResolvedValue({ ok: true });
     await act(async () => {
       root.render(
         <GatewayScreen
@@ -333,9 +343,10 @@ describe('GatewayScreen interactions', () => {
   });
 
   it('surfaces a refused restart (remote gateway) inline without throwing', async () => {
-    const onRestartGateway = vi
-      .fn()
-      .mockResolvedValue({ ok: false, error: 'restart is only available for a local gateway' });
+    const onRestartGateway = vi.fn<GatewayScreenProps['onRestartGateway']>().mockResolvedValue({
+      ok: false,
+      error: 'restart is only available for a local gateway',
+    });
     await act(async () => {
       root.render(
         <GatewayScreen
@@ -363,7 +374,9 @@ describe('GatewayScreen interactions', () => {
   });
 
   it('exports diagnostics from the Logs tab toolbar and shows the saved path', async () => {
-    const onExportDiagnostics = vi.fn().mockResolvedValue({ ok: true, path: '/tmp/diag.json' });
+    const onExportDiagnostics = vi
+      .fn<NonNullable<GatewayScreenProps['onExportDiagnostics']>>()
+      .mockResolvedValue({ ok: true, path: '/tmp/diag.json' });
     await act(async () => {
       root.render(
         <GatewayScreen
@@ -394,7 +407,9 @@ describe('GatewayScreen interactions', () => {
   });
 
   it('shows nothing extra when the export dialog is canceled, and surfaces a real failure inline', async () => {
-    const onExportDiagnostics = vi.fn().mockResolvedValue({ ok: false, canceled: true });
+    const onExportDiagnostics = vi
+      .fn<NonNullable<GatewayScreenProps['onExportDiagnostics']>>()
+      .mockResolvedValue({ ok: false, canceled: true });
     await act(async () => {
       root.render(
         <GatewayScreen

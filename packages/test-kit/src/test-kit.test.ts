@@ -1,10 +1,13 @@
 import { accessSync } from 'node:fs';
 import { access, readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
+
 import { describe, expect, test } from 'vitest';
+
 import { useFakeClock } from './fake-clock.js';
 import { fc } from './fast-check.js';
 import { recordQualityResult } from './quality-result.js';
+import { forEachSequentially } from './sequential.js';
 import { tempDir, tempDirSync } from './temp-dir.js';
 import { jsdomProject, nodeProject } from './vitest.js';
 import { generateVolumeFixture } from './volume-fixture.js';
@@ -54,6 +57,38 @@ describe('test-kit', () => {
       { numRuns: 32 },
     );
     expect(runs).toBeGreaterThan(0);
+  });
+
+  test('forEachSequentially starts each item only after its predecessor settles', async () => {
+    let releaseFirst = () => {};
+    const first = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const started: number[] = [];
+    const sequence = forEachSequentially([1, 2, 3], (value) => {
+      started.push(value);
+      return value === 1 ? first : undefined;
+    });
+
+    await Promise.resolve();
+    expect(started).toStrictEqual([1]);
+
+    releaseFirst();
+    await sequence;
+    expect(started).toStrictEqual([1, 2, 3]);
+  });
+
+  test('forEachSequentially does not start later items after a failure', async () => {
+    const failure = new Error('stop');
+    const started: number[] = [];
+
+    await expect(
+      forEachSequentially([1, 2, 3], (value) => {
+        started.push(value);
+        if (value === 2) throw failure;
+      }),
+    ).rejects.toBe(failure);
+    expect(started).toStrictEqual([1, 2]);
   });
 
   test('nodeProject merges requireAssertions and the node environment', () => {

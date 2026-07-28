@@ -20,8 +20,9 @@
  * the new gateway.
  */
 
-import path from 'node:path';
 import { mkdir, stat } from 'node:fs/promises';
+import path from 'node:path';
+
 import { openSession } from './apps-store-client.js';
 import { vaultCodeStoreDir } from './gateway-paths.js';
 import { loadSettings } from './settings.js';

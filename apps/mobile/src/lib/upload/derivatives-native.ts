@@ -82,12 +82,19 @@ export async function generateDeviceDerivatives(
   mediaType: string,
 ): Promise<DeviceDerivativeSet> {
   const source = mediaType.startsWith('video/')
-    ? (await VideoThumbnails.getThumbnailAsync(localUri, { time: 0, quality: 0.9 })).uri
+    ? (
+        await VideoThumbnails.getThumbnailAsync(localUri, {
+          time: 0,
+          quality: 0.9,
+        })
+      ).uri
     : localUri;
   const thumb = await jpegRung(source, 256, 0.82);
   const preview = await jpegRung(source, 2_048, 0.86);
   const poster = mediaType.startsWith('video/') ? await jpegRung(source, 1_024, 0.86) : undefined;
-  const decoded = jpeg.decode(await new File(thumb).bytes(), { useTArray: true });
+  const decoded = jpeg.decode(await new File(thumb).bytes(), {
+    useTArray: true,
+  });
   const thumbhash = bytesToBase64(
     rgbaToThumbHash(decoded.width, decoded.height, decoded.data),
   ).replace(/=+$/u, '');
@@ -125,25 +132,27 @@ export async function contributeDeviceDerivatives(
   parentSha: string,
   derivatives: readonly DeviceDerivative[],
 ): Promise<void> {
-  for (const derivative of derivatives) {
-    const file = new File(derivative.uri);
-    // Derivatives are gateway-regenerable accelerators, not correctness. If the
-    // durable copy is somehow gone, skip it rather than throw — a thrown error
-    // would poison the whole follow-up, including its canonical replica write.
-    if (!file.exists) continue;
-    const params = new URLSearchParams({
-      variant: derivative.variant,
-      variant_of: parentSha,
-      media_type: derivative.mediaType,
-    });
-    const response = await fetch(`${gatewayBase}/centraid/_vault/blobs?${params}`, {
-      method: 'POST',
-      headers: { 'content-type': derivative.mediaType, ...authHeader() },
-      body: (await file.bytes()).buffer as ArrayBuffer,
-    });
-    if (!response.ok)
-      throw new Error(`Derivative ${derivative.variant} failed (${response.status})`);
-  }
+  await Promise.all(
+    derivatives.map(async (derivative) => {
+      const file = new File(derivative.uri);
+      // Derivatives are gateway-regenerable accelerators, not correctness. If the
+      // durable copy is somehow gone, skip it rather than throw — a thrown error
+      // would poison the whole follow-up, including its canonical replica write.
+      if (!file.exists) return;
+      const params = new URLSearchParams({
+        variant: derivative.variant,
+        variant_of: parentSha,
+        media_type: derivative.mediaType,
+      });
+      const response = await fetch(`${gatewayBase}/centraid/_vault/blobs?${params}`, {
+        method: 'POST',
+        headers: { 'content-type': derivative.mediaType, ...authHeader() },
+        body: (await file.bytes()).buffer as ArrayBuffer,
+      });
+      if (!response.ok)
+        throw new Error(`Derivative ${derivative.variant} failed (${response.status})`);
+    }),
+  );
 }
 
 /** Delete durable derivative copies once their follow-up has settled (F3/F10). */

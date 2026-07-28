@@ -8,10 +8,12 @@
  */
 
 import { readFileSync } from 'node:fs';
-import path from 'node:path';
 import { createRequire } from 'node:module';
+import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+
 import { describe, expect, it } from 'vitest';
+
 import { lintHandlerSource } from '../handler/lint.js';
 import { parseManifest } from './manifest.js';
 
@@ -59,7 +61,10 @@ function stubCtx(options: {
   }) => unknown;
 }) {
   const invokes: { command: string; input: Record<string, unknown> }[] = [];
-  const agentCalls: { prompt: string; content?: { contentId: string; variant: string }[] }[] = [];
+  const agentCalls: {
+    prompt: string;
+    content?: { contentId: string; variant: string }[];
+  }[] = [];
   const state = new Map<string, unknown>();
   const logs: string[] = [];
   const ctx = {
@@ -79,7 +84,10 @@ function stubCtx(options: {
       json?: unknown;
       content?: { contentId: string; variant: string }[];
     }) => {
-      agentCalls.push({ prompt: call.prompt, ...(call.content ? { content: call.content } : {}) });
+      agentCalls.push({
+        prompt: call.prompt,
+        ...(call.content ? { content: call.content } : {}),
+      });
       return options.agent ? options.agent(call) : {};
     },
     state: {
@@ -141,14 +149,19 @@ describe('photo-captioner behavior', () => {
         tags: [{ label: 'Beach', confidence: 0.9 }],
       }),
     });
-    const result = (await handler({ ctx: harness.ctx, log: harness.log })) as { summary: string };
+    const result = (await handler({ ctx: harness.ctx, log: harness.log })) as {
+      summary: string;
+    };
     // Preview wins over thumb; originals are never a spelling.
     expect(harness.agentCalls[0]!.content).toStrictEqual([{ contentId: 'c1', variant: 'preview' }]);
     expect(harness.invokes).toHaveLength(1);
     const staged = harness.invokes[0]!;
     expect(staged.command).toBe('sync.stage_rows');
     expect(staged.input.kind).toBe('enrichment.vision');
-    const rows = staged.input.rows as { entity_type: string; external_id: string }[];
+    const rows = staged.input.rows as {
+      entity_type: string;
+      external_id: string;
+    }[];
     expect(rows.map((r) => r.entity_type)).toStrictEqual(['knowledge.annotation', 'core.tag']);
     expect(rows[0]!.external_id).toBe('a1:caption');
     expect(harness.state.get('cursor')).toBe('a1');
@@ -160,7 +173,11 @@ describe('photo-captioner behavior', () => {
     const harness = stubCtx({
       reads: {
         'enrich.request': [
-          { request_id: 'rq1', entity_type: 'media.media_asset', entity_id: 'old1' },
+          {
+            request_id: 'rq1',
+            entity_type: 'media.media_asset',
+            entity_id: 'old1',
+          },
         ],
         'media.media_asset': [{ asset_id: 'old1', content_id: 'oc1', kind: 'photo' }],
         'core.content_derivative': [{ content_id: 'oc1', variant: 'thumb' }],
@@ -183,7 +200,9 @@ describe('photo-captioner behavior', () => {
         'core.content_derivative': [],
       },
     });
-    const result = (await handler({ ctx: harness.ctx, log: harness.log })) as { summary: string };
+    const result = (await handler({ ctx: harness.ctx, log: harness.log })) as {
+      summary: string;
+    };
     expect(harness.agentCalls).toHaveLength(0);
     expect(harness.invokes).toHaveLength(0);
     expect(result.summary).toContain('skipped 1');
@@ -202,7 +221,9 @@ describe('doc-text-extractor behavior', () => {
       },
       agent: () => ({ text: 'Warranty expires 2027-03-01' }),
     });
-    const result = (await handler({ ctx: harness.ctx, log: harness.log })) as { summary: string };
+    const result = (await handler({ ctx: harness.ctx, log: harness.log })) as {
+      summary: string;
+    };
     expect(harness.agentCalls[0]!.content).toStrictEqual([{ contentId: 'd1', variant: 'preview' }]);
     expect(harness.invokes.map((i) => i.command)).toStrictEqual(['core.set_extracted_text']);
     expect(harness.invokes[0]!.input).toStrictEqual({
@@ -243,7 +264,9 @@ describe('doc-text-extractor behavior', () => {
         'core.content_derivative': [],
       },
     });
-    const result = (await handler({ ctx: harness.ctx, log: harness.log })) as { summary: string };
+    const result = (await handler({ ctx: harness.ctx, log: harness.log })) as {
+      summary: string;
+    };
     expect(harness.agentCalls).toHaveLength(0);
     expect(harness.invokes).toHaveLength(0);
     expect(result.summary).toContain('skipped 1');
@@ -257,7 +280,9 @@ describe('doc-text-extractor behavior', () => {
     };
     const harness = stubCtx({
       reads,
-      agent: () => ({ text: 'Late preview exposes the albatross renewal date' }),
+      agent: () => ({
+        text: 'Late preview exposes the albatross renewal date',
+      }),
     });
     await handler({ ctx: harness.ctx, log: harness.log });
     expect(harness.state.get('cursor')).toBe('d5');
@@ -275,7 +300,10 @@ describe('doc-text-extractor behavior', () => {
     ]);
     expect(harness.invokes.at(-1)).toStrictEqual({
       command: 'core.set_extracted_text',
-      input: { content_id: 'd5', text: 'Late preview exposes the albatross renewal date' },
+      input: {
+        content_id: 'd5',
+        text: 'Late preview exposes the albatross renewal date',
+      },
     });
     expect(harness.state.get('derivativeCursor')).toBe('dv-1');
   });
@@ -319,9 +347,14 @@ describe('screenshot-extractor behavior', () => {
         'media.media_asset': [{ asset_id: 's2', content_id: 'c2', kind: 'photo', exif_json: null }],
         'core.content_derivative': [{ content_id: 'c2', variant: 'preview' }],
       },
-      agent: () => ({ kind: 'booking', booking: { summary: 'Flight BLR → GOI' } }),
+      agent: () => ({
+        kind: 'booking',
+        booking: { summary: 'Flight BLR → GOI' },
+      }),
     });
-    const result = (await handler({ ctx: harness.ctx, log: harness.log })) as { summary: string };
+    const result = (await handler({ ctx: harness.ctx, log: harness.log })) as {
+      summary: string;
+    };
     expect(harness.invokes).toHaveLength(0);
     expect(result.summary).toContain('0 booking(s)');
   });
@@ -348,7 +381,11 @@ describe('face-proposer behavior', () => {
     await handler({ ctx: harness.ctx, log: harness.log });
     const input = harness.invokes[0]!.input as {
       kind: string;
-      rows: { entity_type: string; external_id: string; payload: { party_id?: unknown } }[];
+      rows: {
+        entity_type: string;
+        external_id: string;
+        payload: { party_id?: unknown };
+      }[];
     };
     expect(input.kind).toBe('enrichment.faces');
     expect(input.rows.map((r) => r.external_id)).toStrictEqual(['f1:face:0', 'f1:face:1']);
@@ -367,17 +404,32 @@ describe('trip-albums behavior', () => {
       captured_at: `2026-06-1${Math.min(i, 4)}T10:0${i}:00.000Z`, // 5-day spread
     }));
     const homePhotos = [
-      { asset_id: 'h1', content_id: 'hc1', kind: 'photo', captured_at: '2026-05-01T09:00:00.000Z' },
-      { asset_id: 'h2', content_id: 'hc2', kind: 'photo', captured_at: '2026-05-01T10:00:00.000Z' },
+      {
+        asset_id: 'h1',
+        content_id: 'hc1',
+        kind: 'photo',
+        captured_at: '2026-05-01T09:00:00.000Z',
+      },
+      {
+        asset_id: 'h2',
+        content_id: 'hc2',
+        kind: 'photo',
+        captured_at: '2026-05-01T10:00:00.000Z',
+      },
     ];
     const harness = stubCtx({
       reads: { 'media.media_asset': [...homePhotos, ...trip] },
     });
-    const result = (await handler({ ctx: harness.ctx, log: harness.log })) as { summary: string };
+    const result = (await handler({ ctx: harness.ctx, log: harness.log })) as {
+      summary: string;
+    };
     expect(harness.agentCalls).toHaveLength(0); // deterministic code, no model
     expect(harness.invokes.map((i) => i.command)).toStrictEqual(['sync.stage_rows']);
     const input = harness.invokes[0]!.input as {
-      rows: { external_id: string; payload: { name: string; members: unknown[] } }[];
+      rows: {
+        external_id: string;
+        payload: { name: string; members: unknown[] };
+      }[];
     };
     // The two May photos are too few/short; the June run is one trip.
     expect(input.rows).toHaveLength(1);
@@ -401,12 +453,18 @@ describe('doc-entity-linker behavior', () => {
       },
       agent: () => ({
         mentions: [
-          { name: 'Rahul Mehta', exact: 'payable to Rahul Mehta by June 30', prefix: 'is ' },
+          {
+            name: 'Rahul Mehta',
+            exact: 'payable to Rahul Mehta by June 30',
+            prefix: 'is ',
+          },
           { name: 'Sunita Rao', exact: 'witnessed by Sunita Rao' },
         ],
       }),
     });
-    const result = (await handler({ ctx: harness.ctx, log: harness.log })) as { summary: string };
+    const result = (await handler({ ctx: harness.ctx, log: harness.log })) as {
+      summary: string;
+    };
     expect(harness.invokes.map((i) => i.command)).toStrictEqual(['core.link_entities']);
     const input = harness.invokes[0]!.input as Record<string, unknown>;
     expect(input.from_id).toBe('d1');
@@ -423,12 +481,16 @@ describe('doc-entity-linker behavior', () => {
         'core.content_derivative': [{ derivative_id: 'dv2', content_id: 'd2', variant: 'text' }],
         'core.party': [{ party_id: 'p1', kind: 'person', display_name: 'Rahul Mehta' }],
       },
-      agent: () => ({ mentions: [{ name: 'Rahul Mehta', exact: 'Rahul Mehta again' }] }),
+      agent: () => ({
+        mentions: [{ name: 'Rahul Mehta', exact: 'Rahul Mehta again' }],
+      }),
     });
     harness.ctx.vault.invoke = async () => {
       throw new Error('precondition no_identical_live_link failed');
     };
-    const result = (await handler({ ctx: harness.ctx, log: harness.log })) as { summary: string };
+    const result = (await handler({ ctx: harness.ctx, log: harness.log })) as {
+      summary: string;
+    };
     expect(result.summary).toContain('linked 0');
   });
 });
@@ -442,7 +504,11 @@ describe('obligation-extractor behavior', () => {
       },
       agent: () => ({
         obligations: [
-          { what: 'Home insurance renewal', kind: 'renewal', date: '2027-03-01' },
+          {
+            what: 'Home insurance renewal',
+            kind: 'renewal',
+            date: '2027-03-01',
+          },
           { what: 'Some vague thing', kind: 'due', date: 'soon' },
         ],
       }),
@@ -450,7 +516,10 @@ describe('obligation-extractor behavior', () => {
     await handler({ ctx: harness.ctx, log: harness.log });
     const input = harness.invokes[0]!.input as {
       kind: string;
-      rows: { external_id: string; payload: { status: string; dtstart: string } }[];
+      rows: {
+        external_id: string;
+        payload: { status: string; dtstart: string };
+      }[];
     };
     expect(input.kind).toBe('enrichment.obligations');
     expect(input.rows).toHaveLength(1); // "soon" is not a date
@@ -467,7 +536,11 @@ describe('renewal-reminders behavior', () => {
       reads: {},
       input: {
         rows: [
-          { summary: 'Passport expiry', dtstart: '2026-07-18', status: 'tentative' },
+          {
+            summary: 'Passport expiry',
+            dtstart: '2026-07-18',
+            status: 'tentative',
+          },
           {
             summary: 'Home insurance renewal (renewal)',
             dtstart: '2026-07-12',
@@ -494,7 +567,11 @@ describe('doc-filer behavior', () => {
       reads: {
         'core.content_derivative': [{ derivative_id: 'dv1', content_id: 'd1', variant: 'text' }],
         'core.content_item': [
-          { content_id: 'd1', media_type: 'application/pdf', title: 'scan_001' },
+          {
+            content_id: 'd1',
+            media_type: 'application/pdf',
+            title: 'scan_001',
+          },
         ],
         'core.concept_scheme': [{ scheme_id: 'sf', uri: 'https://centraid.dev/schemes/folders' }],
         'core.concept': [
@@ -519,7 +596,11 @@ describe('doc-filer behavior', () => {
     expect(harness.invokes.map((i) => i.command)).toStrictEqual(['sync.stage_rows']);
     const input = harness.invokes[0]!.input as {
       kind: string;
-      rows: { entity_type: string; external_id: string; payload: Record<string, unknown> }[];
+      rows: {
+        entity_type: string;
+        external_id: string;
+        payload: Record<string, unknown>;
+      }[];
     };
     expect(input.kind).toBe('enrichment.doctype');
     expect(input.rows.map((r) => r.entity_type)).toStrictEqual(['core.content_item', 'core.tag']);

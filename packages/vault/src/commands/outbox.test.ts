@@ -1,11 +1,5 @@
-// The outbox consent story (issue #306): an agent stages an external write
-// as an inert artifact (risk low); deciding is the owner's act on the thing
-// itself; "always allow" mints a standing (actor, verb, target) grant that
-// approves the next matching item at staging time; the drain record is the
-// executor's receipt. Nothing here touches the network — that's the
-// gateway-side executor's job, behind the allowWrites lane.
-
 import { assert, beforeEach, describe, expect, test } from 'vitest';
+
 import {
   bootstrapVault,
   createGrant,
@@ -15,23 +9,29 @@ import {
 } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { createGateway, Gateway } from '../gateway/gateway.js';
-import { registerOutboxCommands } from './outbox.js';
 import type { Credential, InvokeOutcome } from '../gateway/types.js';
+import { registerOutboxCommands } from './outbox.js';
 
 let db: VaultDb;
 let gw: Gateway;
 let boot: BootstrapResult;
 let owner: Credential;
 let agent: Credential;
-
 describe('outbox', () => {
   beforeEach(() => {
     db = openVaultDb();
     boot = bootstrapVault(db, { ownerName: 'Priya' });
     gw = createGateway(db);
     registerOutboxCommands(gw);
-    owner = { kind: 'device', deviceId: boot.deviceId, deviceKey: boot.deviceKey };
-    const enrolled = enrollAgent(db, { name: 'gmail-send', modelRef: 'model-x' });
+    owner = {
+      kind: 'device',
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+    };
+    const enrolled = enrollAgent(db, {
+      name: 'gmail-send',
+      modelRef: 'model-x',
+    });
     const device = enrollDevice(db, boot.ownerPartyId, 'agent-host');
     createGrant(db, {
       granteePartyId: enrolled.partyId,
@@ -52,14 +52,17 @@ describe('outbox', () => {
       )
       .run(new Date().toISOString());
   });
-
   function stageInput(overrides: Record<string, unknown> = {}): Record<string, unknown> {
     return {
       kind: 'pull.gmail',
       label: 'personal',
       verb: 'gmail.send',
       target: 'ravi@example.com',
-      artifact: { to: 'ravi@example.com', subject: 'Hi', body: 'See you at 6.' },
+      artifact: {
+        to: 'ravi@example.com',
+        subject: 'Hi',
+        body: 'See you at 6.',
+      },
       request: {
         method: 'POST',
         url: 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send',
@@ -97,7 +100,6 @@ describe('outbox', () => {
       expect(row.actor_kind).toBe('ai_agent');
       expect(row.verb).toBe('gmail.send');
       expect(JSON.parse(String(row.artifact_json)).subject).toBe('Hi');
-      // Placeholders, never tokens — the request row is injectable, not armed.
       expect(String(row.request_json)).toContain('{{connection:access_token}}');
     });
 
@@ -114,7 +116,10 @@ describe('outbox', () => {
       const staged = invoke(agent, 'outbox.stage', stageInput());
       if (staged.status !== 'executed') throw new Error('stage failed');
       const itemId = (staged.output as { item_id: string }).item_id;
-      const refused = invoke(agent, 'outbox.decide', { item_id: itemId, decision: 'approve' });
+      const refused = invoke(agent, 'outbox.decide', {
+        item_id: itemId,
+        decision: 'approve',
+      });
       expect(refused.status).toBe('failed');
       assert(refused.status === 'failed');
       expect(refused.reason).toContain('owner');
@@ -125,7 +130,10 @@ describe('outbox', () => {
       const staged = invoke(agent, 'outbox.stage', stageInput());
       if (staged.status !== 'executed') throw new Error('stage failed');
       const itemId = (staged.output as { item_id: string }).item_id;
-      const outcome = invoke(owner, 'outbox.decide', { item_id: itemId, decision: 'discard' });
+      const outcome = invoke(owner, 'outbox.decide', {
+        item_id: itemId,
+        decision: 'discard',
+      });
       expect(outcome.status).toBe('executed');
       const row = itemRow(itemId);
       expect(row.status).toBe('discarded');
@@ -140,7 +148,11 @@ describe('outbox', () => {
       const outcome = invoke(owner, 'outbox.decide', {
         item_id: itemId,
         decision: 'approve',
-        artifact: { to: 'ravi@example.com', subject: 'Hi (edited)', body: 'See you at 7.' },
+        artifact: {
+          to: 'ravi@example.com',
+          subject: 'Hi (edited)',
+          body: 'See you at 7.',
+        },
         request: {
           method: 'POST',
           url: 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send',
@@ -161,12 +173,15 @@ describe('outbox', () => {
       const artifactOnly = invoke(owner, 'outbox.decide', {
         item_id: itemId,
         decision: 'approve',
-        artifact: { to: 'ravi@example.com', subject: 'Hi (edited)', body: 'See you at 7.' },
+        artifact: {
+          to: 'ravi@example.com',
+          subject: 'Hi (edited)',
+          body: 'See you at 7.',
+        },
       });
       expect(artifactOnly.status).toBe('failed');
       assert(artifactOnly.status === 'failed');
       expect(artifactOnly.reason).toContain('TOGETHER');
-      // The item is untouched — still pending, original halves intact.
       const row = itemRow(itemId);
       expect(row.status).toBe('pending');
       expect(JSON.parse(String(row.artifact_json)).subject).toBe('Hi');
@@ -186,7 +201,10 @@ describe('outbox', () => {
       if (staged.status !== 'executed') throw new Error('stage failed');
       const itemId = (staged.output as { item_id: string }).item_id;
       invoke(owner, 'outbox.decide', { item_id: itemId, decision: 'discard' });
-      const again = invoke(owner, 'outbox.decide', { item_id: itemId, decision: 'approve' });
+      const again = invoke(owner, 'outbox.decide', {
+        item_id: itemId,
+        decision: 'approve',
+      });
       expect(again.status).toBe('failed');
       assert(again.status === 'failed');
       expect(again.predicate).toContain('item_is_pending');
@@ -207,14 +225,16 @@ describe('outbox', () => {
       const grantId = (decided as { output?: { grant_id?: string } }).output?.grant_id;
       expect(grantId).toBeTruthy();
 
-      // Same actor, same verb, same target → approved at staging time.
       const second = invoke(agent, 'outbox.stage', stageInput());
       if (second.status !== 'executed') throw new Error('stage failed');
-      const out = second.output as { item_id: string; status: string; grant_id?: string };
+      const out = second.output as {
+        item_id: string;
+        status: string;
+        grant_id?: string;
+      };
       expect(out.status).toBe('approved');
       expect(out.grant_id).toBe(grantId);
 
-      // Different target → back to pending; the grant is scoped, not a blanket.
       const other = invoke(agent, 'outbox.stage', stageInput({ target: 'meera@example.com' }));
       if (other.status !== 'executed') throw new Error('stage failed');
       expect((other.output as { status: string }).status).toBe('pending');
@@ -229,7 +249,9 @@ describe('outbox', () => {
         always_allow: true,
       });
       const grantId = (decided as { output?: { grant_id?: string } }).output?.grant_id as string;
-      const revoked = invoke(owner, 'outbox.revoke_grant', { grant_id: grantId });
+      const revoked = invoke(owner, 'outbox.revoke_grant', {
+        grant_id: grantId,
+      });
       expect(revoked.status).toBe('executed');
       const next = invoke(agent, 'outbox.stage', stageInput());
       if (next.status !== 'executed') throw new Error('stage failed');
@@ -245,15 +267,14 @@ describe('outbox', () => {
         always_allow: true,
       });
       const grantId = (decided as { output?: { grant_id?: string } }).output?.grant_id as string;
-      // Two more matching items auto-approve at staging; neither has drained.
       const second = invoke(agent, 'outbox.stage', stageInput());
       const third = invoke(agent, 'outbox.stage', stageInput());
       if (second.status !== 'executed' || third.status !== 'executed')
         throw new Error('stage failed');
-      const revoked = invoke(owner, 'outbox.revoke_grant', { grant_id: grantId });
+      const revoked = invoke(owner, 'outbox.revoke_grant', {
+        grant_id: grantId,
+      });
       expect(revoked.status).toBe('executed');
-      // All three: the always-allow decision stamped the grant onto the first
-      // item too, so every approved-but-undrained rider of the rule reparks.
       expect((revoked as { output?: { reparked?: number } }).output?.reparked).toBe(3);
       for (const outcome of [first, second, third]) {
         const row = itemRow((outcome.output as { item_id: string }).item_id);
@@ -279,7 +300,9 @@ describe('outbox', () => {
         disposition: 'sent',
         status_code: 200,
       });
-      const revoked = invoke(owner, 'outbox.revoke_grant', { grant_id: grantId });
+      const revoked = invoke(owner, 'outbox.revoke_grant', {
+        grant_id: grantId,
+      });
       expect(revoked.status).toBe('executed');
       expect((revoked as { output?: { reparked?: number } }).output?.reparked).toBe(0);
       expect(itemRow(firstId).status).toBe('sent');
@@ -292,8 +315,10 @@ describe('outbox', () => {
       if (staged.status !== 'executed') throw new Error('stage failed');
       const itemId = (staged.output as { item_id: string }).item_id;
       invoke(owner, 'outbox.decide', { item_id: itemId, decision: 'approve' });
-      // The staging actor cannot repark its own item.
-      const forged = invoke(agent, 'outbox.repark', { item_id: itemId, note: 'nope' });
+      const forged = invoke(agent, 'outbox.repark', {
+        item_id: itemId,
+        note: 'nope',
+      });
       expect(forged.status).toBe('failed');
       const real = invoke(owner, 'outbox.repark', {
         item_id: itemId,
@@ -304,7 +329,6 @@ describe('outbox', () => {
       expect(row.status).toBe('pending');
       expect(row.decided_at).toBeNull();
       expect(String(row.note)).toContain('expired');
-      // A pending item cannot repark — the precondition holds the line.
       const again = invoke(owner, 'outbox.repark', { item_id: itemId });
       expect(again.status).toBe('failed');
     });
@@ -315,11 +339,12 @@ describe('outbox', () => {
       const staged = invoke(agent, 'outbox.stage', stageInput());
       if (staged.status !== 'executed') throw new Error('stage failed');
       const itemId = (staged.output as { item_id: string }).item_id;
-      // Pending items never drain.
-      const early = invoke(owner, 'outbox.record_result', { item_id: itemId, disposition: 'sent' });
+      const early = invoke(owner, 'outbox.record_result', {
+        item_id: itemId,
+        disposition: 'sent',
+      });
       expect(early.status).toBe('failed');
       invoke(owner, 'outbox.decide', { item_id: itemId, decision: 'approve' });
-      // The staging actor cannot mark its own item drained.
       const forged = invoke(agent, 'outbox.record_result', {
         item_id: itemId,
         disposition: 'sent',
@@ -338,14 +363,15 @@ describe('outbox', () => {
     });
   });
 
-  // ── Graph joins + drain-side publish (issue #310 S2) ───────────────────
-
   describe('outbox graph joins', () => {
     function stageDecideDrain(overrides: Record<string, unknown> = {}) {
       const staged = invoke(agent, 'outbox.stage', stageInput(overrides));
       if (staged.status !== 'executed') throw new Error('stage failed');
       const itemId = (staged.output as { item_id: string }).item_id;
-      const decided = invoke(owner, 'outbox.decide', { item_id: itemId, decision: 'approve' });
+      const decided = invoke(owner, 'outbox.decide', {
+        item_id: itemId,
+        decision: 'approve',
+      });
       if (decided.status !== 'executed') throw new Error('decide failed');
       const drained = invoke(owner, 'outbox.record_result', {
         item_id: itemId,
@@ -357,7 +383,6 @@ describe('outbox', () => {
     }
 
     test('stage resolves the wire address to a known party and validates subject refs', () => {
-      // A known person carrying the target email as an identifier.
       db.vault
         .prepare(
           `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at, ontology_version)
@@ -382,7 +407,6 @@ describe('outbox', () => {
       expect(row.target_type).toBe('core.party');
       expect(row.target_id).toBe('p-ravi');
 
-      // Half a subject ref, an unknown entity, and a dead row all refuse.
       expect(invoke(agent, 'outbox.stage', stageInput({ subject_type: 'core.party' })).status).toBe(
         'failed',
       );
@@ -431,12 +455,14 @@ describe('outbox', () => {
       expect(thread.channel).toBe('email');
       expect(thread.external_ref).toBe(`outbox:conn-1:ravi@example.com`);
 
-      // Participants: the owner as a party, the unknown address as a handle.
       const parts = db.vault
         .prepare(
           'SELECT party_id, handle FROM social_thread_participant WHERE thread_id = ? ORDER BY party_id',
         )
-        .all(msg.thread_id) as { party_id: string | null; handle: string | null }[];
+        .all(msg.thread_id) as {
+        party_id: string | null;
+        handle: string | null;
+      }[];
       expect(parts).toHaveLength(2);
       expect(parts.some((p) => p.party_id === boot.ownerPartyId)).toBe(true);
       expect(parts.some((p) => p.party_id === null && p.handle === 'ravi@example.com')).toBe(true);
@@ -444,7 +470,9 @@ describe('outbox', () => {
 
     test('repeated sends to one address converse in one thread; replay is idempotent', () => {
       const first = stageDecideDrain();
-      const second = stageDecideDrain({ artifact: { subject: 'Again', body: 'Second note.' } });
+      const second = stageDecideDrain({
+        artifact: { subject: 'Again', body: 'Second note.' },
+      });
       const t1 = db.vault
         .prepare('SELECT thread_id FROM social_message WHERE external_id = ?')
         .get(`outbox:${first.itemId}`) as { thread_id: string };

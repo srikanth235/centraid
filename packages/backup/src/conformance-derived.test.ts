@@ -3,9 +3,11 @@
  * Runs the derived cases against LocalBackupProvider (same as the suite spread).
  */
 
-import { tempDir } from '@centraid/test-kit/temp-dir';
 import { promises as fs } from 'node:fs';
+
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { describe, expect, test } from 'vitest';
+
 import { providerDerivedConformanceCases } from './conformance-derived.js';
 import type { ConformanceHarness } from './conformance.js';
 import { LocalBackupProvider } from './local-provider.js';

@@ -6,6 +6,7 @@
 // automation-event-sources.test-fixtures.ts.
 
 import { describe, expect, it, vi } from 'vitest';
+
 import { pollProviderEventSource, type PollJson } from './automation-event-sources.js';
 import { github, gmail, replies } from './automation-event-sources.test-fixtures.js';
 
@@ -17,7 +18,11 @@ describe(pollProviderEventSource, () => {
       body: { emailAddress: 'owner@example.com', historyId: '100' },
     });
     const baseline = await pollProviderEventSource({
-      trigger: { kind: 'event', connectorKind: 'pull.gmail', event: 'new-message' },
+      trigger: {
+        kind: 'event',
+        connectorKind: 'pull.gmail',
+        event: 'new-message',
+      },
       connection: gmail,
       now: new Date('2026-07-25T00:00:00Z'),
       limit: 50,
@@ -50,7 +55,11 @@ describe(pollProviderEventSource, () => {
       },
     });
     const next = await pollProviderEventSource({
-      trigger: { kind: 'event', connectorKind: 'pull.gmail', event: 'new-message' },
+      trigger: {
+        kind: 'event',
+        connectorKind: 'pull.gmail',
+        event: 'new-message',
+      },
       connection: gmail,
       cursor: baseline.cursor,
       now: new Date('2026-07-25T00:05:00Z'),
@@ -72,16 +81,24 @@ describe(pollProviderEventSource, () => {
         },
       },
     ]);
-    expect(JSON.stringify(next)).not.toMatch(/token|authorization|owner@example\.com/);
+    expect(JSON.stringify(next)).not.toMatch(/token|authorization|owner@example\.com/u);
   });
 
   it('re-baselines an expired Gmail cursor and records a gap without backfill', async () => {
     const poll = replies(
-      { status: 404, headers: {}, body: { error: { message: 'HistoryId too old' } } },
+      {
+        status: 404,
+        headers: {},
+        body: { error: { message: 'HistoryId too old' } },
+      },
       { status: 200, headers: {}, body: { historyId: '900' } },
     );
     const next = await pollProviderEventSource({
-      trigger: { kind: 'event', connectorKind: 'pull.gmail', event: 'new-message' },
+      trigger: {
+        kind: 'event',
+        connectorKind: 'pull.gmail',
+        event: 'new-message',
+      },
       connection: gmail,
       cursor: { provider: 'gmail', historyId: '1' },
       now: new Date('2026-07-25T00:00:00Z'),
@@ -129,7 +146,11 @@ describe(pollProviderEventSource, () => {
           };
     }) satisfies PollJson;
     const next = await pollProviderEventSource({
-      trigger: { kind: 'event', connectorKind: 'pull.gmail', event: 'new-message' },
+      trigger: {
+        kind: 'event',
+        connectorKind: 'pull.gmail',
+        event: 'new-message',
+      },
       connection: gmail,
       cursor: { provider: 'gmail', historyId: '100' },
       now: new Date('2026-07-25T00:05:00Z'),
@@ -160,11 +181,19 @@ describe(pollProviderEventSource, () => {
       return {
         status: 200,
         headers: {},
-        body: { historyId: '900', nextPageToken: `page-${historyRequests + 1}`, history: [] },
+        body: {
+          historyId: '900',
+          nextPageToken: `page-${historyRequests + 1}`,
+          history: [],
+        },
       };
     }) satisfies PollJson;
     const next = await pollProviderEventSource({
-      trigger: { kind: 'event', connectorKind: 'pull.gmail', event: 'new-message' },
+      trigger: {
+        kind: 'event',
+        connectorKind: 'pull.gmail',
+        event: 'new-message',
+      },
       connection: gmail,
       cursor: { provider: 'gmail', historyId: '100' },
       now: new Date('2026-07-25T00:05:00Z'),
@@ -191,14 +220,22 @@ describe(pollProviderEventSource, () => {
     expect(() =>
       pollProviderEventSource({
         ...base,
-        trigger: { kind: 'event', connectorKind: 'push.slack', event: 'message' },
+        trigger: {
+          kind: 'event',
+          connectorKind: 'push.slack',
+          event: 'message',
+        },
       }),
     ).toThrow('no event cursor adapter');
     await expect(
       pollProviderEventSource({
         ...base,
         connection: gmail,
-        trigger: { kind: 'event', connectorKind: 'pull.gmail', event: 'deleted-message' },
+        trigger: {
+          kind: 'event',
+          connectorKind: 'pull.gmail',
+          event: 'deleted-message',
+        },
       }),
     ).rejects.toThrow('unsupported Gmail event');
     await expect(
@@ -212,25 +249,31 @@ describe(pollProviderEventSource, () => {
         },
       }),
     ).rejects.toThrow('unsupported GitHub event');
-    for (const repo of [undefined, '', 'one-segment', 'owner/repo/extra', 'owner/repo name']) {
-      await expect(
-        pollProviderEventSource({
-          ...base,
-          trigger: {
-            kind: 'event',
-            connectorKind: 'pull.github',
-            event: 'issue',
-            filter: repo === undefined ? {} : { repo },
-          },
-        }),
-      ).rejects.toThrow('filter.repo');
-    }
+    await Promise.all(
+      [undefined, '', 'one-segment', 'owner/repo/extra', 'owner/repo name'].map((repo) =>
+        expect(
+          pollProviderEventSource({
+            ...base,
+            trigger: {
+              kind: 'event',
+              connectorKind: 'pull.github',
+              event: 'issue',
+              filter: repo === undefined ? {} : { repo },
+            },
+          }),
+        ).rejects.toThrow('filter.repo'),
+      ),
+    );
   });
 
   it('skips malformed provider rows while preserving minimal valid events', async () => {
     const now = new Date('2026-07-25T00:00:00Z');
     const gmailResult = await pollProviderEventSource({
-      trigger: { kind: 'event', connectorKind: 'pull.gmail', event: 'new-message' },
+      trigger: {
+        kind: 'event',
+        connectorKind: 'pull.gmail',
+        event: 'new-message',
+      },
       connection: gmail,
       cursor: { provider: 'gmail', historyId: '1' },
       now,
@@ -295,7 +338,12 @@ describe(pollProviderEventSource, () => {
       {
         id: 'github:event:minimal',
         occurredAt: now.getTime(),
-        payload: { provider: 'github', event: 'issue', eventId: 'minimal', repo: 'acme/app' },
+        payload: {
+          provider: 'github',
+          event: 'issue',
+          eventId: 'minimal',
+          repo: 'acme/app',
+        },
       },
     ]);
     nowSpy.mockRestore();

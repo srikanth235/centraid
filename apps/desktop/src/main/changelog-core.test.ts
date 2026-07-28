@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { normalizeReleases } from './changelog-core.js';
 
 describe(normalizeReleases, () => {
@@ -48,7 +49,10 @@ describe(normalizeReleases, () => {
 
   it('falls back tag<->name and normalizes missing fields', () => {
     const [byName, byTag] = normalizeReleases([{ name: 'Named only' }, { tag_name: 'v1.0.0' }]);
-    expect(byName).toMatchObject({ version: 'Named only', title: 'Named only' });
+    expect(byName).toMatchObject({
+      version: 'Named only',
+      title: 'Named only',
+    });
     expect(byTag).toMatchObject({
       version: 'v1.0.0',
       title: 'v1.0.0',

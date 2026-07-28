@@ -3,8 +3,8 @@
 // injection lesson). The hook in `ShareIntentIngest.tsx` is a thin wrapper that
 // wires the real producers, `expo-file-system`, `Alert`, and reset in.
 
-import type { DeviceMediaInput } from '../../lib/upload/media-producer';
 import type { NativeReplicaSession } from '../../lib/replica/native-session';
+import type { DeviceMediaInput } from '../../lib/upload/media-producer';
 
 /** A shared file as expo-share-intent hands it to us (structural subset). */
 export interface SharedIntentFileLike {
@@ -28,7 +28,9 @@ export interface SharedIntentLike {
 // ephemeral app-group files, so they must be deleted once the upload settles.
 // The flag is optional on the producer input the upload-queue agent owns; until
 // that lands it is simply ignored, so passing it now is forward-compatible.
-type MediaProducerInput = DeviceMediaInput & { deleteSourceAfterSettle?: boolean };
+type MediaProducerInput = DeviceMediaInput & {
+  deleteSourceAfterSettle?: boolean;
+};
 interface DocumentProducerInput {
   localUri: string;
   title: string;
@@ -92,7 +94,9 @@ export async function processShareIntent(
       );
       return;
     }
-    for (const file of files) {
+    const processFile = async (index: number): Promise<void> => {
+      const file = files[index];
+      if (!file) return;
       const plaintextSize = file.size ?? ports.fileSize(file.path);
       if (isDeviceMedia(file.mimeType)) {
         await ports.backupDeviceMedia(session, gatewayBase, {
@@ -115,7 +119,9 @@ export async function processShareIntent(
           deleteSourceAfterSettle: true,
         });
       }
-    }
+      return processFile(index + 1);
+    };
+    await processFile(0);
   } catch (error) {
     ports.alert('Save to Centraid paused', error instanceof Error ? error.message : String(error));
   } finally {

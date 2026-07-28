@@ -1,5 +1,7 @@
 import { deflateRawSync } from 'node:zlib';
+
 import { describe, expect, test } from 'vitest';
+
 import { parseCsvRows } from './csv.js';
 import { parseIcs } from './ics.js';
 import { isPasswordsCsvHeader, parsePasswordsCsv } from './passwords-csv.js';

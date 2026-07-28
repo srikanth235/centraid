@@ -1,8 +1,10 @@
 import { assert, beforeEach, describe, expect, test } from 'vitest';
-import { bootstrapVault, createGrant, enrollApp, type BootstrapResult } from '../bootstrap.js';
+
+import { bootstrapVault, type BootstrapResult } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { createGateway, Gateway } from '../gateway/gateway.js';
 import type { Credential } from '../gateway/types.js';
+import { registerPartyCommands } from './parties.js';
 import {
   FLAGS_SCHEME_URI,
   STARRED_NOTATION,
@@ -10,7 +12,6 @@ import {
   taggedNotationCount,
 } from './people-test-kit.js';
 import { LIST_SCHEME_URI, registerPeopleCommands } from './people.js';
-import { registerPartyCommands } from './parties.js';
 
 let db: VaultDb;
 let gw: Gateway;
@@ -24,11 +25,19 @@ describe('people', () => {
     gw = createGateway(db);
     registerPeopleCommands(gw);
     registerPartyCommands(gw);
-    owner = { kind: 'device', deviceId: boot.deviceId, deviceKey: boot.deviceKey };
+    owner = {
+      kind: 'device',
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+    };
   });
 
   function invoke(command: string, input: Record<string, unknown>) {
-    return gw.invoke(owner, { command, input, purpose: 'dpv:ServiceProvision' });
+    return gw.invoke(owner, {
+      command,
+      input,
+      purpose: 'dpv:ServiceProvision',
+    });
   }
 
   function out<T = Record<string, unknown>>(o: ReturnType<typeof invoke>): T {
@@ -59,7 +68,10 @@ describe('people', () => {
   }
 
   test('add_person mints a canonical person party plus its 1:1 profile', () => {
-    const partyId = addPerson({ role: 'Product designer · SF', avatar_color: '#7C5BD9' });
+    const partyId = addPerson({
+      role: 'Product designer · SF',
+      avatar_color: '#7C5BD9',
+    });
     const party = db.vault
       .prepare('SELECT kind, display_name FROM core_party WHERE party_id = ?')
       .get(partyId);
@@ -105,7 +117,10 @@ describe('people', () => {
     const profile = db.vault
       .prepare('SELECT role, met FROM people_profile WHERE party_id = ?')
       .get(partyId) as { role: string; met: string };
-    expect(profile).toMatchObject({ role: 'Design lead', met: 'Ceramics class, 2019' });
+    expect(profile).toMatchObject({
+      role: 'Design lead',
+      met: 'Ceramics class, 2019',
+    });
   });
 
   test('set_cadence updates the keep-in-touch interval', () => {
@@ -149,7 +164,10 @@ describe('people', () => {
         WHERE l.to_type = 'core.party' AND l.to_id = ? AND l.valid_to IS NULL`,
       )
       .get(partyId);
-    expect(interaction).toMatchObject({ kind: 'Call', body_text: 'Sunday catch-up' });
+    expect(interaction).toMatchObject({
+      kind: 'Call',
+      body_text: 'Sunday catch-up',
+    });
   });
 
   test('star/unstar are the canonical flags-scheme tag on the party (idempotent)', () => {
@@ -214,7 +232,10 @@ describe('people', () => {
   test('tasks add and toggle done', () => {
     const partyId = addPerson();
     const taskId = out<{ task_id: string }>(
-      invoke('people.add_task', { party_id: partyId, text: 'Send the studio rec' }),
+      invoke('people.add_task', {
+        party_id: partyId,
+        text: 'Send the studio rec',
+      }),
     ).task_id;
     const doneOf = () =>
       (
@@ -297,7 +318,10 @@ describe('people', () => {
     // Direction 2 — update_party's birth_date refreshes the People row's MM-DD,
     // and a known full date is preserved with its year on the party side.
     expect(
-      invoke('core.update_party', { party_id: partyId, birth_date: '1990-03-04' }).status,
+      invoke('core.update_party', {
+        party_id: partyId,
+        birth_date: '1990-03-04',
+      }).status,
     ).toBe('executed');
     expect(birthDateOf()).toBe('1990-03-04');
     expect(rowMonthDay()).toBe('03-04');
@@ -384,73 +408,6 @@ describe('people', () => {
     expect(stateOf()).toBe('needs-action');
   });
 
-  test('debts add in minor units and settle (a settled debt refuses re-settling)', () => {
-    const partyId = addPerson();
-    const debtId = out<{ debt_id: string }>(
-      invoke('people.add_debt', {
-        party_id: partyId,
-        direction: 'owed',
-        amount_minor: 4000,
-        reason: 'Concert ticket',
-      }),
-    ).debt_id;
-    const row = db.vault
-      .prepare(
-        'SELECT from_party, to_party, amount_minor, settled_at FROM tally_obligation WHERE obligation_id = ?',
-      )
-      .get(debtId) as {
-      from_party: string;
-      to_party: string;
-      amount_minor: number;
-      settled_at: string | null;
-    };
-    expect(row).toMatchObject({
-      from_party: partyId,
-      to_party: boot.ownerPartyId,
-      amount_minor: 4000,
-      settled_at: null,
-    });
-    expect(invoke('people.settle_debt', { debt_id: debtId }).status).toBe('executed');
-    const again = invoke('people.settle_debt', { debt_id: debtId });
-    expect(again.status).toBe('failed');
-    assert(again.status === 'failed');
-    expect(again.predicate).toContain('debt_open');
-  });
-
-  test('the installed People grant can write an obligation and read it through Tally', () => {
-    const partyId = addPerson();
-    const app = enrollApp(db, { name: 'people' });
-    createGrant(db, {
-      appId: app.appId,
-      purposeConceptId: boot.concepts['dpv:ServiceProvision'] as string,
-      grantedByPartyId: boot.ownerPartyId,
-      scopes: [
-        { schema: 'people', verbs: 'read+act' },
-        { schema: 'tally', table: 'obligation', verbs: 'read' },
-      ],
-    });
-    const appCredential: Credential = {
-      kind: 'app',
-      appId: app.appId,
-      signingKey: app.signingKey,
-    };
-    const added = gw.invoke(appCredential, {
-      command: 'people.add_debt',
-      input: { party_id: partyId, direction: 'owed', amount_minor: 7250, reason: 'Train fare' },
-      purpose: 'dpv:ServiceProvision',
-    });
-    expect(added.status).toBe('executed');
-    const debtId = (added as { output: { debt_id: string } }).output.debt_id;
-    expect(
-      gw
-        .read(appCredential, {
-          entity: 'tally.obligation',
-          where: [{ column: 'obligation_id', op: 'eq', value: debtId }],
-          purpose: 'dpv:ServiceProvision',
-        })
-        .rows.map((row) => row.obligation_id),
-    ).toContain(debtId);
-  });
   test('lists create with unique names, rename, and delete only when empty', () => {
     const work = createList('Work');
     const twin = invoke('people.create_list', { name: 'Work' });

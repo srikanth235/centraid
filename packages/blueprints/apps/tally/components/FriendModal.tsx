@@ -4,6 +4,7 @@
 // mutates it in place and re-renders, same pattern as ExpenseModal's `onPatch`.
 import type { AddFriendModel } from '../types.ts';
 import { ModalBackdrop } from './Shared.tsx';
+
 import shared from './shared.module.css';
 
 export function FriendModal({

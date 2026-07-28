@@ -14,6 +14,7 @@
 
 import crypto from 'node:crypto';
 import path from 'node:path';
+
 import { GatewayDatabase } from './gateway-db.js';
 import { MemberStore, type Member, type MemberGrant } from './member-store.js';
 
@@ -40,7 +41,11 @@ export function canWrite(role: DeviceRole): boolean {
   return role === 'admin' || role === 'write';
 }
 
-const ROLE_RANK: Record<GrantableRole, number> = { read: 1, write: 2, admin: 3 };
+const ROLE_RANK: Record<GrantableRole, number> = {
+  read: 1,
+  write: 2,
+  admin: 3,
+};
 
 /** True when `candidate` grants no more authority than `ceiling`. */
 export function roleWithin(candidate: GrantableRole, ceiling: GrantableRole): boolean {
@@ -161,7 +166,7 @@ function toEnrollment(row: EnrollmentRow): DeviceEnrollment {
     memberLabel: row.member_label,
     vaultId: row.vault_id,
     label: row.label,
-    ...(row.platform !== null ? { platform: row.platform } : {}),
+    ...(row.platform === null ? {} : { platform: row.platform }),
     // The tombstone wins over the member's authored role: a stolen phone
     // keeps its owner's grants on paper and none of them in practice.
     role: row.revoked === 1 ? 'revoked' : row.role,
@@ -255,16 +260,20 @@ export class EnrollmentStore {
         'SELECT enrollment_id, platform, grant_profile_json FROM devices WHERE endpoint_id = ?',
       )
       .get(input.endpointId) as
-      | { enrollment_id: string; platform: string | null; grant_profile_json: string | null }
+      | {
+          enrollment_id: string;
+          platform: string | null;
+          grant_profile_json: string | null;
+        }
       | undefined;
     if (existing) {
-      const platform = input.platform !== undefined ? input.platform : existing.platform;
+      const platform = input.platform === undefined ? existing.platform : input.platform;
       const grantProfile =
-        input.grantProfile !== undefined
-          ? JSON.stringify(input.grantProfile)
-          : input.platform !== undefined && input.platform !== 'extension'
+        input.grantProfile === undefined
+          ? input.platform !== undefined && input.platform !== 'extension'
             ? null
-            : existing.grant_profile_json;
+            : existing.grant_profile_json
+          : JSON.stringify(input.grantProfile);
       this.gatewayDatabase.db
         .prepare(
           `UPDATE devices

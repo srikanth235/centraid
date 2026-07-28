@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+
 import { assertSha, type BlobTransferCoordinator } from '@centraid/vault';
 
 /** Blob-scoped custody stream: no all-vault backlog/status disclosure. */
@@ -41,7 +42,7 @@ export async function openBlobCustodyEvents(input: {
     }
     publishing = true;
     try {
-      do {
+      const publishNext = async (): Promise<void> => {
         again = false;
         const state = firstState ?? (await transfers.preflight(sha256));
         firstState = undefined;
@@ -55,7 +56,9 @@ export async function openBlobCustodyEvents(input: {
           last = data;
           res.write(`event: custody\ndata: ${data}\n\n`);
         }
-      } while (again && !closed);
+        if (again && !closed) return publishNext();
+      };
+      await publishNext();
     } finally {
       publishing = false;
     }

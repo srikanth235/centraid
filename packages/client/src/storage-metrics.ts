@@ -74,7 +74,13 @@ function deriveFreshness(input: FreshnessInput, now: number): FreshnessMetric {
   // "never happened" is the worst possible, so T (and status) is unknown.
   const anyMissing = values.some((v) => v === null);
   if (anyMissing) {
-    return { status: 'unknown', tMs: null, ageMs: null, declaredCadenceMs, clocks };
+    return {
+      status: 'unknown',
+      tMs: null,
+      ageMs: null,
+      declaredCadenceMs,
+      clocks,
+    };
   }
   const tMs = Math.min(...(values as number[]));
   const ageMs = now - tMs;
@@ -93,7 +99,12 @@ function deriveFreshness(input: FreshnessInput, now: number): FreshnessMetric {
  *  PROTOCOL.md). Structural subset of `@centraid/backup`'s `Retention` — kept
  *  local so this module stays dependency-free. */
 export type RetentionInput =
-  | { kind: 'ladder'; keepAllDays: number; dailyDays: number; weeklyDays: number }
+  | {
+      kind: 'ladder';
+      keepAllDays: number;
+      dailyDays: number;
+      weeklyDays: number;
+    }
   | { kind: 'none' };
 
 export interface RecoveryWindowMetric {
@@ -155,7 +166,12 @@ export interface CostMetric {
 
 function deriveCost(usage: UsageInput | null): CostMetric {
   if (!usage) {
-    return { bytesStored: 0, quotaBytes: null, fractionUsed: null, metered: false };
+    return {
+      bytesStored: 0,
+      quotaBytes: null,
+      fractionUsed: null,
+      metered: false,
+    };
   }
   let bytesStored = 0;
   let quotaBytes: number | null = null;

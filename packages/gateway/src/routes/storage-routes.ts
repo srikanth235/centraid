@@ -57,6 +57,8 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
+
+import { requestCasGrant } from '@centraid/backup';
 import {
   S3BlobStore,
   custodyStateByteCounts,
@@ -64,9 +66,8 @@ import {
   readBackupPolicy,
   readBlobStoreSettings,
 } from '@centraid/vault';
-import { requestCasGrant } from '@centraid/backup';
-import type { RouteHandler } from '../serve/build-gateway.js';
-import type { VaultRegistry } from '../serve/vault-registry.js';
+
+import type { RecoveryKitStateStore } from '../backup/recovery-kit-state.js';
 import {
   StorageConnectionError,
   type CreateStorageConnectionInput,
@@ -78,7 +79,8 @@ import {
   fetchProviderProfileStatus,
 } from '../backup/storage-credentials.js';
 import type { StorageUsagePoller } from '../backup/storage-usage.js';
-import type { RecoveryKitStateStore } from '../backup/recovery-kit-state.js';
+import type { RouteHandler } from '../serve/build-gateway.js';
+import type { VaultRegistry } from '../serve/vault-registry.js';
 import { readJson, sendError, sendJson } from './route-helpers.js';
 import { tryStorageLocalRoutes, type StorageLocalRouteDeps } from './storage-local-routes.js';
 
@@ -180,7 +182,10 @@ async function probeConnection(
         'signed request reached the bucket and was accepted; provider advertises the home profile',
     };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 
@@ -281,7 +286,10 @@ export function makeStorageRouteHandler(deps: StorageRouteDeps): RouteHandler {
 
     if (url.pathname === STATUS_PATH || url.pathname === STATUS_EVENTS_PATH) {
       if ((req.method ?? 'GET') !== 'GET') {
-        return sendJson(res, 405, { error: 'method_not_allowed', message: 'GET only' });
+        return sendJson(res, 405, {
+          error: 'method_not_allowed',
+          message: 'GET only',
+        });
       }
       try {
         const planes = deps.vaults.planesList();
@@ -295,7 +303,10 @@ export function makeStorageRouteHandler(deps: StorageRouteDeps): RouteHandler {
 
     if (url.pathname === USAGE_PATH) {
       if ((req.method ?? 'GET') !== 'GET') {
-        return sendJson(res, 405, { error: 'method_not_allowed', message: 'GET only' });
+        return sendJson(res, 405, {
+          error: 'method_not_allowed',
+          message: 'GET only',
+        });
       }
       try {
         const connections = await deps.storageConnections.list();
@@ -330,7 +341,9 @@ export function makeStorageRouteHandler(deps: StorageRouteDeps): RouteHandler {
     if (url.pathname === CONNECTIONS_PATH) {
       if ((req.method ?? 'GET') === 'GET') {
         try {
-          return sendJson(res, 200, { connections: await deps.storageConnections.list() });
+          return sendJson(res, 200, {
+            connections: await deps.storageConnections.list(),
+          });
         } catch (err) {
           return sendError(res, err);
         }
@@ -368,7 +381,10 @@ export function makeStorageRouteHandler(deps: StorageRouteDeps): RouteHandler {
           return sendConnectionError(res, err);
         }
       }
-      return sendJson(res, 405, { error: 'method_not_allowed', message: 'GET, POST only' });
+      return sendJson(res, 405, {
+        error: 'method_not_allowed',
+        message: 'GET, POST only',
+      });
     }
 
     if (url.pathname.startsWith(`${CONNECTIONS_PATH}/`)) {
@@ -416,7 +432,10 @@ export function makeStorageRouteHandler(deps: StorageRouteDeps): RouteHandler {
 
       if (segments.length === 2 && segments[1] === 'test') {
         if ((req.method ?? 'GET') !== 'POST') {
-          return sendJson(res, 405, { error: 'method_not_allowed', message: 'POST only' });
+          return sendJson(res, 405, {
+            error: 'method_not_allowed',
+            message: 'POST only',
+          });
         }
         try {
           const result = await probeConnection(deps.storageConnections, id);

@@ -55,10 +55,15 @@ export function createSearch({
           tail: null,
           truncated: false,
         }));
-        const merged = mergeScopePages(pages, { ownScopeId: ownScopeId(mountedScopes()) });
+        const merged = mergeScopePages(pages, {
+          ownScopeId: ownScopeId(mountedScopes()),
+        });
         assets = merged.assets as unknown as Asset[];
       } else {
-        const res = await client.read<{ assets?: Asset[] }>({ query: 'search', input: { term } });
+        const res = await client.read<{ assets?: Asset[] }>({
+          query: 'search',
+          input: { term },
+        });
         assets = res?.assets ?? [];
       }
     } catch {

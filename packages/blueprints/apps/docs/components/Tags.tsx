@@ -5,9 +5,11 @@
 // photos app's Lightbox tag editor almost verbatim, adapted to docs' own
 // class names.
 import { useState } from 'react';
+
 import type { DriveDoc } from '../types.ts';
-import styles from './Tags.module.css';
+
 import shared from './shared.module.css';
+import styles from './Tags.module.css';
 
 export function Tags({
   doc,

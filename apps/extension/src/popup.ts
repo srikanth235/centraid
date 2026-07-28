@@ -1,4 +1,3 @@
-import type { CompanionModule, CompanionRequest, ModuleStatus, PageCapture } from './types.js';
 import {
   errorText,
   moduleAvailability,
@@ -6,6 +5,7 @@ import {
   type PopupEnvelope,
 } from './popup-core.js';
 import { blockingSummary, pausedModuleStatuses } from './popup-state.js';
+import type { CompanionModule, CompanionRequest, ModuleStatus, PageCapture } from './types.js';
 
 async function send<T>(message: CompanionRequest): Promise<T> {
   const response = (await chrome.runtime.sendMessage(message)) as PopupEnvelope<T> | undefined;
@@ -22,13 +22,19 @@ async function activeTab(): Promise<ChromeTab | undefined> {
   return (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
 }
 
-async function capturePage(): Promise<{ tab: ChromeTab; capture: PageCapture }> {
+async function capturePage(): Promise<{
+  tab: ChromeTab;
+  capture: PageCapture;
+}> {
   const tab = await activeTab();
   if (!tab?.id || !tab.url) throw new Error('No capturable tab is active.');
   const capture = (await chrome.tabs
     .sendMessage(tab.id, { type: 'page:capture' })
     .catch(async () => {
-      await chrome.scripting.executeScript({ target: { tabId: tab.id! }, files: ['content.js'] });
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id! },
+        files: ['content.js'],
+      });
       return chrome.tabs.sendMessage(tab.id!, { type: 'page:capture' });
     })) as PageCapture;
   return { tab, capture };
@@ -149,7 +155,9 @@ for (const [id, kind] of [
 byId('document').addEventListener('click', () => {
   void capturePage().then(
     async ({ tab, capture }) => {
-      const screenshot = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
+      const screenshot = await chrome.tabs.captureVisibleTab(tab.windowId, {
+        format: 'png',
+      });
       await send({ type: 'capture:document', capture, screenshot });
       setNotice('Screenshot saved to Docs.');
     },

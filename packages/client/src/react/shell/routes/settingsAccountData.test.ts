@@ -4,6 +4,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
 import type * as GatewayClient from '../../../gateway-client.js';
 
 const listVaults = vi.fn<typeof GatewayClient.listVaults>();
@@ -60,7 +61,13 @@ describe('settingsAccountData', () => {
           color: '#111',
           blurb: 'b',
         },
-        { vaultId: 'v2', name: 'Work', ownerPartyId: 'p1', icon: 'Briefcase', color: '#222' },
+        {
+          vaultId: 'v2',
+          name: 'Work',
+          ownerPartyId: 'p1',
+          icon: 'Briefcase',
+          color: '#222',
+        },
       ]);
       await expect(loadActiveSpaceData()).resolves.toStrictEqual({
         vaultId: 'v1',
@@ -74,7 +81,13 @@ describe('settingsAccountData', () => {
 
     it('marks the sole vault non-deletable', async () => {
       listVaults.mockResolvedValue([
-        { vaultId: 'v1', name: 'Only', ownerPartyId: 'p1', icon: 'Folder', color: '#111' },
+        {
+          vaultId: 'v1',
+          name: 'Only',
+          ownerPartyId: 'p1',
+          icon: 'Folder',
+          color: '#111',
+        },
       ]);
       const data = await loadActiveSpaceData();
       expect(data?.deletable).toBe(false);

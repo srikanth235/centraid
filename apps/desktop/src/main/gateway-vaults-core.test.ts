@@ -1,18 +1,29 @@
 import { describe, expect, it } from 'vitest';
+
 import { fetchGatewayVaults, foldVaultsResponse } from './gateway-vaults-core.js';
 
 describe(foldVaultsResponse, () => {
   it('folds a well-formed 200 response', () => {
     const result = foldVaultsResponse(200, {
       vaults: [
-        { vaultId: 'v1', name: 'Personal', ownerPartyId: 'p1', color: '#5B8DEF' },
+        {
+          vaultId: 'v1',
+          name: 'Personal',
+          ownerPartyId: 'p1',
+          color: '#5B8DEF',
+        },
         { vaultId: 'v2', name: 'Work' },
       ],
     });
     expect(result).toStrictEqual({
       ok: true,
       vaults: [
-        { vaultId: 'v1', name: 'Personal', ownerPartyId: 'p1', color: '#5B8DEF' },
+        {
+          vaultId: 'v1',
+          name: 'Personal',
+          ownerPartyId: 'p1',
+          color: '#5B8DEF',
+        },
         { vaultId: 'v2', name: 'Work' },
       ],
     });
@@ -22,30 +33,57 @@ describe(foldVaultsResponse, () => {
     const result = foldVaultsResponse(200, {
       vaults: [{ vaultId: 'v1', name: 'Personal' }, { vaultId: 'v2' }, null, 'not an object', 42],
     });
-    expect(result).toStrictEqual({ ok: true, vaults: [{ vaultId: 'v1', name: 'Personal' }] });
+    expect(result).toStrictEqual({
+      ok: true,
+      vaults: [{ vaultId: 'v1', name: 'Personal' }],
+    });
   });
 
   it('returns an empty list, not an error, for an empty vaults array', () => {
-    expect(foldVaultsResponse(200, { vaults: [] })).toStrictEqual({ ok: true, vaults: [] });
+    expect(foldVaultsResponse(200, { vaults: [] })).toStrictEqual({
+      ok: true,
+      vaults: [],
+    });
   });
 
   it('maps 401 and 403 to auth_failed', () => {
-    expect(foldVaultsResponse(401, {})).toStrictEqual({ ok: false, error: 'auth_failed' });
-    expect(foldVaultsResponse(403, {})).toStrictEqual({ ok: false, error: 'auth_failed' });
+    expect(foldVaultsResponse(401, {})).toStrictEqual({
+      ok: false,
+      error: 'auth_failed',
+    });
+    expect(foldVaultsResponse(403, {})).toStrictEqual({
+      ok: false,
+      error: 'auth_failed',
+    });
   });
 
   it('maps any other non-200 status to unreachable', () => {
-    expect(foldVaultsResponse(500, {})).toStrictEqual({ ok: false, error: 'unreachable' });
-    expect(foldVaultsResponse(404, {})).toStrictEqual({ ok: false, error: 'unreachable' });
+    expect(foldVaultsResponse(500, {})).toStrictEqual({
+      ok: false,
+      error: 'unreachable',
+    });
+    expect(foldVaultsResponse(404, {})).toStrictEqual({
+      ok: false,
+      error: 'unreachable',
+    });
   });
 
   it('treats a non-object body as bad_response', () => {
-    expect(foldVaultsResponse(200, null)).toStrictEqual({ ok: false, error: 'bad_response' });
-    expect(foldVaultsResponse(200, 'oops')).toStrictEqual({ ok: false, error: 'bad_response' });
+    expect(foldVaultsResponse(200, null)).toStrictEqual({
+      ok: false,
+      error: 'bad_response',
+    });
+    expect(foldVaultsResponse(200, 'oops')).toStrictEqual({
+      ok: false,
+      error: 'bad_response',
+    });
   });
 
   it('treats a missing/non-array vaults field as bad_response', () => {
-    expect(foldVaultsResponse(200, {})).toStrictEqual({ ok: false, error: 'bad_response' });
+    expect(foldVaultsResponse(200, {})).toStrictEqual({
+      ok: false,
+      error: 'bad_response',
+    });
     expect(foldVaultsResponse(200, { vaults: 'nope' })).toStrictEqual({
       ok: false,
       error: 'bad_response',
@@ -62,7 +100,10 @@ describe(fetchGatewayVaults, () => {
         status: 200,
       });
     });
-    expect(result).toStrictEqual({ ok: true, vaults: [{ vaultId: 'v1', name: 'Personal' }] });
+    expect(result).toStrictEqual({
+      ok: true,
+      vaults: [{ vaultId: 'v1', name: 'Personal' }],
+    });
     expect(seenHeaders?.Authorization).toBe('Bearer tok');
   });
 

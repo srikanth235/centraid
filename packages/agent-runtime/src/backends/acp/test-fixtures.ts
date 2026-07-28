@@ -4,9 +4,11 @@
 // backend.test.ts (core turn), backend.attachments.test.ts,
 // backend.model-usage.test.ts, and backend.vault-tools.test.ts.
 
-import { tempDir } from '@centraid/test-kit/temp-dir';
 import { fileURLToPath } from 'node:url';
+
 import type { AdapterUsageSnapshot, ToolContext, TurnStreamEvent } from '@centraid/app-engine';
+import { tempDir } from '@centraid/test-kit/temp-dir';
+
 import { runAcpTurn, type AcpTurnConfig } from './backend.js';
 
 export const FAKE_AGENT = fileURLToPath(new URL('fake-acp-agent.mjs', import.meta.url));
@@ -18,7 +20,11 @@ export interface RunOptions {
   hydrationContext?: string;
   hydrationAttachments?: { path: string; mime: string; filename?: string }[];
   recoveryHydrationContext?: string;
-  recoveryHydrationAttachments?: { path: string; mime: string; filename?: string }[];
+  recoveryHydrationAttachments?: {
+    path: string;
+    mime: string;
+    filename?: string;
+  }[];
   forceHydration?: boolean;
   model?: string;
   attachments?: { path: string; mime: string; filename?: string }[];
@@ -34,7 +40,11 @@ export interface RunOptions {
 
 export async function runFake(opts: RunOptions): Promise<{
   events: TurnStreamEvent[];
-  result: { sessionId?: string; usageSnapshot?: AdapterUsageSnapshot; hydrated?: boolean };
+  result: {
+    sessionId?: string;
+    usageSnapshot?: AdapterUsageSnapshot;
+    hydrated?: boolean;
+  };
 }> {
   const cwd = await tempDir('acp-backend-');
   const events: TurnStreamEvent[] = [];

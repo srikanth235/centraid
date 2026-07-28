@@ -55,14 +55,17 @@ function fence(lang: string, body: string): string {
 /** Human-readable Markdown: role headings, timestamps, code fences for tools. */
 export function conversationToMarkdown(conv: ExportableConversation): string {
   const lines: string[] = [];
-  lines.push(`# ${conv.title || 'Untitled conversation'}`, '');
-  lines.push(`_Exported ${isoDate(Date.now())} · started ${isoDate(conv.createdAt)}_`, '');
+  lines.push(
+    `# ${conv.title || 'Untitled conversation'}`,
+    '',
+    `_Exported ${isoDate(Date.now())} · started ${isoDate(conv.createdAt)}_`,
+    '',
+  );
   for (const m of conv.messages) {
     const when = isoDate(m.createdAt);
     const p = m.payload;
     if (p.kind === 'user') {
-      lines.push(`## 🧑 User · ${when}`, '');
-      lines.push(p.text || '');
+      lines.push(`## 🧑 User · ${when}`, '', p.text || '');
       if (p.attachments && p.attachments.length > 0) {
         lines.push('');
         for (const a of p.attachments) {
@@ -70,8 +73,7 @@ export function conversationToMarkdown(conv: ExportableConversation): string {
         }
       }
     } else if (p.kind === 'ai') {
-      lines.push(`## 🤖 Assistant · ${when}${p.error ? ' · error' : ''}`, '');
-      lines.push(p.text || '');
+      lines.push(`## 🤖 Assistant · ${when}${p.error ? ' · error' : ''}`, '', p.text || '');
       if (p.usage) {
         const u = p.usage;
         const bits = [

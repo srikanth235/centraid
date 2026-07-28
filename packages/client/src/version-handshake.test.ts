@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+
 import {
   EXPECTED_GATEWAY_VERSION,
   EXPECTED_PROTOCOL_VERSION,
@@ -25,16 +26,25 @@ describe('version-handshake', () => {
       version: EXPECTED_GATEWAY_VERSION,
       schemaEpoch: EXPECTED_SCHEMA_EPOCH + 1,
     });
-    expect(badProtocol).toMatchObject({ ok: false, reason: 'protocol_mismatch' });
+    expect(badProtocol).toMatchObject({
+      ok: false,
+      reason: 'protocol_mismatch',
+    });
   });
 
   test('judgeGatewayInfo: malformed payloads are rejected, not guessed', () => {
-    expect(judgeGatewayInfo(null)).toMatchObject({ ok: false, reason: 'malformed' });
+    expect(judgeGatewayInfo(null)).toMatchObject({
+      ok: false,
+      reason: 'malformed',
+    });
     expect(judgeGatewayInfo({ version: '0.1.0' })).toMatchObject({
       ok: false,
       reason: 'malformed',
     });
-    expect(judgeGatewayInfo({ schemaEpoch: 1 })).toMatchObject({ ok: false, reason: 'malformed' });
+    expect(judgeGatewayInfo({ schemaEpoch: 1 })).toMatchObject({
+      ok: false,
+      reason: 'malformed',
+    });
   });
 
   test('handshakeGateway: network failure → unreachable; 200 payload is judged', async () => {

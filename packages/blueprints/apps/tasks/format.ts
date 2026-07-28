@@ -118,7 +118,11 @@ export function parseNlDue(title: string): NlDue | null {
     const amount = m.groups?.amount ?? '';
     const unit = m.groups?.unit ?? '';
     const n = Number(amount) * (unit.toLowerCase() === 'w' ? 7 : 1);
-    return { clean: m.groups?.clean ?? '', due: plusDays(n), token: `+${amount}${unit}` };
+    return {
+      clean: m.groups?.clean ?? '',
+      due: plusDays(n),
+      token: `+${amount}${unit}`,
+    };
   }
   m = t.match(/^(?<clean>.*\S)\s+(?<word>today|tod|tomorrow|tmr|tom)$/iu);
   if (m) {

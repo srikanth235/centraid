@@ -13,14 +13,15 @@
 // demand (custody.open) and re-promote. Admission never trusts a possibly stale
 // replica-index row to delete an original's last local copy.
 
-import type { DatabaseSync } from 'node:sqlite';
 import { availableParallelism, totalmem } from 'node:os';
+import type { DatabaseSync } from 'node:sqlite';
+
 import type { BackupPolicy } from '../backup-policy.js';
 import { VaultBlobBackpressureError } from '../errors.js';
-import type { LocalBlobStore } from './local.js';
-import { AccessIndex, ReplicaIndex } from './replica-index.js';
-import { OrphanTombstoneIndex } from './orphan-tombstone.js';
 import { pendingOutboxShas, pinnedThumbShas, previewShas, stagingShas } from './evict.js';
+import type { LocalBlobStore } from './local.js';
+import { OrphanTombstoneIndex } from './orphan-tombstone.js';
+import { AccessIndex, ReplicaIndex } from './replica-index.js';
 
 /** The `blob_cache` settings bag (issue #405 §3), camelCase to match `blob_store`. */
 export interface BlobCacheSettings {
@@ -67,7 +68,7 @@ export function replicationConcurrencyFromEnv(
   const fallback = host.cores <= 4 || host.totalMemoryBytes <= 4 * 1024 ** 3 ? 1 : 3;
   const raw = env.CENTRAID_REPLICATION_CONCURRENCY;
   if (raw === undefined || raw === '') return fallback;
-  const parsed = Number.parseInt(raw, 10);
+  const parsed = Math.trunc(Number(raw));
   return Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 8) : fallback;
 }
 /** Default QoS cooldown after the last interactive read before bulk resumes (issue #405 §7). */
@@ -234,11 +235,13 @@ export class BlobCache {
    * boundaries, not mid-multipart. Resolves immediately when nothing is hot.
    */
   async qosWait(): Promise<void> {
-    for (;;) {
+    const waitUntilClear = async (): Promise<void> => {
       const cooling = this.nowMs() - this.lastInteractiveAtMs < this.qosCooldownMs;
       if (this.interactiveReads === 0 && !cooling) return;
       await this.sleepFn(this.qosPollMs);
-    }
+      return waitUntilClear();
+    };
+    return waitUntilClear();
   }
 
   // ---- budget (issue #405 §3) ----

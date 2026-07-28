@@ -9,6 +9,7 @@ import { webCryptoUploadCrypto, type UploadCrypto } from './crypto';
 import { enqueueLocalFile, type EnqueueInput } from './enqueue';
 import { expoFileSource, expoPartPutter } from './expo-native';
 import { httpDirectTransferClient } from './gateway-client';
+import { createNativeDigest } from './native-digest';
 import {
   UploadQueueStore,
   type NewUploadFollowup,
@@ -17,7 +18,6 @@ import {
   type UploadItem,
 } from './store';
 import { UploadDrainer, type DrainSummary, type UploadPolicy } from './uploader';
-import { createNativeDigest } from './native-digest';
 
 /**
  * The queue's own database, deliberately NOT the replica's — see the header of
@@ -58,7 +58,9 @@ export class UploadQueue {
       gatewayBaseUrl: options.gatewayBaseUrl,
       ...(options.policy ? { policy: options.policy } : {}),
       ...(options.onProgress
-        ? { onProgress: ({ completed, total }) => options.onProgress?.({ completed, total }) }
+        ? {
+            onProgress: ({ completed, total }) => options.onProgress?.({ completed, total }),
+          }
         : {}),
     });
     return new UploadQueue(store, drainer, {

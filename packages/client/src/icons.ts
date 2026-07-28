@@ -6,8 +6,8 @@
   const tokens = window.CentraidTokens;
   if (!tokens || !tokens.icons) {
     console.error('CentraidTokens.icons missing — preload.js may not be loaded.');
-    window.Icon = window.Icon || ({} as typeof window.Icon);
-    window.ICON_PALETTE = window.ICON_PALETTE || ({} as typeof window.ICON_PALETTE);
+    window.Icon ||= {} as typeof window.Icon;
+    window.ICON_PALETTE ||= {} as typeof window.ICON_PALETTE;
     return;
   }
 

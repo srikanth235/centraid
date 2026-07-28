@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+
 import {
   CBSF_MAGIC,
   CBSF_VERSION,
@@ -28,6 +29,6 @@ describe('cbsf', () => {
   });
 
   test('decodeCbsfDirectory rejects size mismatch', () => {
-    expect(() => decodeCbsfDirectory(new Uint8Array(4), 1)).toThrow(/size mismatch/);
+    expect(() => decodeCbsfDirectory(new Uint8Array(4), 1)).toThrow(/size mismatch/u);
   });
 });

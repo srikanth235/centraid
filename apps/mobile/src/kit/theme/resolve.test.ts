@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { navThemeFor, navThemes, resolveTheme } from './resolve';
 import { darkPalette, lightPalette } from './tokens.generated';
 
@@ -24,7 +25,7 @@ describe(resolveTheme, () => {
   });
 
   it('derives ink4, which the kit tokens lack', () => {
-    expect(resolveTheme('light').colors.ink4).toMatch(/^rgba\(/);
+    expect(resolveTheme('light').colors.ink4).toMatch(/^rgba\(/u);
     expect(resolveTheme('dark').colors.ink4).not.toBe(resolveTheme('light').colors.ink4);
   });
 

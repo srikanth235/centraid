@@ -1,14 +1,16 @@
-import { useState, type JSX } from 'react';
 import { THEME_PRESETS, themes, tileFinish } from '@centraid/design-tokens';
 import type { IconName, ThemeName } from '@centraid/design-tokens';
-import { Icon } from '../ui/index.js';
+import { useState, type JSX } from 'react';
+
 import type { SettingsAppearanceBridgeProps, SettingsTileVariant } from '../screen-contracts.js';
+import { Icon } from '../ui/index.js';
 import { DrawerGroup, DrawerRow, Switch } from './settings-controls.js';
-import styles from './SettingsAppearanceScreen.module.css';
+
 import a11y from '../styles/a11y.module.css';
+import linkBtnCss from '../styles/linkBtn.module.css';
 import segCss from '../styles/seg.module.css';
 import swatchCss from '../styles/swatch.module.css';
-import linkBtnCss from '../styles/linkBtn.module.css';
+import styles from './SettingsAppearanceScreen.module.css';
 
 // Accent options — mirrors ACCENT_PALETTE (app-shell-context.ts) + the names
 // from makeSwatches. Kept inline so the React bundle stays decoupled.
@@ -22,14 +24,22 @@ const ACCENTS: ReadonlyArray<{ key: string; name: string; color: string }> = [
 
 const TILE_VARIANTS: readonly SettingsTileVariant[] = ['solid', 'gradient', 'glassy', 'flat'];
 
-const PREVIEW_SEEDS: ReadonlyArray<{ color: string; icon: IconName; name: string }> = [
+const PREVIEW_SEEDS: ReadonlyArray<{
+  color: string;
+  icon: IconName;
+  name: string;
+}> = [
   { color: '#4E68DD', icon: 'Todo', name: 'Tasks' },
   { color: '#7C5BD9', icon: 'Journal', name: 'Journal' },
   { color: '#E55772', icon: 'Pencil', name: 'Notes' },
   { color: '#2EA098', icon: 'Habit', name: 'Weekly' },
 ];
 
-function themePreview(name: ThemeName): { bg: string; elev: string; accent: string } {
+function themePreview(name: ThemeName): {
+  bg: string;
+  elev: string;
+  accent: string;
+} {
   const theme = themes[name];
   const bgL = (theme as { bgL?: string }).bgL;
   const bg = bgL ? `hsl(222 11% ${bgL.replace('%', '')}%)` : theme.bg;

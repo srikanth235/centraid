@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test } from 'vitest';
+
 import { bootstrapVault, createGrant, enrollApp, type BootstrapResult } from '../bootstrap.js';
 import { registerKnowledgeCommands } from '../commands/knowledge.js';
 import { registerLinkCommands } from '../commands/links.js';
@@ -24,7 +25,11 @@ describe('cards', () => {
     registerLinkCommands(gw);
     registerKnowledgeCommands(gw);
     registerMediaCommands(gw);
-    owner = { kind: 'device', deviceId: boot.deviceId, deviceKey: boot.deviceKey };
+    owner = {
+      kind: 'device',
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+    };
   });
 
   function invoke(cred: Credential, command: string, input: Record<string, unknown>) {
@@ -32,7 +37,10 @@ describe('cards', () => {
   }
 
   function addNote(title: string): string {
-    const out = invoke(owner, 'knowledge.create_note', { title, body_text: `${title} body` });
+    const out = invoke(owner, 'knowledge.create_note', {
+      title,
+      body_text: `${title} body`,
+    });
     expect(out.status).toBe('executed');
     return (out as { output: { note_id: string } }).output.note_id;
   }
@@ -78,7 +86,11 @@ describe('cards', () => {
     const noteId = addNote('Has a photo');
     const assetId = addPhoto('Linked photo');
     const app = enrollApp(db, { name: 'notes-app' });
-    const appCred: Credential = { kind: 'app', appId: app.appId, signingKey: app.signingKey };
+    const appCred: Credential = {
+      kind: 'app',
+      appId: app.appId,
+      signingKey: app.signingKey,
+    };
     // The app reads knowledge (its own domain) — media is deliberately absent.
     createGrant(db, {
       appId: app.appId,
@@ -111,7 +123,10 @@ describe('cards', () => {
       refs: [{ type: 'media.media_asset', id: assetId }],
       purpose: PURPOSE,
     });
-    expect(after.cards[0]).toMatchObject({ status: 'live', title: 'Linked photo' });
+    expect(after.cards[0]).toMatchObject({
+      status: 'live',
+      title: 'Linked photo',
+    });
 
     // Unlink ends the authorization along with the relationship.
     const linkId = (linked as { output: { link_id: string } }).output.link_id;

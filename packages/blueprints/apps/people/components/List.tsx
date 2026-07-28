@@ -4,6 +4,7 @@ import { avatarColor, listName, daysSince, shortFmt, statusOf } from '../format.
 import { I } from '../icons.ts';
 import type { AppData, Person } from '../types.ts';
 import { Icon, KitAvatar, Snippet } from './Shared.tsx';
+
 import styles from './List.module.css';
 
 export function ListRow({

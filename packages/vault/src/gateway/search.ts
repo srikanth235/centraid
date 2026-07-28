@@ -15,8 +15,8 @@ import { nowIso } from '../ids.js';
 import { SEARCHABLE } from '../schema/fts.js';
 import { resolveEntity } from '../schema/tables.js';
 import { evaluateConsent } from './consent.js';
-import { extSearchable } from './ext.js';
 import { writeReceipt } from './evidence.js';
+import { extSearchable } from './ext.js';
 import { applyFieldMask, compileFilters } from './filters.js';
 import type { Identity, SearchRequest, SearchResult } from './types.js';
 import { GatewayError } from './types.js';
@@ -129,7 +129,11 @@ export function searchEntity(
     objectId: null,
     purpose: request.purpose,
     decision: 'allow',
-    detail: { query: request.query, filter: request.where ?? [], rowCount: rows.length },
+    detail: {
+      query: request.query,
+      filter: request.where ?? [],
+      rowCount: rows.length,
+    },
   });
   return { rows, receiptId };
 }

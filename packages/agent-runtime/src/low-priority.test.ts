@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+
 import { lowPriorityCommand } from './low-priority.js';
 
 describe('low-priority', () => {
@@ -28,7 +29,10 @@ describe('low-priority', () => {
         platform: 'darwin',
         exists: (file) => file === '/usr/bin/nice',
       }),
-    ).toStrictEqual({ bin: '/usr/bin/nice', args: ['-n', '10', '--', 'codex', 'exec'] });
+    ).toStrictEqual({
+      bin: '/usr/bin/nice',
+      args: ['-n', '10', '--', 'codex', 'exec'],
+    });
 
     // An explicit niceness flows through to the nice increment.
     expect(
@@ -37,11 +41,17 @@ describe('low-priority', () => {
         exists: (file) => file === '/usr/bin/nice',
         niceness: 19,
       }),
-    ).toStrictEqual({ bin: '/usr/bin/nice', args: ['-n', '19', '--', 'codex', 'exec'] });
+    ).toStrictEqual({
+      bin: '/usr/bin/nice',
+      args: ['-n', '19', '--', 'codex', 'exec'],
+    });
 
     // Windows still ignores it (no wrapper).
     expect(
-      lowPriorityCommand('codex.exe', ['exec'], { platform: 'win32', niceness: 5 }),
+      lowPriorityCommand('codex.exe', ['exec'], {
+        platform: 'win32',
+        niceness: 5,
+      }),
     ).toStrictEqual({
       bin: 'codex.exe',
       args: ['exec'],

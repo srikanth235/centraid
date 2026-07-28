@@ -295,7 +295,10 @@ const LOG_TIME: CommandDefinition = {
   outputSchema: {
     type: 'object',
     required: ['entry_id', 'activity_id'],
-    properties: { entry_id: { type: 'string' }, activity_id: { type: 'string' } },
+    properties: {
+      entry_id: { type: 'string' },
+      activity_id: { type: 'string' },
+    },
   },
   preconditions: [
     {
@@ -549,7 +552,12 @@ function createDraftInvoice(ctx: HandlerCtx): Record<string, unknown> {
     entityType: 'business.invoice',
     entityId: invoiceId,
   });
-  return { invoice_id: invoiceId, number, total_minor: total, line_count: entryRows.length };
+  return {
+    invoice_id: invoiceId,
+    number,
+    total_minor: total,
+    line_count: entryRows.length,
+  };
 }
 
 /** Sequential per-year numbers: INV-2026-0001, INV-2026-0002, … */

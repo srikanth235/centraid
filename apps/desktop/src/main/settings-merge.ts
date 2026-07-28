@@ -66,9 +66,9 @@ export function mergePersistedSettings(
   return {
     activeGatewayId: patch.activeGatewayId?.trim() || current.activeGatewayId,
     ...(patch.builderEnabled === undefined
-      ? current.builderEnabled !== undefined
-        ? { builderEnabled: current.builderEnabled }
-        : {}
+      ? current.builderEnabled === undefined
+        ? {}
+        : { builderEnabled: current.builderEnabled }
       : { builderEnabled: patch.builderEnabled }),
     ...preserveOrSet('remoteTemplatesUrl', patch.remoteTemplatesUrl, current.remoteTemplatesUrl),
     ...(activeVaultByGateway !== undefined && Object.keys(activeVaultByGateway).length
@@ -86,9 +86,9 @@ export function mergePersistedSettings(
       return next === undefined ? {} : { gatewayAlertSeconds: next };
     })(),
     ...(patch.gatewayAlertsEnabled === undefined
-      ? current.gatewayAlertsEnabled !== undefined
-        ? { gatewayAlertsEnabled: current.gatewayAlertsEnabled }
-        : {}
+      ? current.gatewayAlertsEnabled === undefined
+        ? {}
+        : { gatewayAlertsEnabled: current.gatewayAlertsEnabled }
       : { gatewayAlertsEnabled: patch.gatewayAlertsEnabled }),
     ...preserveOrSet(
       'changelogSeenVersion',
@@ -96,14 +96,14 @@ export function mergePersistedSettings(
       current.changelogSeenVersion,
     ),
     ...(patch.launchAtLogin === undefined
-      ? current.launchAtLogin !== undefined
-        ? { launchAtLogin: current.launchAtLogin }
-        : {}
+      ? current.launchAtLogin === undefined
+        ? {}
+        : { launchAtLogin: current.launchAtLogin }
       : { launchAtLogin: patch.launchAtLogin }),
     ...(patch.offerGatewayService === undefined
-      ? current.offerGatewayService !== undefined
-        ? { offerGatewayService: current.offerGatewayService }
-        : {}
+      ? current.offerGatewayService === undefined
+        ? {}
+        : { offerGatewayService: current.offerGatewayService }
       : { offerGatewayService: patch.offerGatewayService }),
   };
 }

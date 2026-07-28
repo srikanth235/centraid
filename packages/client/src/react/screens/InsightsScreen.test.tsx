@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
+
 import type { InsightsSummary } from '../screen-contracts.js';
 import InsightsScreen from './InsightsScreen.js';
 
@@ -27,8 +28,22 @@ const summary: InsightsSummary = {
     { date: '2026-06-10', tokens: 2000, costUsd: 0.2, runs: 3 },
   ],
   bySource: [
-    { key: 'a1', label: 'Daily Digest', kind: 'automation', runs: 5, tokens: 8000, costUsd: 2 },
-    { key: 'c1', label: 'Chat', kind: 'chat', runs: 2, tokens: 3000, costUsd: 0.3 },
+    {
+      key: 'a1',
+      label: 'Daily Digest',
+      kind: 'automation',
+      runs: 5,
+      tokens: 8000,
+      costUsd: 2,
+    },
+    {
+      key: 'c1',
+      label: 'Chat',
+      kind: 'chat',
+      runs: 2,
+      tokens: 3000,
+      costUsd: 0.3,
+    },
   ],
   byRunner: [{ provider: 'claude-code', runs: 7, tokens: 11_000, costUsd: 2.5 }],
   byModel: [{ model: 'claude-opus-4-8', runs: 7, tokens: 11_000, costUsd: 1.1 }],
@@ -63,7 +78,13 @@ const summary: InsightsSummary = {
     tokens: 4000,
     costUsd: 0.4,
     topSources: [
-      { key: 'a1', label: 'Daily Digest', kind: 'automation', tokens: 3000, costUsd: 0.3 },
+      {
+        key: 'a1',
+        label: 'Daily Digest',
+        kind: 'automation',
+        tokens: 3000,
+        costUsd: 0.3,
+      },
     ],
   },
   attention: {

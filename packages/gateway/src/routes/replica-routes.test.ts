@@ -1,25 +1,32 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
 // governance: allow-repo-hygiene file-size-limit (#419) one route suite shares the real vault-plane fixture across bootstrap, windowed pagination, delta, SSE, row, checkpoint, and intent surfaces
 import crypto from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import path from 'node:path';
 import { Readable } from 'node:stream';
+
+import { forEachSequentially } from '@centraid/test-kit/sequential';
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { currentReplicaLogState, recordReplicaIntentOutcome } from '@centraid/vault';
 import { afterEach, describe, expect, test, vi } from 'vitest';
+
 import { EnrollmentStore } from '../serve/enrollment-store.js';
-import { openVaultPlane, type VaultPlane } from '../serve/vault-plane.js';
 import { runWithVaultContext, vaultContext } from '../serve/vault-context.js';
+import { openVaultPlane, type VaultPlane } from '../serve/vault-plane.js';
 import type { VaultRegistry } from '../serve/vault-registry.js';
 import type { ReplicaIntentDispatcher } from './replica-intent-route.js';
 import { makeReplicaRouteHandler } from './replica-routes.js';
 
-const logger = { info: () => undefined, warn: () => undefined, error: () => undefined };
+const logger = {
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+};
 const cleanups: Array<() => Promise<void> | void> = [];
 
 describe('replica-routes', () => {
   afterEach(async () => {
-    while (cleanups.length > 0) await cleanups.pop()?.();
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
   });
 
   async function fixture(
@@ -31,7 +38,12 @@ describe('replica-routes', () => {
     unscopedHandler: ReturnType<typeof makeReplicaRouteHandler>;
   }> {
     const dir = await tempDir(`replica-routes-${crypto.randomUUID()}-`);
-    const plane = openVaultPlane({ bootstrap: true, dir, logger, enableWalShipper: false });
+    const plane = openVaultPlane({
+      bootstrap: true,
+      dir,
+      logger,
+      enableWalShipper: false,
+    });
     const enrollments = EnrollmentStore.open(path.join(dir, 'gateway.db'));
     const vaults = { current: () => plane } as unknown as VaultRegistry;
     const unscopedHandler = makeReplicaRouteHandler(vaults, {
@@ -54,8 +66,10 @@ describe('replica-routes', () => {
         : runWithVaultContext({ vaultId: plane.boot.vaultId, deviceKey: fixtureDevice }, () =>
             unscopedHandler(req, res),
           );
-    cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
-    cleanups.push(() => plane.stop());
+    cleanups.push(
+      () => fs.rm(dir, { recursive: true, force: true }),
+      () => plane.stop(),
+    );
     plane.approveGrant('agenda', {
       purpose: 'dpv:ServiceProvision',
       scopes: [{ schema: 'schedule', table: 'task', verbs: 'read+act' }],
@@ -135,7 +149,9 @@ describe('replica-routes', () => {
     );
 
     expect(res.statusCode).toBe(403);
-    expect(res.json()).toMatchObject({ error: 'replica_device_identity_required' });
+    expect(res.json()).toMatchObject({
+      error: 'replica_device_identity_required',
+    });
   });
 
   test('bootstrap at N, filtered pull, checkpoint, and the single resumable SSE tail agree', async () => {
@@ -161,7 +177,11 @@ describe('replica-routes', () => {
       cursor: { epoch: string; seq: number };
       schemaEpoch: string;
       shapes: Array<{ appId: string; entities: Array<{ entity: string }> }>;
-      rows: Array<{ entity: string; rowId: string; values: Record<string, unknown> }>;
+      rows: Array<{
+        entity: string;
+        rowId: string;
+        values: Record<string, unknown>;
+      }>;
     }>();
     expect(bootstrap.shapes).toStrictEqual([
       expect.objectContaining({
@@ -243,7 +263,11 @@ describe('replica-routes', () => {
 
   type WindowPage = {
     cursor: { epoch: string; seq: number };
-    rows: Array<{ entity: string; rowId: string; values: Record<string, unknown> }>;
+    rows: Array<{
+      entity: string;
+      rowId: string;
+      values: Record<string, unknown>;
+    }>;
     complete: boolean;
     next?: string;
     shapes?: unknown;
@@ -289,9 +313,8 @@ describe('replica-routes', () => {
     const collected = [...first.page.rows];
     let next = first.page.next;
     const cursors = [first.page.cursor];
-    let guard = 0;
-    while (next && guard < 10) {
-      guard += 1;
+    const collectNextPage = async (guard = 0): Promise<void> => {
+      if (!next || guard >= 10) return;
       const page = await bootstrapPage(
         handler,
         plane.boot.vaultId,
@@ -303,8 +326,9 @@ describe('replica-routes', () => {
       cursors.push(page.page.cursor);
       collected.push(...page.page.rows);
       next = page.page.complete ? undefined : page.page.next;
-      if (page.page.complete) break;
-    }
+      if (!page.page.complete) await collectNextPage(guard + 1);
+    };
+    await collectNextPage();
     // Every task arrived exactly once across the windows.
     const seen = collected
       .filter((row) => row.entity === 'schedule.task')
@@ -318,7 +342,10 @@ describe('replica-routes', () => {
   async function bootstrapDirect(
     handler: ReturnType<typeof makeReplicaRouteHandler>,
     query: string,
-  ): Promise<{ status: number; page: WindowPage & { error?: string; reason?: string } }> {
+  ): Promise<{
+    status: number;
+    page: WindowPage & { error?: string; reason?: string };
+  }> {
     const res = new MockResponse();
     await handler(
       request(`/centraid/_vault/replica/bootstrap${query}`),
@@ -336,7 +363,9 @@ describe('replica-routes', () => {
 
     const tampered = await bootstrapDirect(handler, '?window=2&after=not-a-valid-token');
     expect(tampered.status).toBe(400);
-    expect(tampered.page).toMatchObject({ error: 'invalid_replica_bootstrap_token' });
+    expect(tampered.page).toMatchObject({
+      error: 'invalid_replica_bootstrap_token',
+    });
   });
 
   test('a schemaEpoch change between windows forces a 409 rebootstrap', async () => {
@@ -475,10 +504,14 @@ describe('replica-routes', () => {
     );
     const bootstrap = bootstrapRes.json<{
       shapes: Array<{ shapeId: string }>;
-      rows: Array<{ entity: string; rowId: string; oversizedFields?: string[] }>;
+      rows: Array<{
+        entity: string;
+        rowId: string;
+        oversizedFields?: string[];
+      }>;
     }>();
     const row = bootstrap.rows.find((candidate) => candidate.entity === 'schedule.task')!;
-    expect(row.rowId).toMatch(/^r_/);
+    expect(row.rowId).toMatch(/^r_/u);
     expect(row.oversizedFields).toContain('description');
     expect(bootstrapRes.body).not.toContain('lazy-canonical-secret');
 
@@ -496,7 +529,9 @@ describe('replica-routes', () => {
     );
     expect(lazyRes.statusCode).toBe(200);
     expect(
-      lazyRes.json<{ row: { rowId: string; values: { description: string } } }>().row,
+      lazyRes.json<{
+        row: { rowId: string; values: { description: string } };
+      }>().row,
     ).toStrictEqual({
       shapeId: bootstrap.shapes[0]!.shapeId,
       entity: 'schedule.task',
@@ -583,13 +618,18 @@ describe('replica-routes', () => {
         bootstrapRes as unknown as ServerResponse,
       ),
     );
-    const bootstrap = bootstrapRes.json<{ cursor: { epoch: string; seq: number } }>();
+    const bootstrap = bootstrapRes.json<{
+      cursor: { epoch: string; seq: number };
+    }>();
     const outcomesRes = new MockResponse();
     await runWithVaultContext({ vaultId: plane.boot.vaultId, deviceKey }, () =>
       handler(
         request('/centraid/_vault/replica/outcomes', {
           method: 'POST',
-          body: { intentIds: ['historical-pending', 'unknown'], through: bootstrap.cursor },
+          body: {
+            intentIds: ['historical-pending', 'unknown'],
+            through: bootstrap.cursor,
+          },
         }),
         outcomesRes as unknown as ServerResponse,
       ),
@@ -637,7 +677,9 @@ describe('replica-routes', () => {
     query.set('stream', '1');
     const streamRes = new MockResponse();
     await handler(
-      request(`/centraid/_vault/changes?${query}`, { accept: 'text/event-stream' }),
+      request(`/centraid/_vault/changes?${query}`, {
+        accept: 'text/event-stream',
+      }),
       streamRes as unknown as ServerResponse,
     );
     expect(streamRes.body).toContain('event: rebootstrap');

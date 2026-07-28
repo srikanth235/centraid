@@ -5,10 +5,12 @@
  * costs a write, and one automation is one cron schedule.
  */
 
+import path from 'node:path';
+
 import { AutomationTriggerStore, makeJournalDbProvider } from '@centraid/app-engine';
 import { tempDirSync } from '@centraid/test-kit/temp-dir';
-import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
+
 import type { Manifest } from '../manifest/manifest.js';
 import type { Row } from '../scaffold/app.js';
 import { VaultCursorEngine, type VaultCursorEngineOptions } from './cursor-engine.js';
@@ -38,7 +40,7 @@ function row(ref: string, triggers: Manifest['triggers']): Row {
 
 function store(): AutomationTriggerStore {
   return new AutomationTriggerStore(
-    makeJournalDbProvider(join(tempDirSync('centraid-cursor-invariants-'), 'journal.db')),
+    makeJournalDbProvider(path.join(tempDirSync('centraid-cursor-invariants-'), 'journal.db')),
   );
 }
 
@@ -171,7 +173,11 @@ describe('VaultCursorEngine cursor invariants', () => {
         throw new Error('gateway stopped');
       },
     });
-    const trigger = { kind: 'webhook' as const, id: 'hook-id', secretHash: 'a'.repeat(64) };
+    const trigger = {
+      kind: 'webhook' as const,
+      id: 'hook-id',
+      secretHash: 'a'.repeat(64),
+    };
 
     await expect(engine.reconcile([row('hooks/doorbell', [trigger])])).rejects.toThrow(
       'gateway stopped',
@@ -180,7 +186,9 @@ describe('VaultCursorEngine cursor invariants', () => {
     // The doorbell was drained inside the same serialized run — and the
     // failure was still surfaced rather than swallowed by the retry.
     expect(attempts).toStrictEqual(['9', '9']);
-    expect(cursors.getCursor('hooks/doorbell', 0)).toMatchObject({ positionJson: '9' });
+    expect(cursors.getCursor('hooks/doorbell', 0)).toMatchObject({
+      positionJson: '9',
+    });
     expect(cursors.getCursor('hooks/doorbell', 0)?.pendingJson).toBeUndefined();
   });
 
@@ -207,11 +215,15 @@ describe('VaultCursorEngine cursor invariants', () => {
     await settle();
     const afterBootstrap = writes;
 
-    for (const minute of [1, 2, 3, 4, 5]) {
+    const tickNextMinute = async (index: number): Promise<void> => {
+      const minute = [1, 2, 3, 4, 5][index];
+      if (minute === undefined) return;
       clock = new Date(2026, 0, 1, 8, minute);
       engine.tick();
       await settle();
-    }
+      return tickNextMinute(index + 1);
+    };
+    await tickNextMinute(0);
 
     // One bootstrap row, then silence — 1,440 upserts a day buys nothing.
     expect(afterBootstrap).toBe(1);
@@ -225,7 +237,10 @@ describe('VaultCursorEngine cursor invariants', () => {
       fireCursor: vi.fn<NonNullable<VaultCursorEngineOptions['fireCursor']>>(),
       onDormancyChange: () => Promise.reject(new Error('ledger write failed')),
       onError: (error, ref) =>
-        errors.push({ ref, message: error instanceof Error ? error.message : String(error) }),
+        errors.push({
+          ref,
+          message: error instanceof Error ? error.message : String(error),
+        }),
     });
 
     await expect(
@@ -239,7 +254,10 @@ describe('VaultCursorEngine cursor invariants', () => {
   it('fires an automation once per minute however many crons it declares', async () => {
     const fired: string[] = [];
     let clock = new Date(2026, 0, 1, 8, 0);
-    const s = new VaultCursorEngine({ fire: (ref) => void fired.push(ref), now: () => clock });
+    const s = new VaultCursorEngine({
+      fire: (ref) => void fired.push(ref),
+      now: () => clock,
+    });
     // Two expressions that both match 08:00 are one schedule, not two streams.
     await s.reconcile([
       row('a/multi', [

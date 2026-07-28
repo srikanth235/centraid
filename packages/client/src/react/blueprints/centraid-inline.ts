@@ -1,3 +1,4 @@
+import type { InlineAppModule, InlineScope } from '@centraid/blueprints/apps/inline-types';
 // The inline `window.centraid` — the shell-side replacement for the served
 // bridge's `w.centraid` client (packages/app-engine bridge-script.ts). Backed
 // by the shell replica session: reads run the app's query modules locally
@@ -19,10 +20,10 @@
 // teardown that restores whatever was there before. Only one inline app is
 // mounted at a time, so a single module-level install is still enough.
 import { appQueryPath } from '@centraid/protocol';
+
 import { auth, authHeaders, doFetch, readJson, VAULT_HEADER } from '../../gateway-client-core.js';
 import type { ReplicaShellSession } from '../../replica/shell-session.js';
 import type { ReplicaInvalidation } from '../../replica/types.js';
-import type { InlineAppModule, InlineScope } from '@centraid/blueprints/apps/inline-types';
 import { authorizeBlobUrl } from './blob-auth.js';
 import { runInlineQuery } from './inlineQueryCtx.js';
 
@@ -69,30 +70,30 @@ export interface InlineCentraidClient {
   appId: string;
   /** Mounted scopes, primary (the member's own) first. */
   scopes: InlineScope[];
-  read<T = Record<string, unknown>>(opts: {
+  read: <T = Record<string, unknown>>(opts: {
     query: string;
     input?: Record<string, unknown>;
     signal?: AbortSignal;
     scope?: string;
-  }): Promise<T>;
-  readAll<T = Record<string, unknown>>(opts: {
+  }) => Promise<T>;
+  readAll: <T = Record<string, unknown>>(opts: {
     query: string;
     input?: Record<string, unknown>;
     signal?: AbortSignal;
     /** Restrict the fan-out (e.g. "load more" hits only the horizon scopes). */
     scopes?: readonly string[];
-  }): Promise<InlineScopeRead<T>[]>;
-  write<T = unknown>(opts: {
+  }) => Promise<InlineScopeRead<T>[]>;
+  write: <T = unknown>(opts: {
     action: string;
     input?: Record<string, unknown>;
     intentId?: string;
     signal?: AbortSignal;
     scope?: string;
-  }): Promise<T>;
-  describe(): Promise<unknown>;
-  onChange(cb: (detail: InlineChangeDetail) => void): () => void;
+  }) => Promise<T>;
+  describe: () => Promise<unknown>;
+  onChange: (cb: (detail: InlineChangeDetail) => void) => () => void;
   /** An authed `blob:` URL for a `/_vault/blobs/…` path in one scope. */
-  blobUrl(pathname: string, scope?: string): Promise<string | null>;
+  blobUrl: (pathname: string, scope?: string) => Promise<string | null>;
 }
 
 /** Codes on which a failed local read escalates to the gateway tool route. */
@@ -183,7 +184,7 @@ function bindingsOf(options: CreateInlineCentraidOptions): InlineScopeBinding[] 
  * arrives later through `addInlineScope`.
  */
 interface InlineClientControls {
-  add(binding: InlineScopeBinding): void;
+  add: (binding: InlineScopeBinding) => void;
 }
 const controls = new WeakMap<object, InlineClientControls>();
 
@@ -229,13 +230,17 @@ export function createInlineCentraidClient(
     cb: (detail: InlineChangeDetail) => void,
     binding: InlineScopeBinding,
   ): (() => void) =>
-    binding.session.subscribe(appId, undefined, (invalidations) => {
-      for (const invalidation of invalidations) cb(toChangeDetail(invalidation, binding.scope.id));
-    });
+    binding.session.subscribe(appId, undefined, (invalidations) =>
+      invalidations.forEach((invalidation) => cb(toChangeDetail(invalidation, binding.scope.id))),
+    );
 
   const readIn = async <T>(
     binding: InlineScopeBinding,
-    opts: { query: string; input?: Record<string, unknown>; signal?: AbortSignal },
+    opts: {
+      query: string;
+      input?: Record<string, unknown>;
+      signal?: AbortSignal;
+    },
   ): Promise<T> => {
     const module = queries[opts.query];
     if (!module) throw new Error(`Unknown query: ${opts.query}`);
@@ -328,7 +333,7 @@ export function createInlineCentraidClient(
         status: outcome.status,
         invocationId: outcome.intentId,
         ...(outcome.reason ? { reason: outcome.reason, message: outcome.reason } : {}),
-        ...(outcome.output !== undefined ? { output: outcome.output } : {}),
+        ...(outcome.output === undefined ? {} : { output: outcome.output }),
       } as T;
     },
 
@@ -367,7 +372,11 @@ export function createInlineCentraidClient(
         // Announce the arrival on the same channel a burst uses, tagged with
         // the new scope — the app's existing per-scope refetch handles it, and
         // nothing has to re-read the scopes that were already painted.
-        registration.cb({ source: 'scope-added', scope: binding.scope.id, ts: Date.now() });
+        registration.cb({
+          source: 'scope-added',
+          scope: binding.scope.id,
+          ts: Date.now(),
+        });
       }
     },
   });
@@ -387,7 +396,9 @@ export interface InstallInlineCentraidOptions extends CreateInlineCentraidOption
 
 /** Install `window.centraid` for one inline app mount; returns the teardown. */
 export function installInlineCentraid(options: InstallInlineCentraidOptions): () => void {
-  const target = (options.target ?? (window as unknown)) as { centraid?: unknown };
+  const target = (options.target ?? (window as unknown)) as {
+    centraid?: unknown;
+  };
   const previous = target.centraid;
   const client = createInlineCentraidClient(options);
   target.centraid = client;

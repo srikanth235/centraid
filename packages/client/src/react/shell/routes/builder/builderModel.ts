@@ -143,7 +143,11 @@ export function toBuilderMsg(m: ConversationMsg, appVersionCount: number): Build
       running,
       error,
       rows: m.open
-        ? m.calls.map((c) => ({ state: c.state, verb: toolVerb(c.tool), target: c.summary ?? '' }))
+        ? m.calls.map((c) => ({
+            state: c.state,
+            verb: toolVerb(c.tool),
+            target: c.summary ?? '',
+          }))
         : [],
       change,
     };

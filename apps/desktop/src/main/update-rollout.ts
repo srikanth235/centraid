@@ -9,10 +9,12 @@
  * is not re-rolled every check.
  */
 
-import { app } from 'electron';
+import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+
+import { app } from 'electron';
+
 import { shouldAdmitUpdate, stableBucketId } from './update-rollout-core.js';
 
 const INSTALL_ID_FILE = 'install-id';

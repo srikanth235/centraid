@@ -1,4 +1,5 @@
 import { describe, expect, test, vi } from 'vitest';
+
 import {
   EndpointSecretError,
   loadEndpointSecret,
@@ -47,6 +48,7 @@ describe('endpoint-secret', () => {
         label: 'endpoint key',
       }),
     ).toThrow(EndpointSecretError);
+    let caught: unknown;
     try {
       loadEndpointSecret({
         persistence: memory(new Uint8Array(7)),
@@ -54,14 +56,15 @@ describe('endpoint-secret', () => {
         label: 'endpoint key',
       });
     } catch (error) {
-      expect(String(error)).toContain('Restore');
-      expect(String(error)).toContain('remove it deliberately');
+      caught = error;
     }
+    expect(String(caught)).toContain('Restore');
+    expect(String(caught)).toContain('remove it deliberately');
   });
 
   test('device corruption remints and warns', () => {
     const persistence = memory(new Uint8Array(3));
-    const warn = vi.fn();
+    const warn = vi.fn<NonNullable<Parameters<typeof loadEndpointSecret>[0]['warn']>>();
     const secret = loadEndpointSecret({
       persistence,
       onCorrupt: 'remint',

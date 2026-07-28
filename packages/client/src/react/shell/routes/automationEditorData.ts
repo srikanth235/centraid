@@ -52,8 +52,17 @@ const DEFAULT_EDITOR_LOAD: AutomationEditorLoadResult = {
  *  up. */
 interface ManifestConnectorExtra {
   requires: { secrets?: readonly string[]; runner?: string };
-  connector?: { kind: string; label: string; principal?: string; connectionId?: string };
-  connections?: readonly { connectionId: string; kind: string; label: string }[];
+  connector?: {
+    kind: string;
+    label: string;
+    principal?: string;
+    connectionId?: string;
+  };
+  connections?: readonly {
+    connectionId: string;
+    kind: string;
+    label: string;
+  }[];
   vault?: {
     purpose: string;
     why?: string;

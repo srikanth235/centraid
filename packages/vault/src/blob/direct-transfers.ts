@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
+
 import {
   VaultBlobAuthorizationError,
   VaultBlobRemoteUnavailableError,
@@ -58,7 +59,11 @@ export interface DirectBlobInitResult {
   settlement?: DirectSettlementReceipt;
   upload?:
     | { kind: 'single'; url: string }
-    | { kind: 'multipart'; uploadId: string; parts: { partNumber: number; url: string }[] };
+    | {
+        kind: 'multipart';
+        uploadId: string;
+        parts: { partNumber: number; url: string }[];
+      };
 }
 
 /**

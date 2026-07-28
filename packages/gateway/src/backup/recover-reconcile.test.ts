@@ -1,4 +1,5 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import crypto from 'node:crypto';
+import { promises as fs } from 'node:fs';
 /*
  * Adopt-time inventory reconcile (issue #439 R5) — the four outcomes, in
  * isolation: a restored `blob_replica` index of beliefs, a provider inventory
@@ -8,19 +9,20 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  * (c) no inventory ⇒ honest skip with the index untouched, (d) full agreement ⇒
  * a clean report.
  */
-
-import { afterEach, describe, expect, test } from 'vitest';
-import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
+
+import { forEachSequentially } from '@centraid/test-kit/sequential';
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { FsBlobStore, ReplicaIndex } from '@centraid/vault';
+import { afterEach, describe, expect, test } from 'vitest';
+
 import { reconcileAdoptedInventory } from './recover-reconcile.js';
 
 const cleanups: Array<() => Promise<void> | void> = [];
 describe('recover-reconcile', () => {
   afterEach(async () => {
-    while (cleanups.length > 0) await cleanups.pop()?.();
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
   });
 
   const sha = (seed: string): string => crypto.createHash('sha256').update(seed).digest('hex');
@@ -67,7 +69,11 @@ describe('recover-reconcile', () => {
       error,
       warn,
       info,
-      log: { error: (m) => error.push(m), warn: (m) => warn.push(m), info: (m) => info.push(m) },
+      log: {
+        error: (m) => error.push(m),
+        warn: (m) => warn.push(m),
+        info: (m) => info.push(m),
+      },
     };
   }
 
@@ -90,7 +96,12 @@ describe('recover-reconcile', () => {
       log: spy.log,
     });
 
-    expect(report).toMatchObject({ checked: 2, missing: 1, repinned: [dropped], lost: [] });
+    expect(report).toMatchObject({
+      checked: 2,
+      missing: 1,
+      repinned: [dropped],
+      lost: [],
+    });
     expect(report.skipped).toBeUndefined();
     expect(fetched).toStrictEqual([dropped]); // the reconcile asked the engine for exactly the gap
     expect(blobs.hasSync(dropped)).toBe(true); // it is local again
@@ -98,7 +109,7 @@ describe('recover-reconcile', () => {
     const believed = believedAfter(dir);
     expect(believed.has(dropped)).toBe(false);
     expect(believed.has(kept)).toBe(true);
-    expect(spy.warn.some((m) => /re-pinned/.test(m))).toBe(true);
+    expect(spy.warn.some((m) => /re-pinned/u.test(m))).toBe(true);
     expect(spy.error).toHaveLength(0);
   });
 
@@ -119,10 +130,15 @@ describe('recover-reconcile', () => {
       log: spy.log,
     });
 
-    expect(report).toMatchObject({ checked: 1, missing: 1, repinned: [], lost: [lost] });
+    expect(report).toMatchObject({
+      checked: 1,
+      missing: 1,
+      repinned: [],
+      lost: [lost],
+    });
     expect(materializeCalls).toBe(0); // nothing to re-pin — the snapshot can't help
     expect(believedAfter(dir).has(lost)).toBe(false); // still unmarked (stop trusting a dead remote)
-    expect(spy.error.some((m) => /CRITICAL/.test(m) && /LOST/.test(m))).toBe(true);
+    expect(spy.error.some((m) => /CRITICAL/u.test(m) && /LOST/u.test(m))).toBe(true);
   });
 
   test('(c) a provider with no inventory capability skips honestly and touches nothing', async () => {
@@ -167,7 +183,12 @@ describe('recover-reconcile', () => {
       log: spy.log,
     });
 
-    expect(report).toStrictEqual({ checked: 2, missing: 0, repinned: [], lost: [] });
+    expect(report).toStrictEqual({
+      checked: 2,
+      missing: 0,
+      repinned: [],
+      lost: [],
+    });
     expect(believedAfter(dir)).toStrictEqual(new Set([a, b])); // nothing unmarked
     expect(spy.error).toHaveLength(0);
     expect(spy.warn).toHaveLength(0);

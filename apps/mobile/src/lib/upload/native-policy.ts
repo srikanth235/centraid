@@ -1,5 +1,6 @@
 import * as Battery from 'expo-battery';
 import * as Network from 'expo-network';
+
 import { Store } from '../../storage';
 import type { UploadPolicy } from './uploader';
 

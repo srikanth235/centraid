@@ -1,10 +1,12 @@
 import { type JSX, useCallback, useEffect, useRef, useState } from 'react';
-import { Icon } from '../ui/index.js';
+
+import type { CompileAttemptDTO, CompileStepDTO, TurnWatchOutcome } from '../screen-contracts.js';
 import { cx } from '../ui/cx.js';
+import { Icon } from '../ui/index.js';
+import AutomationCompileArtifacts, { type ArtifactFile } from './AutomationCompileArtifacts.js';
+
 import au from '../styles/automation.module.css';
 import styles from './AutomationCompilePane.module.css';
-import AutomationCompileArtifacts, { type ArtifactFile } from './AutomationCompileArtifacts.js';
-import type { CompileAttemptDTO, CompileStepDTO, TurnWatchOutcome } from '../screen-contracts.js';
 
 /*
  * The compiler readout — the right rail of the compile screen.
@@ -52,7 +54,10 @@ export interface AutomationCompilePaneProps {
     onSteps: (steps: CompileStepDTO[]) => void,
     signal: AbortSignal,
   ) => Promise<TurnWatchOutcome>;
-  onReadSource: () => Promise<{ manifest: string | null; handler: string | null }>;
+  onReadSource: () => Promise<{
+    manifest: string | null;
+    handler: string | null;
+  }>;
   onOpenRun: (runId: string) => void;
   onOpenRuns: () => void;
 }
@@ -128,9 +133,10 @@ export default function AutomationCompilePane({
   const [steps, setSteps] = useState<CompileStepDTO[]>([]);
   const [watched, setWatched] = useState<Watched>(null);
   const [phase, setPhase] = useState<Phase>('idle');
-  const [source, setSource] = useState<{ manifest: string | null; handler: string | null } | null>(
-    null,
-  );
+  const [source, setSource] = useState<{
+    manifest: string | null;
+    handler: string | null;
+  } | null>(null);
   const [file, setFile] = useState<ArtifactFile>('handler');
   const [showArtifacts, setShowArtifacts] = useState(false);
   const watchRef = useRef<AbortController | null>(null);
@@ -150,7 +156,9 @@ export default function AutomationCompilePane({
 
   const refreshSource = useCallback(
     (): Promise<void> =>
-      onReadSource().then(setSource, () => setSource({ handler: null, manifest: null })),
+      onReadSource()
+        .then(setSource)
+        .catch(() => setSource({ handler: null, manifest: null })),
     [onReadSource],
   );
 
@@ -282,7 +290,11 @@ export default function AutomationCompilePane({
                 label: 'Plan is stale',
                 tone: 'paused',
               }
-            : { detail: `Compiled ${latest.whenLabel}.`, label: 'Plan ready', tone: 'active' }
+            : {
+                detail: `Compiled ${latest.whenLabel}.`,
+                label: 'Plan ready',
+                tone: 'active',
+              }
           : {
               detail: 'Compile once to turn these instructions into a plan that can run.',
               label: 'No plan yet',

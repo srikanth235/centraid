@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import {
   type ConversationMsg,
   parseVersionTime,
@@ -60,7 +61,11 @@ describe(toBuilderMsg, () => {
     };
     const dto = toBuilderMsg(m, 2);
     if (dto.kind !== 'toolGroup') throw new Error('expected toolGroup');
-    expect(dto.change).toStrictEqual({ count: 1, subtitle: 'app.ts', version: 'v3' });
+    expect(dto.change).toStrictEqual({
+      count: 1,
+      subtitle: 'app.ts',
+      version: 'v3',
+    });
     expect(dto.rows).toStrictEqual([]); // collapsed → no rows
   });
 });

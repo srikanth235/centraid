@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+
 import {
   createKeyring,
   createSnapshot,
@@ -9,12 +10,13 @@ import {
   restoreSnapshot,
   type SourceEntry,
 } from '@centraid/backup';
-import { createTestVault } from '../helpers/factories.js';
-import { generateVolumeFixture } from '@centraid/test-kit/volume-fixture';
 import { recordQualityResult } from '@centraid/test-kit/quality-result';
 import { tempDir } from '@centraid/test-kit/temp-dir';
+import { generateVolumeFixture } from '@centraid/test-kit/volume-fixture';
 import { FsBlobStore, sha256OfBytes, blobUriFor } from '@centraid/vault';
 import { describe, expect, test } from 'vitest';
+
+import { createTestVault } from '../helpers/factories.js';
 
 const OWNER = 'tests/scale/backup-restore.scale.test.ts';
 const APP_META = {
@@ -61,7 +63,11 @@ describe('backup-restore.scale', () => {
     // populated with ontology rows from the shared volume fixture and real CAS
     // blob content — not a hand-made single-BLOB sqlite file.
     const db = await createTestVault({ dir: sourceDir });
-    const fixture = generateVolumeFixture({ seed: 458, parties: PARTY_COUNT, photos: BLOB_COUNT });
+    const fixture = generateVolumeFixture({
+      seed: 458,
+      parties: PARTY_COUNT,
+      photos: BLOB_COUNT,
+    });
     const cas = new FsBlobStore(path.join(sourceDir, 'blobs'));
 
     const insertParty = db.vault.prepare(
@@ -147,7 +153,11 @@ describe('backup-restore.scale', () => {
       keyring,
       vaultId: 'scale-vault',
       destDir: restoreDir,
-      current: { gatewayVersion: '0.1.0', vaultUserVersion: '1', ontologyVersion: '1.2' },
+      current: {
+        gatewayVersion: '0.1.0',
+        vaultUserVersion: '1',
+        ontologyVersion: '1.2',
+      },
     });
     const durationMs = performance.now() - started;
 
@@ -158,10 +168,14 @@ describe('backup-restore.scale', () => {
     // Row fidelity: open the restored db and count the ontology rows back.
     const restored = new DatabaseSync(path.join(restoreDir, 'vault.db'));
     const partyRows = (
-      restored.prepare('SELECT count(*) AS n FROM core_party').get() as { n: number }
+      restored.prepare('SELECT count(*) AS n FROM core_party').get() as {
+        n: number;
+      }
     ).n;
     const contentRows = (
-      restored.prepare('SELECT count(*) AS n FROM core_content_item').get() as { n: number }
+      restored.prepare('SELECT count(*) AS n FROM core_content_item').get() as {
+        n: number;
+      }
     ).n;
     restored.close();
 
@@ -190,8 +204,17 @@ describe('backup-restore.scale', () => {
       name: `Backup restore of a ${BLOB_COUNT} MiB populated vault`,
       status: passed ? 'passed' : 'failed',
       measurements: [
-        { name: 'wall clock', value: durationMs, unit: 'ms', budget: DURATION_BUDGET_MS },
-        { name: 'restored vault bytes', value: restoredVaultBytes.length, unit: 'bytes' },
+        {
+          name: 'wall clock',
+          value: durationMs,
+          unit: 'ms',
+          budget: DURATION_BUDGET_MS,
+        },
+        {
+          name: 'restored vault bytes',
+          value: restoredVaultBytes.length,
+          unit: 'bytes',
+        },
         { name: 'party rows restored', value: partyRows, unit: 'rows' },
         { name: 'content rows restored', value: contentRows, unit: 'rows' },
       ],

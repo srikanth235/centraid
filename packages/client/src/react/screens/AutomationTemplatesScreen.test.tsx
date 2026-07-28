@@ -1,7 +1,8 @@
 import { act } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import { createRoot, type Root } from 'react-dom/client';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
 import type { AutomationTemplatesBridgeProps, DiscoverTemplate } from '../screen-contracts.js';
 import AutomationTemplatesScreen from './AutomationTemplatesScreen.js';
 

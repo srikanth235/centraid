@@ -6,10 +6,12 @@ import { describe, expect, it, vi } from 'vitest';
 // a static render doesn't need `window.CentraidApi` (only present under
 // Electron, not jsdom).
 vi.mock(import('../../../../gateway-client.js'), () => ({
-  writeAppFile: vi.fn(),
-  publish: vi.fn(),
-  readAutomation: vi.fn(),
-  listAutomationTurns: vi.fn().mockResolvedValue([]),
+  writeAppFile: vi.fn<typeof import('../../../../gateway-client.js').writeAppFile>(),
+  publish: vi.fn<typeof import('../../../../gateway-client.js').publish>(),
+  readAutomation: vi.fn<typeof import('../../../../gateway-client.js').readAutomation>(),
+  listAutomationTurns: vi
+    .fn<typeof import('../../../../gateway-client.js').listAutomationTurns>()
+    .mockResolvedValue([]),
 }));
 
 const { default: ConfigView } = await import('./BuilderAutomationConfigView.js');

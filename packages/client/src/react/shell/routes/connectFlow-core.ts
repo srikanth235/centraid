@@ -46,7 +46,12 @@ export interface ConnectivityVaultPreview {
 export interface ConnectivityReport {
   ok: boolean;
   stages: ConnectivityStage[];
-  gateway?: { version: string; schemaEpoch: number; instanceId: string; compatible: boolean };
+  gateway?: {
+    version: string;
+    schemaEpoch: number;
+    instanceId: string;
+    compatible: boolean;
+  };
   vaults?: ConnectivityVaultPreview[];
   ticket?: { vaultName: string; expiresAt: string; gatewayEndpointId: string };
   error?: string;
@@ -175,7 +180,13 @@ export function connectFlowReducer(
     case 'setRememberDevice':
       return { ...state, rememberDevice: event.value };
     case 'startTest':
-      return { ...state, report: null, step: 'test', testError: null, testing: true };
+      return {
+        ...state,
+        report: null,
+        step: 'test',
+        testError: null,
+        testing: true,
+      };
     case 'testSettled':
       return { ...state, report: event.report, testing: false };
     case 'localVaultsLoaded':
@@ -191,16 +202,35 @@ export function connectFlowReducer(
           : canCreateVaultFor(state)
             ? { kind: 'create' }
             : null;
-      return { ...state, step: 'vault', vaultChoice: state.vaultChoice ?? defaultChoice };
+      return {
+        ...state,
+        step: 'vault',
+        vaultChoice: state.vaultChoice ?? defaultChoice,
+      };
     }
     case 'selectVault':
       return { ...state, vaultChoice: event.choice };
     case 'commit':
-      return { ...state, commitError: null, committing: true, step: 'committing' };
+      return {
+        ...state,
+        commitError: null,
+        committing: true,
+        step: 'committing',
+      };
     case 'commitSettled':
-      return { ...state, committing: false, result: event.result, step: 'done' };
+      return {
+        ...state,
+        committing: false,
+        result: event.result,
+        step: 'done',
+      };
     case 'commitFailed':
-      return { ...state, commitError: event.error, committing: false, step: 'error' };
+      return {
+        ...state,
+        commitError: event.error,
+        committing: false,
+        step: 'error',
+      };
     case 'reset':
       return createInitialConnectFlowState();
     default:

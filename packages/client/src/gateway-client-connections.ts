@@ -26,6 +26,8 @@
  * types pass through unchanged.
  */
 
+import { ROUTES, vaultConnectionAuthorizePath, vaultConnectionPath } from '@centraid/protocol';
+
 import {
   GatewayClientError,
   auth,
@@ -35,7 +37,6 @@ import {
   readJson,
   withClientSession,
 } from './gateway-client-core.js';
-import { ROUTES, vaultConnectionAuthorizePath, vaultConnectionPath } from '@centraid/protocol';
 
 // ---- Connection health list (GET /_vault/connections) ----
 
@@ -254,7 +255,11 @@ export async function configureAssistConnection(
     cred_kind: string;
     status: string;
   }>(res, 'configure Centraid Assist connection');
-  return { connectionId: out.connection_id, credKind: out.cred_kind, status: out.status };
+  return {
+    connectionId: out.connection_id,
+    credKind: out.cred_kind,
+    status: out.status,
+  };
 }
 
 export async function configureConnection(
@@ -285,7 +290,11 @@ export async function configureConnection(
     cred_kind: string;
     status: string;
   }>(res, 'configure connection');
-  return { connectionId: out.connection_id, credKind: out.cred_kind, status: out.status };
+  return {
+    connectionId: out.connection_id,
+    credKind: out.cred_kind,
+    status: out.status,
+  };
 }
 
 // ---- Pause / resume (PATCH /_vault/connections/<id>) ----
@@ -297,14 +306,18 @@ export async function setConnectionStatus(input: {
 }): Promise<{ connectionId: string; status: string }> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, vaultConnectionPath(enc(input.connectionId)), {
-    body: JSON.stringify({ status: input.status, ...(input.note ? { note: input.note } : {}) }),
+    body: JSON.stringify({
+      status: input.status,
+      ...(input.note ? { note: input.note } : {}),
+    }),
     headers: authHeaders(token, 'application/json'),
     method: 'PATCH',
   });
-  const out = await readJson<{ ok: true; connection_id: string; status: string }>(
-    res,
-    'set connection status',
-  );
+  const out = await readJson<{
+    ok: true;
+    connection_id: string;
+    status: string;
+  }>(res, 'set connection status');
   return { connectionId: out.connection_id, status: out.status };
 }
 
@@ -396,11 +409,16 @@ export async function beginConnectionAuthorization(input: {
     headers: withClientSession(authHeaders(token, 'application/json')),
     method: 'POST',
   });
-  const out = await readJson<{ auth_url: string; state: string; redirect_uri: string }>(
-    res,
-    'begin authorization',
-  );
-  return { authUrl: out.auth_url, redirectUri: out.redirect_uri, state: out.state };
+  const out = await readJson<{
+    auth_url: string;
+    state: string;
+    redirect_uri: string;
+  }>(res, 'begin authorization');
+  return {
+    authUrl: out.auth_url,
+    redirectUri: out.redirect_uri,
+    state: out.state,
+  };
 }
 
 export interface AssistOAuthHandoff {

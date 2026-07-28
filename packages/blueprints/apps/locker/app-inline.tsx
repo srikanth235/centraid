@@ -5,12 +5,12 @@
 // kitAsk. The `./queries/*` imports live ONLY here so they never reach the
 // served/browser bundle (the gateway refuses to serve node-side handlers).
 
+import type { InlineAppModule } from '../inline-types.ts';
 import { Root, CHANGE_TABLES } from './app-root.tsx';
-import itemsQuery from './queries/items.ts';
 import itemQuery from './queries/item.ts';
+import itemsQuery from './queries/items.ts';
 import searchQuery from './queries/search.ts';
 import trashQuery from './queries/trash.ts';
-import type { InlineAppModule } from '../inline-types.ts';
 
 const lockerInlineApp: InlineAppModule = {
   appId: 'locker',

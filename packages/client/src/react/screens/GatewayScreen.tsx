@@ -1,6 +1,5 @@
 import { useRef, useState, type JSX } from 'react';
-import Icon from '../ui/Icon.js';
-import { cx } from '../ui/cx.js';
+
 import {
   availabilityPct,
   buildOutageRows,
@@ -12,19 +11,22 @@ import {
   type GatewayRuntimeSnapshot,
   type ReconciledStatus,
 } from '../shell/routes/gatewayData.js';
-import SettingsDiagnosticsScreen, {
-  type GatewayHealthDTO,
-  type SettingsDiagnosticsBridgeProps,
-} from './SettingsDiagnosticsScreen.js';
-import LogsScreen, { type LogsBridgeProps } from './LogsScreen.js';
+import { cx } from '../ui/cx.js';
+import Icon from '../ui/Icon.js';
 import GatewayAlertsTab from './GatewayAlertsTab.js';
-import RestartGatewayButton from './RestartGatewayButton.js';
+import LogsScreen, { type LogsBridgeProps } from './LogsScreen.js';
 import ResourceModeCard, {
   type ResourceMode,
   type ResourceModeCardProps,
 } from './ResourceModeCard.js';
-import styles from './GatewayScreen.module.css';
+import RestartGatewayButton from './RestartGatewayButton.js';
+import SettingsDiagnosticsScreen, {
+  type GatewayHealthDTO,
+  type SettingsDiagnosticsBridgeProps,
+} from './SettingsDiagnosticsScreen.js';
+
 import a11y from '../styles/a11y.module.css';
+import styles from './GatewayScreen.module.css';
 
 // Gateway runtime, component health, logs, and alerts share one instrument
 // panel (#341/#344/#347). Backup/storage custody used to live on the Overview
@@ -212,8 +214,8 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
                   ) : null}
                   {overall === 'degraded' ? (
                     <div className={styles.statusDegraded}>
-                      {unhealthyCount} component{unhealthyCount === 1 ? '' : 's'} reporting trouble
-                      — see Components
+                      {unhealthyCount} component
+                      {unhealthyCount === 1 ? '' : 's'} reporting trouble — see Components
                     </div>
                   ) : null}
                 </div>

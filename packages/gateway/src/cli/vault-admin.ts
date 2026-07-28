@@ -19,11 +19,11 @@
  * desktop's ConnectFlow) wants one line to parse, not an NDJSON stream.
  */
 
-import { openVaultRegistry, VaultRegistryError, type VaultInfo } from '../serve/vault-registry.js';
 import { GatewayDatabase, GatewayLockError } from '../serve/gateway-db.js';
+import { openVaultRegistry, VaultRegistryError, type VaultInfo } from '../serve/vault-registry.js';
+import { jsonFail, runJson, type Fail } from './json-cli.js';
 import { daemonKeyStore } from './key-store.js';
 import { daemonLayoutFor } from './paths.js';
-import { jsonFail, runJson, type Fail } from './json-cli.js';
 
 const quietLogger = {
   info: () => undefined,
@@ -88,7 +88,9 @@ export async function commandVault(
     let mutationLock: GatewayDatabase | undefined;
     if (action !== 'list') {
       try {
-        mutationLock = GatewayDatabase.open(parsed.dataDir, { lock: 'exclusive' });
+        mutationLock = GatewayDatabase.open(parsed.dataDir, {
+          lock: 'exclusive',
+        });
       } catch (error) {
         if (error instanceof GatewayLockError) localFail(error.message, 1);
         throw error;

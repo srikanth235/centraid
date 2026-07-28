@@ -1,12 +1,13 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import { promises as fs } from 'node:fs';
 // Issue #167: the gateway publish gate (`validateManifestAt`) lints an
 // automation app's handler.js for replay-unsafe patterns, so a
 // nondeterministic handler is rejected at publish time rather than silently
 // mis-resumed under the #166 journal/replay runtime.
-
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { promises as fs } from 'node:fs';
 import path from 'node:path';
+
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+
 import { validateManifestAt } from './validate-manifest.ts';
 
 let dir: string;
@@ -57,8 +58,8 @@ describe('validate-automation-handler', () => {
     );
     const err = await validateManifestAt(dir);
     expect(err).toBeTruthy();
-    expect(err!).toMatch(/automations\/main\/handler\.js/);
-    expect(err!).toMatch(/no-date-now/);
+    expect(err!).toMatch(/automations\/main\/handler\.js/u);
+    expect(err!).toMatch(/no-date-now/u);
   });
 
   test('rejects a handler that uses Math.random / raw fetch', async () => {
@@ -70,7 +71,7 @@ describe('validate-automation-handler', () => {
     );
     const err = await validateManifestAt(dir);
     expect(err).toBeTruthy();
-    expect(err!).toMatch(/no-raw-fetch|no-math-random/);
+    expect(err!).toMatch(/no-raw-fetch|no-math-random/u);
   });
 
   test('does not lint handlers of a non-automation app', async () => {

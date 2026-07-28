@@ -3,6 +3,7 @@
 // already-archived turn. Reads only — no lock held, no mutation.
 
 import type { DatabaseSync } from 'node:sqlite';
+
 import type { Row } from './types.js';
 
 /** A contiguous seq-range of one conversation eligible for one segment. */

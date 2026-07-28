@@ -7,14 +7,16 @@
  * authoritative on every platform.
  */
 
-import { existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+
 import { handshakeGateway } from '@centraid/protocol';
 import { endpointIdForSecret } from '@centraid/tunnel';
-import { daemonLayoutFor } from './paths.js';
-import { resolveDaemonConfig } from './resolve-config.js';
+
 import { GatewayDatabase, GatewayLockError } from '../serve/gateway-db.js';
 import { daemonKeyStore } from './key-store.js';
+import { daemonLayoutFor } from './paths.js';
+import { resolveDaemonConfig } from './resolve-config.js';
 
 interface LockStatus {
   dataDir: string;
@@ -29,7 +31,10 @@ export interface LockStatusDependencies {
 }
 
 function holderPid(file: string): number | undefined {
-  const result = spawnSync('lsof', ['-t', file], { encoding: 'utf8', timeout: 2_000 });
+  const result = spawnSync('lsof', ['-t', file], {
+    encoding: 'utf8',
+    timeout: 2_000,
+  });
   if (result.status !== 0) return undefined;
   const pid = Number(result.stdout.trim().split(/\s+/u)[0]);
   return Number.isInteger(pid) && pid > 0 ? pid : undefined;
@@ -47,13 +52,13 @@ export async function commandLockStatus(
   let json = false;
   for (let i = 0; i < args.length; i++) {
     const flag = args[i];
-    const next = (): string => {
+    const readValue = (): string => {
       const value = args[++i];
       if (value === undefined) fail(`${flag} requires a value`, 2);
       return value;
     };
-    if (flag === '--data-dir') dataDir = next();
-    else if (flag === '--config') configPath = next();
+    if (flag === '--data-dir') dataDir = readValue();
+    else if (flag === '--config') configPath = readValue();
     else if (flag === '--json') json = true;
     else fail(`unknown flag "${flag}"`, 2);
   }
@@ -94,10 +99,10 @@ export async function commandLockStatus(
         dataDir: config.dataDir,
         held: true,
         answering: false,
-        ...(pid !== undefined ? { holderPid: pid } : {}),
+        ...(pid === undefined ? {} : { holderPid: pid }),
         detail:
           'gateway.db is held but the daemon is not answering' +
-          (pid !== undefined ? ` (OS holder pid ${pid})` : ''),
+          (pid === undefined ? '' : ` (OS holder pid ${pid})`),
       };
     }
   } else {

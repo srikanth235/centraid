@@ -1,35 +1,29 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
-/*
- * HTTP-level coverage for the storage-connection routes (issue #367 §C1):
- * CRUD against a REAL `StorageConnectionStore` (gateway.db plus real
- * AES-256-GCM sealing), the non-bypassable recovery-kit confirmation gate,
- * and the per-vault status shape (§C7).
- */
-
-import { afterEach, describe, expect, test, vi } from 'vitest';
-import http from 'node:http';
-import path from 'node:path';
 import { promises as fs } from 'node:fs';
+import http from 'node:http';
 import type { AddressInfo } from 'node:net';
+import path from 'node:path';
+
+import { forEachSequentially } from '@centraid/test-kit/sequential';
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { bootstrapVault, openVaultDb, type VaultDb } from '@centraid/vault';
-import type { RouteHandler } from '../serve/build-gateway.js';
-import type { VaultRegistry } from '../serve/vault-registry.js';
-import type { VaultPlane } from '../serve/vault-plane.js';
-import { openStorageConnectionStore } from '../backup/storage-connections.js';
+import { afterEach, describe, expect, test, vi } from 'vitest';
+
 import { RecoveryKitStateStore } from '../backup/recovery-kit-state.js';
+import { openStorageConnectionStore } from '../backup/storage-connections.js';
 import { StorageUsagePoller } from '../backup/storage-usage.js';
+import type { RouteHandler } from '../serve/build-gateway.js';
+import type { VaultPlane } from '../serve/vault-plane.js';
+import type { VaultRegistry } from '../serve/vault-registry.js';
 import { makeStorageRouteHandler } from './storage-routes.js';
 
 const servers: http.Server[] = [];
 const cleanups: Array<() => Promise<void> | void> = [];
-
 describe('storage-routes', () => {
   afterEach(async () => {
     for (const server of servers.splice(0)) server.close();
     vi.restoreAllMocks();
-    while (cleanups.length > 0) await cleanups.pop()?.();
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
   });
-
   function startHandlerServer(handler: RouteHandler): Promise<string> {
     const server = http.createServer((req, res) => {
       void handler(req, res).then((owned) => {
@@ -53,20 +47,17 @@ describe('storage-routes', () => {
     await expect(store.verify('test-kit-fingerprint')).resolves.toBeTruthy();
   }
 
-  /**
-   * Minimal fake storage provider — serves just the discovery document
-   * (`GET /v1/storage/provider`, PROTOCOL.md) the home-profile gate (#436 §1)
-   * reads on create/test. `home: true` advertises the `home` profile with the
-   * full capability bundle; `home: false` advertises neither, so the gate
-   * rejects it with `provider_not_home_profile`.
-   */
   function startFakeProviderServer(opts: { apiKey: string; home: boolean }): Promise<string> {
     const server = http.createServer((req, res) => {
       if (req.headers.authorization !== `Bearer ${opts.apiKey}`) {
         res.writeHead(401, { 'content-type': 'application/json' });
         res.end(
           JSON.stringify({
-            error: { type: 'invalid_request_error', code: 'auth_expired', message: 'bad key' },
+            error: {
+              type: 'invalid_request_error',
+              code: 'auth_expired',
+              message: 'bad key',
+            },
           }),
         );
         return;
@@ -106,7 +97,11 @@ describe('storage-routes', () => {
       res.writeHead(404, { 'content-type': 'application/json' });
       res.end(
         JSON.stringify({
-          error: { type: 'invalid_request_error', code: 'not_found', message: 'no route' },
+          error: {
+            type: 'invalid_request_error',
+            code: 'not_found',
+            message: 'no route',
+          },
         }),
       );
     });
@@ -123,9 +118,6 @@ describe('storage-routes', () => {
     return { planesList: () => [] } as unknown as VaultRegistry;
   }
 
-  /** A real in-memory VaultDb (migrated schema + a live BlobCustody/BlobCache),
-   *  wrapped as the minimal `VaultPlane` shape the status route reads — enough
-   *  to exercise the real `custodyState*`/`metrics()` reads without a disk. */
   function planeFromDb(name: string, vaultId: string, db: VaultDb): VaultPlane {
     return { name, boot: { vaultId }, db } as unknown as VaultPlane;
   }
@@ -149,14 +141,22 @@ describe('storage-routes', () => {
 
     const apiKey = 'sk-provider-super-secret-value';
     const provider = await startFakeProviderServer({ apiKey, home: true });
-    const body = { kind: 'provider', name: 'Clawgnition home', baseUrl: provider, apiKey };
+    const body = {
+      kind: 'provider',
+      name: 'Clawgnition home',
+      baseUrl: provider,
+      apiKey,
+    };
 
     const refused = await fetch(`${base}/centraid/_gateway/storage/connections`, {
       method: 'POST',
       body: JSON.stringify(body),
     });
     expect(refused.status).toBe(409);
-    const refusedJson = (await refused.json()) as { error: string; recoveryKitConfirmed: boolean };
+    const refusedJson = (await refused.json()) as {
+      error: string;
+      recoveryKitConfirmed: boolean;
+    };
     expect(refusedJson.error).toBe('recovery_kit_not_confirmed');
     expect(refusedJson.recoveryKitConfirmed).toBe(false);
     await expect(storageConnections.list()).resolves.toHaveLength(0);
@@ -166,7 +166,9 @@ describe('storage-routes', () => {
       body: JSON.stringify({ ...body, force: true }),
     });
     expect(forced.status).toBe(409);
-    await expect(forced.json()).resolves.toMatchObject({ error: 'recovery_kit_not_confirmed' });
+    await expect(forced.json()).resolves.toMatchObject({
+      error: 'recovery_kit_not_confirmed',
+    });
     await expect(storageConnections.list()).resolves.toHaveLength(0);
     await expect(fs.readFile(path.join(dir, 'gateway.db'), 'utf8')).resolves.not.toContain(apiKey);
   });
@@ -199,7 +201,9 @@ describe('storage-routes', () => {
       }),
     });
     expect(created.status).toBe(201);
-    const { connection } = (await created.json()) as { connection: { id: string } };
+    const { connection } = (await created.json()) as {
+      connection: { id: string };
+    };
 
     const list = await fetch(`${base}/centraid/_gateway/storage/connections`);
     expect(((await list.json()) as { connections: unknown[] }).connections).toHaveLength(1);
@@ -212,14 +216,18 @@ describe('storage-routes', () => {
       body: JSON.stringify({ name: 'Clawgnition (renamed)' }),
     });
     expect(patched.status).toBe(200);
-    const patchedJson = (await patched.json()) as { connection: { name: string } };
+    const patchedJson = (await patched.json()) as {
+      connection: { name: string };
+    };
     expect(patchedJson.connection.name).toBe('Clawgnition (renamed)');
 
     const deleted = await fetch(`${base}/centraid/_gateway/storage/connections/${connection.id}`, {
       method: 'DELETE',
     });
     expect(deleted.status).toBe(200);
-    expect((await deleted.json()) as { ok: boolean }).toStrictEqual({ ok: true });
+    expect((await deleted.json()) as { ok: boolean }).toStrictEqual({
+      ok: true,
+    });
 
     const goneAfterDelete = await fetch(
       `${base}/centraid/_gateway/storage/connections/${connection.id}`,
@@ -260,7 +268,9 @@ describe('storage-routes', () => {
     );
     const res = await fetch(`${base}/centraid/_gateway/storage/status`);
     expect(res.status).toBe(200);
-    expect((await res.json()) as { vaults: unknown[] }).toStrictEqual({ vaults: [] });
+    expect((await res.json()) as { vaults: unknown[] }).toStrictEqual({
+      vaults: [],
+    });
   });
 
   test('GET status/events exposes the authenticated custody completion stream', async () => {
@@ -304,13 +314,17 @@ describe('storage-routes', () => {
     );
     const res = await fetch(`${base}/centraid/_gateway/storage/connections`, {
       method: 'POST',
-      body: JSON.stringify({ kind: 'provider', name: 'not-home', baseUrl: provider, apiKey }),
+      body: JSON.stringify({
+        kind: 'provider',
+        name: 'not-home',
+        baseUrl: provider,
+        apiKey,
+      }),
     });
     expect(res.status).toBe(400);
     const json = (await res.json()) as { error: string; message: string };
     expect(json.error).toBe('provider_not_home_profile');
-    expect(json.message).toMatch(/home/);
-    // Nothing persisted — the gate runs before create.
+    expect(json.message).toMatch(/home/u);
     await expect(storageConnections.list()).resolves.toHaveLength(0);
   });
 
@@ -332,7 +346,12 @@ describe('storage-routes', () => {
       const provider = await startFakeProviderServer({ apiKey, home: true });
       return fetch(`${base}/centraid/_gateway/storage/connections`, {
         method: 'POST',
-        body: JSON.stringify({ kind: 'provider', name, baseUrl: provider, apiKey }),
+        body: JSON.stringify({
+          kind: 'provider',
+          name,
+          baseUrl: provider,
+          apiKey,
+        }),
       });
     };
     expect((await create('first')).status).toBe(201);
@@ -340,7 +359,7 @@ describe('storage-routes', () => {
     expect(second.status).toBe(409);
     const json = (await second.json()) as { error: string; message: string };
     expect(json.error).toBe('already_exists');
-    expect(json.message).toMatch(/only one home connection/);
+    expect(json.message).toMatch(/only one home connection/u);
   });
 
   test('GET usage answers an empty list with zero connections', async () => {
@@ -357,7 +376,9 @@ describe('storage-routes', () => {
     );
     const res = await fetch(`${base}/centraid/_gateway/storage/usage`);
     expect(res.status).toBe(200);
-    expect((await res.json()) as { connections: unknown[] }).toStrictEqual({ connections: [] });
+    expect((await res.json()) as { connections: unknown[] }).toStrictEqual({
+      connections: [],
+    });
   });
 
   test('GET usage: a provider connection with no target yet reports providerReported: null with localReplicatedBytes 0 (no vaults mounted)', async () => {
@@ -377,7 +398,12 @@ describe('storage-routes', () => {
     );
     await fetch(`${base}/centraid/_gateway/storage/connections`, {
       method: 'POST',
-      body: JSON.stringify({ kind: 'provider', name: 'My home', baseUrl: provider, apiKey }),
+      body: JSON.stringify({
+        kind: 'provider',
+        name: 'My home',
+        baseUrl: provider,
+        apiKey,
+      }),
     });
     const res = await fetch(`${base}/centraid/_gateway/storage/usage`);
     expect(res.status).toBe(200);
@@ -394,10 +420,6 @@ describe('storage-routes', () => {
     expect(body.connections[0]?.providerReported).toBeNull();
     expect(body.connections[0]?.localReplicatedBytes).toBe(0);
   });
-
-  // ── Bounded storage-tier metrics on GET status (issue #405 §7) ─────────────
-  // The `cache` block makes tier health visible: spool vs. budget, the hit-rate
-  // counters, bytes served local vs. remote, evictions and backpressure.
 
   interface StatusCacheDTO {
     spoolBytes: number;
@@ -434,11 +456,11 @@ describe('storage-routes', () => {
 
     const res = await fetch(`${base}/centraid/_gateway/storage/status`);
     expect(res.status).toBe(200);
-    const out = (await res.json()) as { vaults: { vaultId: string; cache: StatusCacheDTO }[] };
+    const out = (await res.json()) as {
+      vaults: { vaultId: string; cache: StatusCacheDTO }[];
+    };
     const cache = out.vaults[0]?.cache;
     expect(cache).toBeDefined();
-    // In-memory vault has no volume to measure ⇒ unlimited ⇒ null (never the
-    // Number.MAX_SAFE_INTEGER sentinel on the wire).
     expect(cache?.budgetBytes).toBeNull();
     expect(cache?.spoolBytes).toBe(blob.length);
     expect(cache?.localHits).toBe(1);
@@ -457,9 +479,6 @@ describe('storage-routes', () => {
 
     const db = openVaultDb();
     cleanups.push(() => db.close());
-    // The explicit budget lives in `core_vault.settings_json`, which only exists
-    // after bootstrap — mint the vault, then set the operator's budget (it wins
-    // over the derived one, issue #405 §3).
     bootstrapVault(db, { ownerName: 'Tester' });
     db.vault
       .prepare('UPDATE core_vault SET settings_json = ?')

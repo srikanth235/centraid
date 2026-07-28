@@ -1,4 +1,5 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
 // Scenario seeds end-to-end (issue #290 phase 1): every blueprint seed.js
 // runs in the real handler worker against a real vault plane through the
 // demo bridge — the same path the demo route drives — then purges clean.
@@ -6,19 +7,23 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
 // longer exists (or whose input changed) fails HERE, not on an owner's
 // first click.
 
-import { afterEach, describe, expect, test } from 'vitest';
-import { existsSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { runHandler } from '@centraid/app-engine';
+import { forEachSequentially } from '@centraid/test-kit/sequential';
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { afterEach, describe, expect, test } from 'vitest';
+
 import { openVaultPlane, type VaultPlane } from './vault-plane.js';
 
-const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
+const silentLogger = {
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+};
 
 const cleanups: Array<() => Promise<void> | void> = [];
 describe('demo-seed', () => {
   afterEach(async () => {
-    while (cleanups.length > 0) await cleanups.pop()?.();
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
   });
   function openPlane(dir: string): VaultPlane {
     const plane = openVaultPlane({
@@ -31,14 +36,7 @@ describe('demo-seed', () => {
     return plane;
   }
 
-  const BLUEPRINTS = path.join(
-    path.dirname(fileURLToPath(import.meta.url)),
-    '..',
-    '..',
-    '..',
-    'blueprints',
-    'apps',
-  );
+  const BLUEPRINTS = path.join(import.meta.dirname, '..', '..', '..', 'blueprints', 'apps');
 
   async function loadSeed(plane: VaultPlane, appId: string, appsDir: string): Promise<void> {
     const seedFile = path.join(BLUEPRINTS, appId, 'seed.js');
@@ -59,9 +57,9 @@ describe('demo-seed', () => {
     const plane = openPlane(dir);
     const appsDir = path.join(dir, 'apps');
 
-    for (const appId of ['tasks', 'notes', 'people', 'tally']) {
-      await loadSeed(plane, appId, appsDir);
-    }
+    await forEachSequentially(['tasks', 'notes', 'people', 'tally'], (appId) =>
+      loadSeed(plane, appId, appsDir),
+    );
 
     const status = plane.demoStatus();
     const byApp = new Map(status.map((s) => [s.appId, s.rows]));
@@ -101,8 +99,11 @@ describe('demo-seed', () => {
     const dir = await tempDir();
     const plane = openPlane(dir);
     const bridge = plane.demoBridgeFor('tasks');
-    const refused = await bridge({ op: 'changes', payload: { entities: ['schedule.task'] } });
+    const refused = await bridge({
+      op: 'changes',
+      payload: { entities: ['schedule.task'] },
+    });
     expect(refused.ok).toBe(false);
-    expect(refused.error).toMatch(/not part of the scenario surface/);
+    expect(refused.error).toMatch(/not part of the scenario surface/u);
   });
 });

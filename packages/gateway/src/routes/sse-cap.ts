@@ -9,6 +9,7 @@
  */
 
 import type { ServerResponse } from 'node:http';
+
 import { sendJson } from './route-helpers.js';
 
 /** Concurrent subscribers a single SSE surface accepts. These are personal

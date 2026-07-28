@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from 'vitest';
+
 import { openVaultDb, type VaultDb } from '../db.js';
 import { applyExtBand } from '../gateway/ext.js';
 import type { ExtTableSpec } from '../schema/ext.js';
@@ -45,11 +46,31 @@ describe('change-log', () => {
 
     const page = readReplicaChanges(vault);
     expect(
-      page.changes.map(({ seq, entity, rowId, op }) => ({ seq, entity, rowId, op })),
+      page.changes.map(({ seq, entity, rowId, op }) => ({
+        seq,
+        entity,
+        rowId,
+        op,
+      })),
     ).toStrictEqual([
-      { seq: 1, entity: 'core.concept_scheme', rowId: 'scheme-1', op: 'insert' },
-      { seq: 2, entity: 'core.concept_scheme', rowId: 'scheme-1', op: 'update' },
-      { seq: 3, entity: 'core.concept_scheme', rowId: 'scheme-1', op: 'delete' },
+      {
+        seq: 1,
+        entity: 'core.concept_scheme',
+        rowId: 'scheme-1',
+        op: 'insert',
+      },
+      {
+        seq: 2,
+        entity: 'core.concept_scheme',
+        rowId: 'scheme-1',
+        op: 'update',
+      },
+      {
+        seq: 3,
+        entity: 'core.concept_scheme',
+        rowId: 'scheme-1',
+        op: 'delete',
+      },
     ]);
     expect(page.changes[0]?.oldValuesJson).toBeNull();
     expect(JSON.parse(page.changes[1]!.oldValuesJson!)).toMatchObject({
@@ -139,14 +160,16 @@ describe('change-log', () => {
     const old = new Map(
       changes.map((change) => [change.entity, JSON.parse(change.oldValuesJson ?? '{}') as object]),
     );
-    expect(old.get('consent.app')).toMatchObject({ display_name: 'Before app' });
+    expect(old.get('consent.app')).toMatchObject({
+      display_name: 'Before app',
+    });
     expect(old.get('consent.app')).not.toHaveProperty('signing_key');
     expect(old.get('agent.agent')).toMatchObject({ model_ref: 'tier:fast' });
     expect(old.get('agent.agent')).not.toHaveProperty('host_key');
     expect(old.get('consent.device')).toMatchObject({ name: 'Before device' });
     expect(old.get('consent.device')).not.toHaveProperty('public_key');
     expect(JSON.stringify(changes)).not.toMatch(
-      /signing-never-log|host-never-log|public-never-log/,
+      /signing-never-log|host-never-log|public-never-log/u,
     );
   });
 
@@ -198,7 +221,11 @@ describe('change-log', () => {
       .run();
     const live = readReplicaChanges(opened.vault, { since: afterDdl });
     expect(live.changes).toStrictEqual([
-      expect.objectContaining({ entity: 'ext.gym-log.workout', rowId: 'w1', op: 'insert' }),
+      expect.objectContaining({
+        entity: 'ext.gym-log.workout',
+        rowId: 'w1',
+        op: 'insert',
+      }),
     ]);
 
     applyExtBand(opened, 'gym-log', [extSpec], 'draft');
@@ -223,7 +250,7 @@ describe('change-log', () => {
     expect(second.changes.map((entry) => entry.rowId)).toStrictEqual(['c']);
     expect(second.hasMore).toBe(false);
     expect(second.next).toStrictEqual(first.watermark);
-    expect(() => parseReplicaCursor('not-a-cursor')).toThrow(/form/);
+    expect(() => parseReplicaCursor('not-a-cursor')).toThrow(/form/u);
   });
 
   test('retention applies age then count while advancing through a deleted prefix', () => {
@@ -255,7 +282,12 @@ describe('change-log', () => {
       maxAgeMs: 30 * 24 * 60 * 60 * 1_000,
       maxEntries: 2,
     });
-    expect(result).toMatchObject({ expired: 1, compacted: 1, overflow: 1, retained: 2 });
+    expect(result).toMatchObject({
+      expired: 1,
+      compacted: 1,
+      overflow: 1,
+      retained: 2,
+    });
     expect(result.floor.seq).toBe(3);
     expect(
       readReplicaChanges(vault, { since: result.floor }).changes.map((entry) => entry.rowId),
@@ -280,7 +312,12 @@ describe('change-log', () => {
       maxAgeMs: 30 * 24 * 60 * 60 * 1_000,
       maxEntries: 10,
     });
-    expect(result).toMatchObject({ expired: 2, compacted: 0, overflow: 0, retained: 0 });
+    expect(result).toMatchObject({
+      expired: 2,
+      compacted: 0,
+      overflow: 0,
+      retained: 0,
+    });
     expect(result.floor.seq).toBe(2);
   });
 
@@ -299,7 +336,12 @@ describe('change-log', () => {
       maxAgeMs: 30 * 24 * 60 * 60 * 1_000,
       maxEntries: 2,
     });
-    expect(result).toMatchObject({ expired: 0, compacted: 0, overflow: 2, retained: 2 });
+    expect(result).toMatchObject({
+      expired: 0,
+      compacted: 0,
+      overflow: 2,
+      retained: 2,
+    });
     expect(result.floor.seq).toBe(2);
   });
 
@@ -322,7 +364,11 @@ describe('change-log', () => {
       maxEntries: 1_000,
     });
 
-    expect(result).toMatchObject({ compacted: 1_000, overflow: 0, retained: 1 });
+    expect(result).toMatchObject({
+      compacted: 1_000,
+      overflow: 0,
+      retained: 1,
+    });
     expect(result.floor).toStrictEqual({ epoch, seq: 1_000 });
     expect(readReplicaChanges(vault, { since: result.floor }).changes).toStrictEqual([
       expect.objectContaining({ seq: 1_001, rowId: 'hot-row', op: 'update' }),
@@ -372,7 +418,11 @@ describe('change-log', () => {
   test('warm initialization skips a stable trigger catalog and repairs schema drift', () => {
     const { vault } = open();
     const schemaVersion = () =>
-      (vault.prepare('PRAGMA schema_version').get() as { schema_version: number }).schema_version;
+      (
+        vault.prepare('PRAGMA schema_version').get() as {
+          schema_version: number;
+        }
+      ).schema_version;
     const recordedVersion = () =>
       (
         vault

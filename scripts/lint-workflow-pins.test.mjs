@@ -25,7 +25,7 @@ test('a floating tag is rejected', () => {
   );
   const errors = lintWorkflowSource('w.yml', source);
   assert.equal(errors.length, 1);
-  assert.match(errors[0], /floating ref `actions\/checkout@v4`/);
+  assert.match(errors[0], /floating ref `actions\/checkout@v4`/u);
 });
 
 test('a moving branch ref is rejected the same way a tag is', () => {
@@ -35,7 +35,7 @@ test('a moving branch ref is rejected the same way a tag is', () => {
   );
   const errors = lintWorkflowSource('w.yml', source);
   assert.equal(errors.length, 1);
-  assert.match(errors[0], /rust-toolchain@stable/);
+  assert.match(errors[0], /rust-toolchain@stable/u);
 });
 
 test('repo-local and docker:// refs are exempt', () => {
@@ -53,14 +53,14 @@ test('a hardcoded bun-version is rejected', () => {
   );
   const errors = lintWorkflowSource('w.yml', source);
   assert.equal(errors.length, 1);
-  assert.match(errors[0], /hardcodes a Bun version/);
+  assert.match(errors[0], /hardcodes a Bun version/u);
 });
 
 test('a job without timeout-minutes is rejected, and names the job', () => {
   const source = clean.replace('    timeout-minutes: 10\n', '');
   const errors = lintWorkflowSource('w.yml', source);
   assert.equal(errors.length, 1);
-  assert.match(errors[0], /job `build` has no timeout-minutes/);
+  assert.match(errors[0], /job `build` has no timeout-minutes/u);
 });
 
 test('every job is checked, not just the first', () => {
@@ -71,7 +71,7 @@ test('every job is checked, not just the first', () => {
 `;
   const errors = lintWorkflowSource('w.yml', source);
   assert.equal(errors.length, 1);
-  assert.match(errors[0], /job `publish` has no timeout-minutes/);
+  assert.match(errors[0], /job `publish` has no timeout-minutes/u);
 });
 
 test('a step key that merely looks like a job key is not treated as one', () => {
@@ -114,7 +114,7 @@ test('a hand-rolled bun install is rejected — the setup action owns it', () =>
   );
   const errors = lintWorkflowSource('w.yml', source);
   assert.equal(errors.length, 1);
-  assert.match(errors[0], /runs `bun install` by hand/);
+  assert.match(errors[0], /runs `bun install` by hand/u);
 });
 
 test('a named-step install is caught too, not just `- run:`', () => {
@@ -127,7 +127,7 @@ test('a named-step install is caught too, not just `- run:`', () => {
   );
   const errors = lintWorkflowSource('w.yml', source);
   assert.equal(errors.length, 1);
-  assert.match(errors[0], /runs `bun install` by hand/);
+  assert.match(errors[0], /runs `bun install` by hand/u);
 });
 
 test('only ci.yml may listen on pull_request', () => {
@@ -139,7 +139,7 @@ on:
 ${clean.slice(clean.indexOf('jobs:'))}`;
   const errors = lintWorkflowSource('.github/workflows/web.yml', source);
   assert.equal(errors.length, 1);
-  assert.match(errors[0], /only ci\.yml may/);
+  assert.match(errors[0], /only ci\.yml may/u);
 });
 
 test('ci.yml itself may listen on pull_request', () => {
@@ -187,7 +187,7 @@ on:
 ${clean.slice(clean.indexOf('jobs:'))}`;
   const errors = lintWorkflowSource('.github/workflows/release-desktop.yml', source);
   assert.equal(errors.length, 1);
-  assert.match(errors[0], /only release\.yml may/);
+  assert.match(errors[0], /only release\.yml may/u);
 });
 
 test('release.yml itself may listen on push tags', () => {

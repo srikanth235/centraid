@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+
 import { listSkills, composeSkills, parseSkillFile, skillsDir } from './compose.js';
 
 describe('compose', () => {

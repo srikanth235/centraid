@@ -1,10 +1,12 @@
 import { useRef, useState, type JSX } from 'react';
-import { Button } from '../ui/index.js';
+
 import type {
   FoundingInitializeResult,
   FoundingRestoreResult,
   FoundingVerifyResult,
 } from '../../gateway-client-founding.js';
+import { Button } from '../ui/index.js';
+
 import styles from './RecoverScreen.module.css';
 
 export interface FoundingScreenBridge {

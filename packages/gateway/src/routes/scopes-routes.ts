@@ -31,7 +31,9 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
+
 import { AUTHED_DEVICE_HEADER } from '@centraid/app-engine';
+
 import type { RouteHandler } from '../serve/build-gateway.js';
 import type { EnrollmentStore, GrantableRole } from '../serve/enrollment-store.js';
 import { sendJson } from './route-helpers.js';
@@ -119,14 +121,18 @@ export function makeScopesRouteHandler(deps: ScopesRouteDeps): RouteHandler {
     const ensure = deps.ensureAppInstalled;
     if (!ensure) return;
     if (![...installed.values()].some(Boolean)) return;
-    for (const [vaultId, present] of [...installed]) {
-      if (present) continue;
-      try {
-        installed.set(vaultId, await ensure(vaultId, appId));
-      } catch {
-        installed.set(vaultId, false);
-      }
-    }
+    const reconciled = await Promise.all(
+      [...installed]
+        .filter(([, present]) => !present)
+        .map(async ([vaultId]) => {
+          try {
+            return [vaultId, await ensure(vaultId, appId)] as const;
+          } catch {
+            return [vaultId, false] as const;
+          }
+        }),
+    );
+    for (const [vaultId, present] of reconciled) installed.set(vaultId, present);
   };
 
   return async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
@@ -167,8 +173,8 @@ export function makeScopesRouteHandler(deps: ScopesRouteDeps): RouteHandler {
     const scopes: ScopeRow[] = visible.map((vault) => ({
       vaultId: vault.vaultId,
       label: vault.name,
-      ...(vault.color !== undefined ? { color: vault.color } : {}),
-      ...(vault.icon !== undefined ? { icon: vault.icon } : {}),
+      ...(vault.color === undefined ? {} : { color: vault.color }),
+      ...(vault.icon === undefined ? {} : { icon: vault.icon }),
       role: roles.get(vault.vaultId)!,
       ...(installed ? { installed: installed.get(vault.vaultId) === true } : {}),
     }));

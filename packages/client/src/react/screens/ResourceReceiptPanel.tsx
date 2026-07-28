@@ -1,4 +1,5 @@
 import type { JSX } from 'react';
+
 import { relativeTime } from '../format.js';
 import {
   processUsageRows,
@@ -6,6 +7,7 @@ import {
   type ResourceUsageDTO,
   type ResourceUsageRow,
 } from './resource-summary.js';
+
 import styles from './ResourceReceiptPanel.module.css';
 
 // Resource receipt (issue #528 Phase C): "what this vault's gateway host
@@ -80,7 +82,10 @@ export default function ResourceReceiptPanel({ usage }: ResourceReceiptPanelProp
         {wakeups === null ? null : (
           <UsageRow
             key="wakeups"
-            row={{ label: 'Background wakeups (last hour)', value: String(wakeups) }}
+            row={{
+              label: 'Background wakeups (last hour)',
+              value: String(wakeups),
+            }}
           />
         )}
       </dl>

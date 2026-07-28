@@ -53,7 +53,12 @@ export interface Attempt {
   usage?: AsstUsageDTO;
 }
 export type AsstMsg =
-  | { kind: 'user'; text: string; attachments?: AsstAttachment[]; createdAt?: number }
+  | {
+      kind: 'user';
+      text: string;
+      attachments?: AsstAttachment[];
+      createdAt?: number;
+    }
   /** Live-only streaming reasoning row (issue #420, Wave 2). */
   | { kind: 'thinking'; text: string; streaming?: boolean }
   /** Durable runner notice (issue #420, Wave 6) — e.g. dropped-PDF warning. */
@@ -116,7 +121,10 @@ export function activeAttemptOf(msg: Extract<AsstMsg, { kind: 'ai' }>): Attempt 
  * thread, and a warn notice replaces it when a segment blob couldn't be fetched.
  */
 export function hydrateMessages(
-  rows: Array<{ payload: CentraidConversationHistoryMessage; createdAt: number }>,
+  rows: Array<{
+    payload: CentraidConversationHistoryMessage;
+    createdAt: number;
+  }>,
   opts: { hasArchivedHistory?: boolean; archiveUnavailable?: boolean } = {},
 ): AsstMsg[] {
   const out: AsstMsg[] = [];

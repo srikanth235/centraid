@@ -12,6 +12,8 @@
 import { createHash } from 'node:crypto';
 import { existsSync, promises as fs } from 'node:fs';
 import path from 'node:path';
+
+import { WAL_DB_FILES, type EngineLogger, type SourceEntry } from '@centraid/backup';
 import {
   archivedSegmentShas,
   conversationArchiveShas,
@@ -19,9 +21,9 @@ import {
   readBlobStoreSettings,
   ReplicaIndex,
 } from '@centraid/vault';
-import { WAL_DB_FILES, type EngineLogger, type SourceEntry } from '@centraid/backup';
-import { GitError, run } from '../worktree-store/git.js';
+
 import type { VaultPlane } from '../serve/vault-plane.js';
+import { GitError, run } from '../worktree-store/git.js';
 
 /** Every blob CAS file under `<vaultDir>/blobs/sha256/<fan>/<sha>` (`FsBlobStore`'s layout). */
 async function listBlobEntries(
@@ -30,25 +32,27 @@ async function listBlobEntries(
 ): Promise<SourceEntry[]> {
   const base = path.join(vaultDir, 'blobs', 'sha256');
   if (!existsSync(base)) return [];
-  const entries: SourceEntry[] = [];
-  for (const fan of await fs.readdir(base)) {
-    const fanDir = path.join(base, fan);
-    let names: string[];
-    try {
-      names = await fs.readdir(fanDir);
-    } catch {
-      continue;
-    }
-    for (const name of names) {
-      if (!/^[0-9a-f]{64}$/u.test(name)) continue;
-      if (only && !only.has(name)) continue;
-      entries.push({
-        path: `blobs/sha256/${fan}/${name}`,
-        kind: 'blob',
-        absolutePath: path.join(fanDir, name),
-      });
-    }
-  }
+  const entries = (
+    await Promise.all(
+      (
+        await fs.readdir(base)
+      ).map(async (fan) => {
+        const fanDir = path.join(base, fan);
+        try {
+          const names = await fs.readdir(fanDir);
+          return names
+            .filter((name) => /^[0-9a-f]{64}$/u.test(name) && (!only || only.has(name)))
+            .map((name) => ({
+              path: `blobs/sha256/${fan}/${name}`,
+              kind: 'blob' as const,
+              absolutePath: path.join(fanDir, name),
+            }));
+        } catch {
+          return [];
+        }
+      }),
+    )
+  ).flat();
   // Deterministic order — dedup/reuse in `createSnapshot` doesn't care, but
   // stable manifests make debugging/verification output legible.
   entries.sort((a, b) => a.path.localeCompare(b.path));
@@ -64,7 +68,9 @@ async function listBlobEntries(
  */
 async function codeRefsDigest(bareDir: string): Promise<string> {
   const refs = await run(['for-each-ref', '--format=%(objectname) %(refname)'], { cwd: bareDir });
-  const head = await run(['symbolic-ref', '--quiet', 'HEAD'], { cwd: bareDir }).catch(() => '');
+  const head = await run(['symbolic-ref', '--quiet', 'HEAD'], {
+    cwd: bareDir,
+  }).catch(() => '');
   return createHash('sha256').update(`${head}\n${refs}`).digest('hex');
 }
 
@@ -112,7 +118,11 @@ async function bundleCodeStore(
     const priorDigest = await fs.readFile(digestPath, 'utf8').catch(() => '');
     if (priorDigest === digest) {
       log.info?.('backup: code store unchanged since last snapshot — reusing apps.bundle');
-      return { path: 'apps.bundle', kind: 'git-bundle', absolutePath: bundlePath };
+      return {
+        path: 'apps.bundle',
+        kind: 'git-bundle',
+        absolutePath: bundlePath,
+      };
     }
   }
 
@@ -122,7 +132,11 @@ async function bundleCodeStore(
     // dedups against the previous snapshot's chunks instead of re-uploading.
     await run(['-c', 'pack.threads=1', 'bundle', 'create', bundlePath, '--all'], { cwd: bareDir });
     await fs.writeFile(digestPath, digest);
-    return { path: 'apps.bundle', kind: 'git-bundle', absolutePath: bundlePath };
+    return {
+      path: 'apps.bundle',
+      kind: 'git-bundle',
+      absolutePath: bundlePath,
+    };
   } catch (err) {
     // An empty bare repo (no refs yet) makes `git bundle create --all` fail
     // loudly ("Refusing to create empty bundle") — that's an EXPECTED state

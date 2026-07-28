@@ -1,14 +1,5 @@
-// The v2 sidebar: brand row, Add photos, smart nav (Photos/Favorites/
-// Albums), the owner's actual album list (mini cover + count, inline
-// rename/delete on hover), a Tags filter section (issue #352's free-form
-// labels), the Duplicates and Trash shelves, and a storage footer. Pure
-// view — every interaction is a callback prop; `newAlbumOpen`/
-// `renamingAlbumForId` are app.tsx-owned sliver state (same split the old
-// Chips.jsx/AlbumTools.jsx pair used), threaded through by the orchestrator
-// (sidebar.tsx, replacing toolbar.jsx).
-// CSS split: own classes in Sidebar.module.css; the `.sectionLabel` eyebrow is
-// shared (shared.module.css); `kit-*` classes stay global strings.
-import { armConfirm } from '../kit.ts';
+import type { ReactNode } from 'react';
+
 import { ALBUMS, DUPLICATES, FAVORITES, TRASH } from '../constants.ts';
 import {
   AlbumsIcon,
@@ -22,9 +13,20 @@ import {
   ShieldIcon,
   TrashIcon,
 } from '../icons.tsx';
-import type { ReactNode } from 'react';
+// The v2 sidebar: brand row, Add photos, smart nav (Photos/Favorites/
+// Albums), the owner's actual album list (mini cover + count, inline
+// rename/delete on hover), a Tags filter section (issue #352's free-form
+// labels), the Duplicates and Trash shelves, and a storage footer. Pure
+// view — every interaction is a callback prop; `newAlbumOpen`/
+// `renamingAlbumForId` are app.tsx-owned sliver state (same split the old
+// Chips.jsx/AlbumTools.jsx pair used), threaded through by the orchestrator
+// (sidebar.tsx, replacing toolbar.jsx).
+// CSS split: own classes in Sidebar.module.css; the `.sectionLabel` eyebrow is
+// shared (shared.module.css); `kit-*` classes stay global strings.
+import { armConfirm } from '../kit.ts';
 import type { Album } from '../types.ts';
 import { InlineInput } from './InlineInput.tsx';
+
 import shared from './shared.module.css';
 import styles from './Sidebar.module.css';
 

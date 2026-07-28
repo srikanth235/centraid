@@ -3,8 +3,10 @@
 // rather than a shared in-memory handle. Test-only module — imported by
 // store.test.ts / store-items.test.ts, never shipped.
 
-import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import path from 'node:path';
+
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
+
 import { makeJournalDbProvider, type DatabaseProvider } from '../stores/gateway-db.js';
 import { ConversationStore } from './store.js';
 

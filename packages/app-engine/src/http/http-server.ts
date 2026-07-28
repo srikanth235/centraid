@@ -1,11 +1,10 @@
-import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import crypto from 'node:crypto';
+import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import { AddressInfo } from 'node:net';
-import { timingSafeEqual } from './security.js';
-import { makeConversationRouteHandler } from './conversation-routes.js';
-import { makeUserStoreRouteHandler } from '../stores/prefs-store.js';
+
 import type { Runtime } from '../runtime.js';
-import { GATEWAY_SHUTDOWN_GRACE_MS, tuneGatewayHttpServer } from './server-tuning.js';
+import { makeUserStoreRouteHandler } from '../stores/prefs-store.js';
+import { makeConversationRouteHandler } from './conversation-routes.js';
 import { COMPANION_GRANTS_HEADER } from './internal-headers.js';
 import {
   decideCors,
@@ -13,6 +12,8 @@ import {
   hostnameFromHostHeader,
   isAllowedHostHeader,
 } from './request-boundary.js';
+import { timingSafeEqual } from './security.js';
+import { GATEWAY_SHUTDOWN_GRACE_MS, tuneGatewayHttpServer } from './server-tuning.js';
 
 export interface RuntimeHttpServerOptions {
   runtime: Runtime;
@@ -278,7 +279,12 @@ export async function startRuntimeHttpServer(
       res.statusCode = 400;
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
       res.setHeader('Connection', 'close');
-      res.end(JSON.stringify({ error: 'invalid_host', message: 'Host header is not allowed.' }));
+      res.end(
+        JSON.stringify({
+          error: 'invalid_host',
+          message: 'Host header is not allowed.',
+        }),
+      );
       return;
     }
 
@@ -321,7 +327,12 @@ export async function startRuntimeHttpServer(
     if (!isPublic && !authz) {
       res.statusCode = 401;
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
-      res.end(JSON.stringify({ error: 'unauthorized', message: 'Invalid bearer token.' }));
+      res.end(
+        JSON.stringify({
+          error: 'unauthorized',
+          message: 'Invalid bearer token.',
+        }),
+      );
       return;
     }
     // Stamped on public paths too: a handshake route stays reachable while
@@ -338,10 +349,13 @@ export async function startRuntimeHttpServer(
       const handled = await userStoreHandler(req, res);
       if (handled) return;
     }
-    for (const handler of opts.extraHandlers ?? []) {
-      const handled = await handler(req, res);
-      if (handled) return;
-    }
+    const tryExtraHandler = async (index: number): Promise<boolean> => {
+      const handler = opts.extraHandlers?.[index];
+      if (!handler) return false;
+      if (await handler(req, res)) return true;
+      return tryExtraHandler(index + 1);
+    };
+    if (await tryExtraHandler(0)) return;
     await opts.runtime.handle(req, res);
   }
 

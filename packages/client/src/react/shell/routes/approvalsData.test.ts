@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import type {
   OutboxGrant,
   OutboxItem,
@@ -98,7 +99,9 @@ describe(buildOutboxRow, () => {
 
   it('joins a list of recipients — the real gmail-send template stages `to` as an array', () => {
     const row = buildOutboxRow(
-      outboxItem({ artifact: { to: ['a@x.com', 'b@x.com'], subject: 'Hi', body: 'Hey' } }),
+      outboxItem({
+        artifact: { to: ['a@x.com', 'b@x.com'], subject: 'Hi', body: 'Hey' },
+      }),
     );
     expect(row.recipient).toBe('a@x.com, b@x.com');
   });

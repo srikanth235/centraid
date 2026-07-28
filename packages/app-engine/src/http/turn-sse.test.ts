@@ -3,11 +3,13 @@
  * Pure attachment parsing / lock serialization — no live HTTP or runner.
  */
 
-import { describe, expect, it, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
-import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import path from 'node:path';
+
 import { tempDir } from '@centraid/test-kit/temp-dir';
+import { describe, expect, it, vi } from 'vitest';
+
 import { ConversationHistoryStore } from '../conversation/history.js';
 import type { ConversationRunner, TurnResumePlan } from '../conversation/runner.js';
 import { makeJournalDbProvider } from '../stores/gateway-db.js';
@@ -21,14 +23,14 @@ import {
 
 const HASH = 'ab'.repeat(32);
 
-describe('parseTurnAttachmentRefs', () => {
+describe(parseTurnAttachmentRefs, () => {
   it('returns [] for non-arrays and drops malformed entries', () => {
-    expect(parseTurnAttachmentRefs(undefined)).toEqual([]);
-    expect(parseTurnAttachmentRefs(null)).toEqual([]);
-    expect(parseTurnAttachmentRefs('x')).toEqual([]);
-    expect(parseTurnAttachmentRefs([{ hash: 'short', mime: 'image/png' }])).toEqual([]);
-    expect(parseTurnAttachmentRefs([{ hash: HASH }])).toEqual([]); // missing mime
-    expect(parseTurnAttachmentRefs([null, 1, {}])).toEqual([]);
+    expect(parseTurnAttachmentRefs(undefined)).toStrictEqual([]);
+    expect(parseTurnAttachmentRefs(null)).toStrictEqual([]);
+    expect(parseTurnAttachmentRefs('x')).toStrictEqual([]);
+    expect(parseTurnAttachmentRefs([{ hash: 'short', mime: 'image/png' }])).toStrictEqual([]);
+    expect(parseTurnAttachmentRefs([{ hash: HASH }])).toStrictEqual([]); // missing mime
+    expect(parseTurnAttachmentRefs([null, 1, {}])).toStrictEqual([]);
   });
 
   it('keeps only 64-hex hash + mime (filename/size optional passthrough shape)', () => {
@@ -37,17 +39,19 @@ describe('parseTurnAttachmentRefs', () => {
       { hash: 'cd'.repeat(32), mime: 'text/plain' },
       { hash: HASH.toUpperCase(), mime: 'image/png' }, // uppercase rejected
     ]);
-    expect(refs).toEqual([
+    expect(refs).toStrictEqual([
       { hash: HASH, mime: 'image/png', filename: 'a.png', sizeBytes: 12 },
       { hash: 'cd'.repeat(32), mime: 'text/plain' },
     ]);
   });
 });
 
-describe('resolveTurnAttachments', () => {
+describe(resolveTurnAttachments, () => {
   it('returns [] when store missing or refs empty', () => {
-    expect(resolveTurnAttachments(undefined, 'app', [{ hash: HASH, mime: 'x' }])).toEqual([]);
-    expect(resolveTurnAttachments({ blobPathFor: () => '/never' } as never, 'app', [])).toEqual([]);
+    expect(resolveTurnAttachments(undefined, 'app', [{ hash: HASH, mime: 'x' }])).toStrictEqual([]);
+    expect(
+      resolveTurnAttachments({ blobPathFor: () => '/never' } as never, 'app', []),
+    ).toStrictEqual([]);
   });
 
   it('maps only real, size-matched CAS refs through conversationStore.blobPathFor', async () => {
@@ -63,16 +67,18 @@ describe('resolveTurnAttachments', () => {
       { hash: 'ef'.repeat(32), mime: 'text/plain', sizeBytes: 1 },
       { hash: HASH, mime: 'image/png', filename: 'wrong.png', sizeBytes: 99 },
     ];
-    expect(validateTurnAttachmentRefs(store as never, 'notes', refs)).toEqual(refs.slice(0, 2));
+    expect(validateTurnAttachmentRefs(store as never, 'notes', refs)).toStrictEqual(
+      refs.slice(0, 2),
+    );
     const out = resolveTurnAttachments(store as never, 'notes', refs);
-    expect(out).toEqual([
+    expect(out).toStrictEqual([
       { path: path.join(dir, HASH), mime: 'image/png', filename: 'p.png' },
       { path: path.join(dir, 'cd'.repeat(32)), mime: 'text/plain' },
     ]);
   });
 });
 
-describe('withConversationLock', () => {
+describe(withConversationLock, () => {
   it('serializes work on the same (appId, conversationId) key', async () => {
     const locks = new Map<string, Promise<void>>();
     const order: number[] = [];
@@ -93,10 +99,10 @@ describe('withConversationLock', () => {
     });
     // Same conversation — p2 must wait until p1 finishes.
     await Promise.resolve();
-    expect(order).toEqual([1]);
+    expect(order).toStrictEqual([1]);
     releaseFirst();
-    await expect(Promise.all([p1, p2])).resolves.toEqual(['a', 'b']);
-    expect(order).toEqual([1, 2, 3]);
+    await expect(Promise.all([p1, p2])).resolves.toStrictEqual(['a', 'b']);
+    expect(order).toStrictEqual([1, 2, 3]);
     // Lock entry is cleared once both settle.
     expect(locks.size).toBe(0);
   });
@@ -119,9 +125,9 @@ describe('withConversationLock', () => {
       return 2;
     });
     await Promise.resolve();
-    expect(started.sort()).toEqual(['a', 'b']);
+    expect(started.sort()).toStrictEqual(['a', 'b']);
     releaseA();
-    await expect(Promise.all([a, b])).resolves.toEqual([1, 2]);
+    await expect(Promise.all([a, b])).resolves.toStrictEqual([1, 2]);
   });
 });
 
@@ -140,8 +146,8 @@ function harness(): { req: IncomingMessage; res: ServerResponse } {
   } as unknown as IncomingMessage;
   const res = {
     writableEnded: false,
-    writeHead: vi.fn(),
-    write: vi.fn(() => true),
+    writeHead: vi.fn<ServerResponse['writeHead']>(),
+    write: vi.fn<ServerResponse['write']>(() => true),
     end(this: { writableEnded: boolean }) {
       this.writableEnded = true;
       return this;
@@ -326,7 +332,11 @@ describe('driveTurnOverSse recovery hydration', () => {
       async run(input) {
         input.resumeForKind?.('codex');
         input.onEvent({ type: 'error', message: 'model overloaded' });
-        return { adapterKind: 'codex', hydrated: true, hydrationKind: 'recovery' };
+        return {
+          adapterKind: 'codex',
+          hydrated: true,
+          hydrationKind: 'recovery',
+        };
       },
     };
     await driveTurnOverSse({
@@ -373,7 +383,11 @@ describe('driveTurnOverSse recovery hydration', () => {
 
     const runner: ConversationRunner = {
       async run(input) {
-        input.onEvent({ type: 'tool.start', toolCallId: 't1', toolName: 'write' });
+        input.onEvent({
+          type: 'tool.start',
+          toolCallId: 't1',
+          toolName: 'write',
+        });
         input.onEvent({
           type: 'tool.result',
           toolCallId: 't1',

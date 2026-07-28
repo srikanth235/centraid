@@ -9,11 +9,17 @@
 // canonical kit copy (default class names).
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+
 import { describe, expect, it, vi } from 'vitest';
 
 const PKG = path.resolve(import.meta.dirname, '..');
 const url = pathToFileURL(path.resolve(PKG, 'kit/assistant-rich.js')).href;
 const { richAnswerHtml, hydrateRefs, wireCodeCopy } = await import(url);
+
+type ClipboardWriteTestSeam = (text: string) => Promise<void>;
+type ResolveRefsTestSeam = (
+  refs: Array<{ type: string; id: string }>,
+) => Promise<Array<{ status: 'live'; title: string; subtitle?: string } | { status: 'missing' }>>;
 
 describe('richAnswerHtml', () => {
   it('renders prose paragraphs with inline formatting', () => {
@@ -27,7 +33,7 @@ describe('richAnswerHtml', () => {
     const html = richAnswerHtml('# Title\n- one\n- two');
     expect(html).toContain('asstH');
     expect(html).toContain('asstUl');
-    expect(html.match(/<li>/g)?.length).toBe(2);
+    expect(html.match(/<li>/gu)?.length).toBe(2);
   });
 
   it('renders a ref chip for an entity reference', () => {
@@ -39,7 +45,11 @@ describe('richAnswerHtml', () => {
   });
 
   it('renders a typed table block', () => {
-    const spec = JSON.stringify({ columns: ['A', 'B'], rows: [[1, 2]], caption: 'Cap' });
+    const spec = JSON.stringify({
+      columns: ['A', 'B'],
+      rows: [[1, 2]],
+      caption: 'Cap',
+    });
     const html = richAnswerHtml('Before\n```block:table\n' + spec + '\n```\nAfter');
     expect(html).toContain('asstTable');
     expect(html).toContain('<th>A</th>');
@@ -53,7 +63,11 @@ describe('richAnswerHtml', () => {
     expect(stat).toContain('asstStatValue');
     const chart = richAnswerHtml(
       '```block:chart\n' +
-        JSON.stringify({ type: 'bar', x: ['a', 'b'], series: [{ values: [1, 2] }] }) +
+        JSON.stringify({
+          type: 'bar',
+          x: ['a', 'b'],
+          series: [{ values: [1, 2] }],
+        }) +
         '\n```',
     );
     expect(chart).toContain('asstChart');
@@ -67,7 +81,10 @@ describe('richAnswerHtml', () => {
   });
 
   it('honors an injected class map (how the React shell passes its CSS module)', () => {
-    const html = richAnswerHtml('**bold**', { asstRich: 'x-rich', asstP: 'x-p' });
+    const html = richAnswerHtml('**bold**', {
+      asstRich: 'x-rich',
+      asstP: 'x-p',
+    });
     expect(html).toContain('x-rich');
     expect(html).toContain('x-p');
     expect(html).not.toContain('asstRich');
@@ -134,9 +151,12 @@ describe('richAnswerHtml', () => {
 
 describe('wireCodeCopy', () => {
   it('copies the code block text to the clipboard on click (#420)', async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
+    const writeText = vi.fn<ClipboardWriteTestSeam>().mockResolvedValue(undefined);
     // jsdom has no clipboard by default — inject a minimal stub.
-    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    });
     const host = document.createElement('div');
     host.innerHTML = richAnswerHtml('```\nSELECT 1;\n```');
     wireCodeCopy(host);
@@ -148,8 +168,11 @@ describe('wireCodeCopy', () => {
   });
 
   it('is idempotent — a second wire does not double-bind', () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    const writeText = vi.fn<ClipboardWriteTestSeam>().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    });
     const host = document.createElement('div');
     host.innerHTML = richAnswerHtml('```\nx\n```');
     wireCodeCopy(host);
@@ -164,7 +187,7 @@ describe('hydrateRefs', () => {
     const host = document.createElement('div');
     host.innerHTML = richAnswerHtml('See @[Placeholder](ref:home.asset_item/abc123).');
     const resolveRefs = vi
-      .fn()
+      .fn<ResolveRefsTestSeam>()
       .mockResolvedValue([{ status: 'live', title: 'Groceries', subtitle: 'Home' }]);
     hydrateRefs(host, { resolveRefs });
     await Promise.resolve();
@@ -178,7 +201,9 @@ describe('hydrateRefs', () => {
   it('marks a missing ref rather than silently leaving it', async () => {
     const host = document.createElement('div');
     host.innerHTML = richAnswerHtml('@[X](ref:home.asset_item/gone).');
-    hydrateRefs(host, { resolveRefs: vi.fn().mockResolvedValue([{ status: 'missing' }]) });
+    hydrateRefs(host, {
+      resolveRefs: vi.fn<ResolveRefsTestSeam>().mockResolvedValue([{ status: 'missing' }]),
+    });
     await Promise.resolve();
     await Promise.resolve();
     expect(host.querySelector('.asstRef')?.dataset.state).toBe('missing');

@@ -1,8 +1,10 @@
 import { type JSX, useState } from 'react';
+
 import { describeCron } from '../../../../cron.js';
-import styles from './BuilderAutomationPane.module.css';
-import buttonCss from '../../../ui/Button.module.css';
 import { cx } from '../../../ui/cx.js';
+
+import buttonCss from '../../../ui/Button.module.css';
+import styles from './BuilderAutomationPane.module.css';
 
 // Re-exported so this module's existing importers (BuilderAutomationPane,
 // BuilderAutomationConfigView, this file's own tests) keep working — the
@@ -42,7 +44,12 @@ export type EditableTrigger =
   | { kind: 'cron'; expr: string; tz?: string }
   | { kind: 'webhook'; pending: true }
   | { kind: 'data'; entities: string[]; every?: string }
-  | { kind: 'condition'; entity: string; where?: ConditionWhereClauseLike[]; every?: string };
+  | {
+      kind: 'condition';
+      entity: string;
+      where?: ConditionWhereClauseLike[];
+      every?: string;
+    };
 
 // Mirrors packages/automation/src/manifest/manifest.ts `CONDITION_OPS` — kept
 // in sync by hand since the renderer bundle doesn't pull in the automation
@@ -102,7 +109,10 @@ function parseWhereInput(text: string): { where?: ConditionWhereClauseLike[] } |
     };
   }
   if (!Array.isArray(parsed)) {
-    return { field: 'where', message: 'must be a JSON array of {column, op, value?} clauses' };
+    return {
+      field: 'where',
+      message: 'must be a JSON array of {column, op, value?} clauses',
+    };
   }
   const clauses: ConditionWhereClauseLike[] = [];
   for (let i = 0; i < parsed.length; i++) {
@@ -112,10 +122,16 @@ function parseWhereInput(text: string): { where?: ConditionWhereClauseLike[] } |
     }
     const c = raw as Record<string, unknown>;
     if (typeof c.column !== 'string' || !c.column) {
-      return { field: 'where', message: `[${i}].column must be a non-empty string` };
+      return {
+        field: 'where',
+        message: `[${i}].column must be a non-empty string`,
+      };
     }
     if (typeof c.op !== 'string' || !(CONDITION_OPS as readonly string[]).includes(c.op)) {
-      return { field: 'where', message: `[${i}].op must be one of ${CONDITION_OPS.join(', ')}` };
+      return {
+        field: 'where',
+        message: `[${i}].op must be one of ${CONDITION_OPS.join(', ')}`,
+      };
     }
     clauses.push({
       column: c.column,
@@ -203,7 +219,10 @@ export default function TriggerEditor(props: TriggerEditorProps): JSX.Element {
     if (kind === 'data') {
       const entities = parseEntities(entitiesText);
       if (entities.length === 0) {
-        setFieldError({ field: 'entities', message: 'list at least one <schema>.<table> entity.' });
+        setFieldError({
+          field: 'entities',
+          message: 'list at least one <schema>.<table> entity.',
+        });
         return;
       }
       const bad = entities.find((e) => !isValidEntityName(e));
@@ -223,10 +242,17 @@ export default function TriggerEditor(props: TriggerEditorProps): JSX.Element {
         return;
       }
       if (every.trim() && !isValidCronExpr(every)) {
-        setFieldError({ field: 'every', message: 'must be a 5-field cron expression.' });
+        setFieldError({
+          field: 'every',
+          message: 'must be a 5-field cron expression.',
+        });
         return;
       }
-      onSave({ kind: 'data', entities, ...(every.trim() ? { every: every.trim() } : {}) });
+      onSave({
+        kind: 'data',
+        entities,
+        ...(every.trim() ? { every: every.trim() } : {}),
+      });
       return;
     }
     // condition
@@ -243,7 +269,10 @@ export default function TriggerEditor(props: TriggerEditorProps): JSX.Element {
       return;
     }
     if (every.trim() && !isValidCronExpr(every)) {
-      setFieldError({ field: 'every', message: 'must be a 5-field cron expression.' });
+      setFieldError({
+        field: 'every',
+        message: 'must be a 5-field cron expression.',
+      });
       return;
     }
     onSave({

@@ -1,9 +1,11 @@
 import { type JSX } from 'react';
+
 import type { BrowseColumn, BrowseColumnsResult } from '../../gateway-client.js';
-import Icon from '../ui/Icon.js';
 import { cx } from '../ui/cx.js';
-import styles from './AtlasBrowseTab.module.css';
+import Icon from '../ui/Icon.js';
 import { cellText, isSealedValue, rowIdOf } from './atlasBrowseData.js';
+
+import styles from './AtlasBrowseTab.module.css';
 
 // The machinery lock bar and the keyset-paginated grid (issue #441 B3), split
 // out of AtlasBrowseTab. Machinery bands are read-only until an explicit unlock;

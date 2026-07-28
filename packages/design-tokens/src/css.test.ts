@@ -9,6 +9,7 @@
  * literal bytes, so a new token or a re-ordered block does not fail the suite.
  */
 import { describe, expect, test } from 'vitest';
+
 import { toCss } from './css.js';
 import { densities } from './density.js';
 import { palette } from './palette.js';
@@ -48,8 +49,8 @@ describe('css', () => {
     // its digit attached, `bodyStrong` gains a hyphen. Both spellings are load
     // bearing for `font: var(--t-...)` call sites.
     expect(root).toContain('--t-body-strong:');
-    expect(root).toMatch(/--t-display-?1:/);
-    expect(root).not.toMatch(/--t-[a-z-]*[A-Z]/);
+    expect(root).toMatch(/--t-display-?1:/u);
+    expect(root).not.toMatch(/--t-[a-z-]*[A-Z]/u);
   });
 
   test('each registered theme and density gets its own override block', () => {
@@ -66,7 +67,7 @@ describe('css', () => {
     // Hue and saturation go to zero; every surface must still be derived from
     // --bg-l so the lightness slider keeps driving all four.
     for (const prop of ['--bg', '--bg-app', '--bg-elev', '--bg-sunken']) {
-      expect(off).toMatch(new RegExp(`${prop}: hsl\\(0 0%`));
+      expect(off).toMatch(new RegExp(`${prop}: hsl\\(0 0%`, 'u'));
     }
     expect(off).toContain('var(--bg-l)');
     // The device-wall composite references --bg-wall, so redefining it here is

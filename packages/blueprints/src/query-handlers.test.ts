@@ -10,11 +10,26 @@
 // agenda bounding recurring expansion to the visible range.
 import { describe, expect, it, vi } from 'vitest';
 
+type VaultReadTestSeam = (input: {
+  entity?: string;
+  filter?: Record<string, unknown>;
+}) => Promise<{ rows: unknown[] }>;
+type VaultRevealTestSeam = (input: {
+  columns?: string[];
+  context?: { kind: string; origin?: string };
+}) => Promise<{ values: Record<string, unknown>; receiptId: string }>;
+type VaultInvokeTestSeam = (input: {
+  command: string;
+  input?: unknown;
+}) => Promise<{ status: string; output: unknown }>;
+
 /** A mock ctx.vault that returns fixture rows keyed by entity name. */
 function ctxOf(rowsByEntity: Record<string, unknown[]>) {
   return {
     vault: {
-      read: async ({ entity }: { entity: string }) => ({ rows: rowsByEntity[entity] ?? [] }),
+      read: async ({ entity }: { entity: string }) => ({
+        rows: rowsByEntity[entity] ?? [],
+      }),
       resolve: async () => ({ cards: [] }),
       invoke: async () => ({ status: 'executed', output: { items: [] } }),
       search: async () => ({ rows: rowsByEntity.__search__ ?? [] }),
@@ -67,17 +82,17 @@ describe('Locker Companion queries (#462)', () => {
 
   it('reveals password with page context and asks only for a TOTP derivative', async () => {
     const { default: fill } = await importQuery('../apps/locker/queries/autofill-item.ts');
-    const reveal = vi.fn().mockResolvedValue({
+    const reveal = vi.fn<VaultRevealTestSeam>().mockResolvedValue({
       values: { password: 'live-password' },
       receiptId: 'receipt-fill',
     });
-    const invoke = vi.fn().mockResolvedValue({
+    const invoke = vi.fn<VaultInvokeTestSeam>().mockResolvedValue({
       status: 'executed',
       output: { code: '123456', remaining: 12 },
     });
     const ctx = {
       vault: {
-        read: vi.fn().mockResolvedValue({
+        read: vi.fn<VaultReadTestSeam>().mockResolvedValue({
           rows: [
             {
               item_id: 'login-1',
@@ -110,17 +125,20 @@ describe('Locker Companion queries (#462)', () => {
       }),
     );
     expect(invoke).toHaveBeenCalledWith(
-      expect.objectContaining({ command: 'locker.totp_code', input: { item_id: 'login-1' } }),
+      expect.objectContaining({
+        command: 'locker.totp_code',
+        input: { item_id: 'login-1' },
+      }),
     );
     expect(JSON.stringify(result)).not.toContain('otp_seed');
   });
 
   it('refuses reveal when page origin does not match the stored login URL', async () => {
     const { default: fill } = await importQuery('../apps/locker/queries/autofill-item.ts');
-    const reveal = vi.fn();
+    const reveal = vi.fn<VaultRevealTestSeam>();
     const ctx = {
       vault: {
-        read: vi.fn().mockResolvedValue({
+        read: vi.fn<VaultReadTestSeam>().mockResolvedValue({
           rows: [
             {
               item_id: 'login-1',
@@ -132,7 +150,7 @@ describe('Locker Companion queries (#462)', () => {
           ],
         }),
         reveal,
-        invoke: vi.fn(),
+        invoke: vi.fn<VaultInvokeTestSeam>(),
       },
     };
     const result = await fill({
@@ -140,16 +158,16 @@ describe('Locker Companion queries (#462)', () => {
       ctx,
     });
     expect(result.fill).toBeNull();
-    expect(result.reason).toMatch(/does not match/i);
+    expect(result.reason).toMatch(/does not match/iu);
     expect(reveal).not.toHaveBeenCalled();
   });
 
   it('refuses forged evil 127 hostnames that are not true loopback', async () => {
     const { default: fill } = await importQuery('../apps/locker/queries/autofill-item.ts');
-    const reveal = vi.fn();
+    const reveal = vi.fn<VaultRevealTestSeam>();
     const ctx = {
       vault: {
-        read: vi.fn().mockResolvedValue({
+        read: vi.fn<VaultReadTestSeam>().mockResolvedValue({
           rows: [
             {
               item_id: 'login-1',
@@ -161,7 +179,7 @@ describe('Locker Companion queries (#462)', () => {
           ],
         }),
         reveal,
-        invoke: vi.fn(),
+        invoke: vi.fn<VaultInvokeTestSeam>(),
       },
     };
     // pageOrigin requires origin === raw; evil hostname fails match even if stored is loopback.
@@ -189,7 +207,10 @@ describe('notes library query (issue #404)', () => {
 
   it('ships a bounded preview + checklist tally, never the full body', async () => {
     const { default: library } = await importQuery('../apps/notes/queries/library.ts');
-    const ctx = ctxOf({ 'knowledge.note': [note], 'core.content_item': [content] });
+    const ctx = ctxOf({
+      'knowledge.note': [note],
+      'core.content_item': [content],
+    });
     const res = await library({ input: { limit: 50 }, query: {}, ctx });
     expect(res.notes).toHaveLength(1);
     const row = res.notes[0];
@@ -207,8 +228,15 @@ describe('notes library query (issue #404)', () => {
 
   it('note query decodes and returns the full canonical body on open', async () => {
     const { default: noteQuery } = await importQuery('../apps/notes/queries/note.ts');
-    const ctx = ctxOf({ 'knowledge.note': [note], 'core.content_item': [content] });
-    const res = await noteQuery({ input: { note_id: 'n1' }, query: { note_id: 'n1' }, ctx });
+    const ctx = ctxOf({
+      'knowledge.note': [note],
+      'core.content_item': [content],
+    });
+    const res = await noteQuery({
+      input: { note_id: 'n1' },
+      query: { note_id: 'n1' },
+      ctx,
+    });
     expect(res.note_id).toBe('n1');
     expect(res.body).toBe(body);
   });
@@ -234,7 +262,10 @@ describe('agenda upcoming query — range-bounded recurrence (issue #404)', () =
   }
 
   it('expands a daily series only within an explicit [from, to] window (+ buffer)', async () => {
-    const res = await run({ from: '2026-06-01T00:00:00.000Z', to: '2026-06-08T00:00:00.000Z' });
+    const res = await run({
+      from: '2026-06-01T00:00:00.000Z',
+      to: '2026-06-08T00:00:00.000Z',
+    });
     // A one-week window (plus the ~31d span buffer back of `from`) — a couple
     // dozen instances, NOT a year's worth.
     expect(res.events.length).toBeGreaterThan(30);
@@ -256,8 +287,14 @@ describe('agenda upcoming query — range-bounded recurrence (issue #404)', () =
   });
 
   it('is idempotent across repeated reads of the same range (memoized expansion)', async () => {
-    const a = await run({ from: '2026-06-01T00:00:00.000Z', to: '2026-06-08T00:00:00.000Z' });
-    const b = await run({ from: '2026-06-01T00:00:00.000Z', to: '2026-06-08T00:00:00.000Z' });
+    const a = await run({
+      from: '2026-06-01T00:00:00.000Z',
+      to: '2026-06-08T00:00:00.000Z',
+    });
+    const b = await run({
+      from: '2026-06-01T00:00:00.000Z',
+      to: '2026-06-08T00:00:00.000Z',
+    });
     expect(b.events.map((e) => e.instance_key)).toStrictEqual(a.events.map((e) => e.instance_key));
   });
 });
@@ -315,7 +352,11 @@ describe('replica-local search projections (issue #406)', () => {
       'core.content_item': [content],
       'media.media_asset': [asset],
     });
-    const result = await search({ input: { term: 'moon camp' }, query: {}, ctx });
+    const result = await search({
+      input: { term: 'moon camp' },
+      query: {},
+      ctx,
+    });
 
     expect(result.vaultDenied).toBeUndefined();
     expect(result.assets).toHaveLength(1);

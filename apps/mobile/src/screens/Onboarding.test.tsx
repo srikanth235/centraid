@@ -3,26 +3,29 @@
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import Onboarding from './Onboarding';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const mocks = vi.hoisted(() => ({
-  initializeMobileVault: vi.fn(),
-  notificationAsync: vi.fn(),
-  onDone: vi.fn(),
-  pair: vi.fn(),
-  pickRecoveryKit: vi.fn(),
-  prepareMobileFounding: vi.fn(),
-  rememberInitializedVault: vi.fn(),
-  rememberRestoredVaults: vi.fn(),
-  requestPermission: vi.fn(),
-  restoreMobileVaults: vi.fn(),
-  setOnboarded: vi.fn(),
-  setProfileColor: vi.fn(),
-  setProfileName: vi.fn(),
-  shareRecoveryKit: vi.fn(),
-  verifyMobileFoundingKit: vi.fn(),
+  initializeMobileVault: vi.fn<typeof import('../lib/vault-founding').initializeMobileVault>(),
+  notificationAsync: vi.fn<typeof import('expo-haptics').notificationAsync>(),
+  onDone: vi.fn<() => void>(),
+  pair: vi.fn<typeof import('../lib/phone-link').pair>(),
+  pickRecoveryKit: vi.fn<typeof import('../lib/recovery-kit-files').pickRecoveryKit>(),
+  prepareMobileFounding: vi.fn<typeof import('../lib/vault-founding').prepareMobileFounding>(),
+  rememberInitializedVault:
+    vi.fn<typeof import('../lib/vault-founding').rememberInitializedVault>(),
+  rememberRestoredVaults: vi.fn<typeof import('../lib/vault-founding').rememberRestoredVaults>(),
+  requestPermission:
+    vi.fn<NonNullable<ReturnType<typeof import('expo-camera').useCameraPermissions>[1]>>(),
+  restoreMobileVaults: vi.fn<typeof import('../lib/vault-founding').restoreMobileVaults>(),
+  setOnboarded: vi.fn<typeof import('../lib/profile').setOnboarded>(),
+  setProfileColor: vi.fn<typeof import('../lib/profile').setProfileColor>(),
+  setProfileName: vi.fn<typeof import('../lib/profile').setProfileName>(),
+  shareRecoveryKit: vi.fn<typeof import('../lib/recovery-kit-files').shareRecoveryKit>(),
+  verifyMobileFoundingKit: vi.fn<typeof import('../lib/vault-founding').verifyMobileFoundingKit>(),
 }));
 
 vi.mock(import('react-native'), async () => {
@@ -40,7 +43,9 @@ vi.mock(import('react-native'), async () => {
     // impractical to replicate in a DOM stand-in — this whole mock renders
     // plain DOM elements instead, so each export below is asserted to its
     // real type rather than the module being widened.
-    Platform: { OS: 'ios' } as unknown as typeof import('react-native').Platform,
+    Platform: {
+      OS: 'ios',
+    } as unknown as typeof import('react-native').Platform,
     Pressable: (({
       accessibilityRole,
       accessibilityState,
@@ -66,14 +71,18 @@ vi.mock(import('react-native'), async () => {
         type: 'button',
       })) as unknown as typeof import('react-native').Pressable,
     ScrollView: (({ children }: { children?: React.ReactNode }) =>
-      element('main', { children })) as unknown as typeof import('react-native').ScrollView,
+      element('main', {
+        children,
+      })) as unknown as typeof import('react-native').ScrollView,
     StyleSheet: {
       absoluteFill: {},
       create: <T,>(styles: T): T => styles,
       hairlineWidth: 1,
     } as unknown as typeof import('react-native').StyleSheet,
     Text: (({ children }: { children?: React.ReactNode }) =>
-      element('span', { children })) as unknown as typeof import('react-native').Text,
+      element('span', {
+        children,
+      })) as unknown as typeof import('react-native').Text,
     TextInput: (({
       autoCapitalize: _autoCapitalize,
       autoCorrect: _autoCorrect,
@@ -96,7 +105,9 @@ vi.mock(import('react-native'), async () => {
         type: !multiline && secureTextEntry ? 'password' : undefined,
       })) as unknown as typeof import('react-native').TextInput,
     View: (({ children }: { children?: React.ReactNode }) =>
-      element('div', { children })) as unknown as typeof import('react-native').View,
+      element('div', {
+        children,
+      })) as unknown as typeof import('react-native').View,
   };
 });
 
@@ -247,23 +258,34 @@ describe('screens/Onboarding', () => {
       fingerprint: 'fingerprint',
       kit: { wrapped: true },
       vault: { name: 'Family', vaultId: 'vault-1' },
+      enrollment: { enrollmentId: 'enrollment-1' },
+      recoveryScope: 'vault-1',
     });
     mocks.notificationAsync.mockResolvedValue(undefined);
-    mocks.pair.mockResolvedValue(undefined);
+    mocks.pair.mockResolvedValue({
+      desktopName: 'Desktop',
+      deviceId: 'device-1',
+    });
     mocks.pickRecoveryKit.mockResolvedValue({ wrapped: true });
     mocks.prepareMobileFounding.mockResolvedValue({
-      endpointId: 'gateway-1',
-      endpointTicket: 'endpoint-ticket',
+      gatewayId: 'gateway-1',
+      endpointHint: 'endpoint-ticket',
       foundingTicket: 'founding-ticket',
+      baseUrl: 'http://127.0.0.1:49152',
     });
     mocks.rememberInitializedVault.mockResolvedValue(undefined);
     mocks.rememberRestoredVaults.mockResolvedValue(undefined);
     mocks.restoreMobileVaults.mockResolvedValue({
+      ok: true,
       enrollments: [],
       reports: [{ vaultId: 'restored-1' }],
     });
     mocks.shareRecoveryKit.mockResolvedValue(undefined);
-    mocks.verifyMobileFoundingKit.mockResolvedValue(undefined);
+    mocks.verifyMobileFoundingKit.mockResolvedValue({
+      ok: true,
+      vaultId: 'vault-1',
+      fingerprint: 'fingerprint',
+    });
     container = document.createElement('div');
     document.body.appendChild(container);
     const handleDone = mocks.onDone;
@@ -305,11 +327,12 @@ describe('screens/Onboarding', () => {
   }
 
   async function flush(times = 4): Promise<void> {
-    for (let i = 0; i < times; i++) {
-      await act(async () => {
-        await Promise.resolve();
-      });
-    }
+    const flushNext = async (index: number): Promise<void> => {
+      if (index >= times) return;
+      await act(async () => {});
+      return flushNext(index + 1);
+    };
+    return flushNext(0);
   }
 
   async function openFoundingChoice(): Promise<void> {
@@ -388,14 +411,17 @@ describe('screens/Onboarding', () => {
       );
       expect(mocks.rememberInitializedVault).toHaveBeenCalledWith(
         {
-          endpointId: 'gateway-1',
-          endpointTicket: 'endpoint-ticket',
+          gatewayId: 'gateway-1',
+          endpointHint: 'endpoint-ticket',
           foundingTicket: 'founding-ticket',
+          baseUrl: 'http://127.0.0.1:49152',
         },
         {
           fingerprint: 'fingerprint',
           kit: { wrapped: true },
           vault: { name: 'Family', vaultId: 'vault-1' },
+          enrollment: { enrollmentId: 'enrollment-1' },
+          recoveryScope: 'vault-1',
         },
       );
       expect(container!.textContent).toContain("You're all set");
@@ -404,7 +430,11 @@ describe('screens/Onboarding', () => {
     it('surfaces a restore failure, retries, and remembers every restored vault', async () => {
       mocks.restoreMobileVaults
         .mockRejectedValueOnce(new Error('provider unavailable'))
-        .mockResolvedValueOnce({ enrollments: [], reports: [{ vaultId: 'restored-1' }] });
+        .mockResolvedValueOnce({
+          ok: true,
+          enrollments: [],
+          reports: [{ vaultId: 'restored-1' }],
+        });
       await openFoundingChoice();
       click(button('Restore vault'));
       expect(container!.textContent).toContain('storage-provider key');
@@ -431,11 +461,13 @@ describe('screens/Onboarding', () => {
       );
       expect(mocks.rememberRestoredVaults).toHaveBeenCalledWith(
         {
-          endpointId: 'gateway-1',
-          endpointTicket: 'endpoint-ticket',
+          gatewayId: 'gateway-1',
+          endpointHint: 'endpoint-ticket',
           foundingTicket: 'founding-ticket',
+          baseUrl: 'http://127.0.0.1:49152',
         },
         {
+          ok: true,
           enrollments: [],
           reports: [{ vaultId: 'restored-1' }],
         },

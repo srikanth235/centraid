@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import path from 'node:path';
+
 /**
  * Print the {@link https://docs.expo.dev/versions/latest/sdk/fingerprint/ @expo/fingerprint}
  * hash of this app's *native* build inputs for one platform — nothing else.
@@ -23,7 +25,6 @@
  * to stdout with no trailing newline, suitable for `>> "$GITHUB_OUTPUT"`.
  */
 import { createFingerprintAsync } from '@expo/fingerprint';
-import { resolve } from 'node:path';
 
 const platform = process.argv[2];
 if (platform !== 'ios' && platform !== 'android') {
@@ -34,9 +35,11 @@ if (platform !== 'ios' && platform !== 'android') {
 // scripts/ → apps/mobile. Resolve relative to this file, not cwd: gradle and
 // the monorepo root both invoke Expo tooling from different cwds (see the same
 // note in app.config.ts).
-const projectRoot = resolve(import.meta.dirname, '..');
+const projectRoot = path.resolve(import.meta.dirname, '..');
 
-const fingerprint = await createFingerprintAsync(projectRoot, { platforms: [platform] });
+const fingerprint = await createFingerprintAsync(projectRoot, {
+  platforms: [platform],
+});
 // Guard against a silent empty digest becoming a constant (always-hit) key.
 if (!fingerprint.hash || fingerprint.sources.length === 0) {
   process.stderr.write(

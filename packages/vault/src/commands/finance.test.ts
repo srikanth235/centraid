@@ -1,4 +1,5 @@
 import { assert, beforeEach, describe, expect, test } from 'vitest';
+
 import { bootstrapVault, type BootstrapResult } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { createGateway, Gateway } from '../gateway/gateway.js';
@@ -18,7 +19,11 @@ describe('finance', () => {
     boot = bootstrapVault(db, { ownerName: 'Priya' });
     gw = createGateway(db);
     registerFinanceCommands(gw);
-    owner = { kind: 'device', deviceId: boot.deviceId, deviceKey: boot.deviceKey };
+    owner = {
+      kind: 'device',
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+    };
     const accountId = uuidv7();
     db.vault
       .prepare(
@@ -46,7 +51,10 @@ describe('finance', () => {
     const txn = db.vault
       .prepare('SELECT category_concept_id, amount_minor FROM core_transaction WHERE txn_id = ?')
       .get(txnId);
-    expect(txn).toMatchObject({ category_concept_id: groceries, amount_minor: 420000 });
+    expect(txn).toMatchObject({
+      category_concept_id: groceries,
+      amount_minor: 420000,
+    });
     // Provenance records the reclassification.
     const prov = db.journal
       .prepare(
@@ -63,7 +71,10 @@ describe('finance', () => {
       input: {
         txn_id: txnId,
         splits: [
-          { amount_minor: 300000, category_concept_id: boot.concepts['groceries'] as string },
+          {
+            amount_minor: 300000,
+            category_concept_id: boot.concepts['groceries'] as string,
+          },
           {
             amount_minor: 120000,
             category_concept_id: boot.concepts['gifts'] as string,
@@ -87,7 +98,12 @@ describe('finance', () => {
       command: 'finance.split_txn',
       input: {
         txn_id: txnId,
-        splits: [{ amount_minor: 999, category_concept_id: boot.concepts['groceries'] as string }],
+        splits: [
+          {
+            amount_minor: 999,
+            category_concept_id: boot.concepts['groceries'] as string,
+          },
+        ],
       },
       purpose: 'dpv:ServiceProvision',
     });
@@ -109,7 +125,10 @@ describe('finance', () => {
     const groceries = boot.concepts['groceries'] as string;
     gw.invoke(owner, {
       command: 'finance.split_txn',
-      input: { txn_id: txnId, splits: [{ amount_minor: 420000, category_concept_id: groceries }] },
+      input: {
+        txn_id: txnId,
+        splits: [{ amount_minor: 420000, category_concept_id: groceries }],
+      },
       purpose: 'dpv:ServiceProvision',
     });
     gw.invoke(owner, {
@@ -118,7 +137,10 @@ describe('finance', () => {
         txn_id: txnId,
         splits: [
           { amount_minor: 400000, category_concept_id: groceries },
-          { amount_minor: 20000, category_concept_id: boot.concepts['transport'] as string },
+          {
+            amount_minor: 20000,
+            category_concept_id: boot.concepts['transport'] as string,
+          },
         ],
       },
       purpose: 'dpv:ServiceProvision',

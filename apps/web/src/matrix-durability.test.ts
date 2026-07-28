@@ -2,6 +2,7 @@
  * Matrix cell web.durability (#535): relay refreshes preserve identity.
  */
 import { describe, expect, test } from 'vitest';
+
 import { webGatewayId, type WebConnection } from './web-state.js';
 
 const base: WebConnection = {

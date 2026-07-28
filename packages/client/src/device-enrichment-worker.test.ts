@@ -1,17 +1,24 @@
 import { describe, expect, test, vi } from 'vitest';
+
 import type { DeviceWorkContribution } from './device-enrichment-compute.js';
 import { computeDeviceWorkContributions } from './device-enrichment-compute.js';
 import { runDeviceEnrichmentWorkerOnce, type DeviceWorkerApi } from './device-enrichment-worker.js';
 import type { CentraidGatewayDevice, DeviceEnrichmentLease } from './gateway-client-devices.js';
 
 vi.mock(import('./gateway-client-devices.js'), () => ({
-  finishGatewayDeviceWork: vi.fn(),
-  leaseGatewayDeviceWork: vi.fn(),
-  listGatewayDevices: vi.fn(),
-  readGatewayDeviceWorkSource: vi.fn(),
-  releaseGatewayDeviceWork: vi.fn(),
-  setGatewayDeviceCompute: vi.fn(),
-  stageGatewayDeviceWorkDerivative: vi.fn(),
+  finishGatewayDeviceWork:
+    vi.fn<typeof import('./gateway-client-devices.js').finishGatewayDeviceWork>(),
+  leaseGatewayDeviceWork:
+    vi.fn<typeof import('./gateway-client-devices.js').leaseGatewayDeviceWork>(),
+  listGatewayDevices: vi.fn<typeof import('./gateway-client-devices.js').listGatewayDevices>(),
+  readGatewayDeviceWorkSource:
+    vi.fn<typeof import('./gateway-client-devices.js').readGatewayDeviceWorkSource>(),
+  releaseGatewayDeviceWork:
+    vi.fn<typeof import('./gateway-client-devices.js').releaseGatewayDeviceWork>(),
+  setGatewayDeviceCompute:
+    vi.fn<typeof import('./gateway-client-devices.js').setGatewayDeviceCompute>(),
+  stageGatewayDeviceWorkDerivative:
+    vi.fn<typeof import('./gateway-client-devices.js').stageGatewayDeviceWorkDerivative>(),
 }));
 
 const SHA = 'a'.repeat(64);
@@ -50,7 +57,11 @@ const lease: DeviceEnrichmentLease = {
   entityType: 'core.content_item',
   entityId: 'content-1',
   reason: 'manual',
-  detail: JSON.stringify({ contentId: 'content-1', sha256: SHA, mediaType: 'video/mp4' }),
+  detail: JSON.stringify({
+    contentId: 'content-1',
+    sha256: SHA,
+    mediaType: 'video/mp4',
+  }),
   capability: 'poster',
   contributionVariant: 'poster',
   deviceId: 'http:laptop',
@@ -66,15 +77,20 @@ function workerApi(overrides: Partial<DeviceWorkerApi> = {}): DeviceWorkerApi {
     mediaType: 'image/jpeg',
   };
   return {
-    conditions: vi.fn().mockResolvedValue({ charging: true, unmetered: true }),
-    devices: vi.fn().mockResolvedValue([device()]),
-    advertise: vi.fn().mockResolvedValue(device()),
-    lease: vi.fn().mockResolvedValue(lease),
-    read: vi.fn().mockResolvedValue(new Blob(['video'], { type: 'video/mp4' })),
-    compute: vi.fn().mockResolvedValue([contribution]),
-    stage: vi.fn().mockResolvedValue(undefined),
-    finish: vi.fn().mockResolvedValue(true),
-    release: vi.fn().mockResolvedValue(true),
+    conditions: vi.fn<DeviceWorkerApi['conditions']>().mockResolvedValue({
+      charging: true,
+      unmetered: true,
+    }),
+    devices: vi.fn<DeviceWorkerApi['devices']>().mockResolvedValue([device()]),
+    advertise: vi.fn<DeviceWorkerApi['advertise']>().mockResolvedValue(device()),
+    lease: vi.fn<DeviceWorkerApi['lease']>().mockResolvedValue(lease),
+    read: vi
+      .fn<DeviceWorkerApi['read']>()
+      .mockResolvedValue(new Blob(['video'], { type: 'video/mp4' })),
+    compute: vi.fn<DeviceWorkerApi['compute']>().mockResolvedValue([contribution]),
+    stage: vi.fn<DeviceWorkerApi['stage']>().mockResolvedValue(undefined),
+    finish: vi.fn<DeviceWorkerApi['finish']>().mockResolvedValue(true),
+    release: vi.fn<DeviceWorkerApi['release']>().mockResolvedValue(true),
     ...overrides,
   };
 }
@@ -111,14 +127,18 @@ describe('device-enrichment-worker', () => {
 
   test('battery/network and standing opt-in gates run before a lease', async () => {
     const ineligible = workerApi({
-      conditions: vi.fn().mockResolvedValue({ charging: true, unmetered: false }),
+      conditions: vi
+        .fn<DeviceWorkerApi['conditions']>()
+        .mockResolvedValue({ charging: true, unmetered: false }),
     });
     await expect(runDeviceEnrichmentWorkerOnce(ineligible)).resolves.toStrictEqual({
       status: 'ineligible',
     });
     expect(ineligible.devices).not.toHaveBeenCalled();
 
-    const disabled = workerApi({ devices: vi.fn().mockResolvedValue([device(false)]) });
+    const disabled = workerApi({
+      devices: vi.fn<DeviceWorkerApi['devices']>().mockResolvedValue([device(false)]),
+    });
     await expect(runDeviceEnrichmentWorkerOnce(disabled)).resolves.toStrictEqual({
       status: 'disabled',
     });
@@ -127,7 +147,7 @@ describe('device-enrichment-worker', () => {
 
   test('eligibility loss after compute releases the TTL lease without submitting', async () => {
     const conditions = vi
-      .fn()
+      .fn<DeviceWorkerApi['conditions']>()
       .mockResolvedValueOnce({ charging: true, unmetered: true })
       .mockResolvedValueOnce({ charging: false, unmetered: true });
     const api = workerApi({ conditions });
@@ -143,14 +163,20 @@ describe('device-enrichment-worker', () => {
   test('desktop file-ASR adapter turns an existing media Blob into a transcript contribution', async () => {
     const original = window.CentraidApi;
     window.CentraidApi = {
-      transcribeMedia: vi.fn().mockResolvedValue('adapter-backed starlight transcript'),
+      transcribeMedia: vi
+        .fn<NonNullable<typeof window.CentraidApi.transcribeMedia>>()
+        .mockResolvedValue('adapter-backed starlight transcript'),
     } as unknown as typeof window.CentraidApi;
     const transcriptLease: DeviceEnrichmentLease = {
       ...lease,
       requestId: 'transcript-job',
       capability: 'transcript',
       contributionVariant: 'transcript',
-      detail: JSON.stringify({ contentId: 'content-1', sha256: SHA, mediaType: 'audio/wav' }),
+      detail: JSON.stringify({
+        contentId: 'content-1',
+        sha256: SHA,
+        mediaType: 'audio/wav',
+      }),
     };
     try {
       const contributions = await computeDeviceWorkContributions(
@@ -174,7 +200,9 @@ describe('device-enrichment-worker', () => {
   test('transcript-capable desktop leases, computes, stages, and completes the job', async () => {
     const original = window.CentraidApi;
     window.CentraidApi = {
-      transcribeMedia: vi.fn().mockResolvedValue('worker starlight transcript'),
+      transcribeMedia: vi
+        .fn<NonNullable<typeof window.CentraidApi.transcribeMedia>>()
+        .mockResolvedValue('worker starlight transcript'),
     } as unknown as typeof window.CentraidApi;
     const transcriptDevice = device(true, true);
     const transcriptLease: DeviceEnrichmentLease = {
@@ -182,13 +210,19 @@ describe('device-enrichment-worker', () => {
       requestId: 'transcript-job',
       capability: 'transcript',
       contributionVariant: 'transcript',
-      detail: JSON.stringify({ contentId: 'content-1', sha256: SHA, mediaType: 'audio/wav' }),
+      detail: JSON.stringify({
+        contentId: 'content-1',
+        sha256: SHA,
+        mediaType: 'audio/wav',
+      }),
     };
     const api = workerApi({
-      devices: vi.fn().mockResolvedValue([transcriptDevice]),
-      advertise: vi.fn().mockResolvedValue(transcriptDevice),
-      lease: vi.fn().mockResolvedValue(transcriptLease),
-      read: vi.fn().mockResolvedValue(new Blob(['RIFF-voice'], { type: 'audio/wav' })),
+      devices: vi.fn<DeviceWorkerApi['devices']>().mockResolvedValue([transcriptDevice]),
+      advertise: vi.fn<DeviceWorkerApi['advertise']>().mockResolvedValue(transcriptDevice),
+      lease: vi.fn<DeviceWorkerApi['lease']>().mockResolvedValue(transcriptLease),
+      read: vi
+        .fn<DeviceWorkerApi['read']>()
+        .mockResolvedValue(new Blob(['RIFF-voice'], { type: 'audio/wav' })),
       compute: computeDeviceWorkContributions,
     });
     try {
@@ -197,12 +231,17 @@ describe('device-enrichment-worker', () => {
         requestId: 'transcript-job',
       });
       expect(api.lease).toHaveBeenCalledWith(
-        expect.objectContaining({ capabilities: ['poster', 'pdfText', 'transcript'] }),
+        expect.objectContaining({
+          capabilities: ['poster', 'pdfText', 'transcript'],
+        }),
       );
       expect(api.stage).toHaveBeenCalledWith(
         'vault-1',
         SHA,
-        expect.objectContaining({ variant: 'transcript', mediaType: 'text/plain' }),
+        expect.objectContaining({
+          variant: 'transcript',
+          mediaType: 'text/plain',
+        }),
       );
       expect(api.finish).toHaveBeenCalledWith('vault-1', transcriptLease);
     } finally {

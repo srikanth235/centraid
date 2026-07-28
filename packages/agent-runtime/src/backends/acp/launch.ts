@@ -12,6 +12,7 @@
  */
 
 import type { TurnStreamEvent } from '@centraid/app-engine';
+
 import { agentSpawnEnv } from '../../spawn-env.js';
 import { resolveAdapterEntry } from './adapter-bin.js';
 import type { AcpTurnConfig } from './types.js';

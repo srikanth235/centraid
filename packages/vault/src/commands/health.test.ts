@@ -1,4 +1,5 @@
 import { assert, beforeEach, describe, expect, test } from 'vitest';
+
 import { bootstrapVault, createGrant, enrollApp, type BootstrapResult } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { createGateway, Gateway } from '../gateway/gateway.js';
@@ -17,7 +18,11 @@ describe('health', () => {
     boot = bootstrapVault(db, { ownerName: 'Priya' });
     gw = createGateway(db);
     registerHealthCommands(gw);
-    owner = { kind: 'device', deviceId: boot.deviceId, deviceKey: boot.deviceKey };
+    owner = {
+      kind: 'device',
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+    };
   });
 
   function logVital(value: number, observedAt?: string): string {
@@ -38,7 +43,12 @@ describe('health', () => {
   test('log_vital: the reading IS an observation, plus clinical columns (R02)', () => {
     const outcome = gw.invoke(owner, {
       command: 'health.log_vital',
-      input: { vital_type: 'body_weight', value_num: 62.4, context: 'rest', modality: 'sensed' },
+      input: {
+        vital_type: 'body_weight',
+        value_num: 62.4,
+        context: 'rest',
+        modality: 'sensed',
+      },
       purpose: 'dpv:HealthMonitoring',
     });
     expect(outcome.status).toBe('executed');
@@ -90,7 +100,10 @@ describe('health', () => {
     });
     expect(outcome.status).toBe('executed');
     if (outcome.status !== 'executed') return;
-    expect(outcome.output).toMatchObject({ observation_id: typoId, status: 'entered-in-error' });
+    expect(outcome.output).toMatchObject({
+      observation_id: typoId,
+      status: 'entered-in-error',
+    });
     const statusOf = db.vault.prepare(
       'SELECT status FROM core_observation WHERE observation_id = ?',
     );
@@ -113,7 +126,10 @@ describe('health', () => {
     expect(first.status).toBe('executed');
     const again = gw.invoke(owner, {
       command: 'health.void_vital',
-      input: { observation_id: observationId, reason: 'voiding twice by mistake' },
+      input: {
+        observation_id: observationId,
+        reason: 'voiding twice by mistake',
+      },
       purpose: 'dpv:HealthMonitoring',
     });
     expect(again.status).toBe('failed');
@@ -161,7 +177,11 @@ describe('health', () => {
     const workout = db.vault
       .prepare('SELECT activity_id, distance_m, avg_hr FROM health_workout WHERE workout_id = ?')
       .get(workout_id);
-    expect(workout).toMatchObject({ activity_id, distance_m: 8000, avg_hr: 152 });
+    expect(workout).toMatchObject({
+      activity_id,
+      distance_m: 8000,
+      avg_hr: 152,
+    });
   });
 
   function seedCourse(): string {
@@ -179,16 +199,26 @@ describe('health', () => {
     const courseId = seedCourse();
     const outcome = gw.invoke(owner, {
       command: 'health.adjust_course',
-      input: { course_id: courseId, action: 'adjust', dose_text: '50 mg twice daily' },
+      input: {
+        course_id: courseId,
+        action: 'adjust',
+        dose_text: '50 mg twice daily',
+      },
       purpose: 'dpv:HealthMonitoring',
     });
     expect(outcome.status).toBe('executed');
     if (outcome.status !== 'executed') return;
-    expect(outcome.output).toMatchObject({ state: 'active', reminders_stale: true });
+    expect(outcome.output).toMatchObject({
+      state: 'active',
+      reminders_stale: true,
+    });
     const course = db.vault
       .prepare('SELECT dose_text, ended_at FROM health_medication_course WHERE course_id = ?')
       .get(courseId);
-    expect(course).toMatchObject({ dose_text: '50 mg twice daily', ended_at: null });
+    expect(course).toMatchObject({
+      dose_text: '50 mg twice daily',
+      ended_at: null,
+    });
     // Boundary held: the health command wrote no events.
     const events = db.vault.prepare('SELECT count(*) AS n FROM core_event').get() as { n: number };
     expect(events.n).toBe(0);
@@ -269,15 +299,22 @@ describe('health', () => {
       grantedByPartyId: boot.ownerPartyId,
       scopes: [{ schema: 'health', verbs: 'read' }], // whole schema — the default
     });
-    const cred: Credential = { kind: 'app', appId: app.appId, signingKey: app.signingKey };
+    const cred: Credential = {
+      kind: 'app',
+      appId: app.appId,
+      signingKey: app.signingKey,
+    };
     // Vitals ride the schema-wide scope…
     expect(
       gw.read(cred, { entity: 'health.vital', purpose: 'dpv:HealthMonitoring' }).rows,
     ).toStrictEqual([]);
     // …conditions do not (§03: highest-sensitivity table).
     expect(() =>
-      gw.read(cred, { entity: 'health.condition', purpose: 'dpv:HealthMonitoring' }),
-    ).toThrow(/deny/);
+      gw.read(cred, {
+        entity: 'health.condition',
+        purpose: 'dpv:HealthMonitoring',
+      }),
+    ).toThrow(/deny/u);
     // The owner explicitly scoping the table is what unlocks it.
     createGrant(db, {
       appId: app.appId,
@@ -292,7 +329,10 @@ describe('health', () => {
     expect(rows).toHaveLength(1);
     // The owner reads their own conditions regardless — minimization clamps grants, not ownership.
     expect(
-      gw.read(owner, { entity: 'health.condition', purpose: 'dpv:HealthMonitoring' }).rows,
+      gw.read(owner, {
+        entity: 'health.condition',
+        purpose: 'dpv:HealthMonitoring',
+      }).rows,
     ).toHaveLength(1);
   });
 });

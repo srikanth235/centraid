@@ -8,9 +8,11 @@
  */
 
 import { readdirSync, readFileSync } from 'node:fs';
-import path from 'node:path';
 import { createRequire } from 'node:module';
+import path from 'node:path';
+
 import { describe, expect, it } from 'vitest';
+
 import { parseManifest } from './manifest.js';
 
 const require = createRequire(import.meta.url);
@@ -63,7 +65,9 @@ describe('bundled automation templates', () => {
     '%s: handler.js loads and exports a pull-connector spec',
     async (id) => {
       const file = path.join(AUTOMATIONS_DIR, id, 'automations', id, 'handler.js');
-      const mod = (await import(`${'file://'}${file}`)) as { default?: unknown };
+      const mod = (await import(`${'file://'}${file}`)) as {
+        default?: unknown;
+      };
       expect(mod.default).toMatchObject({
         protocol: 'centraid.pull/v1',
         principal: expect.any(Function),
@@ -76,7 +80,9 @@ describe('bundled automation templates', () => {
     '%s: handler.js loads and exports a handler function',
     async (id) => {
       const file = path.join(AUTOMATIONS_DIR, id, 'automations', id, 'handler.js');
-      const mod = (await import(`${'file://'}${file}`)) as { default?: unknown };
+      const mod = (await import(`${'file://'}${file}`)) as {
+        default?: unknown;
+      };
       expect(mod.default).toBeTypeOf('function');
     },
   );

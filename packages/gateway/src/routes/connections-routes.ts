@@ -20,13 +20,9 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
+
 import { ROUTES } from '@centraid/protocol';
-import type { RouteHandler } from '../serve/build-gateway.js';
-import type { VaultRegistry } from '../serve/vault-registry.js';
-import type { VaultPlane } from '../serve/vault-plane.js';
-import type { ConnectionBroker } from '../serve/connection-broker.js';
-import { PROVIDER_PRESETS } from './connection-providers.js';
-import { readJson, sendJson } from './route-helpers.js';
+
 import {
   ASSIST_GOOGLE_AUTH_URL,
   ASSIST_GOOGLE_TOKEN_URL,
@@ -35,7 +31,13 @@ import {
   assistScopes,
   type AssistOAuthConfig,
 } from '../serve/assist-oauth.js';
+import type { RouteHandler } from '../serve/build-gateway.js';
+import type { ConnectionBroker } from '../serve/connection-broker.js';
 import { vaultContext } from '../serve/vault-context.js';
+import type { VaultPlane } from '../serve/vault-plane.js';
+import type { VaultRegistry } from '../serve/vault-registry.js';
+import { PROVIDER_PRESETS } from './connection-providers.js';
+import { readJson, sendJson } from './route-helpers.js';
 
 const PREFIX = ROUTES.vaultConnections;
 export const OAUTH_CALLBACK_PATH = ROUTES.vaultOAuthCallback;
@@ -76,11 +78,17 @@ async function invokeAsOwner(
     purpose: 'dpv:ServiceProvision',
   });
   if (outcome.status === 'executed') {
-    sendJson(res, 200, { ok: true, ...(outcome.output as Record<string, unknown>) });
+    sendJson(res, 200, {
+      ok: true,
+      ...(outcome.output as Record<string, unknown>),
+    });
     return;
   }
   const reason = 'reason' in outcome ? outcome.reason : outcome.status;
-  sendJson(res, outcome.status === 'denied' ? 403 : 400, { ok: false, error: reason });
+  sendJson(res, outcome.status === 'denied' ? 403 : 400, {
+    ok: false,
+    error: reason,
+  });
 }
 
 /** The browser-facing ceremony end: tiny self-contained HTML, no assets. */
@@ -150,7 +158,9 @@ export function makeConnectionsRouteHandler(
     try {
       plane = vaults.current();
     } catch (err) {
-      sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+      sendJson(res, 500, {
+        error: err instanceof Error ? err.message : String(err),
+      });
       return true;
     }
 
@@ -339,14 +349,20 @@ export function makeConnectionsRouteHandler(
         purpose: 'dpv:ServiceProvision',
       });
       if (outcome.status === 'executed') {
-        sendJson(res, 200, { ok: true, ...(outcome.output as Record<string, unknown>) });
+        sendJson(res, 200, {
+          ok: true,
+          ...(outcome.output as Record<string, unknown>),
+        });
         return true;
       }
       const reason = 'reason' in outcome ? outcome.reason : outcome.status;
       // A refused removal (undecided outbox items, or receipted sync
       // history) is a real state conflict, not a bad request — 409, mirroring
       // vault-routes.ts's outbox decide/revoke convention.
-      sendJson(res, outcome.status === 'denied' ? 403 : 409, { ok: false, error: reason });
+      sendJson(res, outcome.status === 'denied' ? 403 : 409, {
+        ok: false,
+        error: reason,
+      });
       return true;
     }
 
@@ -381,12 +397,16 @@ export function makeConnectionsRouteHandler(
           redirect_uri: 'redirectUri' in ceremony ? ceremony.redirectUri : redirectUri,
         });
       } catch (err) {
-        sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+        sendJson(res, 400, {
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
       return true;
     }
 
-    sendJson(res, 404, { error: `no such connections route: ${method} ${url.pathname}` });
+    sendJson(res, 404, {
+      error: `no such connections route: ${method} ${url.pathname}`,
+    });
     return true;
   };
 }

@@ -1,3 +1,5 @@
+import type { WriteTarget } from '../_shared/write-target.ts';
+import { $ } from './dom.ts';
 // Outcome narration + the write trampoline (shared pattern across apps). No
 // domain (asset/album) state lives here — it's generic plumbing, which is
 // exactly why every action module and every component that needs to fire a
@@ -21,8 +23,6 @@
 // ambient scope — the empty id every scope-addressed transport reads as "the
 // one scope there is".
 import { outcomeMessage } from './kit.ts';
-import { $ } from './dom.ts';
-import type { WriteTarget } from '../_shared/write-target.ts';
 
 /**
  * Which write is being placed. `new` follows the chip selection (an upload
@@ -33,7 +33,11 @@ import type { WriteTarget } from '../_shared/write-target.ts';
 export type WriteTargetKind = 'new' | 'own';
 
 /** Where new things land while nothing better is known: the ambient scope. */
-const AMBIENT_TARGET: WriteTarget = { disabled: false, scopeId: '', label: 'Library' };
+const AMBIENT_TARGET: WriteTarget = {
+  disabled: false,
+  scopeId: '',
+  label: 'Library',
+};
 
 let resolveTarget: (kind: WriteTargetKind) => WriteTarget = () => AMBIENT_TARGET;
 
@@ -81,7 +85,11 @@ export async function act(
   scope?: string | null,
 ): Promise<VaultOutcome | undefined> {
   try {
-    return await window.centraid.write({ action, input, ...(scope ? { scope } : {}) });
+    return await window.centraid.write({
+      action,
+      input,
+      ...(scope ? { scope } : {}),
+    });
   } catch (err) {
     // A read-only audience is refused by the shell with a human message; that
     // is narration, not a crash, and it reads like any other refusal.

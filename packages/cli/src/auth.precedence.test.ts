@@ -3,6 +3,7 @@
  */
 
 import { describe, expect, test } from 'vitest';
+
 import { resolveToken } from './auth.ts';
 
 describe('auth.precedence', () => {

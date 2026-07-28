@@ -1,6 +1,6 @@
 // Details drawer (#detailsRoot root).
 import { useRef, useState } from 'react';
-import { armConfirm } from '../kit.ts';
+
 import {
   custodyMeta,
   extOf,
@@ -14,11 +14,13 @@ import {
   typeMeta,
 } from '../format.ts';
 import { I, RENAME_ICON } from '../icons.ts';
+import { armConfirm } from '../kit.ts';
 import type { ActivityEvent, CustodyTone, DriveDoc, VersionEntry } from '../types.ts';
 import { Activity } from './Activity.tsx';
 import { History } from './History.tsx';
 import { Icon } from './Shared.tsx';
 import { Tags } from './Tags.tsx';
+
 import styles from './Details.module.css';
 import shared from './shared.module.css';
 
@@ -257,7 +259,12 @@ export function Details({
                 type="button"
                 className={`kit-btn ${shared.detailBtn} danger`}
                 onClick={(e) => {
-                  if (!armConfirm(e.currentTarget, { armedLabel: 'Trash — sure?' })) return;
+                  if (
+                    !armConfirm(e.currentTarget, {
+                      armedLabel: 'Trash — sure?',
+                    })
+                  )
+                    return;
                   onTrash(doc);
                 }}
               >

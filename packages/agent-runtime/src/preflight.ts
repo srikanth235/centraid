@@ -12,13 +12,15 @@
  */
 
 import { spawn } from 'node:child_process';
+
 import type { RunnerStatus } from '@centraid/app-engine';
-import type { RunnerKind, RunnerPrefs } from './types.js';
-import { getRunnerBackend } from './registry.js';
-import { readRunnerModels } from './models/catalog.js';
-import { agentSpawnEnv } from './spawn-env.js';
-import { lowPriorityCommand } from './low-priority.js';
+
 import { resolveAcpCapabilities } from './backends/acp/capabilities-cache.js';
+import { lowPriorityCommand } from './low-priority.js';
+import { readRunnerModels } from './models/catalog.js';
+import { getRunnerBackend } from './registry.js';
+import { agentSpawnEnv } from './spawn-env.js';
+import type { RunnerKind, RunnerPrefs } from './types.js';
 
 const VERSION_TIMEOUT_MS = 5_000;
 
@@ -96,7 +98,11 @@ export async function probeCliAvailability(
  */
 export async function runPreflight(
   prefs: RunnerPrefs,
-  opts: { catalogPath?: string; refresh?: boolean; requireSessionReady?: boolean } = {},
+  opts: {
+    catalogPath?: string;
+    refresh?: boolean;
+    requireSessionReady?: boolean;
+  } = {},
 ): Promise<RunnerStatus> {
   const key = cacheKey(prefs);
   const status = cached && cached.cacheKey === key ? cached.status : await probe(prefs);

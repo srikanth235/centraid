@@ -11,11 +11,13 @@
 // tasks/components/Capture.jsx uses, inverted for teardown instead of setup.
 import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent, KeyboardEvent } from 'react';
-import { relTime, renderAttachments } from '../kit.ts';
+
 import { deriveTitle, parseBlocks, stripInline } from '../format.ts';
 import { I } from '../icons.ts';
-import { Icon } from './Shared.tsx';
+import { relTime, renderAttachments } from '../kit.ts';
 import type { Note, NotePatch, Notebook } from '../types.ts';
+import { Icon } from './Shared.tsx';
+
 import styles from './Editor.module.css';
 import shared from './shared.module.css';
 
@@ -277,13 +279,16 @@ export function Editor({
   onAddTag: (noteId: string, label: string) => void;
   onRemoveTag: (tagId: string) => void;
 }) {
-  const [title, setTitleState] = useState(note.title ?? '');
-  const [body, setBodyState] = useState(note.body ?? '');
+  const [title, setTitle] = useState(note.title ?? '');
+  const [body, setBody] = useState(note.body ?? '');
   const [bodyEditing, setBodyEditing] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>('');
   const titleRef = useRef(title);
   const bodyRef = useRef(body);
-  const lastSavedRef = useRef({ title: note.title ?? '', body: note.body ?? '' });
+  const lastSavedRef = useRef({
+    title: note.title ?? '',
+    body: note.body ?? '',
+  });
   const saveTimerRef = useRef(0);
   const savingRef = useRef<Promise<void> | null>(null);
   const caretRef = useRef<number | null>(null);
@@ -350,7 +355,7 @@ export function Editor({
     registerFlush?.(flush);
     return () => clearTimeout(saveTimerRef.current);
     // (#336) mount-once flush registration, deliberately []
-  }, []);
+  }, [flush, registerFlush]);
 
   useEffect(() => {
     if (bodyEditing && textareaRef.current) {
@@ -362,19 +367,19 @@ export function Editor({
     }
   }, [bodyEditing]);
 
-  const setTitle = (v: string): void => {
+  const updateTitle = (v: string): void => {
     titleRef.current = v;
-    setTitleState(v);
+    setTitle(v);
     scheduleSave();
   };
-  const setBody = (v: string): void => {
+  const updateBody = (v: string): void => {
     bodyRef.current = v;
-    setBodyState(v);
+    setBody(v);
     scheduleSave();
   };
   const saveBodyNow = (v: string): void => {
     bodyRef.current = v;
-    setBodyState(v);
+    setBody(v);
     clearTimeout(saveTimerRef.current);
     performSave();
   };
@@ -401,7 +406,7 @@ export function Editor({
       const cur = bodyRef.current;
       const base = cur.length > 0 && !cur.endsWith('\n') ? `${cur}\n` : cur;
       const next = `${base}- [ ] `;
-      setBody(next);
+      updateBody(next);
       enterEdit(next.length);
       return;
     }
@@ -422,7 +427,7 @@ export function Editor({
       caret = lineEnd + 7;
     }
     caretRef.current = caret;
-    setBody(next);
+    updateBody(next);
     requestAnimationFrame(() => {
       textareaRef.current?.setSelectionRange(caret, caret);
     });
@@ -441,13 +446,13 @@ export function Editor({
     if (m.groups?.text === '') {
       const next = el.value.slice(0, lineStart) + el.value.slice(pos);
       caretRef.current = lineStart;
-      setBody(next);
+      updateBody(next);
       return;
     }
     const insertion = `\n${(m.groups?.marker ?? '').replace(/\[[xX]\]/u, '[ ]')}`;
     const next = el.value.slice(0, pos) + insertion + el.value.slice(pos);
     caretRef.current = pos + insertion.length;
-    setBody(next);
+    updateBody(next);
   };
 
   const notebookId = note.notebook_ids?.[0] ?? '';
@@ -534,7 +539,7 @@ export function Editor({
             placeholder="Title"
             aria-label="Note title"
             value={title}
-            onChange={(e) => setTitle(e.target.value)}
+            onChange={(e) => updateTitle(e.target.value)}
           />
 
           {bodyEditing ? (
@@ -544,7 +549,7 @@ export function Editor({
               placeholder="Start writing. Markdown and - [ ] checklists work."
               aria-label="Note body"
               value={body}
-              onChange={(e) => setBody(e.target.value)}
+              onChange={(e) => updateBody(e.target.value)}
               onKeyDown={handleBodyKeyDown}
               onBlur={() => {
                 setTimeout(() => {

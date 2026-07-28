@@ -49,7 +49,7 @@ function fakeQueue(pending: UploadFollowup[]) {
 function okSession(): { session: NativeReplicaSession; writes: string[] } {
   const writes: string[] = [];
   const session = {
-    write: vi.fn(async (_shape, input) => {
+    write: vi.fn<NativeReplicaSession['write']>(async (_shape, input) => {
       writes.push(input.intentId!);
       return { intentId: input.intentId!, status: 'executed' as const };
     }),
@@ -77,7 +77,7 @@ describe('settled upload follow-ups', () => {
     const writes: string[] = [];
     const createdDocuments = new Set<string>();
     const session = {
-      write: vi.fn(async (_shape, input) => {
+      write: vi.fn<NativeReplicaSession['write']>(async (_shape, input) => {
         writes.push(input.intentId!);
         createdDocuments.add(input.intentId!);
         return { intentId: input.intentId!, status: 'executed' as const };
@@ -100,7 +100,11 @@ describe('settled upload follow-ups', () => {
   });
 
   it('isolates a poison-payload follow-up so the rest still replay (F4)', async () => {
-    const poison = followupOf({ followupId: 1, intentId: 'poison', input: { title: 'no sha' } });
+    const poison = followupOf({
+      followupId: 1,
+      intentId: 'poison',
+      input: { title: 'no sha' },
+    });
     const good = followupOf({
       followupId: 2,
       intentId: 'good',
@@ -112,12 +116,15 @@ describe('settled upload follow-ups', () => {
     // Five passes: the poison never clears, but `good` replays on the first
     // pass and is gone thereafter; by pass five the poison is quarantined.
     let last = { replayed: 0, poisoned: 0 };
-    for (let pass = 0; pass < 5; pass += 1) {
+    const replayNextPass = async (pass: number): Promise<void> => {
+      if (pass >= 5) return;
       last = await replaySettledUploadFollowups(queue, session, 'http://gateway');
-    }
+      return replayNextPass(pass + 1);
+    };
+    await replayNextPass(0);
 
     expect(writes, 'the healthy record replayed exactly once').toStrictEqual(['good']);
-    expect(poisoned).toStrictEqual([{ id: 1, reason: expect.stringMatching(/staged_sha/) }]);
+    expect(poisoned).toStrictEqual([{ id: 1, reason: expect.stringMatching(/staged_sha/u) }]);
     expect(last.poisoned).toBe(1);
   });
 
@@ -125,14 +132,17 @@ describe('settled upload follow-ups', () => {
     const flaky = followupOf({ followupId: 1, intentId: 'flaky' });
     const { queue, poisoned } = fakeQueue([flaky]);
     const session = {
-      write: vi.fn(async () => {
+      write: vi.fn<NativeReplicaSession['write']>(async () => {
         throw new Error('replica rejected the write');
       }),
     } as unknown as NativeReplicaSession;
 
-    for (let pass = 0; pass < 5; pass += 1) {
+    const replayNextPass = async (pass: number): Promise<void> => {
+      if (pass >= 5) return;
       await replaySettledUploadFollowups(queue, session, 'http://gateway');
-    }
-    expect(poisoned).toStrictEqual([{ id: 1, reason: expect.stringMatching(/replica rejected/) }]);
+      return replayNextPass(pass + 1);
+    };
+    await replayNextPass(0);
+    expect(poisoned).toStrictEqual([{ id: 1, reason: expect.stringMatching(/replica rejected/u) }]);
   });
 });

@@ -1,7 +1,9 @@
 import type { JSX } from 'react';
+
 import type { GatewayDeviceRole, GatewayMember } from '../../gateway-client.js';
 import { cx } from '../ui/cx.js';
 import { DEFAULT_ROLE, ROLE_PRESETS } from './device-roles.js';
+
 import styles from './DevicePairPanel.module.css';
 
 /*

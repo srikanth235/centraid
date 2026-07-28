@@ -508,7 +508,9 @@
       "description": "The people window as a bounded recent view: people.profile rows (each a 1:1 enrichment of a core.party), newest first, decorated with name, list, favorite star and active reminder dates, plus the lists. `truncated` means older people exist beyond the window.",
       "input": {
         "type": "object",
-        "properties": { "limit": { "type": "integer", "minimum": 20, "maximum": 2000 } },
+        "properties": {
+          "limit": { "type": "integer", "minimum": 20, "maximum": 2000 }
+        },
         "additionalProperties": false
       },
       "output": {
@@ -542,7 +544,11 @@
     {
       "name": "dashboard",
       "description": "The keep-in-touch summary: who is overdue to reconnect with, upcoming reminders (nearest first), recent logged touches, and the headline counts (all / reconnect / upcoming / favorites).",
-      "input": { "type": "object", "properties": {}, "additionalProperties": false },
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
       "output": {
         "type": "object",
         "properties": {
@@ -557,7 +563,11 @@
     {
       "name": "journal",
       "description": "The journal newest first: owner entries (mood + a line) folded together with logged interactions as automatic entries.",
-      "input": { "type": "object", "properties": {}, "additionalProperties": false },
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
       "output": {
         "type": "object",
         "properties": {

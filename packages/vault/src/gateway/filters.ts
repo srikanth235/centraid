@@ -4,6 +4,7 @@
 // caller-supplied string ever becomes SQL text.
 
 import type { DatabaseSync } from 'node:sqlite';
+
 import type { FilterClause } from './types.js';
 
 const OPS: Record<string, string> = {

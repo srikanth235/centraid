@@ -6,6 +6,7 @@
 // the ONE place chat routes + model-picker state shape are defined.
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+
 import { describe, expect, it } from 'vitest';
 
 const PKG = path.resolve(import.meta.dirname, '..');
@@ -57,7 +58,11 @@ describe('route builders', () => {
 describe('model-picker state', () => {
   it('normalizes a model response body', () => {
     expect(
-      normalizeModelState({ current: 'm1', defaultModel: 'default-x', catalog: [{ id: 'm1' }] }),
+      normalizeModelState({
+        current: 'm1',
+        defaultModel: 'default-x',
+        catalog: [{ id: 'm1' }],
+      }),
     ).toStrictEqual({
       loaded: true,
       current: 'm1',
@@ -76,7 +81,11 @@ describe('model-picker state', () => {
     expect(modelLabel({ loaded: false })).toBe('Model');
     expect(modelLabel({ loaded: true, current: null, catalog: [] })).toBe('Default');
     expect(
-      modelLabel({ loaded: true, current: 'm1', catalog: [{ id: 'm1', label: 'Sonnet' }] }),
+      modelLabel({
+        loaded: true,
+        current: 'm1',
+        catalog: [{ id: 'm1', label: 'Sonnet' }],
+      }),
     ).toBe('Sonnet');
     expect(modelLabel({ loaded: true, current: 'm9', catalog: [] })).toBe('m9');
   });

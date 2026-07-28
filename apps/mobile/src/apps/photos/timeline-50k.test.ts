@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+
 import { mergePhotoAssets, sectionPhotoAssets, type PhotoAsset } from './timeline-model';
 
 function measureCpuMs<T>(run: () => T): { value: T; elapsedMs: number } {

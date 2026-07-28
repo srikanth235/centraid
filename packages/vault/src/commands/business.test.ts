@@ -1,4 +1,5 @@
 import { assert, beforeEach, describe, expect, test } from 'vitest';
+
 import { bootstrapVault, type BootstrapResult } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { createGateway, Gateway } from '../gateway/gateway.js';
@@ -18,7 +19,11 @@ describe('business', () => {
     boot = bootstrapVault(db, { ownerName: 'Priya' });
     gw = createGateway(db);
     registerBusinessCommands(gw);
-    owner = { kind: 'device', deviceId: boot.deviceId, deviceKey: boot.deviceKey };
+    owner = {
+      kind: 'device',
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+    };
     partyId = uuidv7();
     db.vault
       .prepare(
@@ -106,7 +111,10 @@ describe('business', () => {
       default_rate_minor: 9000,
       payment_terms_days: 30,
     });
-    const again = invoke('business.add_client', { party_id: partyId, currency: 'EUR' });
+    const again = invoke('business.add_client', {
+      party_id: partyId,
+      currency: 'EUR',
+    });
     expect(again.status).toBe('failed');
     assert(again.status === 'failed');
     expect(again.predicate).toContain('party_not_already_a_client');
@@ -125,18 +133,27 @@ describe('business', () => {
       .get(clientId);
     expect(row).toMatchObject({ status: 'active', default_rate_minor: 9500 });
 
-    const ghost = invoke('business.update_client', { client_id: 'nope', status: 'past' });
+    const ghost = invoke('business.update_client', {
+      client_id: 'nope',
+      status: 'past',
+    });
     expect(ghost.status).toBe('failed');
     assert(ghost.status === 'failed');
     expect(ghost.predicate).toContain('client_exists');
   });
 
   test('add_project needs a real client and a fresh name', () => {
-    const missing = invoke('business.add_project', { client_id: 'ghost', name: 'X' });
+    const missing = invoke('business.add_project', {
+      client_id: 'ghost',
+      name: 'X',
+    });
     expect(missing.status).toBe('failed');
     const clientId = addClient();
     addProject(clientId, 'Brand refresh');
-    const dup = invoke('business.add_project', { client_id: clientId, name: 'Brand refresh' });
+    const dup = invoke('business.add_project', {
+      client_id: clientId,
+      name: 'Brand refresh',
+    });
     expect(dup.status).toBe('failed');
     assert(dup.status === 'failed');
     expect(dup.predicate).toContain('project_name_unused_for_client');
@@ -145,7 +162,9 @@ describe('business', () => {
   test('log_time lands a canonical work activity plus an unbilled entry with the client default rate', () => {
     const clientId = addClient();
     const projectId = addProject(clientId);
-    const { entry_id, activity_id } = logTime(projectId, { note: 'wireframes' });
+    const { entry_id, activity_id } = logTime(projectId, {
+      note: 'wireframes',
+    });
     const entry = db.vault
       .prepare('SELECT * FROM business_time_entry WHERE entry_id = ?')
       .get(entry_id);
@@ -216,11 +235,15 @@ describe('business', () => {
     });
     expect(out.line_count).toBe(2);
     expect(out.total_minor).toBe(22500 + 9000);
-    expect(out.number).toMatch(/^INV-\d{4}-0001$/);
+    expect(out.number).toMatch(/^INV-\d{4}-0001$/u);
     const invoice = db.vault
       .prepare('SELECT status, total_minor, currency FROM business_invoice WHERE invoice_id = ?')
       .get(out.invoice_id);
-    expect(invoice).toMatchObject({ status: 'draft', total_minor: 31500, currency: 'EUR' });
+    expect(invoice).toMatchObject({
+      status: 'draft',
+      total_minor: 31500,
+      currency: 'EUR',
+    });
     const billed = db.vault
       .prepare(
         'SELECT count(*) AS n FROM business_time_entry WHERE entry_id IN (?, ?) AND invoice_line_id IS NOT NULL',
@@ -233,7 +256,11 @@ describe('business', () => {
       .prepare(
         'SELECT qty_scaled, qty_scale, amount_minor FROM business_invoice_line WHERE invoice_id = ? ORDER BY qty_scaled',
       )
-      .all(out.invoice_id) as { qty_scaled: number; qty_scale: number; amount_minor: number }[];
+      .all(out.invoice_id) as {
+      qty_scaled: number;
+      qty_scale: number;
+      amount_minor: number;
+    }[];
     expect(lines.map((l) => l.qty_scaled)).toStrictEqual([100, 250]);
     expect(lines.map((l) => l.qty_scale)).toStrictEqual([2, 2]);
     expect(lines.every((l) => l.amount_minor >= 0)).toBe(true);
@@ -251,7 +278,7 @@ describe('business', () => {
                  1, NULL, NULL)`,
         )
         .run(uuidv7(), clientId),
-    ).toThrow(/new invoice total must be zero/);
+    ).toThrow(/new invoice total must be zero/u);
 
     const projectId = addProject(clientId);
     const entry = logTime(projectId);
@@ -278,7 +305,7 @@ describe('business', () => {
       db.vault
         .prepare('UPDATE business_invoice SET total_minor = 1 WHERE invoice_id = ?')
         .run(invoice_id),
-    ).toThrow(/must equal the sum of its lines/);
+    ).toThrow(/must equal the sum of its lines/u);
   });
 
   test('business_invoice_line carries a NOT NULL qty_scale and CHECKs its scale + amount (issue #441 A3)', () => {
@@ -404,7 +431,10 @@ describe('business', () => {
 
     // The real settlement (overpayment allowed).
     const txnId = seedCreditTxn(total_minor + 500);
-    const paid = expectExecuted('business.mark_invoice_paid', { invoice_id, txn_id: txnId });
+    const paid = expectExecuted('business.mark_invoice_paid', {
+      invoice_id,
+      txn_id: txnId,
+    });
     expect(paid.status).toBe('paid');
     const row = db.vault
       .prepare('SELECT status, paid_txn_id FROM business_invoice WHERE invoice_id = ?')

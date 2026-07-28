@@ -5,6 +5,7 @@
 // richer `ReplicaIntent` / `ReplicaInvalidation` types (which are structurally
 // assignable to the kit's mirrored shapes).
 import { replicaIntentInvalidations as kitReplicaIntentInvalidations } from '@centraid/blueprints/kit/intent-invalidations.js';
+
 import type { ReplicaIntent, ReplicaInvalidation } from './types.js';
 
 /** Derive app-visible overlay events for every durable intent transition. */

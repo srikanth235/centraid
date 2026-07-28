@@ -1,10 +1,12 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { describe, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { WorktreeStore } from './worktree-store.js';
-import { exportToRemote, importFromRemote } from './remote.js';
+
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { describe, expect, test } from 'vitest';
+
 import { run } from './git.js';
+import { exportToRemote, importFromRemote } from './remote.js';
+import { WorktreeStore } from './worktree-store.js';
 
 async function makeTempRoot(): Promise<string> {
   return tempDir('apps-store-remote-');
@@ -59,7 +61,9 @@ describe('remote', () => {
 
       // Bare remote to receive the push (stands in for GitHub).
       const remoteBare = path.join(remoteRoot, 'remote.git');
-      await run(['init', '--bare', '-b', 'main', remoteBare], { cwd: remoteRoot });
+      await run(['init', '--bare', '-b', 'main', remoteBare], {
+        cwd: remoteRoot,
+      });
 
       const exp = await exportToRemote(source.bareRepoDir, remoteBare);
       expect(exp.remoteName).toBe('origin');
@@ -67,8 +71,8 @@ describe('remote', () => {
 
       // The remote now has main + both tags.
       const remoteTags = await run(['tag', '--list'], { cwd: remoteBare });
-      expect(remoteTags).toMatch(/todo\/v1/);
-      expect(remoteTags).toMatch(/todo\/v2/);
+      expect(remoteTags).toMatch(/todo\/v1/u);
+      expect(remoteTags).toMatch(/todo\/v2/u);
 
       // Import into a fresh gateway root, then init + serve.
       const imp = await importFromRemote(importRoot, remoteBare);
@@ -102,7 +106,9 @@ describe('remote', () => {
       await seedAndPublish(source, 's1', 'todo', 'v1');
 
       const remoteBare = path.join(remoteRoot, 'remote.git');
-      await run(['init', '--bare', '-b', 'main', remoteBare], { cwd: remoteRoot });
+      await run(['init', '--bare', '-b', 'main', remoteBare], {
+        cwd: remoteRoot,
+      });
 
       await exportToRemote(source.bareRepoDir, remoteBare);
       // Second publish + re-export must not fail on the existing remote.
@@ -111,7 +117,7 @@ describe('remote', () => {
       expect(again.remoteName).toBe('origin');
 
       const remoteTags = await run(['tag', '--list'], { cwd: remoteBare });
-      expect(remoteTags).toMatch(/todo\/v2/);
+      expect(remoteTags).toMatch(/todo\/v2/u);
     } finally {
       await fs.rm(sourceRoot, { recursive: true, force: true });
       await fs.rm(remoteRoot, { recursive: true, force: true });
@@ -126,9 +132,11 @@ describe('remote', () => {
       await store.init(); // creates root/apps.git
 
       const remoteBare = path.join(remoteRoot, 'remote.git');
-      await run(['init', '--bare', '-b', 'main', remoteBare], { cwd: remoteRoot });
+      await run(['init', '--bare', '-b', 'main', remoteBare], {
+        cwd: remoteRoot,
+      });
 
-      await expect((() => importFromRemote(root, remoteBare))()).rejects.toThrow(/already exists/);
+      await expect((() => importFromRemote(root, remoteBare))()).rejects.toThrow(/already exists/u);
     } finally {
       await fs.rm(root, { recursive: true, force: true });
       await fs.rm(remoteRoot, { recursive: true, force: true });

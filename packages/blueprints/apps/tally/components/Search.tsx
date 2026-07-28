@@ -3,6 +3,7 @@
 import type { LedgerRow, ViewData } from '../types.ts';
 import { ExpenseRow } from './ExpenseRow.tsx';
 import { ExplistSkeleton } from './Shared.tsx';
+
 import shared from './shared.module.css';
 
 export function SearchResults({

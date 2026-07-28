@@ -25,6 +25,7 @@
  */
 
 import type { RunnerKind, RunnerModel, SurfaceStatus } from '@centraid/app-engine';
+
 import { writeCatalogEntry, hashModelIds } from './catalog.js';
 
 export type { SurfaceStatus } from '@centraid/app-engine';

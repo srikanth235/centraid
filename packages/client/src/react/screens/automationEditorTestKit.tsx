@@ -10,8 +10,9 @@
 
 import { act } from 'react';
 import { vi } from 'vitest';
-import { button } from './domTestKit.js';
+
 import type { AutomationEditorBridgeProps, AutomationEditorData } from '../screen-contracts.js';
+import { button } from './domTestKit.js';
 
 export function makeData(over: Partial<AutomationEditorData> = {}): AutomationEditorData {
   return {

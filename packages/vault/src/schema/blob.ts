@@ -31,6 +31,7 @@
 // here too, same as every other body-shaped column.
 
 import type { DatabaseSync } from 'node:sqlite';
+
 import { truncateForIndex } from './fts.js';
 
 /** Body of a document's FTS row: extracted text, transcript, inline text. */

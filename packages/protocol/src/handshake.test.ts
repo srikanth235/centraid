@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+
 import {
   GATEWAY_MIN_PROTOCOL_VERSION,
   GATEWAY_PROTOCOL_VERSION,
@@ -85,7 +86,10 @@ describe('handshake', () => {
       minSupportedProtocol: 99,
     });
     expect(bad).toMatchObject({ ok: false, reason: 'protocol_mismatch' });
-    expect(judgeGatewayInfo(null)).toMatchObject({ ok: false, reason: 'malformed' });
+    expect(judgeGatewayInfo(null)).toMatchObject({
+      ok: false,
+      reason: 'malformed',
+    });
   });
 
   test('buildGatewayInfoPayload ships product + protocol fields', () => {

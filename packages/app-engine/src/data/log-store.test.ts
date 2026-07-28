@@ -1,7 +1,9 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+
 import { appendLogs, readLogs, type LogEntry } from './log-store.ts';
 
 let workspace: string;
@@ -70,7 +72,13 @@ describe('log-store', () => {
       [
         JSON.stringify(mk('info', 'good', 1)),
         'not-json',
-        JSON.stringify({ ts: 'nope', level: 'info', msg: 'x', source: 'query', handler: 'h' }),
+        JSON.stringify({
+          ts: 'nope',
+          level: 'info',
+          msg: 'x',
+          source: 'query',
+          handler: 'h',
+        }),
         JSON.stringify(mk('info', 'also-good', 2)),
         '',
       ].join('\n'),
@@ -129,7 +137,13 @@ describe('log-store', () => {
   test('rejects entries with unknown source on read', async () => {
     await fs.writeFile(
       path.join(workspace, 'logs.jsonl'),
-      JSON.stringify({ ts: 1, level: 'info', msg: 'x', source: 'rogue', handler: 'h' }) + '\n',
+      JSON.stringify({
+        ts: 1,
+        level: 'info',
+        msg: 'x',
+        source: 'rogue',
+        handler: 'h',
+      }) + '\n',
       'utf8',
     );
     const out = await readLogs(workspace);

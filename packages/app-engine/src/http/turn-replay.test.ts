@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
-import { buildReplayEvents } from './turn-replay.ts';
+
 import { TurnLimiter } from './turn-limiter.ts';
+import { buildReplayEvents } from './turn-replay.ts';
 
 describe('turn-replay', () => {
   test('buildReplayEvents replays a completed turn as start → delta → usage → final (#420)', () => {
@@ -28,7 +29,11 @@ describe('turn-replay', () => {
   });
 
   test('buildReplayEvents replays an errored turn as a single error event (#420)', () => {
-    const events = buildReplayEvents({ turnId: 't', ok: false, error: 'kaboom' });
+    const events = buildReplayEvents({
+      turnId: 't',
+      ok: false,
+      error: 'kaboom',
+    });
     expect(events).toStrictEqual([{ type: 'error', message: 'kaboom' }]);
   });
 

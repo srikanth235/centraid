@@ -1,9 +1,9 @@
-import { useState, type JSX, type ReactNode } from 'react';
 import type { IconName } from '@centraid/design-tokens';
+import { useState, type JSX, type ReactNode } from 'react';
+
 import Icon from '../ui/Icon.js';
 import Logo from '../ui/Logo.js';
 import StatusPill from '../ui/StatusPill.js';
-import chrome from './chrome.module.css';
 import {
   ArrowRightGlyph,
   HomeGlyph,
@@ -12,6 +12,8 @@ import {
   SettingsGlyph,
   SparkleGlyph,
 } from './glyphs.js';
+
+import chrome from './chrome.module.css';
 
 // The shell's own anchor type — mirrors the ambient `MenuAnchor` in the
 // renderer's types.d.ts, redeclared here because the React tsconfig doesn't
@@ -152,7 +154,7 @@ function SbItem(props: {
       data-disabled={props.disabled ? 'true' : undefined}
       data-accent={props.accent ? 'true' : undefined}
       disabled={props.disabled}
-      onClick={props.onClick}
+      onClick={() => props.onClick?.()}
     >
       {props.icon}
       <span className={chrome.sbLabel}>{props.label}</span>
@@ -223,7 +225,10 @@ function ConversationRow({
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            onMenu({ kind: 'rect', rect: e.currentTarget.getBoundingClientRect() });
+            onMenu({
+              kind: 'rect',
+              rect: e.currentTarget.getBoundingClientRect(),
+            });
           }}
         >
           <Icon name="MoreVert" size={14} />
@@ -278,7 +283,9 @@ function HistorySection(props: SidebarProps): JSX.Element {
       active={c.id === props.activeConversationId}
       onClick={() => props.onSelectConversation?.(c.id)}
       {...(props.onConversationMenu
-        ? { onMenu: (anchor: ShellMenuAnchor) => props.onConversationMenu?.(c.id, anchor) }
+        ? {
+            onMenu: (anchor: ShellMenuAnchor) => props.onConversationMenu?.(c.id, anchor),
+          }
         : {})}
       onDelete={props.onDeleteConversation ? () => props.onDeleteConversation?.(c.id) : undefined}
     />
@@ -292,7 +299,7 @@ function HistorySection(props: SidebarProps): JSX.Element {
           icon={<SparkleGlyph />}
           label="No chats yet"
           disabled={!props.onNewChat}
-          onClick={props.onNewChat}
+          onClick={() => props.onNewChat?.()}
         />
       ) : (
         <>
@@ -351,7 +358,7 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
         icon={<SearchGlyph />}
         label="Search"
         meta="⌘K"
-        onClick={props.onSearch}
+        onClick={() => props.onSearch?.()}
         disabled={!props.onSearch}
       />
       <SbItem
@@ -359,11 +366,16 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
         label="New Chat"
         active={props.activePage === 'assistant' && !props.activeConversationId}
         disabled={!props.onNewChat && !props.onAssistant}
-        onClick={props.onNewChat ?? props.onAssistant}
+        onClick={() => (props.onNewChat ?? props.onAssistant)?.()}
         accent
       />
       {props.onNewApp ? (
-        <SbItem icon={<PlusGlyph />} label="Build new" meta="⌘N" onClick={props.onNewApp} />
+        <SbItem
+          icon={<PlusGlyph />}
+          label="Build new"
+          meta="⌘N"
+          onClick={() => props.onNewApp?.()}
+        />
       ) : null}
 
       {/* Automations + Connectors sit above Pages for quick access. */}
@@ -372,14 +384,14 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
         label="Automations"
         active={props.activePage === 'automations'}
         disabled={!props.onAutomations}
-        onClick={props.onAutomations}
+        onClick={() => props.onAutomations?.()}
       />
       <SbItem
         icon={<Icon name="Plug" size={15} />}
         label="Connectors"
         active={props.activePage === 'connectors'}
         disabled={!props.onConnectors}
-        onClick={props.onConnectors}
+        onClick={() => props.onConnectors?.()}
       />
 
       <SbSection label="Pages" />
@@ -387,21 +399,21 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
         icon={<HomeGlyph />}
         label="Home"
         active={props.activePage === 'home'}
-        onClick={props.onHome}
+        onClick={() => props.onHome()}
       />
       <SbItem
         icon={<Icon name="Activity" size={15} />}
         label="Insights"
         active={props.activePage === 'insights'}
         disabled={!props.onInsights}
-        onClick={props.onInsights}
+        onClick={() => props.onInsights?.()}
       />
       <SbItem
         icon={<Icon name="Compass" size={15} />}
         label="Discover"
         active={props.activePage === 'discover'}
         disabled={!props.onDiscover}
-        onClick={props.onDiscover}
+        onClick={() => props.onDiscover?.()}
       />
       <SbItem
         icon={<Icon name="CheckCircle" size={15} />}
@@ -409,7 +421,7 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
         meta={props.approvalsCount ? String(props.approvalsCount) : undefined}
         active={props.activePage === 'approvals'}
         disabled={!props.onApprovals}
-        onClick={props.onApprovals}
+        onClick={() => props.onApprovals?.()}
       />
       <SbSection label="Operations" />
       <SbItem
@@ -417,7 +429,7 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
         label="Gateway"
         active={props.activePage === 'gateway'}
         disabled={!props.onGateway}
-        onClick={props.onGateway}
+        onClick={() => props.onGateway?.()}
         trailing={
           props.gatewayStatus && props.gatewayStatus !== 'unknown' ? (
             <StatusPill tone={props.gatewayStatus === 'up' ? 'live' : 'down'}>
@@ -431,21 +443,21 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
         label="Household"
         active={props.activePage === 'household'}
         disabled={!props.onHousehold}
-        onClick={props.onHousehold}
+        onClick={() => props.onHousehold?.()}
       />
       <SbItem
         icon={<Icon name="Save" size={15} />}
         label="Storage"
         active={props.activePage === 'storage'}
         disabled={!props.onStorage}
-        onClick={props.onStorage}
+        onClick={() => props.onStorage?.()}
       />
       <SbItem
         icon={<Icon name="Globe" size={15} />}
         label="Vault Atlas"
         active={props.activePage === 'atlas'}
         disabled={!props.onAtlas}
-        onClick={props.onAtlas}
+        onClick={() => props.onAtlas?.()}
       />
 
       <HistorySection {...props} />
@@ -455,14 +467,14 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
         <SbItem
           icon={<Icon name="Gift" size={15} />}
           label="What's new"
-          onClick={props.onWhatsNew}
+          onClick={() => props.onWhatsNew?.()}
         />
       ) : null}
       {props.updateVersion !== undefined && props.onRelaunchToUpdate ? (
         <button
           className={chrome.sbUpdate}
           type="button"
-          onClick={props.onRelaunchToUpdate}
+          onClick={() => props.onRelaunchToUpdate?.()}
           disabled={props.updateReadyToInstall === false}
         >
           <Logo size={26} />
@@ -479,7 +491,7 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
         icon={<SettingsGlyph />}
         label="Settings"
         active={props.activePage === 'settings'}
-        onClick={props.onSettings}
+        onClick={() => props.onSettings()}
         trailing={<StatusPill tone="live">live</StatusPill>}
       />
     </div>

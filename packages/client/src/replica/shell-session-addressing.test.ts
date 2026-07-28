@@ -5,7 +5,9 @@ import { beforeAll, beforeEach, describe, expect, test, vi } from 'vitest';
 // (gatewayId, vaultId). These cover the resolve that fills the gap.
 
 const vaultStatus = vi.fn<typeof import('../gateway-client-vault.js').vaultStatus>();
-vi.mock(import('../gateway-client-vault.js'), () => ({ vaultStatus: () => vaultStatus() }));
+vi.mock(import('../gateway-client-vault.js'), () => ({
+  vaultStatus: () => vaultStatus(),
+}));
 
 const status = (vaultId: string): import('../gateway-client-vault.js').VaultStatus => ({
   vaultId,
@@ -48,7 +50,9 @@ describe('shell-session-addressing', () => {
 
   test('an addressed vault is left exactly as the client set it', async () => {
     gatewayAuth = { ...gatewayAuth, vaultId: 'vault-explicit' };
-    await expect(addressedGatewayAuth()).resolves.toMatchObject({ vaultId: 'vault-explicit' });
+    await expect(addressedGatewayAuth()).resolves.toMatchObject({
+      vaultId: 'vault-explicit',
+    });
     expect(vaultStatus).not.toHaveBeenCalled();
   });
 

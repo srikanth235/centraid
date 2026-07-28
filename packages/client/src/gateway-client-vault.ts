@@ -68,7 +68,10 @@ export async function listAppScopes(appId?: string): Promise<AppScopeEntry[] | u
   const path = appId
     ? `/centraid/_vault/scopes?app=${encodeURIComponent(appId)}`
     : '/centraid/_vault/scopes';
-  const res = await doFetch(baseUrl, path, { method: 'GET', headers: authHeaders(token) });
+  const res = await doFetch(baseUrl, path, {
+    method: 'GET',
+    headers: authHeaders(token),
+  });
   if (res.status === 404) {
     await res.body?.cancel().catch(() => {});
     return undefined;
@@ -426,9 +429,12 @@ export async function vaultImportRows(batchId: string): Promise<VaultImportRow[]
 }
 
 /** Publish a reviewed draft batch. */
-export async function vaultImportPublish(
-  batchId: string,
-): Promise<{ created: number; updated: number; skipped: number; failed: unknown[] }> {
+export async function vaultImportPublish(batchId: string): Promise<{
+  created: number;
+  updated: number;
+  skipped: number;
+  failed: unknown[];
+}> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, `/centraid/_vault/imports/${enc(batchId)}/publish`, {
     method: 'POST',

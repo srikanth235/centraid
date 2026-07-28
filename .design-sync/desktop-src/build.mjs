@@ -17,15 +17,15 @@ import {
   readdirSync,
   existsSync,
 } from 'node:fs';
+import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { resolve } from 'node:path';
 
 const here = import.meta.dirname;
-const repoRoot = resolve(here, '..', '..');
-const uiDir = resolve(repoRoot, 'apps/desktop/src/renderer/react/ui');
-const srcDir = resolve(here, 'src');
-const stylesDir = resolve(here, 'styles');
-const distDir = resolve(here, 'dist');
+const repoRoot = path.resolve(here, '..', '..');
+const uiDir = path.resolve(repoRoot, 'apps/desktop/src/renderer/react/ui');
+const srcDir = path.resolve(here, 'src');
+const stylesDir = path.resolve(here, 'styles');
+const distDir = path.resolve(here, 'dist');
 mkdirSync(srcDir, { recursive: true });
 mkdirSync(stylesDir, { recursive: true });
 
@@ -46,21 +46,21 @@ const COMPONENT_FILES = [
   'cx.ts',
   'tile-visual.ts',
 ];
-for (const f of COMPONENT_FILES) copyFileSync(resolve(uiDir, f), resolve(srcDir, f));
+for (const f of COMPONENT_FILES) copyFileSync(path.resolve(uiDir, f), path.resolve(srcDir, f));
 console.log('[build] copied', COMPONENT_FILES.length, 'component files from apps/desktop');
 
 // 1b. Ambient `*.module.css` → class-map declaration (tsc needs this to type
 //     `import styles from './X.module.css'`; Vite resolves it at runtime via
 //     its own css.modules config — nothing to replicate there).
 copyFileSync(
-  resolve(repoRoot, 'apps/desktop/src/renderer/react/css-modules.d.ts'),
-  resolve(srcDir, 'css-modules.d.ts'),
+  path.resolve(repoRoot, 'apps/desktop/src/renderer/react/css-modules.d.ts'),
+  path.resolve(srcDir, 'css-modules.d.ts'),
 );
 console.log('[build] copied css-modules.d.ts (ambient *.module.css types)');
 
 // 2. Curated barrel — the four shell primitives + their public types.
 writeFileSync(
-  resolve(srcDir, 'index.ts'),
+  path.resolve(srcDir, 'index.ts'),
   `// Curated design-sync entry — the desktop shell's presentational primitives.
 export { default as Icon } from './Icon.js';
 export type { IconProps } from './Icon.js';
@@ -75,8 +75,8 @@ export type { AppCardProps, AppCardTone } from './AppCard.js';
 
 // 3. Token CSS — the full :root + per-theme + per-density var blocks that
 //    the renderer injects at boot via theme-vars.ts. styles.css reads these.
-const { toCss } = await import(resolve(repoRoot, 'packages/design-tokens/dist/index.js'));
-writeFileSync(resolve(stylesDir, 'tokens.css'), toCss());
+const { toCss } = await import(path.resolve(repoRoot, 'packages/design-tokens/dist/index.js'));
+writeFileSync(path.resolve(stylesDir, 'tokens.css'), toCss());
 console.log('[build] wrote styles/tokens.css');
 
 // 4. Self-hosted brand fonts — same families the renderer loads from Google
@@ -84,15 +84,15 @@ console.log('[build] wrote styles/tokens.css');
 //    sync's committed woff2 + @font-face rules (latin subset, OFL). Both the
 //    css and the woff2 targets (referenced as ../fonts/*.woff2 from styles/)
 //    are copied fresh so this input is reproducible on a clean clone.
-const dsFontsDir = resolve(repoRoot, '.design-sync/ds-src/fonts');
-const fontsOut = resolve(here, 'fonts');
+const dsFontsDir = path.resolve(repoRoot, '.design-sync/ds-src/fonts');
+const fontsOut = path.resolve(here, 'fonts');
 mkdirSync(fontsOut, { recursive: true });
 for (const f of readdirSync(dsFontsDir).filter((n) => n.endsWith('.woff2'))) {
-  copyFileSync(resolve(dsFontsDir, f), resolve(fontsOut, f));
+  copyFileSync(path.resolve(dsFontsDir, f), path.resolve(fontsOut, f));
 }
 copyFileSync(
-  resolve(repoRoot, '.design-sync/ds-src/styles/fonts.css'),
-  resolve(stylesDir, 'fonts.css'),
+  path.resolve(repoRoot, '.design-sync/ds-src/styles/fonts.css'),
+  path.resolve(stylesDir, 'fonts.css'),
 );
 console.log('[build] copied fonts/*.woff2 + styles/fonts.css');
 
@@ -100,8 +100,8 @@ console.log('[build] copied fonts/*.woff2 + styles/fonts.css');
 //    Since #340, this is a thin shell; per-component styling moved to
 //    CSS Modules (Button.module.css, AppCard.module.css, …) — see step 7.
 copyFileSync(
-  resolve(repoRoot, 'apps/desktop/src/renderer/styles.css'),
-  resolve(stylesDir, 'styles.css'),
+  path.resolve(repoRoot, 'apps/desktop/src/renderer/styles.css'),
+  path.resolve(stylesDir, 'styles.css'),
 );
 console.log('[build] copied styles/styles.css');
 
@@ -116,17 +116,19 @@ console.log('[build] copied styles/styles.css');
 //    into the cssEntry at step 7.
 rmSync(distDir, { recursive: true, force: true });
 const esbuild = await import(
-  pathToFileURL(resolve(repoRoot, '.ds-sync/node_modules/esbuild/lib/main.js')).href
+  pathToFileURL(path.resolve(repoRoot, '.ds-sync/node_modules/esbuild/lib/main.js')).href
 );
 await esbuild.build({
-  entryPoints: [resolve(srcDir, 'index.ts')],
+  entryPoints: [path.resolve(srcDir, 'index.ts')],
   bundle: true,
   format: 'esm',
   jsx: 'automatic',
   target: 'es2020',
-  outfile: resolve(distDir, 'index.js'),
+  outfile: path.resolve(distDir, 'index.js'),
   external: ['react', 'react-dom', 'react/jsx-runtime'],
-  alias: { '@centraid/design-tokens': resolve(repoRoot, 'packages/design-tokens/src/index.ts') },
+  alias: {
+    '@centraid/design-tokens': path.resolve(repoRoot, 'packages/design-tokens/src/index.ts'),
+  },
   loader: { '.css': 'local-css' },
   logLevel: 'info',
 });
@@ -136,13 +138,13 @@ console.log('[build] esbuild -> dist/index.js');
 //    (not @import'd — the converter copies cssEntry verbatim). Order: tokens
 //    define the vars → fonts register @font-face → styles.css reads both →
 //    the CSS-Modules output last (its selectors read the token vars above).
-const componentCssPath = resolve(distDir, 'index.css');
+const componentCssPath = path.resolve(distDir, 'index.css');
 const componentCss = existsSync(componentCssPath) ? readFileSync(componentCssPath, 'utf8') : '';
 const parts = ['tokens.css', 'fonts.css', 'styles.css'].map(
-  (f) => `/* ==== ${f} ==== */\n${readFileSync(resolve(stylesDir, f), 'utf8')}`,
+  (f) => `/* ==== ${f} ==== */\n${readFileSync(path.resolve(stylesDir, f), 'utf8')}`,
 );
 if (componentCss) parts.push(`/* ==== dist/index.css (CSS Modules) ==== */\n${componentCss}`);
-writeFileSync(resolve(stylesDir, 'bundle.css'), parts.join('\n\n'));
+writeFileSync(path.resolve(stylesDir, 'bundle.css'), parts.join('\n\n'));
 console.log(
   '[build] wrote styles/bundle.css (cssEntry)',
   componentCss ? '(incl. CSS Modules output)' : '',

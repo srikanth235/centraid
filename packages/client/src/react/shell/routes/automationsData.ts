@@ -1,9 +1,3 @@
-// Automations overview data layer — ports the vanilla app-automations.ts
-// `collectAutomationRuns` + `buildOverviewData`. Every display value (hue,
-// glyph, trigger/status labels, formatted run meta) is computed here so the
-// React AutomationsOverviewScreen imports no vanilla formatters. All derivation
-// helpers come from the pure automation-identity + app-format modules.
-import { auStatusForRow, glyphForId, hueForId } from '../../../automation-identity.js';
 import {
   fmtTokens,
   formatDuration,
@@ -12,6 +6,12 @@ import {
   relativeTime,
   triggersSummary,
 } from '../../../app-format.js';
+// Automations overview data layer — ports the vanilla app-automations.ts
+// `collectAutomationRuns` + `buildOverviewData`. Every display value (hue,
+// glyph, trigger/status labels, formatted run meta) is computed here so the
+// React AutomationsOverviewScreen imports no vanilla formatters. All derivation
+// helpers come from the pure automation-identity + app-format modules.
+import { auStatusForRow, glyphForId, hueForId } from '../../../automation-identity.js';
 import { cronNextRuns, cronRunLabel, resolveCronTimezone } from '../../../cron.js';
 import { listAutomationTurns, listAutomations } from '../../../gateway-client.js';
 import type {
@@ -211,7 +211,10 @@ export function buildOverviewData(
         name: r.name,
         nextRunLabel: nextRun
           ? cronTz
-            ? cronRunLabel(nextRun, { timeZone: cronTz, viewerTimeZone: viewerTz })
+            ? cronRunLabel(nextRun, {
+                timeZone: cronTz,
+                viewerTimeZone: viewerTz,
+              })
             : relativeRunLabel(nextRun)
           : null,
         ref: r.ref,
@@ -300,7 +303,10 @@ export function deriveAutomationHero(
     webhook =
       wh?.pending || !wh?.id
         ? { pending: true, url: null }
-        : { pending: false, url: new URL(`/_centraid-hook/${wh.id}`, gatewayOrigin).toString() };
+        : {
+            pending: false,
+            url: new URL(`/_centraid-hook/${wh.id}`, gatewayOrigin).toString(),
+          };
   }
 
   // Data/condition triggers get the same hero-level treatment as cron/webhook
@@ -318,8 +324,14 @@ export function deriveAutomationHero(
     : null;
 
   const condTrig = row.triggers.find(
-    (t): t is { kind: 'condition'; entity: string; where?: unknown; every?: string } =>
-      t.kind === 'condition',
+    (
+      t,
+    ): t is {
+      kind: 'condition';
+      entity: string;
+      where?: unknown;
+      every?: string;
+    } => t.kind === 'condition',
   );
   const conditionDetail: AuViewConditionDetailDTO | null = condTrig
     ? {

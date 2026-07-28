@@ -1,9 +1,11 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { afterEach, describe, expect, it, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+
 import { ConversationStore, makeJournalDbProvider, type RunTurnFn } from '@centraid/app-engine';
 import { validateManifest, type Row as AutomationRow } from '@centraid/automation';
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
 import {
   cleanRewrittenInstructions,
   rewriteAutomationInstructions,
@@ -66,7 +68,10 @@ describe('rewrite-automation-instructions', () => {
         expect(input.permissionPolicy).toBe('deny');
         expect(input.model).toBe('fast-model');
         expect(config.prefs.kind).toBe('codex');
-        input.onEvent({ type: 'assistant.delta', delta: 'Summarize only urgent mail.' });
+        input.onEvent({
+          type: 'assistant.delta',
+          delta: 'Summarize only urgent mail.',
+        });
         input.onEvent({
           type: 'usage',
           model: 'fast-model',
@@ -104,7 +109,10 @@ describe('rewrite-automation-instructions', () => {
         totalCostUsd: 0.002,
       });
       expect(store.listItems('revision-1')).toStrictEqual([
-        expect.objectContaining({ kind: 'message_in', text: 'Only urgent mail.' }),
+        expect.objectContaining({
+          kind: 'message_in',
+          text: 'Only urgent mail.',
+        }),
         expect.objectContaining({
           kind: 'step',
           outputJson: '{"text":"Revised instructions","stopReason":"end_turn"}',
@@ -130,7 +138,7 @@ describe('rewrite-automation-instructions', () => {
           runnerPrefs: { kind: 'codex' },
           persistPrompt,
         }),
-      ).rejects.toThrow(/empty/i);
+      ).rejects.toThrow(/empty/iu);
       expect(persistPrompt).not.toHaveBeenCalled();
       const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
       expect(store.getTurn('revision-fail')).toMatchObject({

@@ -1,8 +1,10 @@
 import type { JSX, ReactNode } from 'react';
+
 import type { AgentCardDTO, AgentModelDTO } from '../screen-contracts.js';
-import styles from './SettingsProvidersScreen.module.css';
-import selectCss from '../styles/select.module.css';
 import { cx } from '../ui/cx.js';
+
+import selectCss from '../styles/select.module.css';
+import styles from './SettingsProvidersScreen.module.css';
 
 // The select primitives shared by Settings → Agents' two sections: the routing
 // lanes pick an agent and a model, the inventory picks each agent's default

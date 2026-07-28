@@ -1,7 +1,8 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import type { AppId, RegistryEntry } from '../types.js';
+
 import { isReservedAppId } from '../http/security.js';
+import type { AppId, RegistryEntry } from '../types.js';
 
 /**
  * Persistent registry of registered apps stored at `<appsDir>/_registry.json`.
@@ -33,7 +34,11 @@ export class Registry {
       this.cache = new Map(
         parsed.apps.map((a) => [
           a.id,
-          { id: a.id, path: a.path, registeredAt: a.registeredAt } as RegistryEntry,
+          {
+            id: a.id,
+            path: a.path,
+            registeredAt: a.registeredAt,
+          } as RegistryEntry,
         ]),
       );
     } catch (err: unknown) {

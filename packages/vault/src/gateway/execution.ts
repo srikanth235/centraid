@@ -6,17 +6,21 @@
 // caller.
 
 import type { DatabaseSync } from 'node:sqlite';
-import type { VaultDb } from '../db.js';
-import { nowIso, uuidv7 } from '../ids.js';
+
 import { promoteStagedBlob } from '../blob/promote.js';
 import { stagedInfoTx } from '../blob/staging.js';
+import type { VaultDb } from '../db.js';
+import { nowIso, uuidv7 } from '../ids.js';
+import { notifyReplicaCommit } from '../replica/doorbell.js';
+import {
+  finalizeReplicaInvocationCommit,
+  finalizeOrdinaryInvocationCommit,
+  readReplicaInvocationCommit,
+  recordReplicaInvocationCommitInTransaction,
+  type ReplicaInvocationAudit,
+} from '../replica/invocation-commits.js';
+import { readDurableParkedDenial, readDurableParkedPayload } from '../replica/parked.js';
 import { ONTOLOGY_VERSION } from '../schema/migrate.js';
-import { resolveEntity } from '../schema/tables.js';
-import type { ConsentAllow } from './consent.js';
-import { evaluateConditions, judgmentVeto, type CommandRow } from './contract.js';
-import { actingMemberDetail, writeCheck, writeExplanation, writeReceipt } from './evidence.js';
-import { validateJson } from './json-schema.js';
-import { SEED_DEMO_ACTIVITY } from '../schema/seed.js';
 import {
   isSealedValue,
   redactCommandInput,
@@ -28,6 +32,12 @@ import {
   stampSealKeyFingerprint,
   unsealValue,
 } from '../schema/sealed.js';
+import { SEED_DEMO_ACTIVITY } from '../schema/seed.js';
+import { resolveEntity } from '../schema/tables.js';
+import type { ConsentAllow } from './consent.js';
+import { evaluateConditions, judgmentVeto, type CommandRow } from './contract.js';
+import { actingMemberDetail, writeCheck, writeExplanation, writeReceipt } from './evidence.js';
+import { validateJson } from './json-schema.js';
 import type {
   Citation,
   CommandDefinition,
@@ -38,15 +48,6 @@ import type {
   InvokeRequest,
 } from './types.js';
 import { DEFAULT_PURPOSE, GatewayError } from './types.js';
-import { readDurableParkedDenial, readDurableParkedPayload } from '../replica/parked.js';
-import {
-  finalizeReplicaInvocationCommit,
-  finalizeOrdinaryInvocationCommit,
-  readReplicaInvocationCommit,
-  recordReplicaInvocationCommitInTransaction,
-  type ReplicaInvocationAudit,
-} from '../replica/invocation-commits.js';
-import { notifyReplicaCommit } from '../replica/doorbell.js';
 
 /**
  * A registered command as the gateway executes it: the handler plus the
@@ -101,10 +102,19 @@ const POLY_RULES: Record<string, { pk: string; refs: [string, string][] }> = {
       ['to_type', 'to_id'],
     ],
   },
-  'core.attachment': { pk: 'attachment_id', refs: [['target_type', 'target_id']] },
+  'core.attachment': {
+    pk: 'attachment_id',
+    refs: [['target_type', 'target_id']],
+  },
   'core.tag': { pk: 'tag_id', refs: [['target_type', 'target_id']] },
-  'core.collection_entry': { pk: 'entry_id', refs: [['target_type', 'target_id']] },
-  'knowledge.annotation': { pk: 'annotation_id', refs: [['target_type', 'target_id']] },
+  'core.collection_entry': {
+    pk: 'entry_id',
+    refs: [['target_type', 'target_id']],
+  },
+  'knowledge.annotation': {
+    pk: 'annotation_id',
+    refs: [['target_type', 'target_id']],
+  },
 };
 
 export function pkColumn(vault: DatabaseSync, physical: string): string {
@@ -362,7 +372,11 @@ export function replayInvocation(
     .prepare('SELECT status, receipt_id FROM agent_command_invocation WHERE invocation_id = ?')
     .get(invocationId) as { status: string; receipt_id: string | null } | undefined;
   if (row?.status === 'executed') {
-    return { status: 'replayed', invocationId, output: receiptOutput(db.journal, row.receipt_id) };
+    return {
+      status: 'replayed',
+      invocationId,
+      output: receiptOutput(db.journal, row.receipt_id),
+    };
   }
   if (row && (row.status === 'failed' || row.status === 'rolled_back')) {
     const receipt = db.journal
@@ -410,7 +424,10 @@ export function runContractAndExecute(
   invocationId: string,
   confirmation?: Record<string, unknown>,
   onProvenanceCommitted?: (entityTypes: readonly string[]) => void,
-  options: { deferCommitSettlement?: boolean; deferReplicaNotify?: boolean } = {},
+  options: {
+    deferCommitSettlement?: boolean;
+    deferReplicaNotify?: boolean;
+  } = {},
 ): InvokeOutcome {
   // The purpose that applies (issue #306 decision 4) — journaled even when
   // the caller declared none.
@@ -428,7 +445,13 @@ export function runContractAndExecute(
       detail: { ...detail, risk: command.risk },
     });
     writeExplanation(db.journal, invocationId, `${command.name} did not run: ${predicate}.`);
-    return { status: 'failed', invocationId, receiptId, reason: predicate, predicate };
+    return {
+      status: 'failed',
+      invocationId,
+      receiptId,
+      reason: predicate,
+      predicate,
+    };
   };
 
   // Contract version negotiation (§10 S3, R07): this gateway serves exactly
@@ -458,12 +481,18 @@ export function runContractAndExecute(
     scrub,
   );
   if (schemaErrors.length > 0) {
-    return denyContract(`input schema violation`, { stage: 'contract', errors: schemaErrors });
+    return denyContract(`input schema violation`, {
+      stage: 'contract',
+      errors: schemaErrors,
+    });
   }
   const veto = judgmentVeto(db.vault, command.name, command.owner_schema);
   if (veto) {
     writeCheck(db.journal, invocationId, 'pre', `judgment:${veto}`, false);
-    return denyContract(`vetoed by judgment ${veto}`, { stage: 'contract', judgment: veto });
+    return denyContract(`vetoed by judgment ${veto}`, {
+      stage: 'contract',
+      judgment: veto,
+    });
   }
   const preSpecs = JSON.parse(command.preconditions_json) as ConditionSpec[];
   const preResults = evaluateConditions(db.vault, preSpecs, request.input);
@@ -568,7 +597,10 @@ export function runContractAndExecute(
     // clear secret, however the handler wrote it.
     sealWrites(db, writes);
     const postSpecs = JSON.parse(command.postconditions_json) as ConditionSpec[];
-    postResults = evaluateConditions(db.vault, postSpecs, { ...request.input, ...output });
+    postResults = evaluateConditions(db.vault, postSpecs, {
+      ...request.input,
+      ...output,
+    });
     const failedPost = postResults.find((r) => !r.passed);
     if (failedPost) {
       rollbackInvocationTransaction(db.vault, vaultTransaction);
@@ -586,7 +618,11 @@ export function runContractAndExecute(
         objectId: command.command_id,
         purpose,
         decision: 'deny',
-        detail: { stage: 'execution', predicate: failedPost.predicate, risk: command.risk },
+        detail: {
+          stage: 'execution',
+          predicate: failedPost.predicate,
+          risk: command.risk,
+        },
       });
       writeExplanation(db.journal, invocationId, `${command.name} rolled back: ${friendly}.`);
       return {
@@ -614,7 +650,11 @@ export function runContractAndExecute(
     const provenance = {
       activity: request.demo ? SEED_DEMO_ACTIVITY : `command.${command.name}`,
       used: request.demo
-        ? { invocation: invocationId, command: command.name, app: request.demo.appId }
+        ? {
+            invocation: invocationId,
+            command: command.name,
+            app: request.demo.appId,
+          }
         : { invocation: invocationId },
     };
     // Existing online idempotent replay reads output back from the receipt.
@@ -640,7 +680,7 @@ export function runContractAndExecute(
       citations: citations.map((citation) => ({ ...citation })),
       provenance,
       receiptDetail: {
-        ...(!request.intentId ? { output: durableOutput } : {}),
+        ...(request.intentId ? {} : { output: durableOutput }),
         // L4 attribution (issue #599 decision 8) — WHO, not just what.
         ...actingMemberDetail(identity, request),
         writes: writes.map((write) => ({ ...write })),
@@ -709,5 +749,10 @@ export function runContractAndExecute(
   } catch {
     // Hint only; the persisted cursor and poll backstop own correctness.
   }
-  return { status: 'executed', invocationId, receiptId: finalized.receiptId, output };
+  return {
+    status: 'executed',
+    invocationId,
+    receiptId: finalized.receiptId,
+    output,
+  };
 }

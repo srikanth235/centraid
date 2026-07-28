@@ -19,6 +19,7 @@
 // strings), and `kit-*` is the global kit vocabulary (kit.css, loaded once by the
 // route host). The served path (index.html + app.css) is untouched.
 import type { ReactNode } from 'react';
+
 import styles from './Chrome.module.css';
 
 export interface ChromeSlots {

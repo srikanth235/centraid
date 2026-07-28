@@ -1,9 +1,10 @@
+import type { IconName } from '@centraid/design-tokens';
 import React, { useMemo } from 'react';
 import { Pressable, View, Text, StyleSheet } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
-import type { IconName } from '@centraid/design-tokens';
-import Icon from './Icon';
+
 import { radii, spacing, t, useTheme, type ThemeColors } from '../theme';
+import Icon from './Icon';
 
 export type ButtonVariant = 'primary' | 'soft' | 'ghost';
 
@@ -72,6 +73,11 @@ const makeStyles = (colors: ThemeColors) =>
     labelPrimary: { color: colors.inkInv },
     pressed: { opacity: 0.85 },
     primary: { backgroundColor: colors.ink, borderColor: colors.ink },
-    row: { alignItems: 'center', flexDirection: 'row', gap: spacing[2], justifyContent: 'center' },
+    row: {
+      alignItems: 'center',
+      flexDirection: 'row',
+      gap: spacing[2],
+      justifyContent: 'center',
+    },
     soft: { backgroundColor: colors.bgElev, borderColor: colors.line },
   });

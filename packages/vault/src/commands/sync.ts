@@ -99,7 +99,11 @@ function stageRows(ctx: HandlerCtx): Record<string, unknown> {
     kind?: string;
     label?: string;
     connection_id?: string;
-    rows: { entity_type: string; external_id: string; payload: Record<string, unknown> }[];
+    rows: {
+      entity_type: string;
+      external_id: string;
+      payload: Record<string, unknown>;
+    }[];
   };
   // Only entity types with a publisher can ever land — refuse at staging
   // time, not at the owner's publish click.
@@ -312,7 +316,10 @@ const BEGIN_RUN: CommandDefinition = {
       cursors: { type: 'object' },
       // A refusal is an OUTPUT, not a thrown rollback — the needs-auth
       // flip must survive the invocation (a throw would undo it).
-      refused: { type: 'string', enum: ['paused', 'principal-required', 'principal-mismatch'] },
+      refused: {
+        type: 'string',
+        enum: ['paused', 'principal-required', 'principal-mismatch'],
+      },
       reason: { type: 'string' },
     },
   },
@@ -332,7 +339,10 @@ function resolveConnectionIdentity(
       throw new Error('sync connection requires connection_id or kind + label');
     }
     return {
-      connectionId: ensureConnectionTx(ctx.db, { kind: input.kind, label: input.label }),
+      connectionId: ensureConnectionTx(ctx.db, {
+        kind: input.kind,
+        label: input.label,
+      }),
       kind: input.kind,
       label: input.label,
     };
@@ -449,7 +459,10 @@ const FINISH_RUN: CommandDefinition = {
   outputSchema: {
     type: 'object',
     required: ['run_id'],
-    properties: { run_id: { type: 'string' }, connection_status: { type: 'string' } },
+    properties: {
+      run_id: { type: 'string' },
+      connection_status: { type: 'string' },
+    },
   },
   preconditions: [
     {
@@ -515,7 +528,10 @@ function finishRun(ctx: HandlerCtx): Record<string, unknown> {
     entityType: 'sync.connection_run',
     entityId: input.run_id,
   });
-  return { run_id: input.run_id, connection_status: input.ok ? 'active' : status };
+  return {
+    run_id: input.run_id,
+    connection_status: input.ok ? 'active' : status,
+  };
 }
 
 const SET_CURSOR: CommandDefinition = {
@@ -552,7 +568,11 @@ const SET_CURSOR: CommandDefinition = {
 };
 
 function setCursor(ctx: HandlerCtx): Record<string, unknown> {
-  const input = ctx.input as { connection_id: string; key: string; value: unknown };
+  const input = ctx.input as {
+    connection_id: string;
+    key: string;
+    value: unknown;
+  };
   const existing = ctx.db
     .prepare('SELECT cursor_id FROM sync_connection_cursor WHERE connection_id = ? AND key = ?')
     .get(input.connection_id, input.key) as { cursor_id: string } | undefined;
@@ -598,7 +618,10 @@ const SET_CONNECTION_STATUS: CommandDefinition = {
   outputSchema: {
     type: 'object',
     required: ['connection_id', 'status'],
-    properties: { connection_id: { type: 'string' }, status: { type: 'string' } },
+    properties: {
+      connection_id: { type: 'string' },
+      status: { type: 'string' },
+    },
   },
   preconditions: [
     {
@@ -628,7 +651,11 @@ const SET_CONNECTION_STATUS: CommandDefinition = {
 };
 
 function setConnectionStatus(ctx: HandlerCtx): Record<string, unknown> {
-  const input = ctx.input as { connection_id: string; status: string; note?: string };
+  const input = ctx.input as {
+    connection_id: string;
+    status: string;
+    note?: string;
+  };
   ctx.db
     .prepare('UPDATE sync_connection SET status = ? WHERE connection_id = ?')
     .run(input.status, input.connection_id);
@@ -727,7 +754,10 @@ function configureCredential(ctx: HandlerCtx): Record<string, unknown> {
     api_key?: string;
     allowed_hosts?: string[];
   };
-  const connectionId = ensureConnectionTx(ctx.db, { kind: input.kind, label: input.label });
+  const connectionId = ensureConnectionTx(ctx.db, {
+    kind: input.kind,
+    label: input.label,
+  });
   if (input.cred_kind === 'none') {
     // Detach = DELETE the sidecar row: no half-shredded credentials, and
     // the connection is back on the harness-ambient lane.
@@ -843,7 +873,10 @@ const STORE_TOKENS: CommandDefinition = {
   outputSchema: {
     type: 'object',
     required: ['connection_id', 'status'],
-    properties: { connection_id: { type: 'string' }, status: { type: 'string' } },
+    properties: {
+      connection_id: { type: 'string' },
+      status: { type: 'string' },
+    },
   },
   preconditions: [
     {

@@ -3,16 +3,22 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { aggregateUsage, computeStorageMetrics } from './backupMetrics.js';
-import type { BackupStatusDTO } from './BackupCard.js';
+
 import type { StorageConnectionUsageDTO } from '../../gateway-client.js';
+import type { BackupStatusDTO } from './BackupCard.js';
+import { aggregateUsage, computeStorageMetrics } from './backupMetrics.js';
 
 describe(aggregateUsage, () => {
   it('returns null for empty / missing connections', () => {
     expect(aggregateUsage(null)).toBeNull();
     expect(aggregateUsage([])).toBeNull();
     expect(
-      aggregateUsage([{ connectionId: 'c1', providerReported: null } as StorageConnectionUsageDTO]),
+      aggregateUsage([
+        {
+          connectionId: 'c1',
+          providerReported: null,
+        } as StorageConnectionUsageDTO,
+      ]),
     ).toBeNull();
   });
 
@@ -58,7 +64,11 @@ describe(computeStorageMetrics, () => {
           lastVerifyAt: '2026-07-20T00:00:00.000Z',
           lastWalDrainAt: '2026-07-25T11:00:00.000Z',
           pendingOffsite: { count: 0, bytes: 0 },
-          policy: { rpoSeconds: 60, snapshotIntervalHours: 24, verifyEveryDays: 7 },
+          policy: {
+            rpoSeconds: 60,
+            snapshotIntervalHours: 24,
+            verifyEveryDays: 7,
+          },
         },
         {
           vaultId: 'v2',
@@ -66,7 +76,11 @@ describe(computeStorageMetrics, () => {
           lastVerifyAt: '2026-07-22T00:00:00.000Z',
           lastWalDrainAt: '2026-07-25T11:30:00.000Z',
           pendingOffsite: { count: 0, bytes: 0 },
-          policy: { rpoSeconds: 120, snapshotIntervalHours: 48, verifyEveryDays: 14 },
+          policy: {
+            rpoSeconds: 120,
+            snapshotIntervalHours: 48,
+            verifyEveryDays: 14,
+          },
         },
       ],
       home: { retention: { kind: 'none' }, restoreCostClass: 'free-egress' },

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+
 import type { ConformanceCase, ConformanceHarness } from './conformance.js';
 import type { ObjectListEntry } from './object-store.js';
 import {
@@ -47,19 +48,26 @@ async function collectInventory(
   since?: number,
 ): Promise<ProviderInventoryObject[]> {
   assert.ok(provider.listInventory, 'inventory capability requires listInventory');
+  const listInventory = provider.listInventory.bind(provider);
   const out: ProviderInventoryObject[] = [];
-  let cursor: string | undefined;
   const seenCursors = new Set<string>();
-  do {
-    const page = await provider.listInventory(targetId, { store, limit: 2, cursor, since });
+  async function collectPage(cursor: string | undefined): Promise<void> {
+    const page = await listInventory(targetId, {
+      store,
+      limit: 2,
+      cursor,
+      since,
+    });
     assert.equal(page.store, store);
     out.push(...page.objects);
-    cursor = page.nextCursor ?? undefined;
-    if (cursor) {
-      assert.ok(!seenCursors.has(cursor), 'inventory cursor must advance');
-      seenCursors.add(cursor);
+    const next = page.nextCursor ?? undefined;
+    if (next) {
+      assert.ok(!seenCursors.has(next), 'inventory cursor must advance');
+      seenCursors.add(next);
+      return collectPage(next);
     }
-  } while (cursor);
+  }
+  await collectPage(undefined);
   return out;
 }
 
@@ -69,13 +77,15 @@ async function collectEvents(
   since?: number,
 ): Promise<ProviderAuditEvent[]> {
   assert.ok(provider.listEvents, 'audit capability requires listEvents');
+  const listEvents = provider.listEvents.bind(provider);
   const out: ProviderAuditEvent[] = [];
-  let cursor: string | undefined;
-  do {
-    const page = await provider.listEvents(targetId, { limit: 1, cursor, since });
+  async function collectPage(cursor: string | undefined): Promise<void> {
+    const page = await listEvents(targetId, { limit: 1, cursor, since });
     out.push(...page.events);
-    cursor = page.nextCursor ?? undefined;
-  } while (cursor);
+    const next = page.nextCursor ?? undefined;
+    if (next) return collectPage(next);
+  }
+  await collectPage(undefined);
   return out;
 }
 
@@ -137,40 +147,47 @@ export function providerObservabilityConformanceCases(
           const caps = await provider.capabilities();
           if (!caps.capabilities.includes('inventory')) return;
           assert.ok(provider.listInventory, 'inventory method must be present');
-          const { targetId } = await provider.createTarget({ label: 'inventory' });
-          for (const store of ['backup', 'cas', 'derived'] as const) {
-            if (!caps.capabilities.includes(store)) continue;
-            const dataPlane = await provider.openDataPlane(targetId, store, 'read-write');
-            for (let index = 0; index < 5; index++) {
-              await dataPlane.put(`objects/${index}`, TEXT.encode(`${store}-${index}`));
-            }
-            const inventory = await collectInventory(provider, targetId, store);
-            const raw: ObjectListEntry[] = [];
-            for await (const object of dataPlane.list('')) {
-              raw.push(object);
-            }
-            assert.deepEqual(
-              inventory.map(({ key, sizeBytes }) => ({ key, sizeBytes })),
-              raw
-                .map(({ key, size }) => ({ key, sizeBytes: size }))
-                .sort((a, b) => a.key.localeCompare(b.key)),
-              'provider inventory must match the granted bucket listing',
-            );
-            const rawByKey = new Map(raw.map((object) => [object.key, object]));
-            for (const object of inventory) {
-              assert.ok(object.etagOrHash.length > 0);
-              assert.ok(Number.isInteger(object.storedAt));
-              assert.equal(object.state, 'live');
-              const listed = rawByKey.get(object.key)!;
-              if (listed.etagOrHash) assert.equal(object.etagOrHash, listed.etagOrHash);
-              if (listed.storedAt !== undefined) assert.equal(object.storedAt, listed.storedAt);
-              if (listed.storageClass) assert.equal(object.storageClass, listed.storageClass);
-            }
-            const newest = Math.max(...inventory.map((object) => object.storedAt));
-            const incremental = await collectInventory(provider, targetId, store, newest);
-            assert.ok(incremental.every((object) => object.storedAt >= newest));
-            assert.deepEqual(await collectInventory(provider, targetId, store, newest + 1), []);
-          }
+          const { targetId } = await provider.createTarget({
+            label: 'inventory',
+          });
+          await Promise.all(
+            (['backup', 'cas', 'derived'] as const)
+              .filter((store) => caps.capabilities.includes(store))
+              .map(async (store) => {
+                const dataPlane = await provider.openDataPlane(targetId, store, 'read-write');
+                await Promise.all(
+                  Array.from({ length: 5 }, (_, index) =>
+                    dataPlane.put(`objects/${index}`, TEXT.encode(`${store}-${index}`)),
+                  ),
+                );
+                const inventory = await collectInventory(provider, targetId, store);
+                const raw: ObjectListEntry[] = [];
+                for await (const object of dataPlane.list('')) {
+                  raw.push(object);
+                }
+                assert.deepEqual(
+                  inventory.map(({ key, sizeBytes }) => ({ key, sizeBytes })),
+                  raw
+                    .map(({ key, size }) => ({ key, sizeBytes: size }))
+                    .sort((a, b) => a.key.localeCompare(b.key)),
+                  'provider inventory must match the granted bucket listing',
+                );
+                const rawByKey = new Map(raw.map((object) => [object.key, object]));
+                for (const object of inventory) {
+                  assert.ok(object.etagOrHash.length > 0);
+                  assert.ok(Number.isInteger(object.storedAt));
+                  assert.equal(object.state, 'live');
+                  const listed = rawByKey.get(object.key)!;
+                  if (listed.etagOrHash) assert.equal(object.etagOrHash, listed.etagOrHash);
+                  if (listed.storedAt !== undefined) assert.equal(object.storedAt, listed.storedAt);
+                  if (listed.storageClass) assert.equal(object.storageClass, listed.storageClass);
+                }
+                const newest = Math.max(...inventory.map((object) => object.storedAt));
+                const incremental = await collectInventory(provider, targetId, store, newest);
+                assert.ok(incremental.every((object) => object.storedAt >= newest));
+                assert.deepEqual(await collectInventory(provider, targetId, store, newest + 1), []);
+              }),
+          );
         }),
     },
     {

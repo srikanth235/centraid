@@ -164,6 +164,10 @@ export default async function peopleHandler({ input, ctx }: HandlerArgs) {
     return { people, lists, truncated: profileRows.length >= window, window };
   } catch (err) {
     const e = err as { code?: string; message?: string };
-    return { people: [], lists: [], vaultDenied: { code: e.code, message: e.message } };
+    return {
+      people: [],
+      lists: [],
+      vaultDenied: { code: e.code, message: e.message },
+    };
   }
 }

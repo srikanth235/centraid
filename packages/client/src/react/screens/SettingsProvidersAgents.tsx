@@ -1,7 +1,9 @@
 import type { CSSProperties, JSX } from 'react';
+
 import type { AgentCardDTO } from '../screen-contracts.js';
 import { AgentGlyph } from './agentGlyphs.js';
 import { ConfigSelect, ModelSelect } from './SettingsProvidersSelects.js';
+
 import styles from './SettingsProvidersScreen.module.css';
 
 // Settings → Agents' inventory section: what is installed and which routing

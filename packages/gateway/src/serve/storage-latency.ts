@@ -1,9 +1,9 @@
 /* Boot-time storage characterization for issue #456 M3. */
 
+import crypto from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
-import crypto from 'node:crypto';
 
 export interface StorageLatencySample {
   /** Time spent in the durability barrier for one freshly-written 4 KiB file. */

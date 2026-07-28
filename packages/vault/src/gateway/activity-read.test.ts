@@ -6,9 +6,10 @@
 // grant on `consent.provenance` cannot become a browse-everything key.
 
 import { beforeEach, describe, expect, test } from 'vitest';
+
 import { bootstrapVault, createGrant, enrollApp, type BootstrapResult } from '../bootstrap.js';
-import { openVaultDb, type VaultDb } from '../db.js';
 import { registerDocumentCommands } from '../commands/documents.js';
+import { openVaultDb, type VaultDb } from '../db.js';
 import { createGateway, Gateway } from './gateway.js';
 import type { Credential } from './types.js';
 
@@ -25,12 +26,20 @@ describe('activity-read', () => {
     boot = bootstrapVault(db, { ownerName: 'Priya' });
     gw = createGateway(db);
     registerDocumentCommands(gw);
-    owner = { kind: 'device', deviceId: boot.deviceId, deviceKey: boot.deviceKey };
+    owner = {
+      kind: 'device',
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+    };
   });
 
   function grantApp(
     name: string,
-    scopes: { schema: string; table?: string; verbs: 'read' | 'read+act' | 'act' }[],
+    scopes: {
+      schema: string;
+      table?: string;
+      verbs: 'read' | 'read+act' | 'act';
+    }[],
   ): Credential {
     const app = enrollApp(db, { name });
     createGrant(db, {
@@ -82,8 +91,11 @@ describe('activity-read', () => {
         { schema: 'consent', table: 'provenance', verbs: 'read' },
       ]);
       expect(() =>
-        gw.read(cred, { entity: 'consent.provenance', purpose: 'dpv:ServiceProvision' }),
-      ).toThrow(/scope to exactly one/);
+        gw.read(cred, {
+          entity: 'consent.provenance',
+          purpose: 'dpv:ServiceProvision',
+        }),
+      ).toThrow(/scope to exactly one/u);
     });
 
     test('holding the provenance grant alone cannot browse a domain the app cannot read', () => {
@@ -103,7 +115,7 @@ describe('activity-read', () => {
           ],
           purpose: 'dpv:ServiceProvision',
         }),
-      ).toThrow(/no read consent for core\.document/);
+      ).toThrow(/no read consent for core\.document/u);
     });
 
     test('an unrecognized entity_type is denied, never resolved to SQL', () => {
@@ -120,12 +132,15 @@ describe('activity-read', () => {
           ],
           purpose: 'dpv:ServiceProvision',
         }),
-      ).toThrow(/unknown entity/);
+      ).toThrow(/unknown entity/u);
     });
 
     test('the owner bypasses the extra guard — no entity_type/entity_id required', () => {
       addDocument();
-      const result = gw.read(owner, { entity: 'consent.provenance', purpose: 'owner-assistant' });
+      const result = gw.read(owner, {
+        entity: 'consent.provenance',
+        purpose: 'owner-assistant',
+      });
       expect(result.rows.length).toBeGreaterThan(0);
     });
   });

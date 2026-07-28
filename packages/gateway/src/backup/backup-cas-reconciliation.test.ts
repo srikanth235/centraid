@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, test } from 'vitest';
 import { bootstrapVault, openVaultDb, ReplicaIndex } from '@centraid/vault';
+import { afterEach, describe, expect, test } from 'vitest';
+
 import { runCasOnlyReconciliation } from './backup-cas-reconciliation.js';
 
 const opened: ReturnType<typeof openVaultDb>[] = [];
@@ -49,7 +50,11 @@ describe('backup-cas-reconciliation', () => {
       mode: 'bucket',
       status: 'error',
       backup: { configured: false, source: 'not-configured' },
-      cas: { configured: true, source: 'provider', missing: { count: 1, sample: [CORRUPT] } },
+      cas: {
+        configured: true,
+        source: 'provider',
+        missing: { count: 1, sample: [CORRUPT] },
+      },
     });
     expect(index.has(CORRUPT)).toBe(false);
   });
@@ -69,7 +74,12 @@ describe('backup-cas-reconciliation', () => {
       mode: 'scheduled',
       status: 'ok',
       backup: { configured: false, source: 'not-configured' },
-      cas: { configured: true, source: 'bucket', missing: { count: 0 }, orphans: { count: 0 } },
+      cas: {
+        configured: true,
+        source: 'bucket',
+        missing: { count: 0 },
+        orphans: { count: 0 },
+      },
     });
   });
 
@@ -93,7 +103,13 @@ describe('backup-cas-reconciliation', () => {
       source: 'provider',
       providerAttested: true,
       objects: [
-        { key: `blobs/sha256/${sha}`, sizeBytes: 1, etagOrHash: sha, storedAt: 1, state: 'live' },
+        {
+          key: `blobs/sha256/${sha}`,
+          sizeBytes: 1,
+          etagOrHash: sha,
+          storedAt: 1,
+          state: 'live',
+        },
       ],
     };
   }

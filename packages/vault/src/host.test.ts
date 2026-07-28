@@ -1,8 +1,10 @@
 import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { afterEach, describe, expect, test } from 'vitest';
+
+import { bootstrapVault, createGrant } from './bootstrap.js';
+import { registerTaskCommands } from './commands/tasks.js';
 import { openVaultDb, type VaultDb } from './db.js';
 import { createGateway } from './gateway/gateway.js';
-import { bootstrapVault, createGrant } from './bootstrap.js';
 import {
   ensureAgentEnrolled,
   ensureAppEnrolled,
@@ -15,7 +17,6 @@ import {
   markAgentRevoked,
   purposeConceptId,
 } from './host.js';
-import { registerTaskCommands } from './commands/tasks.js';
 
 const cleanups: (() => void)[] = [];
 describe('host', () => {
@@ -41,8 +42,15 @@ describe('host', () => {
     expect(boot2.concepts['dpv:ServiceProvision']).toBe(boot1.concepts['dpv:ServiceProvision']);
     // The recovered credential authenticates: an owner read succeeds.
     const gw = createGateway(second);
-    const cred = { kind: 'device', deviceId: boot2.deviceId, deviceKey: boot2.deviceKey } as const;
-    const result = gw.read(cred, { entity: 'core.party', purpose: 'dpv:ServiceProvision' });
+    const cred = {
+      kind: 'device',
+      deviceId: boot2.deviceId,
+      deviceKey: boot2.deviceKey,
+    } as const;
+    const result = gw.read(cred, {
+      entity: 'core.party',
+      purpose: 'dpv:ServiceProvision',
+    });
     expect(result.rows.length).toBeGreaterThan(0);
 
     const empty = openVaultDb();
@@ -93,7 +101,10 @@ describe('host', () => {
     });
     const grants = listActiveGrants(db, app.appId);
     expect(grants).toHaveLength(1);
-    expect(grants[0]).toMatchObject({ purpose: 'dpv:ServiceProvision', expiresAt: null });
+    expect(grants[0]).toMatchObject({
+      purpose: 'dpv:ServiceProvision',
+      expiresAt: null,
+    });
     expect(grants[0]?.scopes).toStrictEqual([
       { schema: 'schedule', table: null, verbs: 'read+act' },
       { schema: 'core', table: 'event', verbs: 'read' },
@@ -124,8 +135,11 @@ describe('host', () => {
       deviceKey: boot.deviceKey,
     } as const;
     expect(() =>
-      gw.read(cred, { entity: 'schedule.task', purpose: 'dpv:ServiceProvision' }),
-    ).toThrow(/deny/);
+      gw.read(cred, {
+        entity: 'schedule.task',
+        purpose: 'dpv:ServiceProvision',
+      }),
+    ).toThrow(/deny/u);
 
     createGrant(db, {
       granteePartyId: first.partyId,
@@ -138,7 +152,10 @@ describe('host', () => {
     expect(grants[0]).toMatchObject({ purpose: 'dpv:ServiceProvision' });
 
     // The grant covers reads AND typed commands under the schedule schema.
-    const read = gw.read(cred, { entity: 'schedule.task', purpose: 'dpv:ServiceProvision' });
+    const read = gw.read(cred, {
+      entity: 'schedule.task',
+      purpose: 'dpv:ServiceProvision',
+    });
     expect(read.rows).toStrictEqual([]);
     const outcome = gw.invoke(cred, {
       command: 'schedule.add_task',
@@ -151,8 +168,11 @@ describe('host', () => {
     markAgentRevoked(db, first.agentId);
     expect(lookupAgentByName(db, 'briefing')).toBeUndefined();
     expect(() =>
-      gw.read(cred, { entity: 'schedule.task', purpose: 'dpv:ServiceProvision' }),
-    ).toThrow(/unknown caller/);
+      gw.read(cred, {
+        entity: 'schedule.task',
+        purpose: 'dpv:ServiceProvision',
+      }),
+    ).toThrow(/unknown caller/u);
     expect(listEnrolledAgents(db).find((a) => a.agentId === first.agentId)).toBeUndefined();
   });
 
@@ -172,7 +192,9 @@ describe('host', () => {
     // A caller with the real pretty name upserts it in place — same agent
     // identity (every grant/receipt against its party survives), not a
     // second enrollment.
-    const named = ensureAgentEnrolled(db, 'e2e-agent-purge-demo', { displayName: 'Purge Demo' });
+    const named = ensureAgentEnrolled(db, 'e2e-agent-purge-demo', {
+      displayName: 'Purge Demo',
+    });
     expect(named.created).toBe(false);
     expect(named.agentId).toBe(first.agentId);
     expect(named.partyId).toBe(first.partyId);

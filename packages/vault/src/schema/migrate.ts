@@ -11,20 +11,21 @@
 // Tracked via PRAGMA user_version exactly as before; migrate() is unchanged.
 
 import type { DatabaseSync } from 'node:sqlite';
+
 import { AGENT_DDL } from './agent.js';
-import { BLOB_DDL } from './blob.js';
 import { BLOB_TRANSFER_DDL } from './blob-transfer.js';
-import { ENRICH_DDL } from './enrich.js';
+import { BLOB_DDL } from './blob.js';
 import { CONSENT_DDL, CONSENT_INSTALL_MEMORY_DDL } from './consent.js';
-import { APP_EXT_DDL } from './ext.js';
 import { CORE_DDL, LINK_ANCHOR_DDL, SHARE_ORIGIN_DDL } from './core.js';
-import { FTS_DDL } from './fts.js';
 import { HEALTH_DDL, FINANCE_DDL, SCHEDULE_DDL } from './domains-health-finance-schedule.js';
 import { HOME_DDL, BUSINESS_DDL } from './domains-home-business.js';
-import { PEOPLE_DDL } from './domains-people.js';
 import { LOCKER_ALIAS_DDL, LOCKER_DDL } from './domains-locker.js';
-import { TALLY_DDL } from './domains-tally.js';
+import { PEOPLE_DDL } from './domains-people.js';
 import { SOCIAL_DDL, KNOWLEDGE_DDL, MEDIA_DDL } from './domains-social-knowledge-media.js';
+import { TALLY_DDL } from './domains-tally.js';
+import { ENRICH_DDL } from './enrich.js';
+import { APP_EXT_DDL } from './ext.js';
+import { FTS_DDL } from './fts.js';
 import { JOURNAL_DDL } from './journal.js';
 import { OUTBOX_DDL } from './outbox.js';
 import { REPLICA_DDL } from './replica.js';
@@ -157,7 +158,9 @@ export function migrateVault(db: DatabaseSync): void {
 }
 
 function currentVersion(db: DatabaseSync): number {
-  const row = db.prepare('PRAGMA user_version').get() as { user_version: number };
+  const row = db.prepare('PRAGMA user_version').get() as {
+    user_version: number;
+  };
   return row.user_version;
 }
 

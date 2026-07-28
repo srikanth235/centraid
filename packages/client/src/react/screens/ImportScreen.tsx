@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
+
+import { relativeTime } from '../format.js';
 import type {
   ImportBatchDTO,
   ImportBridgeProps,
@@ -6,10 +8,10 @@ import type {
   ImportData,
   ImportRowDTO,
 } from '../screen-contracts.js';
-import { relativeTime } from '../format.js';
-import styles from './ImportScreen.module.css';
-import vault from '../styles/vault.module.css';
+
 import appSettingsCss from '../styles/appSettings.module.css';
+import vault from '../styles/vault.module.css';
+import styles from './ImportScreen.module.css';
 
 const TEXT_KINDS = new Set(['ics', 'vcf', 'vcard', 'mbox', 'csv']);
 
@@ -154,10 +156,9 @@ export default function ImportScreen({
 
   const reload = useCallback(
     (): Promise<void> =>
-      loadData().then(
-        (data) => setState(data ?? 'no-vault'),
-        () => setState('error'),
-      ),
+      loadData()
+        .then((data) => setState(data ?? 'no-vault'))
+        .catch(() => setState('error')),
     [loadData],
   );
 

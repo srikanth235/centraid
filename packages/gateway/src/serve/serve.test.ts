@@ -1,10 +1,12 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+import crypto from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
-import { serve, type GatewayServeHandle } from './serve.ts';
+
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+
 import type { GatewayPaths } from '../paths.ts';
+import { serve, type GatewayServeHandle } from './serve.ts';
 
 let dataDir: string;
 let handle: GatewayServeHandle;
@@ -39,7 +41,10 @@ async function verifyCurrentRecoveryKit(
 describe('serve/serve', () => {
   beforeEach(async () => {
     dataDir = await tempDir(`gateway-runtime-${crypto.randomUUID()}-`);
-    handle = await serve({ initVaultName: "Owner's vault", paths: pathsUnder(dataDir) });
+    handle = await serve({
+      initVaultName: "Owner's vault",
+      paths: pathsUnder(dataDir),
+    });
   });
 
   afterEach(async () => {
@@ -48,7 +53,7 @@ describe('serve/serve', () => {
   });
 
   test('binds to loopback by default and mints a 32-byte random token', () => {
-    expect(handle.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
+    expect(handle.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/u);
     expect(handle.token).toHaveLength(64);
   });
 
@@ -102,7 +107,7 @@ describe('serve/serve', () => {
       host: '127.0.0.1',
       port: 0,
     });
-    expect(handle.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
+    expect(handle.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/u);
   });
 
   test('runnerStatus is reachable and returns a RunnerStatus body', async () => {
@@ -128,7 +133,12 @@ describe('serve/serve', () => {
     // gateway probes its own host).
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
-      agents: Array<{ kind: string; label: string; available: boolean; minVersion: string }>;
+      agents: Array<{
+        kind: string;
+        label: string;
+        available: boolean;
+        minVersion: string;
+      }>;
     };
     expect(Array.isArray(body.agents)).toBe(true);
     expect(body.agents.length).toBeGreaterThan(0);
@@ -164,7 +174,11 @@ describe('serve/serve', () => {
       runtime: { platform: string; arch: string; nodeVersion: string };
       health: { status: string };
       logs: unknown[];
-      vaults: Array<{ vaultId: string; name: string; files: Record<string, number | null> }>;
+      vaults: Array<{
+        vaultId: string;
+        name: string;
+        files: Record<string, number | null>;
+      }>;
       config: unknown;
     };
     expect(body.gateway.version).toBeTypeOf('string');
@@ -250,11 +264,18 @@ describe('serve/serve', () => {
     const vaultId = handle.vaults.current().boot.vaultId;
     const auth = { Authorization: `Bearer ${handle.token}` };
 
-    const before = await fetch(`${handle.url}/centraid/_gateway/backup`, { headers: auth });
+    const before = await fetch(`${handle.url}/centraid/_gateway/backup`, {
+      headers: auth,
+    });
     expect(before.status).toBe(200);
     const beforeBody = (await before.json()) as {
       configured: boolean;
-      vaults: Array<{ vaultId: string; name?: string; lastBackupAt?: string; running?: boolean }>;
+      vaults: Array<{
+        vaultId: string;
+        name?: string;
+        lastBackupAt?: string;
+        running?: boolean;
+      }>;
     };
     expect(beforeBody.configured).toBe(true);
     expect(beforeBody.vaults).toHaveLength(1);
@@ -278,12 +299,15 @@ describe('serve/serve', () => {
     // Ordinary staleness is a re-download prompt, not a gateway outage; observe
     // completion through the returned host-side service handle.
     let lastBackupAt: string | undefined;
-    for (let i = 0; i < 50; i++) {
+    const waitForBackup = async (attempt: number): Promise<void> => {
+      if (attempt >= 50 || lastBackupAt) return;
       const poll = await handle.backup!.status();
       lastBackupAt = poll[vaultId]?.lastBackupAt;
-      if (lastBackupAt) break;
+      if (lastBackupAt) return;
       await new Promise((resolve) => setTimeout(resolve, 20));
-    }
+      return waitForBackup(attempt + 1);
+    };
+    await waitForBackup(0);
     expect(lastBackupAt).toBeTruthy();
   });
 
@@ -305,7 +329,9 @@ describe('serve/serve', () => {
     });
     const auth = { Authorization: `Bearer ${handle.token}` };
 
-    const before = await fetch(`${handle.url}/centraid/_gateway/backup`, { headers: auth });
+    const before = await fetch(`${handle.url}/centraid/_gateway/backup`, {
+      headers: auth,
+    });
     const beforeBody = (await before.json()) as {
       recoveryKit: { confirmedAt: number | null; kitFingerprint?: string };
     };
@@ -327,7 +353,9 @@ describe('serve/serve', () => {
     });
     const authAfter = { Authorization: `Bearer ${handle.token}` }; // token is re-minted per boot
 
-    const after = await fetch(`${handle.url}/centraid/_gateway/backup`, { headers: authAfter });
+    const after = await fetch(`${handle.url}/centraid/_gateway/backup`, {
+      headers: authAfter,
+    });
     expect(after.status).toBe(200);
     const afterBody = (await after.json()) as {
       recoveryKit: { confirmedAt: number | null; kitFingerprint?: string };

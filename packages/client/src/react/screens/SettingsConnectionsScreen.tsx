@@ -1,13 +1,15 @@
+import type { IconName } from '@centraid/design-tokens';
 // governance: allow-repo-hygiene file-size-limit (#363) single cohesive screen component for the Connectors gallery surface; splitting would fragment one visual unit
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
-import type { IconName } from '@centraid/design-tokens';
-import { Button, Icon } from '../ui/index.js';
+
+import { ASSIST_HANDOFF_EVENT, type AssistHandoffResult } from '../../assist-oauth-events.js';
 import { relativeTime } from '../format.js';
 import { cx } from '../ui/cx.js';
-import styles from './SettingsConnectionsScreen.module.css';
-import controlsCss from '../styles/controls.module.css';
+import { Button, Icon } from '../ui/index.js';
 import { ConnectorBrandGlyph } from './connectorBrandMarks.js';
-import { ASSIST_HANDOFF_EVENT, type AssistHandoffResult } from '../../assist-oauth-events.js';
+
+import controlsCss from '../styles/controls.module.css';
+import styles from './SettingsConnectionsScreen.module.css';
 
 // Connectors gallery (issue #304 renderer half; primary sidebar page). Featured
 // tile grid of gateway provider connectors (Gmail, Calendar, Drive, GitHub, …)
@@ -711,7 +713,10 @@ function AssistConnectForm({
   );
   const permitted = [
     ...standardScopes.map((scope) => ({ scope, tier: 'standard' as const })),
-    ...restrictedScopes.map((scope) => ({ scope, tier: 'restricted' as const })),
+    ...restrictedScopes.map((scope) => ({
+      scope,
+      tier: 'restricted' as const,
+    })),
   ].filter(({ scope }) => connectorScopes.has(scope));
   const initialScope =
     featured.scope &&
@@ -942,7 +947,7 @@ export default function SettingsConnectionsScreen({
     return () => {
       if (pollTimer.current) clearTimeout(pollTimer.current);
     };
-  }, [loadConnections, loadProviders, loadOAuthCallbackUri]);
+  }, [loadConnections, loadProviders, loadOAuthCallbackUri, refresh, showToast]);
 
   useEffect(() => {
     const onHandoff = (event: Event): void => {
@@ -1505,7 +1510,38 @@ export default function SettingsConnectionsScreen({
                     )}
                   </div>
 
-                  {!sheet.connecting ? (
+                  {sheet.connecting ? (
+                    sheet.connecting === 'assist' ? (
+                      <AssistConnectForm
+                        featured={sheet.featured}
+                        busy={saving}
+                        existingLabels={labelsForKind(rows, sheet.featured.kind)}
+                        onCancel={() =>
+                          setSheet({
+                            kind: 'detail',
+                            featured: sheet.featured,
+                            connecting: false,
+                          })
+                        }
+                        onSubmit={onSubmitWizard}
+                      />
+                    ) : (
+                      <ConnectForm
+                        featured={sheet.featured}
+                        busy={saving}
+                        oauthCallbackUri={oauthCallbackUri}
+                        existingLabels={labelsForKind(rows, sheet.featured.kind)}
+                        onCancel={() =>
+                          setSheet({
+                            kind: 'detail',
+                            featured: sheet.featured,
+                            connecting: false,
+                          })
+                        }
+                        onSubmit={onSubmitWizard}
+                      />
+                    )
+                  ) : (
                     <>
                       <div className={styles.about}>
                         <div className={styles.aboutHead}>About this Connector</div>
@@ -1600,35 +1636,6 @@ export default function SettingsConnectionsScreen({
                         ) : null}
                       </div>
                     </>
-                  ) : sheet.connecting === 'assist' ? (
-                    <AssistConnectForm
-                      featured={sheet.featured}
-                      busy={saving}
-                      existingLabels={labelsForKind(rows, sheet.featured.kind)}
-                      onCancel={() =>
-                        setSheet({
-                          kind: 'detail',
-                          featured: sheet.featured,
-                          connecting: false,
-                        })
-                      }
-                      onSubmit={onSubmitWizard}
-                    />
-                  ) : (
-                    <ConnectForm
-                      featured={sheet.featured}
-                      busy={saving}
-                      oauthCallbackUri={oauthCallbackUri}
-                      existingLabels={labelsForKind(rows, sheet.featured.kind)}
-                      onCancel={() =>
-                        setSheet({
-                          kind: 'detail',
-                          featured: sheet.featured,
-                          connecting: false,
-                        })
-                      }
-                      onSubmit={onSubmitWizard}
-                    />
                   )}
                 </div>
               </>

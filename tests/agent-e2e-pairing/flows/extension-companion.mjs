@@ -2,7 +2,9 @@ import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { createServer } from 'node:http';
 import path from 'node:path';
+
 import { chromium } from '@playwright/test';
+
 import { runFlow } from '../lib/harness.mjs';
 
 const repo = path.resolve(import.meta.dirname, '../../..');
@@ -92,7 +94,9 @@ try {
       const trigger = page.getByRole('button', { name: 'Centraid' });
       await trigger.waitFor({ timeout: 15_000 });
       await trigger.click();
-      const choice = page.getByRole('button', { name: /Companion acceptance/u });
+      const choice = page.getByRole('button', {
+        name: /Companion acceptance/u,
+      });
       await choice.waitFor({ timeout: 15_000 });
       const coldStart = performance.now();
       await choice.click();
@@ -151,7 +155,10 @@ try {
     } finally {
       await context.close();
     }
-    return { pass: true, notes: 'real MV3 pair → cold/warm fill → receipt → revoke journey held' };
+    return {
+      pass: true,
+      notes: 'real MV3 pair → cold/warm fill → receipt → revoke journey held',
+    };
   });
 } finally {
   await new Promise((resolve) => loginServer.close(resolve));

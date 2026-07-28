@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import {
   applyFillToLiveFields,
   findFields,
@@ -132,7 +133,11 @@ describe('page-fields', () => {
           input.value = value;
         },
       );
-      expect(wrote).toStrictEqual({ username: true, password: true, totp: false });
+      expect(wrote).toStrictEqual({
+        username: true,
+        password: true,
+        totp: false,
+      });
       expect((document.querySelector('#user') as HTMLInputElement).value).toBe('bob');
       expect((document.querySelector('#pass') as HTMLInputElement).value).toBe('new-secret');
     });

@@ -642,7 +642,9 @@ export function ensureConversationLedger(db: DatabaseSync): void {
   }
   if (existingTable('conversation_digest')) {
     const existingDigestCols = (
-      db.prepare(`PRAGMA table_info(conversation_digest)`).all() as { name: string }[]
+      db.prepare(`PRAGMA table_info(conversation_digest)`).all() as {
+        name: string;
+      }[]
     ).map((column) => column.name);
     if (!existingDigestCols.includes('efforts_json')) {
       db.exec(`ALTER TABLE conversation_digest ADD COLUMN efforts_json TEXT NOT NULL DEFAULT '[]'`);

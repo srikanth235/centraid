@@ -1,7 +1,7 @@
+import { Feather } from '@expo/vector-icons';
 import React, { useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
 
 import { family, useTheme } from '../../kit/theme';
 import type { ThemeColors } from '../../kit/theme/resolve';
@@ -63,7 +63,11 @@ export default function PhotosAskView({ navigation }: { navigation: Nav }): Reac
       <View
         style={[
           styles.inputBar,
-          { backgroundColor: colors.bg, borderTopColor: colors.line, paddingBottom: barClearance },
+          {
+            backgroundColor: colors.bg,
+            borderTopColor: colors.line,
+            paddingBottom: barClearance,
+          },
         ]}
       >
         <Pressable
@@ -104,7 +108,11 @@ const makeStyles = (_colors: ThemeColors): ReturnType<typeof StyleSheet.create> 
       paddingHorizontal: 16,
       paddingVertical: 12,
     },
-    bubbleText: { fontFamily: family.sansRegular, fontSize: 15, textAlign: 'right' },
+    bubbleText: {
+      fontFamily: family.sansRegular,
+      fontSize: 15,
+      textAlign: 'right',
+    },
     empty: { alignItems: 'center', paddingHorizontal: 30, paddingVertical: 16 },
     eyebrow: {
       alignSelf: 'flex-start',

@@ -1,7 +1,9 @@
 import { readFile } from 'node:fs/promises';
-import { perfBudgets } from '../../apps/web/tests/e2e/perf-budgets.js';
+
 import { recordQualityResult } from '@centraid/test-kit/quality-result';
 import { describe, expect, test } from 'vitest';
+
+import { perfBudgets } from '../../apps/web/tests/e2e/perf-budgets.js';
 
 const OWNER = 'tests/perf/pwa-waterfall.perf.test.ts';
 // Produced by the web-e2e Playwright job (perf-waterfall.spec.ts) and handed to
@@ -17,8 +19,16 @@ interface WaterfallReport {
     warmToColdByteRatio: number;
   };
   appOpen: {
-    cold: { requestCount: number; grandTotalTransferBytes: number; elapsedMs: number };
-    warm: { requestCount: number; grandTotalTransferBytes: number; elapsedMs: number };
+    cold: {
+      requestCount: number;
+      grandTotalTransferBytes: number;
+      elapsedMs: number;
+    };
+    warm: {
+      requestCount: number;
+      grandTotalTransferBytes: number;
+      elapsedMs: number;
+    };
     warmToColdByteRatio: number;
   };
 }

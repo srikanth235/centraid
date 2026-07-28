@@ -1,6 +1,7 @@
+import { randomUUID } from 'node:crypto';
 // governance: allow-repo-hygiene file-size-limit (#567) the headless compile boundary is one lock/hydration/failover/ledger transaction; splitting settlement from dispatch would obscure its exactly-once guarantees
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+
 import {
   compileHydrationPlan,
   hydrationMessagesFromLedger,
@@ -11,8 +12,9 @@ import {
   type RunnerKind,
   type TurnStreamEvent,
 } from '@centraid/app-engine';
-import { journalConversationStore } from '../journal-stores.js';
 import { validateManifest, type Manifest, type ManifestVaultScope } from '@centraid/automation';
+
+import { journalConversationStore } from '../journal-stores.js';
 import {
   AUTOMATION_ANCHOR_ENTITY,
   type ResolvedAutomationAnchor,
@@ -89,12 +91,8 @@ function compileUsageFields(usage: UsageEvent | undefined): {
 } {
   if (!usage) return {};
   const cost =
-    usage.costUsd !== undefined
-      ? {
-          costUsd: usage.costUsd,
-          costSource: usage.costSource ?? ('agent' as const),
-        }
-      : resolveItemCost({
+    usage.costUsd === undefined
+      ? resolveItemCost({
           model: usage.model,
           usage: {
             inputTokens: usage.inputTokens,
@@ -102,17 +100,21 @@ function compileUsageFields(usage: UsageEvent | undefined): {
             cacheReadTokens: usage.cacheReadTokens,
             cacheWriteTokens: usage.cacheWriteTokens,
           },
-        });
+        })
+      : {
+          costUsd: usage.costUsd,
+          costSource: usage.costSource ?? ('agent' as const),
+        };
   return {
-    ...(usage.model !== undefined ? { model: usage.model } : {}),
-    ...(usage.provider !== undefined ? { provider: usage.provider } : {}),
-    ...(usage.inputTokens !== undefined ? { inputTokens: usage.inputTokens } : {}),
-    ...(usage.outputTokens !== undefined ? { outputTokens: usage.outputTokens } : {}),
-    ...(usage.cacheReadTokens !== undefined ? { cacheReadTokens: usage.cacheReadTokens } : {}),
-    ...(usage.cacheWriteTokens !== undefined ? { cacheWriteTokens: usage.cacheWriteTokens } : {}),
-    ...(cost.costUsd !== undefined ? { costUsd: cost.costUsd } : {}),
-    ...(cost.costSource !== undefined ? { costSource: cost.costSource } : {}),
-    ...(usage.effort !== undefined ? { effort: usage.effort } : {}),
+    ...(usage.model === undefined ? {} : { model: usage.model }),
+    ...(usage.provider === undefined ? {} : { provider: usage.provider }),
+    ...(usage.inputTokens === undefined ? {} : { inputTokens: usage.inputTokens }),
+    ...(usage.outputTokens === undefined ? {} : { outputTokens: usage.outputTokens }),
+    ...(usage.cacheReadTokens === undefined ? {} : { cacheReadTokens: usage.cacheReadTokens }),
+    ...(usage.cacheWriteTokens === undefined ? {} : { cacheWriteTokens: usage.cacheWriteTokens }),
+    ...(cost.costUsd === undefined ? {} : { costUsd: cost.costUsd }),
+    ...(cost.costSource === undefined ? {} : { costSource: cost.costSource }),
+    ...(usage.effort === undefined ? {} : { effort: usage.effort }),
   };
 }
 
@@ -151,9 +153,9 @@ export const HEADLESS_COMPILE_WORK_ORDER = (
   anchors: readonly ResolvedAutomationAnchor[] = [],
 ): string => {
   const anchorTokens = new Set(anchors.map((anchor) => anchor.token));
-  const entities = Array.from(instructions.matchAll(/@\[([^/\]]+)\/([^\]]+)\]/g)).filter(
-    (match) => !anchorTokens.has(match[0]) && match[1] !== AUTOMATION_ANCHOR_ENTITY,
-  );
+  const entities = Array.from(
+    instructions.matchAll(/@\[(?<type>[^/\]]+)\/(?<id>[^\]]+)\]/gu),
+  ).filter((match) => !anchorTokens.has(match[0]) && match[1] !== AUTOMATION_ANCHOR_ENTITY);
   return [
     'Compile this automation headlessly. This is a work order, not a conversation.',
     'Update automation.json only when derived requirements or vault scopes need to change.',
@@ -200,7 +202,7 @@ export function finalizeCompiledManifest(
   },
 ): Manifest {
   const taggedScopes: ManifestVaultScope[] = Array.from(
-    manifest.prompt.matchAll(/@\[([^/.\]]+)\.([^/\]]+)\/[^\]]+\]/g),
+    manifest.prompt.matchAll(/@\[(?<schema>[^/.\]]+)\.(?<table>[^/\]]+)\/[^\]]+\]/gu),
     (match) => ({ schema: match[1]!, table: match[2]!, verbs: 'read' as const }),
   ).filter((scope) => !(scope.schema === 'core' && scope.table === 'link_anchor'));
   const anchoredScopes = [...(options.anchoredScopes ?? [])];
@@ -298,11 +300,15 @@ export async function runHeadlessAutomationCompile(opts: HeadlessCompileOptions)
       : [];
     const hydrationPlan =
       hydrationMessages.length > 0
-        ? compileHydrationPlan(hydrationMessages, { includeAttachmentReferences: true })
+        ? compileHydrationPlan(hydrationMessages, {
+            includeAttachmentReferences: true,
+          })
         : undefined;
     const recoveryHydrationPlan =
       recoveryMessages.length > 0
-        ? compileHydrationPlan(recoveryMessages, { includeAttachmentReferences: true })
+        ? compileHydrationPlan(recoveryMessages, {
+            includeAttachmentReferences: true,
+          })
         : undefined;
     const startedAt = Date.now();
     const message = HEADLESS_COMPILE_WORK_ORDER(opts.instructions, opts.anchors);
@@ -315,7 +321,12 @@ export async function runHeadlessAutomationCompile(opts: HeadlessCompileOptions)
         (opts.runnerKind ? `Compiling plan with ${opts.runnerKind}` : 'Compiling plan'),
       startedAt,
     });
-    store.insertMessageIn({ turnId: runId, role: 'user', text: message, startedAt });
+    store.insertMessageIn({
+      turnId: runId,
+      role: 'user',
+      text: message,
+      startedAt,
+    });
     if (opts.failoverNotice) {
       store.insertItem({
         itemId: randomUUID(),
@@ -426,7 +437,10 @@ export async function runHeadlessAutomationCompile(opts: HeadlessCompileOptions)
           ...(opts.configPins ? { configPins: opts.configPins } : {}),
           ...(conversation.adapterKind ? { activeAdapterKind: conversation.adapterKind } : {}),
           ...(binding?.acpSessionId
-            ? { prevAdapterSessionId: binding.acpSessionId, prevBindingId: binding.id }
+            ? {
+                prevAdapterSessionId: binding.acpSessionId,
+                prevBindingId: binding.id,
+              }
             : {}),
           ...(binding ? { prevAdapterKind: binding.kind } : {}),
           ...(binding?.usageSnapshot ? { prevAdapterUsageSnapshot: binding.usageSnapshot } : {}),
@@ -485,9 +499,9 @@ export async function runHeadlessAutomationCompile(opts: HeadlessCompileOptions)
             kind: 'step',
             outputJson: JSON.stringify({
               text: finalText || 'Plan ready',
-              ...(stopReason !== undefined ? { stopReason } : {}),
+              ...(stopReason === undefined ? {} : { stopReason }),
             }),
-            ...(rawJson !== undefined ? { rawJson } : {}),
+            ...(rawJson === undefined ? {} : { rawJson }),
             ok: true,
             startedAt,
             endedAt,
@@ -500,9 +514,14 @@ export async function runHeadlessAutomationCompile(opts: HeadlessCompileOptions)
           endedAt,
           ok: true,
           summary: 'Plan ready',
-          ...(stopReason !== undefined
-            ? { outputJson: JSON.stringify({ stopReason, text: finalText || 'Plan ready' }) }
-            : {}),
+          ...(stopReason === undefined
+            ? {}
+            : {
+                outputJson: JSON.stringify({
+                  stopReason,
+                  text: finalText || 'Plan ready',
+                }),
+              }),
         });
         if (adapter?.hydrationTokens !== undefined) {
           store.setTurnHydrationTokens(runId, adapter.hydrationTokens);
@@ -534,9 +553,9 @@ export async function runHeadlessAutomationCompile(opts: HeadlessCompileOptions)
           outputJson: JSON.stringify({
             error: message,
             ...(finalText ? { text: finalText } : {}),
-            ...(stopReason !== undefined ? { stopReason } : {}),
+            ...(stopReason === undefined ? {} : { stopReason }),
           }),
-          ...(rawJson !== undefined ? { rawJson } : {}),
+          ...(rawJson === undefined ? {} : { rawJson }),
           ok: false,
           error: message,
           startedAt,
@@ -550,9 +569,9 @@ export async function runHeadlessAutomationCompile(opts: HeadlessCompileOptions)
           ok: false,
           error: message,
           summary: 'Compile failed',
-          ...(stopReason !== undefined
-            ? { outputJson: JSON.stringify({ stopReason, error: message }) }
-            : {}),
+          ...(stopReason === undefined
+            ? {}
+            : { outputJson: JSON.stringify({ stopReason, error: message }) }),
         });
         if (adapter?.hydrationTokens !== undefined) {
           store.setTurnHydrationTokens(runId, adapter.hydrationTokens);
@@ -569,8 +588,11 @@ export async function runHeadlessAutomationCompile(opts: HeadlessCompileOptions)
           : undefined;
         store.noteFailedTurn(conversationId, '', observedAdapter);
       });
-      if (failureClass !== undefined) await opts.onFailure?.(message, failureClass);
-      else await opts.onFailure?.(message);
+      if (failureClass === undefined) {
+        await opts.onFailure?.(message);
+      } else {
+        await opts.onFailure?.(message, failureClass);
+      }
     }
   } finally {
     clearInterval(lockLeaseHeartbeat);

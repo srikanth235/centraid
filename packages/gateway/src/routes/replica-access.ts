@@ -1,4 +1,5 @@
 import type { IncomingMessage } from 'node:http';
+
 import type { EnrollmentStore, DeviceEnrollment } from '../serve/enrollment-store.js';
 import { vaultContext } from '../serve/vault-context.js';
 import { WEB_APP_HEADER } from '../serve/web-app-sessions.js';

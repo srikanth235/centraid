@@ -1,7 +1,9 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
 import { readFileSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterEach, describe, expect, test, vi } from 'vitest';
+
 import {
   clearGatewayCredentials,
   desktopGatewayKeyStore,
@@ -26,7 +28,10 @@ vi.mock(import('electron'), () => ({
     // `SafeStorage` type requires them — stub each with its real signature
     // so the mock is structurally assignable without widening/asserting.
     decryptStringAsync: (value: Buffer) =>
-      Promise.resolve({ result: value.toString('utf8'), shouldReEncrypt: false }),
+      Promise.resolve({
+        result: value.toString('utf8'),
+        shouldReEncrypt: false,
+      }),
     encryptStringAsync: (value: string) => Promise.resolve(Buffer.from(value, 'utf8')),
     getSelectedStorageBackend: () => 'unknown' as const,
     isAsyncEncryptionAvailable: () => Promise.resolve(mocked.encryptionAvailable),
@@ -53,9 +58,9 @@ describe('gateway-secrets', () => {
     const key = getOrCreateGatewayWrappingKey('local');
 
     expect(key).toHaveLength(32);
-    expect(readFileSync(mocked.secretsFile, 'utf8')).toMatch(/^CENTRAID-DEVICE-SECRETS-V1\n/);
+    expect(readFileSync(mocked.secretsFile, 'utf8')).toMatch(/^CENTRAID-DEVICE-SECRETS-V1\n/u);
     expect(statSync(mocked.secretsFile).mode & 0o777).toBe(0o600);
-    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/libsecret.*0600/i));
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/libsecret.*0600/iu));
     expect(getOrCreateGatewayWrappingKey('local')).toStrictEqual(key);
   });
 
@@ -70,7 +75,7 @@ describe('gateway-secrets', () => {
 
     mocked.secretsFile = path.join(copiedDeviceDir, 'connection-secrets.bin');
     expect(() => desktopGatewayKeyStore(dataDir, 'local').load('vault.sealkey')).toThrow(
-      /authentication failed/i,
+      /authentication failed/iu,
     );
   });
 
@@ -94,26 +99,30 @@ describe('gateway-secrets', () => {
     mocked.encryptionAvailable = false;
     vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
     const fallbackKey = getOrCreateGatewayWrappingKey('fallback');
-    expect(readFileSync(mocked.secretsFile, 'utf8')).toMatch(/^CENTRAID-DEVICE-SECRETS-V1\n/);
+    expect(readFileSync(mocked.secretsFile, 'utf8')).toMatch(/^CENTRAID-DEVICE-SECRETS-V1\n/u);
     mocked.encryptionAvailable = true;
     expect(getOrCreateGatewayWrappingKey('fallback')).toStrictEqual(fallbackKey);
-    expect(readFileSync(mocked.secretsFile, 'utf8')).not.toMatch(/^CENTRAID-DEVICE-SECRETS-V1\n/);
+    expect(readFileSync(mocked.secretsFile, 'utf8')).not.toMatch(/^CENTRAID-DEVICE-SECRETS-V1\n/u);
   });
 
   test('device credential parsing rejects unavailable custody and unsupported stores', async () => {
     const root = await tempDir('gateway-secrets-errors-');
     mocked.secretsFile = path.join(root, 'connection-secrets.bin');
-    writeFileSync(mocked.secretsFile, JSON.stringify({ version: 2 }), { mode: 0o600 });
+    writeFileSync(mocked.secretsFile, JSON.stringify({ version: 2 }), {
+      mode: 0o600,
+    });
     mocked.encryptionAvailable = true;
-    expect(() => readLocalLoopbackToken('local')).toThrow(/unsupported format/);
+    expect(() => readLocalLoopbackToken('local')).toThrow(/unsupported format/u);
 
-    writeFileSync(mocked.secretsFile, 'encrypted-device-secrets', { mode: 0o600 });
+    writeFileSync(mocked.secretsFile, 'encrypted-device-secrets', {
+      mode: 0o600,
+    });
     mocked.encryptionAvailable = false;
     vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
     vi.spyOn(console, 'warn').mockReturnValue(undefined);
-    expect(() => readLocalLoopbackToken('local')).toThrow(/encrypted.*libsecret is unavailable/);
+    expect(() => readLocalLoopbackToken('local')).toThrow(/encrypted.*libsecret is unavailable/u);
 
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin');
-    expect(() => storeLocalLoopbackToken('local', 'token')).toThrow(/keychain is unavailable/);
+    expect(() => storeLocalLoopbackToken('local', 'token')).toThrow(/keychain is unavailable/u);
   });
 });

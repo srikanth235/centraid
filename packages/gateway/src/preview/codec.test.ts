@@ -6,9 +6,10 @@
 // orchestration relies on: no upscaling, and `null` for unsupported / oversize
 // / corrupt inputs.
 
-import { describe, expect, test } from 'vitest';
 import jpegJs from 'jpeg-js';
 import { PNG } from 'pngjs';
+import { describe, expect, test } from 'vitest';
+
 import { createImagePreviewCodec } from './codec.js';
 
 const codec = createImagePreviewCodec();
@@ -49,7 +50,7 @@ function makeDhashPattern(rows: readonly number[]): Buffer {
       png.data[offset + 1] = value;
       png.data[offset + 2] = value;
       png.data[offset + 3] = 255;
-      if (col < 8) value += (byte & (1 << (7 - col))) !== 0 ? -10 : 10;
+      if (col < 8) value += (byte & (1 << (7 - col))) === 0 ? 10 : -10;
     }
   }
   return PNG.sync.write(png);
@@ -68,7 +69,10 @@ describe('codec', () => {
     expect(Math.max(out!.width, out!.height)).toBe(256);
     expect(out!.height).toBe(Math.round((256 / 1000) * 600)); // aspect preserved
     // The reported dims match what the bytes actually decode to.
-    expect(decodedSize(out!.bytes)).toStrictEqual({ width: out!.width, height: out!.height });
+    expect(decodedSize(out!.bytes)).toStrictEqual({
+      width: out!.width,
+      height: out!.height,
+    });
     // A 256 px JPEG is small but not empty — a loose band that catches gross regressions.
     expect(out!.bytes.length).toBeGreaterThan(300);
     expect(out!.bytes.length).toBeLessThan(60_000);
@@ -107,7 +111,7 @@ describe('codec', () => {
     expect(hash).toBe('mOkFFwoywEiCh4eGeFiIV4eE0eBXA4sK');
     expect(Buffer.from(hash!, 'base64')).toHaveLength(24);
     // Canonical: unpadded standard base64 that round-trips exactly.
-    expect(Buffer.from(hash!, 'base64').toString('base64').replace(/=+$/, '')).toBe(hash);
+    expect(Buffer.from(hash!, 'base64').toString('base64').replace(/=+$/u, '')).toBe(hash);
     // A landscape source sets the landscape bit — a different, still-valid hash.
     await expect(codec.thumbhash(makePng(96, 48), 'image/png')).resolves.toBe(
       'WQkGJIhABeJzh3dziIVPikSx9w',
@@ -161,6 +165,10 @@ describe('codec', () => {
     });
     const out = await fallback.downscale(makePng(320, 160), 'image/png', 160);
 
-    expect(out).toMatchObject({ mediaType: 'image/jpeg', width: 160, height: 80 });
+    expect(out).toMatchObject({
+      mediaType: 'image/jpeg',
+      width: 160,
+      height: 80,
+    });
   });
 });

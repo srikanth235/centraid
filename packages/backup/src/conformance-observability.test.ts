@@ -2,9 +2,11 @@
  * Direct naming of conformance-observability.ts (issue #545 B12).
  */
 
-import { tempDir } from '@centraid/test-kit/temp-dir';
 import { promises as fs } from 'node:fs';
+
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { describe, expect, test } from 'vitest';
+
 import { providerObservabilityConformanceCases } from './conformance-observability.js';
 import type { ConformanceHarness } from './conformance.js';
 import { LocalBackupProvider } from './local-provider.js';

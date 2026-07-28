@@ -5,6 +5,7 @@ import https from 'node:https';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import zlib from 'node:zlib';
+
 import { createNativeImagePreviewCodec } from '../preview/native-codec.js';
 
 const MAX_BODY_BYTES = 32 * 1024 * 1024;
@@ -262,7 +263,9 @@ export async function startTypeScriptBytePlane(options: {
       if (res.headersSent) {
         res.destroy(error instanceof Error ? error : new Error(String(error)));
       } else {
-        sendJson(res, error instanceof RangeError ? 413 : 400, { error: String(error) });
+        sendJson(res, error instanceof RangeError ? 413 : 400, {
+          error: String(error),
+        });
       }
     });
   });

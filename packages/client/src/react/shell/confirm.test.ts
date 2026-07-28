@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
 import { openConfirm } from './confirm.js';
 
 describe('confirm', () => {
@@ -11,7 +12,11 @@ describe('confirm', () => {
 
   describe(openConfirm, () => {
     it('mounts a dialog with the title/message and resolves true on Confirm', async () => {
-      const p = openConfirm({ title: 'Delete?', message: 'Are you sure', confirmLabel: 'Delete' });
+      const p = openConfirm({
+        title: 'Delete?',
+        message: 'Are you sure',
+        confirmLabel: 'Delete',
+      });
       const card = document.querySelector('.card')!;
       expect(card.textContent).toContain('Delete?');
       expect(card.textContent).toContain('Are you sure');

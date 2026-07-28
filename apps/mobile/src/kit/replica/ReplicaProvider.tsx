@@ -1,22 +1,22 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { AppState } from 'react-native';
-import * as Network from 'expo-network';
 import {
   fetchReplicaBootstrapPage,
   type GatewayAuth,
   type ReplicaFetcher,
 } from '@centraid/client/replica/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Network from 'expo-network';
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { AppState } from 'react-native';
 
 import { authHeader, resolveGatewayBase } from '../../lib/gateway';
 import { getDesktopName } from '../../lib/phone-link';
 import { NativeVaultChangeFeed } from '../../lib/replica/native-change-feed';
 import { nativeReplicaDigest } from '../../lib/replica/native-hash';
-import { openNativeReplicaDriver } from '../../lib/replica/op-sqlite-driver';
 import {
   createNativeReplicaSession,
   type NativeReplicaSession,
 } from '../../lib/replica/native-session';
+import { openNativeReplicaDriver } from '../../lib/replica/op-sqlite-driver';
 import {
   LAST_BASE,
   getActiveSpace,
@@ -52,7 +52,10 @@ function fetcher(vaultId?: string): ReplicaFetcher {
     const headers = new Headers(init.headers);
     for (const [key, value] of Object.entries(authHeader())) headers.set(key, value);
     if (vaultId) headers.set('x-centraid-vault', vaultId);
-    return fetch(new URL(pathname, `${baseUrl}/`), { ...init, headers } as RequestInit);
+    return fetch(new URL(pathname, `${baseUrl}/`), {
+      ...init,
+      headers,
+    } as RequestInit);
   };
 }
 
@@ -116,7 +119,10 @@ export function ReplicaProvider({ children }: { children: React.ReactNode }): Re
   // loading value *during the render that changes the id* — consumers can never
   // read the previous vault's session, not even for the one frame it took the
   // old effect-body reset to land.
-  const [built, setBuilt] = useState<{ spaceId: string; value: ReplicaContextValue }>();
+  const [built, setBuilt] = useState<{
+    spaceId: string;
+    value: ReplicaContextValue;
+  }>();
 
   // Re-key the replica when the user switches the active Space. Keyed on the
   // active Space *id*: switching / forgetting / pairing changes the id, tearing

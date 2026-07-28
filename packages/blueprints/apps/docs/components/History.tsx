@@ -10,8 +10,10 @@
 // the panel always reflects the freshly-recorded chain without any extra
 // wiring back to app.tsx's refresh().
 import { useEffect, useState } from 'react';
+
 import { fmtBytes, fmtFull, loadable, typeMeta } from '../format.ts';
 import type { VersionEntry } from '../types.ts';
+
 import styles from './History.module.css';
 import shared from './shared.module.css';
 
@@ -49,7 +51,12 @@ function VersionPreview({ v }: { v: VersionEntry }) {
     );
   if (t === 'application/pdf')
     return (
-      <iframe className={styles.versionPreviewFrame} src={v.content_uri} title="Version preview" />
+      <iframe
+        className={styles.versionPreviewFrame}
+        src={v.content_uri}
+        title="Version preview"
+        sandbox=""
+      />
     );
   return (
     <a
@@ -132,7 +139,7 @@ export function History({
       cancelled = true;
     };
     // (#360) loadVersions/documentId read once at mount; Details.tsx keys this component by content_id, so a real version change already remounts it fresh instead of re-running this effect
-  }, []);
+  }, [documentId, loadVersions]);
 
   if (versions === null) return <div className={styles.versionStatus}>Loading history…</div>;
   if (denied)

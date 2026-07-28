@@ -3,6 +3,7 @@
  * lowPriorityCommand is pure per call — concurrent invocations must not share state.
  */
 import { describe, expect, test } from 'vitest';
+
 import { lowPriorityCommand } from './low-priority.ts';
 
 describe('matrix-concurrency', () => {

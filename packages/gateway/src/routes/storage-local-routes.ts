@@ -30,6 +30,7 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
+
 import type { LocalUsageScanner } from '../serve/local-usage.js';
 import {
   DEFAULT_STORAGE_LIMITS,
@@ -62,7 +63,10 @@ async function handleLocal(
   deps: StorageLocalRouteDeps,
 ): Promise<boolean> {
   if ((req.method ?? 'GET') !== 'GET') {
-    return sendJson(res, 405, { error: 'method_not_allowed', message: 'GET only' });
+    return sendJson(res, 405, {
+      error: 'method_not_allowed',
+      message: 'GET only',
+    });
   }
   if (!deps.localUsage) {
     return sendJson(res, 503, {
@@ -101,7 +105,10 @@ async function handleLimits(
     }
   }
   if (method !== 'PUT' && method !== 'PATCH') {
-    return sendJson(res, 405, { error: 'method_not_allowed', message: 'GET or PUT' });
+    return sendJson(res, 405, {
+      error: 'method_not_allowed',
+      message: 'GET or PUT',
+    });
   }
   if (!deps.storageLimits) {
     return sendJson(res, 503, {
@@ -111,7 +118,9 @@ async function handleLimits(
   }
   try {
     const body = (await readJson(req)) as StorageLimitsPatch;
-    return sendJson(res, 200, { limits: await deps.storageLimits.update(body) });
+    return sendJson(res, 200, {
+      limits: await deps.storageLimits.update(body),
+    });
   } catch (err) {
     if (err instanceof StorageLimitsError) {
       return sendJson(res, 400, { error: err.code, message: err.message });

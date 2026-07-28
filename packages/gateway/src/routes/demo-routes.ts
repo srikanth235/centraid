@@ -17,7 +17,9 @@
 import { existsSync, readdirSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import path from 'node:path';
+
 import { runHandler } from '@centraid/app-engine';
+
 import type { RouteHandler } from '../serve/build-gateway.js';
 import type { VaultRegistry } from '../serve/vault-registry.js';
 import { sendJson } from './route-helpers.js';
@@ -68,11 +70,16 @@ export function makeDemoRouteHandler(vaults: VaultRegistry, deps: DemoRouteDeps)
     if (method === 'POST' && appId !== null) {
       const seedFile = path.join(deps.codeAppsDir(), appId, 'seed.js');
       if (!existsSync(seedFile)) {
-        sendJson(res, 404, { error: `app "${appId}" ships no seed.js scenario` });
+        sendJson(res, 404, {
+          error: `app "${appId}" ships no seed.js scenario`,
+        });
         return true;
       }
       const outcome = await runHandler({
-        app: { id: appId, dir: path.join(vaults.currentWorkspace().appsDir, appId) },
+        app: {
+          id: appId,
+          dir: path.join(vaults.currentWorkspace().appsDir, appId),
+        },
         handlerFile: seedFile,
         handlerKind: 'action',
         // Deterministic-by-default: generators derive their randomness from
@@ -83,11 +90,18 @@ export function makeDemoRouteHandler(vaults: VaultRegistry, deps: DemoRouteDeps)
         vault: vaults.demoBridgeFor(appId),
       });
       if (!outcome.ok) {
-        sendJson(res, 500, { error: outcome.error ?? 'seed generator failed', logs: outcome.logs });
+        sendJson(res, 500, {
+          error: outcome.error ?? 'seed generator failed',
+          logs: outcome.logs,
+        });
         return true;
       }
       const status = plane.demoStatus().find((s) => s.appId === appId);
-      sendJson(res, 200, { ok: true, result: outcome.value ?? null, rows: status?.rows ?? 0 });
+      sendJson(res, 200, {
+        ok: true,
+        result: outcome.value ?? null,
+        rows: status?.rows ?? 0,
+      });
       return true;
     }
 

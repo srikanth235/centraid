@@ -1,7 +1,9 @@
 import { type CSSProperties, type JSX, useEffect, useState } from 'react';
+
 import { draftPreviewUrl } from '../../../../gateway-client.js';
-import styles from './BuilderPreview.module.css';
 import { cx } from '../../../ui/cx.js';
+
+import styles from './BuilderPreview.module.css';
 
 // The Preview tab — the sandboxed draft iframe (React port of builder.ts
 // renderPreview/makePreviewFrame/resolvePreviewSrc). The builder always
@@ -85,7 +87,10 @@ export default function BuilderPreview({
   // to those re-resolves, and until the new one lands the derived value is
   // null — the building skeleton — without the effect clearing state first.
   const resolveKey = `${appId}\u0000${device}\u0000${reloadNonce}`;
-  const [settled, setSettled] = useState<{ key: string; resolved: PreviewResolved } | null>(null);
+  const [settled, setSettled] = useState<{
+    key: string;
+    resolved: PreviewResolved;
+  } | null>(null);
   const resolved = settled !== null && settled.key === resolveKey ? settled.resolved : null;
 
   useEffect(() => {
@@ -111,14 +116,19 @@ export default function BuilderPreview({
       const sep = src.includes('#') ? '&' : '#';
       setSettled({
         key: resolveKey,
-        resolved: { src, themedSrc: `${src}${sep}theme=${theme}&bgL=${bgL}`, theme, bgL },
+        resolved: {
+          src,
+          themedSrc: `${src}${sep}theme=${theme}&bgL=${bgL}`,
+          theme,
+          bgL,
+        },
       });
       onResolved({ src });
     })();
     return () => {
       alive = false;
     };
-  }, [appId, device, reloadNonce, resolveKey]);
+  }, [appId, device, reloadNonce, resolveKey, onResolved]);
 
   if (!resolved) {
     return (
@@ -155,7 +165,11 @@ export default function BuilderPreview({
               onLoad={(e) => {
                 try {
                   e.currentTarget.contentWindow?.postMessage(
-                    { type: 'centraid:theme', theme: resolved.theme, bgL: resolved.bgL },
+                    {
+                      type: 'centraid:theme',
+                      theme: resolved.theme,
+                      bgL: resolved.bgL,
+                    },
                     '*',
                   );
                 } catch {

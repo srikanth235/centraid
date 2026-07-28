@@ -1,12 +1,14 @@
+import crypto from 'node:crypto';
+import { promises as fs } from 'node:fs';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+
 import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { promises as fs } from 'node:fs';
-import crypto from 'node:crypto';
-import type { IncomingMessage, ServerResponse } from 'node:http';
-import { Runtime } from '../runtime.ts';
-import { startRuntimeHttpServer, type RuntimeHttpServerHandle } from './http-server.ts';
+
 import { ChangeBus } from '../changes/change-bus.ts';
+import { Runtime } from '../runtime.ts';
 import { ChangesSubscriberCap, handleAppChanges } from './changes-sse.ts';
+import { startRuntimeHttpServer, type RuntimeHttpServerHandle } from './http-server.ts';
 
 let workspace: string;
 let server: RuntimeHttpServerHandle;
@@ -49,14 +51,15 @@ describe('changes-sse', () => {
     let buf = '';
     const start = Date.now();
     try {
-      while (Date.now() - start < timeoutMs) {
+      const readNext = async (): Promise<void> => {
+        if (Date.now() - start >= timeoutMs) return;
         const { value, done } = await Promise.race([
           reader.read(),
           new Promise<{ value?: undefined; done?: undefined }>((resolve) =>
             setTimeout(() => resolve({}), 100),
           ),
         ]);
-        if (done) break;
+        if (done) return;
         if (value) {
           buf += decoder.decode(value, { stream: true });
           // SSE frames are separated by blank lines.
@@ -79,8 +82,10 @@ describe('changes-sse', () => {
             }
           }
         }
-        if (predicate(out)) break;
-      }
+        if (predicate(out)) return;
+        return await readNext();
+      };
+      await readNext();
     } finally {
       try {
         await reader.cancel();
@@ -121,8 +126,18 @@ describe('changes-sse', () => {
     expect(res.status).toBe(200);
 
     queueMicrotask(() => {
-      runtime.changeBus.emit({ appId: 'otherapp', tables: ['x'], ts: 1, source: 'handler' });
-      runtime.changeBus.emit({ appId: 'myapp', tables: ['todos'], ts: 2, source: 'handler' });
+      runtime.changeBus.emit({
+        appId: 'otherapp',
+        tables: ['x'],
+        ts: 1,
+        source: 'handler',
+      });
+      runtime.changeBus.emit({
+        appId: 'myapp',
+        tables: ['todos'],
+        ts: 2,
+        source: 'handler',
+      });
     });
 
     const events = await readChangeEvents(res, (e) => e.length >= 1);

@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState, type JSX } from 'react';
+
+import { relativeTime } from '../format.js';
 import type {
   VaultBridgeProps,
   VaultData,
@@ -6,11 +8,11 @@ import type {
   VaultParkedDTO,
   VaultScopeDTO,
 } from '../screen-contracts.js';
-import { relativeTime } from '../format.js';
 import { cx } from '../ui/cx.js';
-import vault from '../styles/vault.module.css';
-import au from '../styles/automation.module.css';
+
 import appSettingsCss from '../styles/appSettings.module.css';
+import au from '../styles/automation.module.css';
+import vault from '../styles/vault.module.css';
 
 const scopeLabel = (s: VaultScopeDTO): string => {
   const target = s.table ? `${s.schema}.${s.table}` : s.schema;
@@ -234,17 +236,16 @@ export default function VaultScreen(props: VaultBridgeProps): JSX.Element {
 
   const reload = useCallback(
     (): Promise<void> =>
-      loadData().then(
-        (data) => {
+      loadData()
+        .then((data) => {
           if (!data) {
             setState({ phase: 'no-vault' });
             return;
           }
           onParkedCount?.(data.parked.length);
           setState({ data, phase: 'ready' });
-        },
-        () => setState({ phase: 'error' }),
-      ),
+        })
+        .catch(() => setState({ phase: 'error' })),
     [loadData, onParkedCount],
   );
 

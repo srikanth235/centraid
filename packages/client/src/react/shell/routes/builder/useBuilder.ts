@@ -1,5 +1,9 @@
 // governance: allow-repo-hygiene file-size-limit (#363) single state/reducer hook for the whole builder surface; the actions and the state they mutate need to stay next to each other to review safely
 import { useCallback, useEffect, useRef, useState } from 'react';
+
+import { inferAppVisual } from '../../../../app-format.js';
+import { describeCron } from '../../../../cron.js';
+import { generateAppId, shortVersionTitle } from '../../../../format.js';
 import {
   createApp,
   createConversation,
@@ -15,17 +19,14 @@ import {
   type ConversationAttachmentRef,
   type TurnStreamEvent,
 } from '../../../../gateway-client.js';
-import { generateAppId, shortVersionTitle } from '../../../../format.js';
-import { inferAppVisual } from '../../../../app-format.js';
-import { describeCron } from '../../../../cron.js';
+import { providerConsentWire, withProviderConsent } from '../../../providerConsent.js';
 import type {
   AgentsStatusDTO,
   AsstModelPickerDTO,
   BuilderChatSnapshot,
 } from '../../../screen-contracts.js';
-import { loadProviders, resolveReportedRunnerKind } from '../settingsProvidersData.js';
 import { openConfirm } from '../../confirm.js';
-import { providerConsentWire, withProviderConsent } from '../../../providerConsent.js';
+import { loadProviders, resolveReportedRunnerKind } from '../settingsProvidersData.js';
 import {
   BUILDER_SUGGESTIONS,
   type ChatView,
@@ -138,8 +139,7 @@ async function streamBuilderWithConsent(input: {
 }): Promise<void> {
   // Every provider approved during THIS send — a consent-gated failover asks
   // twice, and resending only the newest approval loops forever (#567).
-  let approvedProviders: string[] = [];
-  for (;;) {
+  const streamWithConsent = async (approvedProviders: string[]): Promise<void> => {
     let requiredProvider: string | undefined;
     const providerConsent = providerConsentWire(approvedProviders);
     await streamTurn(
@@ -153,7 +153,7 @@ async function streamBuilderWithConsent(input: {
         ...(input.runnerKind ? { runnerKind: input.runnerKind } : {}),
         ...(input.model ? { model: input.model } : {}),
         ...(input.thinking ? { thinking: input.thinking } : {}),
-        ...(providerConsent !== undefined ? { providerConsent } : {}),
+        ...(providerConsent === undefined ? {} : { providerConsent }),
         ...(input.attachments?.length ? { attachments: input.attachments } : {}),
       },
       (event) => {
@@ -172,8 +172,9 @@ async function streamBuilderWithConsent(input: {
       input.onDeclined(requiredProvider);
       return;
     }
-    approvedProviders = withProviderConsent(approvedProviders, requiredProvider);
-  }
+    return streamWithConsent(withProviderConsent(approvedProviders, requiredProvider));
+  };
+  return streamWithConsent([]);
 }
 
 /** The part of the view model that mirrors the mutable model; refreshed by
@@ -630,7 +631,10 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
           const lastIdx = chat.current.length - 1;
           const last = chat.current[lastIdx];
           if (last && last.kind === 'toolGroup') {
-            const updated: ConversationMsg = { ...last, calls: [...last.calls, newCall] };
+            const updated: ConversationMsg = {
+              ...last,
+              calls: [...last.calls, newCall],
+            };
             chat.current = chat.current.map((m, i) => (i === lastIdx ? updated : m));
             renderChat();
             pendingToolStarts.current.set(event.toolCallId, lastIdx);
@@ -653,7 +657,10 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
             if (grp && grp.kind === 'toolGroup') {
               const calls = grp.calls.map((c) =>
                 c.id === event.toolCallId
-                  ? { ...c, state: event.ok ? ('ok' as const) : ('error' as const) }
+                  ? {
+                      ...c,
+                      state: event.ok ? ('ok' as const) : ('error' as const),
+                    }
                   : c,
               );
               chat.current = chat.current.map((m, i) => (i === groupIdx ? { ...grp, calls } : m));
@@ -690,8 +697,11 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
           generating.current = false;
           closeAi();
           closeThinking();
-          pushMessage({ kind: 'status', text: `Agent error: ${event.message}` });
-          return;
+          pushMessage({
+            kind: 'status',
+            text: `Agent error: ${event.message}`,
+          });
+          break;
         case 'phase':
         case 'consent.required':
         case 'notice':
@@ -817,7 +827,7 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
   const handleToggleEnabled = useCallback(async (): Promise<void> => {
     const row = automationRow.current;
     if (!appId.current || automationBusy.current || !row) return;
-    const next = !(row.enabled === true);
+    const next = row.enabled !== true;
     automationBusy.current = true;
     bump();
     try {
@@ -873,9 +883,16 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
     } catch (err) {
       const msg = String(err);
       if (/no_changes|no staged changes/iu.test(msg)) {
-        updateMessage(statusIdx, { kind: 'status', text: 'Already up to date — added to Home.' });
+        updateMessage(statusIdx, {
+          kind: 'status',
+          text: 'Already up to date — added to Home.',
+        });
         showToast('Already published — added to Home.');
-        onAddToHome?.({ prompt: initialPrompt, appId: appId.current, name: projName.current });
+        onAddToHome?.({
+          prompt: initialPrompt,
+          appId: appId.current,
+          name: projName.current,
+        });
       } else if (/HTTP 401|HTTP 403|gateway rejected|auth_required/iu.test(msg)) {
         updateMessage(statusIdx, {
           kind: 'status',
@@ -885,7 +902,10 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
       } else if (
         /gateway_unreachable|Could not reach gateway|fetch failed|ECONNREFUSED/iu.test(msg)
       ) {
-        updateMessage(statusIdx, { kind: 'status', text: 'Gateway not reachable. Is it running?' });
+        updateMessage(statusIdx, {
+          kind: 'status',
+          text: 'Gateway not reachable. Is it running?',
+        });
         showToast('Gateway not reachable. Check the URL in Settings.');
       } else if (/HTTP 422/iu.test(msg)) {
         const file = msg.match(/"file"\s*:\s*"(?<file>[^"]+)"/u)?.groups?.file;
@@ -898,7 +918,10 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
         updateMessage(statusIdx, { kind: 'status', text: detail });
         showToast(file ? `Migration ${file} failed` : 'Migration failed');
       } else {
-        updateMessage(statusIdx, { kind: 'status', text: `Publish failed: ${msg}` });
+        updateMessage(statusIdx, {
+          kind: 'status',
+          text: `Publish failed: ${msg}`,
+        });
       }
     } finally {
       publishing.current = false;
@@ -959,7 +982,10 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
       }
       if (!isNewBuild || !initialPrompt) {
         chat.current = [
-          { kind: 'status', text: 'No prompt provided. Open the builder from "New app" on home.' },
+          {
+            kind: 'status',
+            text: 'No prompt provided. Open the builder from "New app" on home.',
+          },
         ];
         renderChat();
         return;
@@ -983,7 +1009,10 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
         appId.current = id;
         bump();
       } catch (err) {
-        pushMessage({ kind: 'status', text: `Could not create app: ${String(err)}` });
+        pushMessage({
+          kind: 'status',
+          text: `Could not create app: ${String(err)}`,
+        });
         return;
       }
       try {
@@ -991,7 +1020,10 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
           await createConversation(id, projName.current, input.targetScopeId)
         ).id;
       } catch (err) {
-        pushMessage({ kind: 'status', text: `Could not start chat: ${String(err)}` });
+        pushMessage({
+          kind: 'status',
+          text: `Could not start chat: ${String(err)}`,
+        });
         return;
       }
       sendUserPrompt(initialPrompt);
@@ -999,7 +1031,18 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
     return () => {
       agentAbort.current?.abort();
     };
-  }, []);
+  }, [
+    isNewBuild,
+    isAutomation,
+    input.targetScopeId,
+    pushMessage,
+    isUpdateMode,
+    renderChat,
+    sendUserPrompt,
+    bump,
+    refreshAutomationRow,
+    initialPrompt,
+  ]);
 
   // ── View actions ──────────────────────────────────────────────────────────
   const toggleGroup = useCallback(
@@ -1073,7 +1116,10 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
   const setChatModel = useCallback(
     (modelId: string): void => {
       if (!runnerConfig.current) return;
-      runnerConfig.current = { ...runnerConfig.current, selectedModelId: modelId };
+      runnerConfig.current = {
+        ...runnerConfig.current,
+        selectedModelId: modelId,
+      };
       renderChat();
     },
     [renderChat],
@@ -1082,7 +1128,10 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
   const setChatEffort = useCallback(
     (effort: string): void => {
       if (!runnerConfig.current) return;
-      runnerConfig.current = { ...runnerConfig.current, selectedEffortId: effort };
+      runnerConfig.current = {
+        ...runnerConfig.current,
+        selectedEffortId: effort,
+      };
       renderChat();
     },
     [renderChat],

@@ -1,14 +1,15 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import { mkdir, writeFile } from 'node:fs/promises';
 // The dispatcher after issue #286 phase 2: declared-handler routing ONLY.
 // What must hold: manifest lookup + Ajv validation + worker hand-off work;
 // `_sql` and every other underscore name is just an unknown handler now;
 // describe returns the manifest (there is no per-app schema to read).
-
-import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { assert, beforeEach, describe, expect, it } from 'vitest';
-import { Dispatcher } from './dispatcher.js';
+
 import { Registry } from '../registry/registry.js';
+import { Dispatcher } from './dispatcher.js';
 
 let appsDir: string;
 let codeDir: string;
@@ -140,7 +141,11 @@ describe('dispatcher', () => {
     });
 
     it('input failing the declared JSON Schema is refused before the worker', async () => {
-      const out = await dispatcher.write({ app: 'demo', action: 'add_note', input: { nope: 1 } });
+      const out = await dispatcher.write({
+        app: 'demo',
+        action: 'add_note',
+        input: { nope: 1 },
+      });
       expect(out.isError).toBe(true);
       // Narrows the result union so the code assertion below always runs.
       assert(out.isError);
@@ -157,17 +162,28 @@ describe('dispatcher', () => {
     it('describe returns the manifest — no schema payload, no silo', async () => {
       const out = await dispatcher.describe({ app: 'demo' });
       expect(out.isError).toBe(false);
-      const value = out.structuredContent as { manifest: { id: string }; schema?: unknown };
+      const value = out.structuredContent as {
+        manifest: { id: string };
+        schema?: unknown;
+      };
       expect(value.manifest.id).toBe('demo');
       expect('schema' in value).toBe(false);
     });
 
     it('the `_sql` builtin is gone: underscore names are unknown handlers', async () => {
-      const write = await dispatcher.write({ app: 'demo', action: '_sql', input: { sql: 'x' } });
+      const write = await dispatcher.write({
+        app: 'demo',
+        action: '_sql',
+        input: { sql: 'x' },
+      });
       expect(write.isError).toBe(true);
       assert(write.isError);
       expect(write.structuredContent.code).toBe('UNKNOWN_ACTION');
-      const read = await dispatcher.read({ app: 'demo', query: '_sql', input: { sql: 'x' } });
+      const read = await dispatcher.read({
+        app: 'demo',
+        query: '_sql',
+        input: { sql: 'x' },
+      });
       expect(read.isError).toBe(true);
       assert(read.isError);
       expect(read.structuredContent.code).toBe('UNKNOWN_QUERY');

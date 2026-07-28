@@ -1,7 +1,9 @@
 import { useState, type JSX } from 'react';
+
 import { formatBytes } from '../../format.js';
 import { formatDuration } from '../shell/routes/gatewayData.js';
 import { cx } from '../ui/cx.js';
+
 import selectCss from '../styles/select.module.css';
 import styles from './BackupCard.module.css';
 
@@ -222,7 +224,9 @@ export default function BackupPolicyPanel({
               { value: String(20 * MIB), label: '20 MB/s' },
             ]}
             onChange={(value) =>
-              void update({ throttleBytesPerSec: value === '0' ? null : Number(value) })
+              void update({
+                throttleBytesPerSec: value === '0' ? null : Number(value),
+              })
             }
           />
           <SelectSetting
@@ -236,7 +240,9 @@ export default function BackupPolicyPanel({
               { value: String(20 * GIB), label: '20 GB' },
             ]}
             onChange={(value) =>
-              void update({ cacheBudgetBytes: value === '0' ? null : Number(value) })
+              void update({
+                cacheBudgetBytes: value === '0' ? null : Number(value),
+              })
             }
           />
           <SelectSetting

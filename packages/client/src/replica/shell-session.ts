@@ -54,6 +54,20 @@ import {
   type ReplicaValue,
 } from './types.js';
 
+/**
+ * Replica teardown mutates shared session and durable-storage ownership, so
+ * each scope finishes before the next teardown begins.
+ */
+function applyScopeTeardownsInOrder<T>(
+  values: Iterable<T>,
+  teardown: (value: T) => void | PromiseLike<void>,
+): Promise<void> {
+  return Array.from(values).reduce<Promise<void>>(
+    (sequence, value) => sequence.then(() => teardown(value)),
+    Promise.resolve(),
+  );
+}
+
 export type ShellReplicaReadRequest = Omit<ReplicaReadRequest, 'shapeId'> & {
   shapeId?: string;
 };
@@ -217,7 +231,10 @@ export class ReplicaShellSession {
     const dependencies = this.#catalog
       .filter((shape) => shape.appId === appId)
       .flatMap((shape) =>
-        shape.entities.map((entity) => ({ shapeId: shape.shapeId, entity: entity.entity })),
+        shape.entities.map((entity) => ({
+          shapeId: shape.shapeId,
+          entity: entity.entity,
+        })),
       );
     this.beginAdmissionRegistration();
     try {
@@ -233,7 +250,11 @@ export class ReplicaShellSession {
       const existingAdmission = admissionResult(intent);
       if (existingAdmission) return existingAdmission;
       if (!this.#isOnline()) {
-        return { intentId: intent.intentId, status: 'queued', reason: 'waiting for a connection' };
+        return {
+          intentId: intent.intentId,
+          status: 'queued',
+          reason: 'waiting for a connection',
+        };
       }
       const admitted = new Promise<ShellReplicaWriteResult>((resolve, reject) => {
         const waiters = this.#admissionWaiters.get(intent.intentId) ?? new Set();
@@ -381,60 +402,59 @@ export class ReplicaShellSession {
   }
 
   private async drainLoop(): Promise<void> {
-    while (!this.#closed && this.#isOnline()) {
+    if (this.#closed || !this.#isOnline()) return;
+    await this.waitForAdmissionRegistrations();
+    if (this.#closed) return;
+    if (!this.#isOnline()) {
+      this.resolveAdmissionWaitersAsQueued('saved locally; waiting for a connection');
+      return;
+    }
+    let intent: ReplicaIntent | undefined;
+    try {
+      intent = await this.coordinator.claimNextIntent();
+    } catch (error) {
+      this.rejectAdmissionWaiters(error);
+      return;
+    }
+    if (!intent) return;
+    try {
+      const { outcome } = await postReplicaIntent(this.gatewayAuth, intent, this.#fetcher);
+      if (outcome.status === 'executed' || outcome.status === 'in-flight') {
+        await this.coordinator.markIntentAwaitingChange(intent.intentId);
+      } else {
+        await this.coordinator.applyIntentOutcome(outcome);
+      }
       await this.waitForAdmissionRegistrations();
-      if (this.#closed) return;
-      if (!this.#isOnline()) {
-        this.resolveAdmissionWaitersAsQueued('saved locally; waiting for a connection');
+      this.resolveAdmissionWaiter(intent.intentId, outcome);
+      return this.drainLoop();
+    } catch (error) {
+      if (isAuthorizationError(error)) {
+        await this.waitForAdmissionRegistrations();
+        this.rejectAdmissionWaiter(intent.intentId, error);
+        await this.authorizationRevoked();
         return;
       }
-      let intent: ReplicaIntent | undefined;
-      try {
-        intent = await this.coordinator.claimNextIntent();
-      } catch (error) {
-        this.rejectAdmissionWaiters(error);
-        return;
-      }
-      if (!intent) return;
-      try {
-        const { outcome } = await postReplicaIntent(this.gatewayAuth, intent, this.#fetcher);
-        if (outcome.status === 'executed' || outcome.status === 'in-flight') {
-          await this.coordinator.markIntentAwaitingChange(intent.intentId);
-        } else {
-          await this.coordinator.applyIntentOutcome(outcome);
-        }
+      if (isPermanentIntentRejection(error)) {
+        const outcome: IntentOutcome = {
+          intentId: intent.intentId,
+          status: error.status === 403 ? 'denied' : 'failed',
+          reason: error.message,
+        };
+        await this.coordinator.applyIntentOutcome(outcome);
         await this.waitForAdmissionRegistrations();
         this.resolveAdmissionWaiter(intent.intentId, outcome);
-      } catch (error) {
-        if (isAuthorizationError(error)) {
-          await this.waitForAdmissionRegistrations();
-          this.rejectAdmissionWaiter(intent.intentId, error);
-          await this.authorizationRevoked();
-          return;
-        }
-        if (isPermanentIntentRejection(error)) {
-          const outcome: IntentOutcome = {
-            intentId: intent.intentId,
-            status: error.status === 403 ? 'denied' : 'failed',
-            reason: error.message,
-          };
-          await this.coordinator.applyIntentOutcome(outcome);
-          await this.waitForAdmissionRegistrations();
-          this.resolveAdmissionWaiter(intent.intentId, outcome);
-          continue;
-        }
-        await this.coordinator
-          .markIntentTransportFailed(intent.intentId, errorMessage(error))
-          .catch(() => undefined);
-        await this.waitForAdmissionRegistrations();
-        this.resolveAdmissionWaiter(intent.intentId, {
-          intentId: intent.intentId,
-          status: 'queued',
-          reason: 'saved locally; retrying when the gateway is reachable',
-        });
-        this.scheduleRetry();
-        return;
+        return this.drainLoop();
       }
+      await this.coordinator
+        .markIntentTransportFailed(intent.intentId, errorMessage(error))
+        .catch(() => undefined);
+      await this.waitForAdmissionRegistrations();
+      this.resolveAdmissionWaiter(intent.intentId, {
+        intentId: intent.intentId,
+        status: 'queued',
+        reason: 'saved locally; retrying when the gateway is reachable',
+      });
+      this.scheduleRetry();
     }
   }
 
@@ -513,7 +533,11 @@ export class ReplicaShellSession {
 
   private resolveAdmissionWaitersAsQueued(reason: string): void {
     for (const intentId of this.#admissionWaiters.keys()) {
-      this.resolveAdmissionWaiter(intentId, { intentId, status: 'queued', reason });
+      this.resolveAdmissionWaiter(intentId, {
+        intentId,
+        status: 'queued',
+        reason,
+      });
     }
   }
 
@@ -536,9 +560,9 @@ export class ReplicaShellSession {
   }
 
   private async waitForAdmissionRegistrations(): Promise<void> {
-    while (this.#admissionRegistrationBarrier) {
-      await this.#admissionRegistrationBarrier;
-    }
+    if (!this.#admissionRegistrationBarrier) return;
+    await this.#admissionRegistrationBarrier;
+    return this.waitForAdmissionRegistrations();
   }
 
   private async authorizationRevoked(): Promise<void> {
@@ -671,7 +695,7 @@ interface SessionEntry {
 /** A held scope. Release exactly once; releasing twice is a no-op, not a bug. */
 export interface ReplicaScopeLease {
   readonly session: ReplicaShellSession;
-  release(): void;
+  release: () => void;
 }
 
 const sessions = new Map<string, SessionEntry>();
@@ -775,7 +799,7 @@ export async function getReplicaShellSession(): Promise<ReplicaShellSession> {
 
 /** Purge EVERY mounted scope — the local half of losing this device's access. */
 export async function purgeReplicaShellSession(): Promise<void> {
-  for (const entry of [...sessions.values()]) await dropEntry(entry, 'purge');
+  await applyScopeTeardownsInOrder([...sessions.values()], (entry) => dropEntry(entry, 'purge'));
 }
 
 /** Eager local half of revoking the device that owns this renderer. */
@@ -797,11 +821,11 @@ export async function purgeCurrentReplicaDevice(): Promise<void> {
   }
   await purgeReplicaShellSession();
   try {
-    for (const identity of identities.values()) {
-      await purgeRememberedReplicaIdentities((item) => sameIdentity(item, identity), {
+    await applyScopeTeardownsInOrder(identities.values(), (identity) =>
+      purgeRememberedReplicaIdentities((item) => sameIdentity(item, identity), {
         purgeSelector: { kind: 'identity', ...identity },
-      });
-    }
+      }),
+    );
   } catch (error) {
     if (
       error instanceof Error &&
@@ -818,7 +842,7 @@ export async function purgeCurrentReplicaDevice(): Promise<void> {
 
 /** Ordinary scope switches preserve remembered OPFS/IDB for a warm return. */
 export async function closeReplicaShellSession(): Promise<void> {
-  for (const entry of [...sessions.values()]) await dropEntry(entry, 'close');
+  await applyScopeTeardownsInOrder([...sessions.values()], (entry) => dropEntry(entry, 'close'));
 }
 
 /**
@@ -855,15 +879,15 @@ async function handleGatewayChanged(detail: GatewayChangedDetail): Promise<void>
   if (detail.purgeReplicaGatewayId) purgeGatewayIds.add(detail.purgeReplicaGatewayId);
   // Every mounted scope of a removed gateway is terminal; scopes on a gateway
   // that merely lost focus close warm and keep their remembered storage.
-  for (const entry of [...sessions.values()]) {
+  await applyScopeTeardownsInOrder([...sessions.values()], async (entry) => {
     if (purgeGatewayIds.has(entry.identity.gatewayId)) await dropEntry(entry, 'purge');
     else if (entry.identity.gatewayId !== activeGatewayId) await dropEntry(entry, 'close');
-  }
-  for (const gatewayId of purgeGatewayIds) {
-    await purgeRememberedReplicaIdentities((identity) => identity.gatewayId === gatewayId, {
+  });
+  await applyScopeTeardownsInOrder(purgeGatewayIds, (gatewayId) =>
+    purgeRememberedReplicaIdentities((identity) => identity.gatewayId === gatewayId, {
       purgeSelector: { kind: 'gateway', gatewayId },
-    });
-  }
+    }),
+  );
 }
 
 function queueLifecyclePurge(task: () => Promise<void>): void {
@@ -875,7 +899,7 @@ function queueLifecyclePurge(task: () => Promise<void>): void {
 
 /** Drop one revoked session from the map, leaving every other scope mounted. */
 function forgetSession(session: ReplicaShellSession): void {
-  for (const entry of [...sessions.values()]) {
+  for (const entry of sessions.values()) {
     void entry.promise.then((active) => {
       if (active === session && sessions.get(entry.key) === entry) sessions.delete(entry.key);
     });
@@ -903,7 +927,9 @@ async function purgeSessionTerminal(session: ReplicaShellSession): Promise<void>
 /** The PWA service worker owns lazy blob/preview bytes for this device scope. */
 function purgeBrowserReplicaCaches(): void {
   try {
-    navigator.serviceWorker?.controller?.postMessage({ type: 'centraid:purge-tunnel-cache' });
+    navigator.serviceWorker?.controller?.postMessage({
+      type: 'centraid:purge-tunnel-cache',
+    });
   } catch {
     /* Desktop and hardened browsers have no service-worker cache lane. */
   }

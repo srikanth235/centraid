@@ -5,6 +5,7 @@
 // denial row.
 
 import type { DatabaseSync } from 'node:sqlite';
+
 import type { Credential, Identity } from './types.js';
 import { GatewayError } from './types.js';
 

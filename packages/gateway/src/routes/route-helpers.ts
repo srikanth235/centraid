@@ -4,10 +4,11 @@
 // here rather than reaching across packages.
 
 import { promises as fs } from 'node:fs';
-import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import path from 'node:path';
 import { Readable } from 'node:stream';
 import { createBrotliCompress, createGzip, constants } from 'node:zlib';
+
 import { isRunnerKind, negotiateEncoding, type RunnerKind } from '@centraid/app-engine';
 import {
   DEVICE_IDENTITY_HEADER,
@@ -80,14 +81,19 @@ export async function writeFileMap(
   appDir: string,
   files: ReadonlyArray<FileMapEntry>,
 ): Promise<void> {
-  for (const f of files) {
+  async function writeNext(index: number): Promise<void> {
+    const f = files[index];
+    if (!f) return;
     const abs = path.resolve(appDir, f.path);
     if (abs !== appDir && !abs.startsWith(appDir + path.sep)) {
       throw new Error(`refusing to write outside the app: ${f.path}`);
     }
     await fs.mkdir(path.dirname(abs), { recursive: true });
     await fs.writeFile(abs, f.content, 'utf8');
+    return writeNext(index + 1);
   }
+  // Input order defines the winner if a generated map carries a duplicate path.
+  await writeNext(0);
 }
 
 /**
@@ -111,20 +117,27 @@ async function walkFileMap(root: string, rel: string, out: FileMapEntry[]): Prom
   } catch {
     return;
   }
-  for (const e of entries) {
-    if (e.name.startsWith('.')) continue;
+  async function readNext(index: number): Promise<void> {
+    const e = entries[index];
+    if (!e) return;
+    if (e.name.startsWith('.')) return readNext(index + 1);
     const r = rel ? path.posix.join(rel, e.name) : e.name;
     if (e.isDirectory()) {
       await walkFileMap(root, r, out);
-      continue;
+      return readNext(index + 1);
     }
-    if (!e.isFile()) continue;
-    if (!EDITABLE_EXT.has(path.extname(e.name).toLowerCase())) continue;
+    if (!e.isFile()) return readNext(index + 1);
+    if (!EDITABLE_EXT.has(path.extname(e.name).toLowerCase())) return readNext(index + 1);
     const abs = path.join(root, r);
     const stat = await fs.stat(abs).catch(() => null);
-    if (!stat || stat.size > MAX_FILE_MAP_BYTES) continue;
-    out.push({ path: r, content: await fs.readFile(abs, 'utf8').catch(() => '') });
+    if (!stat || stat.size > MAX_FILE_MAP_BYTES) return readNext(index + 1);
+    out.push({
+      path: r,
+      content: await fs.readFile(abs, 'utf8').catch(() => ''),
+    });
+    return readNext(index + 1);
   }
+  await readNext(0);
 }
 
 export function sendJson(res: ServerResponse, status: number, body: unknown): true {
@@ -143,7 +156,9 @@ export function sendJson(res: ServerResponse, status: number, body: unknown): tr
   res.setHeader('Vary', 'Accept-Encoding');
   const compressor =
     encoding === 'br'
-      ? createBrotliCompress({ params: { [constants.BROTLI_PARAM_QUALITY]: 4 } })
+      ? createBrotliCompress({
+          params: { [constants.BROTLI_PARAM_QUALITY]: 4 },
+        })
       : createGzip({ level: 6 });
   compressor.once('error', (error) => res.destroy(error));
   Readable.from(bytes).pipe(compressor).pipe(res);

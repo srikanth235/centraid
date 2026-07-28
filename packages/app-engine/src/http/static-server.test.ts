@@ -1,12 +1,14 @@
+import { writeFileSync, mkdirSync, utimesSync, statSync, promises as fsp } from 'node:fs';
+import { IncomingMessage, ServerResponse } from 'node:http';
+import path from 'node:path';
+import zlib from 'node:zlib';
+
 import { tempDirSync } from '@centraid/test-kit/temp-dir';
 // governance: allow-repo-hygiene file-size-limit one suite per served-asset concern of a single module — CSP/nonce, shared fallback, depth-aware JSX transform, ETag/conditional, and compression tiers all exercise serveStatic and share its fixtures
 import { describe, expect, it, vi } from 'vitest';
-import { writeFileSync, mkdirSync, utimesSync, statSync, promises as fsp } from 'node:fs';
-import zlib from 'node:zlib';
-import { join } from 'node:path';
-import { IncomingMessage, ServerResponse } from 'node:http';
-import { serveStatic } from './static-server.js';
+
 import { resolveStaticPath } from './security.js';
+import { serveStatic } from './static-server.js';
 
 interface MockRes {
   statusCode: number;
@@ -50,8 +52,8 @@ function mockReq(headers: Record<string, string> = {}): IncomingMessage {
 function newAppDir(files: Record<string, string>): string {
   const dir = tempDirSync('centraid-static-server-');
   for (const [rel, content] of Object.entries(files)) {
-    const target = join(dir, rel);
-    mkdirSync(join(target, '..'), { recursive: true });
+    const target = path.join(dir, rel);
+    mkdirSync(path.join(target, '..'), { recursive: true });
     writeFileSync(target, content);
   }
   return dir;
@@ -69,16 +71,16 @@ describe('serveStatic — CSP + nonce', () => {
     });
     const html = data.body.toString('utf8');
     // Inline script gets a nonce; external src=… script does NOT.
-    const inlineMatch = html.match(/<script\s+nonce="([^"]+)">alert/);
+    const inlineMatch = html.match(/<script\s+nonce="(?<nonce>[^"]+)">alert/u);
     expect(inlineMatch).toBeTruthy();
-    expect(html).toMatch(/<script\s+src="app\.js"><\/script>/);
+    expect(html).toMatch(/<script\s+src="app\.js"><\/script>/u);
     // CSP header carries the same nonce — the inline script is now whitelisted.
     const csp = data.headers['Content-Security-Policy'];
     expect(csp).toBeTruthy();
     expect(csp).toContain("media-src 'self' data: blob:");
     expect(csp).toContain("worker-src 'self' blob:");
     expect(csp).toMatch(
-      new RegExp(`script-src 'self' 'nonce-${inlineMatch![1]!.replace(/[/+=]/g, '\\$&')}'`),
+      new RegExp(`script-src 'self' 'nonce-${inlineMatch![1]!.replace(/\+/gu, '\\+')}'`, 'u'),
     );
   });
 
@@ -94,18 +96,24 @@ describe('serveStatic — CSP + nonce', () => {
     // Original `nonce="abc"` is preserved (no double-stamping). A second
     // nonce IS expected on the auto-injected change-bus bridge, which the
     // runtime adds to every served HTML — see `injectChangeBridge`.
-    expect(html).toMatch(/<script nonce="abc">/);
-    expect(html.match(/<script nonce="abc">/g)?.length).toBe(1);
+    expect(html).toMatch(/<script nonce="abc">/u);
+    expect(html.match(/<script nonce="abc">/gu)?.length).toBe(1);
   });
 
   it('mints a fresh nonce per response', async () => {
-    const dir = newAppDir({ 'index.html': '<html><head><script>x</script></head></html>' });
+    const dir = newAppDir({
+      'index.html': '<html><head><script>x</script></head></html>',
+    });
     const { res: res1, data: d1 } = mockRes();
     const { res: res2, data: d2 } = mockRes();
-    await serveStatic(mockReq(), res1, dir, 'index.html', { settingsInject: {} });
-    await serveStatic(mockReq(), res2, dir, 'index.html', { settingsInject: {} });
-    const n1 = d1.body.toString('utf8').match(/nonce="([^"]+)"/)?.[1];
-    const n2 = d2.body.toString('utf8').match(/nonce="([^"]+)"/)?.[1];
+    await serveStatic(mockReq(), res1, dir, 'index.html', {
+      settingsInject: {},
+    });
+    await serveStatic(mockReq(), res2, dir, 'index.html', {
+      settingsInject: {},
+    });
+    const n1 = d1.body.toString('utf8').match(/nonce="(?<nonce>[^"]+)"/u)?.[1];
+    const n2 = d2.body.toString('utf8').match(/nonce="(?<nonce>[^"]+)"/u)?.[1];
     expect(n1 && n2).toBeTruthy();
     expect(n1).not.toBe(n2);
   });
@@ -115,7 +123,7 @@ describe('serveStatic — CSP + nonce', () => {
     const { res, data } = mockRes();
     await serveStatic(mockReq(), res, dir, 'app.js');
     expect(data.headers['Content-Security-Policy']?.includes('nonce-')).toBe(false);
-    expect(data.headers['Content-Security-Policy']!).toMatch(/script-src 'self'/);
+    expect(data.headers['Content-Security-Policy']!).toMatch(/script-src 'self'/u);
   });
 
   it('auto-injects the change-bus bridge into every served HTML', async () => {
@@ -123,22 +131,28 @@ describe('serveStatic — CSP + nonce', () => {
       'index.html': '<!doctype html><html><head><title>x</title></head><body></body></html>',
     });
     const { res, data } = mockRes();
-    await serveStatic(mockReq(), res, dir, 'index.html', { settingsInject: {} });
+    await serveStatic(mockReq(), res, dir, 'index.html', {
+      settingsInject: {},
+    });
     const html = data.body.toString('utf8');
     // Bridge inlines the SSE wiring and the `centraid.onChange` sugar.
-    expect(html).toMatch(/centraid\.onChange/);
-    expect(html).toMatch(/EventSource\('_changes'\)/);
-    expect(html).toMatch(/centraid:datachange/);
+    expect(html).toMatch(/centraid\.onChange/u);
+    expect(html).toMatch(/EventSource\('_changes'\)/u);
+    expect(html).toMatch(/centraid:datachange/u);
     // It sits right after the opening <head>, before any user content.
-    expect(html).toMatch(/<head>\s*<script\b[^>]*>\(function\(\)\{/);
+    expect(html).toMatch(/<head>\s*<script\b[^>]*>\(function\(\)\{/u);
     // The CSP nonce stamper has tagged it so script-src 'self' lets it run.
-    expect(html).toMatch(/<script nonce="[^"]+">\(function\(\)\{var w=window;w\.centraid/);
+    expect(html).toMatch(/<script nonce="[^"]+">\(function\(\)\{var w=window;w\.centraid/u);
   });
 
   it('derives the app id when a browser transport prefixes the app path', async () => {
-    const dir = newAppDir({ 'index.html': '<html><head></head><body></body></html>' });
+    const dir = newAppDir({
+      'index.html': '<html><head></head><body></body></html>',
+    });
     const { res, data } = mockRes();
-    await serveStatic(mockReq(), res, dir, 'index.html', { settingsInject: {} });
+    await serveStatic(mockReq(), res, dir, 'index.html', {
+      settingsInject: {},
+    });
     const html = data.body.toString('utf8');
     // Iroh serves the app under /__centraid_iroh__/<bridge>/centraid/<app>/.
     // The bridge must still identify the app for its scoped tool calls.
@@ -146,11 +160,15 @@ describe('serveStatic — CSP + nonce', () => {
   });
 
   it('skips the bridge inject for HTML without a <head> tag', async () => {
-    const dir = newAppDir({ 'index.html': '<html><body>no head</body></html>' });
+    const dir = newAppDir({
+      'index.html': '<html><body>no head</body></html>',
+    });
     const { res, data } = mockRes();
-    await serveStatic(mockReq(), res, dir, 'index.html', { settingsInject: {} });
+    await serveStatic(mockReq(), res, dir, 'index.html', {
+      settingsInject: {},
+    });
     const html = data.body.toString('utf8');
-    expect(html).not.toMatch(/centraid:datachange/);
+    expect(html).not.toMatch(/centraid:datachange/u);
   });
 
   it('does not inject the bridge into non-HTML responses', async () => {
@@ -158,18 +176,23 @@ describe('serveStatic — CSP + nonce', () => {
     const { res, data } = mockRes();
     await serveStatic(mockReq(), res, dir, 'app.js');
     const body = data.body.toString('utf8');
-    expect(body).not.toMatch(/centraid:datachange/);
-    expect(body).not.toMatch(/centraid\.onChange/);
+    expect(body).not.toMatch(/centraid:datachange/u);
+    expect(body).not.toMatch(/centraid\.onChange/u);
   });
 
   it('bakes data attrs onto <html> via settingsInject', async () => {
-    const dir = newAppDir({ 'index.html': '<html><head></head><body></body></html>' });
+    const dir = newAppDir({
+      'index.html': '<html><head></head><body></body></html>',
+    });
     const { res, data } = mockRes();
     await serveStatic(mockReq(), res, dir, 'index.html', {
-      settingsInject: { dataAttrs: { theme: 'dark' }, cssVars: { 'bg-l': '5%' } },
+      settingsInject: {
+        dataAttrs: { theme: 'dark' },
+        cssVars: { 'bg-l': '5%' },
+      },
     });
     const html = data.body.toString('utf8');
-    expect(html).toMatch(/<html data-theme="dark" style="--bg-l:5%">/);
+    expect(html).toMatch(/<html data-theme="dark" style="--bg-l:5%">/u);
   });
 });
 
@@ -184,13 +207,15 @@ describe('serveStatic — shared kit asset fallback', () => {
     await serveStatic(mockReq(), js.res, appDir, 'kit.ts', { sharedAssetsDir });
     expect(js.data.statusCode).toBe(200);
     expect(js.data.body.toString('utf8')).toBe('export const KIT = 1;\n');
-    expect(js.data.headers['Content-Type']).toMatch(/javascript/);
+    expect(js.data.headers['Content-Type']).toMatch(/javascript/u);
 
     const css = mockRes();
-    await serveStatic(mockReq(), css.res, appDir, 'kit.css', { sharedAssetsDir });
+    await serveStatic(mockReq(), css.res, appDir, 'kit.css', {
+      sharedAssetsDir,
+    });
     expect(css.data.statusCode).toBe(200);
     expect(css.data.body.toString('utf8')).toBe('.kit{color:red}');
-    expect(css.data.headers['Content-Type']).toMatch(/css/);
+    expect(css.data.headers['Content-Type']).toMatch(/css/u);
   });
 
   it('serves the kit Web Component module (elements.js) from the shared dir', async () => {
@@ -204,15 +229,19 @@ describe('serveStatic — shared kit asset fallback', () => {
     });
 
     const els = mockRes();
-    await serveStatic(mockReq(), els.res, appDir, 'elements.js', { sharedAssetsDir });
+    await serveStatic(mockReq(), els.res, appDir, 'elements.js', {
+      sharedAssetsDir,
+    });
     expect(els.data.statusCode).toBe(200);
     expect(els.data.body.toString('utf8')).toBe('export const KitElement = class {};');
-    expect(els.data.headers['Content-Type']).toMatch(/javascript/);
+    expect(els.data.headers['Content-Type']).toMatch(/javascript/u);
   });
 
   it("prefers the app's own copy over the shared one", async () => {
     const appDir = newAppDir({ 'kit.ts': 'export const KIT = "app";' });
-    const sharedAssetsDir = newAppDir({ 'kit.ts': 'export const KIT = "shared";' });
+    const sharedAssetsDir = newAppDir({
+      'kit.ts': 'export const KIT = "shared";',
+    });
     const { res, data } = mockRes();
     await serveStatic(mockReq(), res, appDir, 'kit.ts', { sharedAssetsDir });
     expect(data.body.toString('utf8')).toBe('export const KIT = "app";\n');
@@ -244,14 +273,18 @@ describe('serveStatic — shared kit asset fallback', () => {
     });
 
     const react = mockRes();
-    await serveStatic(mockReq(), react.res, appDir, 'react-core.min.js', { sharedAssetsDir });
+    await serveStatic(mockReq(), react.res, appDir, 'react-core.min.js', {
+      sharedAssetsDir,
+    });
     expect(react.data.statusCode).toBe(404);
 
     const runtime = mockRes();
-    await serveStatic(mockReq(), runtime.res, appDir, 'jsx-runtime.js', { sharedAssetsDir });
+    await serveStatic(mockReq(), runtime.res, appDir, 'jsx-runtime.js', {
+      sharedAssetsDir,
+    });
     expect(runtime.data.statusCode).toBe(200);
     expect(runtime.data.body.toString('utf8')).toBe('export function jsx(){}');
-    expect(runtime.data.headers['Content-Type']).toMatch(/javascript/);
+    expect(runtime.data.headers['Content-Type']).toMatch(/javascript/u);
   });
 
   it('serves hand-authored browser helpers from the shared kit', async () => {
@@ -260,13 +293,17 @@ describe('serveStatic — shared kit asset fallback', () => {
       'edge-upload.js': 'export const stageDirectFile = () => {};',
       'turn-stream.js': 'export const consumeTurnStream = () => {};',
     });
-    for (const name of ['edge-upload.js', 'turn-stream.js']) {
-      const served = mockRes();
-      await serveStatic(mockReq(), served.res, appDir, name, { sharedAssetsDir });
-      expect(served.data.statusCode).toBe(200);
-      expect(served.data.headers['Content-Type']).toMatch(/javascript/);
-      expect(served.data.body.toString('utf8')).toContain('export const');
-    }
+    await Promise.all(
+      ['edge-upload.js', 'turn-stream.js'].map(async (name) => {
+        const served = mockRes();
+        await serveStatic(mockReq(), served.res, appDir, name, {
+          sharedAssetsDir,
+        });
+        expect(served.data.statusCode).toBe(200);
+        expect(served.data.headers['Content-Type']).toMatch(/javascript/u);
+        expect(served.data.body.toString('utf8')).toContain('export const');
+      }),
+    );
   });
 
   it('does not expose generated token styles through sharedAssetsDir', async () => {
@@ -276,16 +313,22 @@ describe('serveStatic — shared kit asset fallback', () => {
       'wall.css': 'body{background:linen}',
     });
 
-    for (const name of ['tokens.css', 'wall.css']) {
-      const served = mockRes();
-      await serveStatic(mockReq(), served.res, appDir, name, { sharedAssetsDir });
-      expect(served.data.statusCode).toBe(404);
-    }
+    await Promise.all(
+      ['tokens.css', 'wall.css'].map(async (name) => {
+        const served = mockRes();
+        await serveStatic(mockReq(), served.res, appDir, name, {
+          sharedAssetsDir,
+        });
+        expect(served.data.statusCode).toBe(404);
+      }),
+    );
   });
 
   it('serves an app-owned stylesheet without consulting sharedAssetsDir', async () => {
     const appDir = newAppDir({ 'wall.css': 'body{background:app}' });
-    const sharedAssetsDir = newAppDir({ 'wall.css': 'body{background:shared}' });
+    const sharedAssetsDir = newAppDir({
+      'wall.css': 'body{background:shared}',
+    });
     const { res, data } = mockRes();
     await serveStatic(mockReq(), res, appDir, 'wall.css', { sharedAssetsDir });
     expect(data.statusCode).toBe(200);
@@ -303,10 +346,10 @@ describe('serveStatic — serve-time JSX transform', () => {
     const { res, data } = mockRes();
     await serveStatic(mockReq(), res, dir, 'app.jsx');
     expect(data.statusCode).toBe(200);
-    expect(data.headers['Content-Type']).toMatch(/javascript/);
+    expect(data.headers['Content-Type']).toMatch(/javascript/u);
     const body = data.body.toString('utf8');
-    expect(body).not.toMatch(/<div/);
-    expect(body).toMatch(/from\s+["']\.\/jsx-runtime\.js["']/);
+    expect(body).not.toMatch(/<div/u);
+    expect(body).toMatch(/from\s+["']\.\/jsx-runtime\.js["']/u);
   });
 
   it('carries the same security headers as .js (nosniff, CSP)', async () => {
@@ -327,11 +370,11 @@ describe('serveStatic — serve-time JSX transform', () => {
 
   it('re-transforms when the file mtime changes (cache invalidation)', async () => {
     const dir = newAppDir({ 'app.jsx': VALID_JSX });
-    const file = join(dir, 'app.jsx');
+    const file = path.join(dir, 'app.jsx');
 
     const first = mockRes();
     await serveStatic(mockReq(), first.res, dir, 'app.jsx');
-    expect(first.data.body.toString('utf8')).toMatch(/className:\s*["']ok["']|"ok"/);
+    expect(first.data.body.toString('utf8')).toMatch(/className:\s*["']ok["']|"ok"/u);
 
     // Overwrite with different JSX and bump mtime forward — FS timestamp
     // granularity can be coarse (1s on some filesystems), so jump well past
@@ -343,20 +386,20 @@ describe('serveStatic — serve-time JSX transform', () => {
     const second = mockRes();
     await serveStatic(mockReq(), second.res, dir, 'app.jsx');
     const secondBody = second.data.body.toString('utf8');
-    expect(secondBody).toMatch(/"v2"/);
-    expect(secondBody).not.toMatch(/"ok"/);
+    expect(secondBody).toMatch(/"v2"/u);
+    expect(secondBody).not.toMatch(/"ok"/u);
   });
 
   it('serves the error shim for broken JSX (200, JS content-type, contains the esbuild message) without poisoning the cache', async () => {
     const dir = newAppDir({ 'app.jsx': BROKEN_JSX });
-    const file = join(dir, 'app.jsx');
+    const file = path.join(dir, 'app.jsx');
 
     const broken = mockRes();
     await serveStatic(mockReq(), broken.res, dir, 'app.jsx');
     expect(broken.data.statusCode).toBe(200);
-    expect(broken.data.headers['Content-Type']).toMatch(/javascript/);
+    expect(broken.data.headers['Content-Type']).toMatch(/javascript/u);
     const brokenBody = broken.data.body.toString('utf8');
-    expect(brokenBody).toMatch(/console\.error\(/);
+    expect(brokenBody).toMatch(/console\.error\(/u);
     // The esbuild message should be present in the shim body somewhere.
     expect(brokenBody.length).toBeGreaterThan('console.error();'.length);
 
@@ -377,8 +420,8 @@ describe('serveStatic — serve-time JSX transform', () => {
     await serveStatic(mockReq(), fixed.res, dir, 'app.jsx');
     expect(fixed.data.statusCode).toBe(200);
     const fixedBody = fixed.data.body.toString('utf8');
-    expect(fixedBody).not.toMatch(/console\.error\(/);
-    expect(fixedBody).not.toMatch(/<div/);
+    expect(fixedBody).not.toMatch(/console\.error\(/u);
+    expect(fixedBody).not.toMatch(/<div/u);
   });
 
   it('transforms .jsx in draft-context serving too (mobile/live and draft share the same path)', async () => {
@@ -388,10 +431,10 @@ describe('serveStatic — serve-time JSX transform', () => {
       draft: { appId: 'myapp', sessionId: 'sess1' },
     });
     expect(data.statusCode).toBe(200);
-    expect(data.headers['Content-Type']).toMatch(/javascript/);
+    expect(data.headers['Content-Type']).toMatch(/javascript/u);
     const body = data.body.toString('utf8');
-    expect(body).not.toMatch(/<div/);
-    expect(body).toMatch(/from\s+["']\.\/jsx-runtime\.js["']/);
+    expect(body).not.toMatch(/<div/u);
+    expect(body).toMatch(/from\s+["']\.\/jsx-runtime\.js["']/u);
   });
 
   // Multi-file React apps: `app.jsx` imports `./components/X.jsx`, so nested
@@ -407,8 +450,8 @@ describe('serveStatic — serve-time JSX transform', () => {
     await serveStatic(mockReq(), res, dir, 'components/Widget.jsx', {});
     expect(data.statusCode).toBe(200);
     const body = data.body.toString('utf8');
-    expect(body).not.toMatch(/<div/);
-    expect(body).toMatch(/from\s+["']\.\.\/jsx-runtime\.js["']/);
+    expect(body).not.toMatch(/<div/u);
+    expect(body).toMatch(/from\s+["']\.\.\/jsx-runtime\.js["']/u);
   });
 
   it('climbs two levels for a doubly-nested .jsx file', async () => {
@@ -417,7 +460,7 @@ describe('serveStatic — serve-time JSX transform', () => {
     await serveStatic(mockReq(), res, dir, 'components/deep/Widget.jsx', {});
     expect(data.statusCode).toBe(200);
     const body = data.body.toString('utf8');
-    expect(body).toMatch(/from\s+["']\.\.\/\.\.\/jsx-runtime\.js["']/);
+    expect(body).toMatch(/from\s+["']\.\.\/\.\.\/jsx-runtime\.js["']/u);
   });
 
   it('never serves a cached rewrite from the wrong depth for identical file content', async () => {
@@ -432,23 +475,23 @@ describe('serveStatic — serve-time JSX transform', () => {
 
     const nested = mockRes();
     await serveStatic(mockReq(), nested.res, nestedDir, 'components/Widget.jsx', {});
-    expect(nested.data.body.toString('utf8')).toMatch(/from\s+["']\.\.\/jsx-runtime\.js["']/);
+    expect(nested.data.body.toString('utf8')).toMatch(/from\s+["']\.\.\/jsx-runtime\.js["']/u);
 
     const root = mockRes();
     await serveStatic(mockReq(), root.res, rootDir, 'app.jsx', {});
-    expect(root.data.body.toString('utf8')).toMatch(/from\s+["']\.\/jsx-runtime\.js["']/);
-    expect(root.data.body.toString('utf8')).not.toMatch(/\.\.\/jsx-runtime\.js/);
+    expect(root.data.body.toString('utf8')).toMatch(/from\s+["']\.\/jsx-runtime\.js["']/u);
+    expect(root.data.body.toString('utf8')).not.toMatch(/\.\.\/jsx-runtime\.js/u);
 
     const deep = mockRes();
     await serveStatic(mockReq(), deep.res, deepDir, 'components/deep/Widget.jsx', {});
-    expect(deep.data.body.toString('utf8')).toMatch(/from\s+["']\.\.\/\.\.\/jsx-runtime\.js["']/);
+    expect(deep.data.body.toString('utf8')).toMatch(/from\s+["']\.\.\/\.\.\/jsx-runtime\.js["']/u);
 
     // Re-request the nested one again — still its own depth, not clobbered
     // by the root or deep requests that ran after it.
     const nestedAgain = mockRes();
     await serveStatic(mockReq(), nestedAgain.res, nestedDir, 'components/Widget.jsx', {});
-    expect(nestedAgain.data.body.toString('utf8')).toMatch(/from\s+["']\.\.\/jsx-runtime\.js["']/);
-    expect(nestedAgain.data.body.toString('utf8')).not.toMatch(/\.\.\/\.\.\/jsx-runtime\.js/);
+    expect(nestedAgain.data.body.toString('utf8')).toMatch(/from\s+["']\.\.\/jsx-runtime\.js["']/u);
+    expect(nestedAgain.data.body.toString('utf8')).not.toMatch(/\.\.\/\.\.\/jsx-runtime\.js/u);
   });
 
   it('404s a nested shared-asset request instead of silently serving the shared copy', async () => {
@@ -488,12 +531,12 @@ export function total(q: Q): number { return q.a; }`;
     const { res, data } = mockRes();
     await serveStatic(mockReq(), res, dir, 'app.tsx');
     expect(data.statusCode).toBe(200);
-    expect(data.headers['Content-Type']).toMatch(/javascript/);
+    expect(data.headers['Content-Type']).toMatch(/javascript/u);
     const body = data.body.toString('utf8');
-    expect(body).not.toMatch(/<div/);
-    expect(body).not.toMatch(/interface\s+Props/);
-    expect(body).not.toMatch(/:\s*number/);
-    expect(body).toMatch(/from\s+["']\.\/jsx-runtime\.js["']/);
+    expect(body).not.toMatch(/<div/u);
+    expect(body).not.toMatch(/interface\s+Props/u);
+    expect(body).not.toMatch(/:\s*number/u);
+    expect(body).toMatch(/from\s+["']\.\/jsx-runtime\.js["']/u);
   });
 
   it('climbs one level for a nested components/*.tsx jsx-runtime import', async () => {
@@ -502,8 +545,8 @@ export function total(q: Q): number { return q.a; }`;
     await serveStatic(mockReq(), res, dir, 'components/Widget.tsx', {});
     expect(data.statusCode).toBe(200);
     const body = data.body.toString('utf8');
-    expect(body).not.toMatch(/<div/);
-    expect(body).toMatch(/from\s+["']\.\.\/jsx-runtime\.js["']/);
+    expect(body).not.toMatch(/<div/u);
+    expect(body).toMatch(/from\s+["']\.\.\/jsx-runtime\.js["']/u);
   });
 
   it('strips types from a plain .ts file (no JSX, JS content-type)', async () => {
@@ -511,14 +554,14 @@ export function total(q: Q): number { return q.a; }`;
     const { res, data } = mockRes();
     await serveStatic(mockReq(), res, dir, 'util.ts');
     expect(data.statusCode).toBe(200);
-    expect(data.headers['Content-Type']).toMatch(/javascript/);
+    expect(data.headers['Content-Type']).toMatch(/javascript/u);
     const body = data.body.toString('utf8');
-    expect(body).not.toMatch(/interface\s+Q/);
-    expect(body).not.toMatch(/:\s*string/);
-    expect(body).not.toMatch(/:\s*number/);
-    expect(body).toMatch(/greeting/);
+    expect(body).not.toMatch(/interface\s+Q/u);
+    expect(body).not.toMatch(/:\s*string/u);
+    expect(body).not.toMatch(/:\s*number/u);
+    expect(body).toMatch(/greeting/u);
     // A no-JSX source needs no runtime import.
-    expect(body).not.toMatch(/jsx-runtime/);
+    expect(body).not.toMatch(/jsx-runtime/u);
   });
 
   it('serves a *.module.css as a JS module: class-map default export + idempotent style injection, JS content-type', async () => {
@@ -527,16 +570,16 @@ export function total(q: Q): number { return q.a; }`;
     await serveStatic(mockReq(), res, dir, 'styles.module.css');
     expect(data.statusCode).toBe(200);
     // NOT text/css — the browser imports it as JS.
-    expect(data.headers['Content-Type']).toMatch(/javascript/);
+    expect(data.headers['Content-Type']).toMatch(/javascript/u);
     const body = data.body.toString('utf8');
     // Injects a guarded <style> element carrying the compiled CSS.
-    expect(body).toMatch(/document\.createElement\(['"]style['"]\)/);
-    expect(body).toMatch(/data-centraid-css-module/);
-    expect(body).toMatch(/color: red/);
+    expect(body).toMatch(/document\.createElement\(['"]style['"]\)/u);
+    expect(body).toMatch(/data-centraid-css-module/u);
+    expect(body).toMatch(/color: red/u);
     // Default-exports the local→hashed class map; camelCase `barBaz` preserved.
-    expect(body).toMatch(/foo:\s*["'][^"']*foo[^"']*["']/);
-    expect(body).toMatch(/barBaz:\s*["'][^"']*barBaz[^"']*["']/);
-    expect(body).toMatch(/export\s*\{[^}]*\bas default\b|export\s+default/);
+    expect(body).toMatch(/foo:\s*["'][^"']*foo[^"']*["']/u);
+    expect(body).toMatch(/barBaz:\s*["'][^"']*barBaz[^"']*["']/u);
+    expect(body).toMatch(/export\s*\{[^}]*\bas default\b|export\s+default/u);
   });
 
   it('a plain (non-module) .css still serves verbatim as text/css', async () => {
@@ -544,19 +587,19 @@ export function total(q: Q): number { return q.a; }`;
     const { res, data } = mockRes();
     await serveStatic(mockReq(), res, dir, 'app.css');
     expect(data.statusCode).toBe(200);
-    expect(data.headers['Content-Type']).toMatch(/text\/css/);
+    expect(data.headers['Content-Type']).toMatch(/text\/css/u);
     expect(data.body.toString('utf8')).toBe('.a{color:blue}');
   });
 
   it('a *.module.css gets an ETag and re-compiles with a fresh etag+body when edited (mtime bump)', async () => {
     const dir = newAppDir({ 'styles.module.css': CSS_MOD });
-    const file = join(dir, 'styles.module.css');
+    const file = path.join(dir, 'styles.module.css');
 
     const first = mockRes();
     await serveStatic(mockReq(), first.res, dir, 'styles.module.css');
     const etag1 = first.data.headers['ETag']!;
-    expect(etag1).toMatch(/^"[0-9a-f]{16,}"$/);
-    expect(first.data.body.toString('utf8')).toMatch(/color: red/);
+    expect(etag1).toMatch(/^"[0-9a-f]{16,}"$/u);
+    expect(first.data.body.toString('utf8')).toMatch(/color: red/u);
 
     // Unchanged → conditional 304.
     const revalidate = mockRes();
@@ -577,8 +620,8 @@ export function total(q: Q): number { return q.a; }`;
     expect(second.data.statusCode).toBe(200);
     expect(second.data.headers['ETag']).not.toBe(etag1);
     const body2 = second.data.body.toString('utf8');
-    expect(body2).toMatch(/color: blue/);
-    expect(body2).not.toMatch(/color: red/);
+    expect(body2).toMatch(/color: blue/u);
+    expect(body2).not.toMatch(/color: red/u);
   });
 });
 
@@ -592,7 +635,7 @@ describe('serveStatic — ETag / conditional revalidation (issue #356)', () => {
     const { res, data } = mockRes();
     await serveStatic(mockReq(), res, dir, 'app.js');
     expect(data.statusCode).toBe(200);
-    expect(data.headers['ETag']).toMatch(/^"[0-9a-f]{16,}"$/);
+    expect(data.headers['ETag']).toMatch(/^"[0-9a-f]{16,}"$/u);
     expect(data.headers['Cache-Control']).toBe('private, no-cache');
   });
 
@@ -663,10 +706,14 @@ describe('serveStatic — ETag / conditional revalidation (issue #356)', () => {
   });
 
   it('HTML gets Cache-Control: no-store, no ETag, and ignores If-None-Match (always 200)', async () => {
-    const dir = newAppDir({ 'index.html': '<html><head></head><body>hi</body></html>' });
+    const dir = newAppDir({
+      'index.html': '<html><head></head><body>hi</body></html>',
+    });
 
     const first = mockRes();
-    await serveStatic(mockReq(), first.res, dir, 'index.html', { settingsInject: {} });
+    await serveStatic(mockReq(), first.res, dir, 'index.html', {
+      settingsInject: {},
+    });
     expect(first.data.statusCode).toBe(200);
     expect(first.data.headers['Cache-Control']).toBe('no-store');
     expect(first.data.headers['ETag']).toBeUndefined();
@@ -684,12 +731,12 @@ describe('serveStatic — ETag / conditional revalidation (issue #356)', () => {
 
   it('.jsx ETag changes when the file content+mtime change, 304s when unchanged', async () => {
     const dir = newAppDir({ 'app.jsx': VALID_JSX });
-    const file = join(dir, 'app.jsx');
+    const file = path.join(dir, 'app.jsx');
 
     const first = mockRes();
     await serveStatic(mockReq(), first.res, dir, 'app.jsx');
     const etag1 = first.data.headers['ETag']!;
-    expect(etag1).toMatch(/^"[0-9a-f]{16,}"$/);
+    expect(etag1).toMatch(/^"[0-9a-f]{16,}"$/u);
 
     // Unchanged file, matching If-None-Match → 304.
     const revalidate = mockRes();
@@ -710,7 +757,7 @@ describe('serveStatic — ETag / conditional revalidation (issue #356)', () => {
     const stale = mockRes();
     await serveStatic(mockReq({ 'if-none-match': etag1 }), stale.res, dir, 'app.jsx');
     expect(stale.data.statusCode).toBe(200);
-    expect(stale.data.body.toString('utf8')).toMatch(/"v2"/);
+    expect(stale.data.body.toString('utf8')).toMatch(/"v2"/u);
   });
 
   it('the depth-aware jsx-runtime rewrite (Tier 1) still holds alongside ETag support', async () => {
@@ -720,12 +767,12 @@ describe('serveStatic — ETag / conditional revalidation (issue #356)', () => {
     expect(data.statusCode).toBe(200);
     expect(data.headers['ETag']).toBeTruthy();
     const body = data.body.toString('utf8');
-    expect(body).toMatch(/from\s+["']\.\.\/jsx-runtime\.js["']/);
+    expect(body).toMatch(/from\s+["']\.\.\/jsx-runtime\.js["']/u);
   });
 
   it('draft-mode: editing the file yields a new etag and a conditional request returns the new body', async () => {
     const dir = newAppDir({ 'app.jsx': VALID_JSX });
-    const file = join(dir, 'app.jsx');
+    const file = path.join(dir, 'app.jsx');
     const draft = { draft: { appId: 'myapp', sessionId: 'sess1' } };
 
     const first = mockRes();
@@ -746,19 +793,19 @@ describe('serveStatic — ETag / conditional revalidation (issue #356)', () => {
     await serveStatic(mockReq({ 'if-none-match': etag1 }), afterEdit.res, dir, 'app.jsx', draft);
     expect(afterEdit.data.statusCode).toBe(200);
     const body = afterEdit.data.body.toString('utf8');
-    expect(body).toMatch(/"v2"/);
+    expect(body).toMatch(/"v2"/u);
     expect(afterEdit.data.headers['ETag']).not.toBe(etag1);
   });
 
   it('broken-JSX error shim gets an ETag; fixing the file (mtime bump) yields a new etag and 200', async () => {
     const dir = newAppDir({ 'app.jsx': BROKEN_JSX });
-    const file = join(dir, 'app.jsx');
+    const file = path.join(dir, 'app.jsx');
 
     const broken = mockRes();
     await serveStatic(mockReq(), broken.res, dir, 'app.jsx');
     expect(broken.data.statusCode).toBe(200);
     const shimEtag = broken.data.headers['ETag']!;
-    expect(shimEtag).toMatch(/^"[0-9a-f]{16,}"$/);
+    expect(shimEtag).toMatch(/^"[0-9a-f]{16,}"$/u);
 
     // Re-requesting the same broken file (no mtime change) revalidates as
     // a 304 against the shim's own etag — proves the shim body is stable
@@ -778,7 +825,7 @@ describe('serveStatic — ETag / conditional revalidation (issue #356)', () => {
     await serveStatic(mockReq({ 'if-none-match': shimEtag }), fixed.res, dir, 'app.jsx');
     expect(fixed.data.statusCode).toBe(200);
     expect(fixed.data.headers['ETag']).not.toBe(shimEtag);
-    expect(fixed.data.body.toString('utf8')).not.toMatch(/console\.error\(/);
+    expect(fixed.data.body.toString('utf8')).not.toMatch(/console\.error\(/u);
   });
 });
 
@@ -796,7 +843,7 @@ describe('serveStatic — compression', () => {
     expect(data.body.length).toBeLessThan(Buffer.byteLength(bigJs));
     expect(zlib.brotliDecompressSync(data.body).toString('utf8')).toBe(bigJs);
     // ETag is keyed to the RAW bytes (content identity), not the encoded form.
-    expect(data.headers['ETag']).toMatch(/^"[0-9a-f]{16,}"$/);
+    expect(data.headers['ETag']).toMatch(/^"[0-9a-f]{16,}"$/u);
   });
 
   it('gzip-encodes when only gzip is offered', async () => {
@@ -895,7 +942,7 @@ describe('serveStatic — ETag cache (no re-read on 304 / cached variant)', () =
     const etag1 = first.data.headers['ETag']!;
 
     // Edit to a different length so both mtime and size move.
-    writeFileSync(join(dir, 'app.js'), `${bigJs}// appended\n`);
+    writeFileSync(path.join(dir, 'app.js'), `${bigJs}// appended\n`);
     const after = mockRes();
     await serveStatic(mockReq({ 'if-none-match': etag1 }), after.res, dir, 'app.js');
     expect(after.data.statusCode).toBe(200);
@@ -906,7 +953,7 @@ describe('serveStatic — ETag cache (no re-read on 304 / cached variant)', () =
 describe('resolveStaticPath — .jsx allowlist', () => {
   it('accepts a .jsx request', () => {
     const dir = newAppDir({ 'app.jsx': 'export default 1;' });
-    expect(resolveStaticPath(dir, 'app.jsx')).toBe(join(dir, 'app.jsx'));
+    expect(resolveStaticPath(dir, 'app.jsx')).toBe(path.join(dir, 'app.jsx'));
   });
 
   it('still rejects a disallowed extension', () => {

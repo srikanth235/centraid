@@ -252,7 +252,10 @@ export async function retryTerminalReplicaPurges(
 ): Promise<number | undefined> {
   const storage = options.storage ?? durableStorage();
   const discoveryFailures: unknown[] = [];
-  for (const selector of listReplicaPurgeSelectors(storage)) {
+  const selectors = listReplicaPurgeSelectors(storage);
+  const retryNextSelector = async (index: number): Promise<void> => {
+    const selector = selectors[index];
+    if (!selector) return;
     try {
       await purgeRememberedReplicaIdentities(
         (identity) => replicaPurgeSelectorMatches(selector, identity),
@@ -261,7 +264,9 @@ export async function retryTerminalReplicaPurges(
     } catch (error) {
       discoveryFailures.push(error);
     }
-  }
+    return retryNextSelector(index + 1);
+  };
+  await retryNextSelector(0);
   const hints = listTerminalPurgeHints(storage);
   const inventory = inventoryFor(options);
   if (!inventory) {
@@ -274,14 +279,24 @@ export async function retryTerminalReplicaPurges(
     }
     return undefined;
   }
-  for (const identity of hints) await inventory.markTerminal(identity);
+  const markNextTerminalHint = async (index: number): Promise<void> => {
+    const identity = hints[index];
+    if (!identity) return;
+    await inventory.markTerminal(identity);
+    return markNextTerminalHint(index + 1);
+  };
+  await markNextTerminalHint(0);
   const now = (options.now ?? Date.now)();
   const due = (await inventory.list()).filter(
     (entry) => entry.state === 'terminal-pending' && entry.retryAt <= now,
   );
-  for (const entry of due) {
+  const purgeNextDueReplica = async (index: number): Promise<void> => {
+    const entry = due[index];
+    if (!entry) return;
     await purgeReplicaIdentityStorage(bareIdentity(entry), options).catch(() => undefined);
-  }
+    return purgeNextDueReplica(index + 1);
+  };
+  await purgeNextDueReplica(0);
   const remaining = (await inventory.list()).filter((entry) => entry.state === 'terminal-pending');
   if (discoveryFailures.length > 0 || listReplicaPurgeSelectors(storage).length > 0) {
     throw new AggregateError(discoveryFailures, 'Replica purge discovery remains pending');
@@ -304,13 +319,17 @@ export async function purgeRememberedReplicaIdentities(
   }
   const identities = (await durableReplicaIdentities(options)).filter(matches);
   const failures: unknown[] = [];
-  for (const identity of identities) {
+  const purgeNextIdentity = async (index: number): Promise<void> => {
+    const identity = identities[index];
+    if (!identity) return;
     try {
       await purgeReplicaIdentityStorage(identity, options);
     } catch (error) {
       failures.push(error);
     }
-  }
+    return purgeNextIdentity(index + 1);
+  };
+  await purgeNextIdentity(0);
   if (failures.length > 0) throw new AggregateError(failures, 'One or more replica scopes remain');
   if (options.purgeSelector && !forgetReplicaPurgeSelector(options.purgeSelector, storage)) {
     throw new Error('Could not confirm remembered replica discovery completion');
@@ -329,7 +348,8 @@ async function durableReplicaIdentities(
   }
   const inventory = inventoryFor(options);
   if (inventory) {
-    for (const identity of await inventory.list()) {
+    const inventoryIdentities = await inventory.list();
+    for (const identity of inventoryIdentities) {
       unique.set(identityKey(identity), bareIdentity(identity));
     }
   }

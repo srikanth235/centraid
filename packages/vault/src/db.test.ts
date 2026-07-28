@@ -1,8 +1,10 @@
-import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { rmSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { afterEach, describe, expect, test, vi } from 'vitest';
+
 import { openVaultDb } from './db.js';
 
 const cleanups: (() => void)[] = [];
@@ -14,8 +16,12 @@ describe('db', () => {
     const dir = tempDirSync();
     const db = openVaultDb({ dir });
     cleanups.push(() => db.close());
-    const vaultSync = db.vault.prepare('PRAGMA synchronous').get() as { synchronous: number };
-    const journalSync = db.journal.prepare('PRAGMA synchronous').get() as { synchronous: number };
+    const vaultSync = db.vault.prepare('PRAGMA synchronous').get() as {
+      synchronous: number;
+    };
+    const journalSync = db.journal.prepare('PRAGMA synchronous').get() as {
+      synchronous: number;
+    };
     // SQLite's synchronous enum: OFF=0, NORMAL=1, FULL=2, EXTRA=3.
     expect(vaultSync.synchronous).toBe(2);
     expect(journalSync.synchronous).toBe(2);
@@ -26,7 +32,9 @@ describe('db', () => {
     cleanups.push(() => db.close());
     // node:sqlite hands back null-prototype rows; spreading compares the column
     // data (which is the contract) without asserting the driver's prototype.
-    expect({ ...db.vault.prepare('PRAGMA synchronous').get() }).toStrictEqual({ synchronous: 1 });
+    expect({ ...db.vault.prepare('PRAGMA synchronous').get() }).toStrictEqual({
+      synchronous: 1,
+    });
     expect({ ...db.journal.prepare('PRAGMA synchronous').get() }).toStrictEqual({
       synchronous: 2,
     });
@@ -43,7 +51,9 @@ describe('db', () => {
       expect({ ...handle.prepare('PRAGMA mmap_size').get() }).toStrictEqual({
         mmap_size: 67_108_864,
       });
-      expect({ ...handle.prepare('PRAGMA temp_store').get() }).toStrictEqual({ temp_store: 2 });
+      expect({ ...handle.prepare('PRAGMA temp_store').get() }).toStrictEqual({
+        temp_store: 2,
+      });
     }
   });
 
@@ -86,8 +96,12 @@ describe('db', () => {
     cleanups.push(() => db.close());
     // SQLite auto_vacuum enum: NONE=0, FULL=1, INCREMENTAL=2. Both files must be
     // incremental so the #438 archival prune can reclaim freed pages to the OS.
-    const vaultAv = db.vault.prepare('PRAGMA auto_vacuum').get() as { auto_vacuum: number };
-    const journalAv = db.journal.prepare('PRAGMA auto_vacuum').get() as { auto_vacuum: number };
+    const vaultAv = db.vault.prepare('PRAGMA auto_vacuum').get() as {
+      auto_vacuum: number;
+    };
+    const journalAv = db.journal.prepare('PRAGMA auto_vacuum').get() as {
+      auto_vacuum: number;
+    };
     expect(vaultAv.auto_vacuum).toBe(2);
     expect(journalAv.auto_vacuum).toBe(2);
   });
@@ -123,10 +137,18 @@ describe('db', () => {
     // The one-time conversion VACUUM in openFile rewrites the file into
     // incremental mode; the file stays in WAL.
     expect(
-      (db.journal.prepare('PRAGMA auto_vacuum').get() as { auto_vacuum: number }).auto_vacuum,
+      (
+        db.journal.prepare('PRAGMA auto_vacuum').get() as {
+          auto_vacuum: number;
+        }
+      ).auto_vacuum,
     ).toBe(2);
     expect(
-      (db.journal.prepare('PRAGMA journal_mode').get() as { journal_mode: string }).journal_mode,
+      (
+        db.journal.prepare('PRAGMA journal_mode').get() as {
+          journal_mode: string;
+        }
+      ).journal_mode,
     ).toBe('wal');
   });
 });

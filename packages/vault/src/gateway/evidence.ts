@@ -4,6 +4,7 @@
 // no other door. All writers here append to journal.db and never UPDATE.
 
 import type { DatabaseSync } from 'node:sqlite';
+
 import { nowIso, sha256Hex, uuidv7 } from '../ids.js';
 import type { Citation, Identity } from './types.js';
 

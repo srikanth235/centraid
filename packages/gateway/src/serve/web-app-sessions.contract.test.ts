@@ -1,16 +1,18 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import crypto from 'node:crypto';
-import path from 'node:path';
-import { Readable } from 'node:stream';
 import { promises as fs } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { WorktreeStore } from '../worktree-store/index.js';
+import path from 'node:path';
+import { Readable } from 'node:stream';
+
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+
 import type { GatewayPaths } from '../paths.js';
+import type { WorktreeStore } from '../worktree-store/index.js';
 import { serve, type GatewayServeHandle } from './serve.js';
+import { runWithVaultContext } from './vault-context.js';
 import { WebAppSessions } from './web-app-sessions.js';
 import { WebControlSessionStore, hashControlToken } from './web-session-store.js';
-import { runWithVaultContext } from './vault-context.js';
 
 let dataDir: string;
 let handle: GatewayServeHandle;
@@ -37,7 +39,11 @@ async function seedApp(store: WorktreeStore, appId: string): Promise<void> {
         {
           name: 'ping',
           description: 'ping',
-          input: { type: 'object', properties: {}, additionalProperties: false },
+          input: {
+            type: 'object',
+            properties: {},
+            additionalProperties: false,
+          },
         },
       ],
     }),
@@ -57,7 +63,10 @@ async function seedApp(store: WorktreeStore, appId: string): Promise<void> {
 describe('web-app-sessions', () => {
   beforeEach(async () => {
     dataDir = await tempDir(`web-session-${crypto.randomUUID()}-`);
-    handle = await serve({ initVaultName: "Owner's vault", paths: pathsUnder(dataDir) });
+    handle = await serve({
+      initVaultName: "Owner's vault",
+      paths: pathsUnder(dataDir),
+    });
     const store = await handle.appsStore();
     await seedApp(store, 'alpha');
     await seedApp(store, 'beta');
@@ -81,7 +90,9 @@ describe('web-app-sessions', () => {
     });
     expect(minted.status).toBe(200);
     const { launchPath } = (await minted.json()) as { launchPath: string };
-    const redeemed = await fetch(new URL(launchPath, handle.url), { redirect: 'manual' });
+    const redeemed = await fetch(new URL(launchPath, handle.url), {
+      redirect: 'manual',
+    });
     expect(redeemed.status).toBe(303);
     const setCookie = redeemed.headers.get('set-cookie') ?? '';
     expect(setCookie).toContain('HttpOnly');
@@ -144,7 +155,10 @@ describe('web-app-sessions', () => {
       body: 'sample document',
     });
     expect(staged.status).toBe(200);
-    await expect(staged.json()).resolves.toMatchObject({ byteSize: 15, mediaType: 'text/plain' });
+    await expect(staged.json()).resolves.toMatchObject({
+      byteSize: 15,
+      mediaType: 'text/plain',
+    });
 
     const otherVaultRoute = await fetch(`${handle.url}/centraid/_vault/anything`, {
       headers: { Cookie: session.cookie },
@@ -186,7 +200,10 @@ describe('web-app-sessions', () => {
     async function establish(): Promise<string> {
       const res = await fetch(`${handle.url}/centraid/_web/control`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${handle.token}`, Origin: 'http://127.0.0.1:4173' },
+        headers: {
+          Authorization: `Bearer ${handle.token}`,
+          Origin: 'http://127.0.0.1:4173',
+        },
       });
       expect(res.status).toBe(200);
       return (res.headers.get('set-cookie') ?? '').split(';')[0] ?? '';
@@ -197,19 +214,23 @@ describe('web-app-sessions', () => {
     expect(first).not.toBe(second);
 
     // Both control cookies remain live after the second pairing.
-    for (const cookie of [first, second]) {
-      const proxied = await fetch(
-        `${handle.url}/centraid/_web/control?path=${encodeURIComponent('/centraid/_apps')}`,
-        { headers: { Cookie: cookie, Origin: 'http://127.0.0.1:4173' } },
-      );
-      expect(proxied.status).toBe(200);
-    }
+    const proxied = await Promise.all(
+      [first, second].map((cookie) =>
+        fetch(`${handle.url}/centraid/_web/control?path=${encodeURIComponent('/centraid/_apps')}`, {
+          headers: { Cookie: cookie, Origin: 'http://127.0.0.1:4173' },
+        }),
+      ),
+    );
+    for (const response of proxied) expect(response.status).toBe(200);
   });
 
   test('launch codes are single-use and forged scope headers do not authenticate', async () => {
     const minted = await fetch(`${handle.url}/centraid/_apps/alpha/web-session`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${handle.token}`, Origin: 'http://127.0.0.1:4173' },
+      headers: {
+        Authorization: `Bearer ${handle.token}`,
+        Origin: 'http://127.0.0.1:4173',
+      },
     });
     const { launchPath } = (await minted.json()) as { launchPath: string };
     expect((await fetch(new URL(launchPath, handle.url), { redirect: 'manual' })).status).toBe(303);
@@ -412,7 +433,10 @@ describe('web-app-sessions', () => {
     });
 
     let enrolled = true;
-    const sessions = new WebAppSessions({ controlStore, isDeviceValid: () => enrolled });
+    const sessions = new WebAppSessions({
+      controlStore,
+      isDeviceValid: () => enrolled,
+    });
     const control = (): IncomingMessage =>
       req({
         url: `/centraid/_web/control?path=${encodeURIComponent('/centraid/_apps')}`,
@@ -420,7 +444,10 @@ describe('web-app-sessions', () => {
       });
 
     // Enrolled → authorizes as the device plane.
-    expect(sessions.authorize(control())).toStrictEqual({ plane: 'device', deviceKey: 'dev-1' });
+    expect(sessions.authorize(control())).toStrictEqual({
+      plane: 'device',
+      deviceKey: 'dev-1',
+    });
 
     // Revoke the enrollment → the very next authorize fails and drops the row.
     enrolled = false;
@@ -460,7 +487,10 @@ describe('web-app-sessions', () => {
     const appReq = (): IncomingMessage =>
       req({ url: '/centraid/alpha/', headers: { cookie: appCookie } });
     // Enrolled → authorizes.
-    expect(sessions.authorize(appReq())).toStrictEqual({ plane: 'device', deviceKey: 'dev-1' });
+    expect(sessions.authorize(appReq())).toStrictEqual({
+      plane: 'device',
+      deviceKey: 'dev-1',
+    });
     // Revoked → the live app cookie is dead.
     enrolled = false;
     expect(sessions.authorize(appReq())).toBeUndefined();

@@ -10,7 +10,9 @@
 // POLY_REF_EXCLUSIONS (with a documented reason). A 7th mechanism added
 // without a registry entry fails here — the registry cannot silently rot.
 import type { DatabaseSync } from 'node:sqlite';
+
 import { describe, expect, test } from 'vitest';
+
 import { openVaultDb } from '../db.js';
 import { POLY_REF_EXCLUSIONS, POLY_REF_REGISTRY } from './poly-refs.js';
 
@@ -36,9 +38,11 @@ function detectPolyPairs(db: DatabaseSync): DetectedPair[] {
   const pairs: DetectedPair[] = [];
   for (const table of tables) {
     const cols = new Set(
-      (db.prepare(`PRAGMA table_info(${JSON.stringify(table)})`).all() as { name: string }[]).map(
-        (c) => c.name,
-      ),
+      (
+        db.prepare(`PRAGMA table_info(${JSON.stringify(table)})`).all() as {
+          name: string;
+        }[]
+      ).map((c) => c.name),
     );
     for (const col of cols) {
       if (!col.endsWith('_type')) continue;

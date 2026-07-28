@@ -17,8 +17,9 @@
  * behind the gateway's host-level auth like the rest of `_vault`.
  */
 
-import type { IncomingMessage, ServerResponse } from 'node:http';
 import { promises as fs } from 'node:fs';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+
 import {
   ASSISTANT_APP_ID,
   driveTurnOverSse,
@@ -36,10 +37,11 @@ import {
   type TurnAttachmentRef,
   type TurnLimiter,
 } from '@centraid/app-engine';
-import type { RouteHandler } from '../serve/build-gateway.js';
-import type { VaultRegistry } from '../serve/vault-registry.js';
+
 import { assistantCwd } from '../runs/assistant-conversation-runner.js';
 import { buildAssistantPrompt } from '../runs/assistant-prompt.js';
+import type { RouteHandler } from '../serve/build-gateway.js';
+import type { VaultRegistry } from '../serve/vault-registry.js';
 import { parseProviderConsent, readJson, sendJson } from './route-helpers.js';
 
 const PREFIX = '/centraid/_vault/assistant';
@@ -120,11 +122,17 @@ export function makeAssistantRouteHandler(opts: AssistantRouteOptions): RouteHan
           });
         }
         if (!isValidConversationId(conversationId)) {
-          return sendJson(res, 400, { error: 'bad_request', message: 'Invalid conversationId.' });
+          return sendJson(res, 400, {
+            error: 'bad_request',
+            message: 'Invalid conversationId.',
+          });
         }
         const session = opts.conversationStore.getSessionMeta(ASSISTANT_APP_ID, conversationId);
         if (!session) {
-          return sendJson(res, 404, { error: 'not_found', message: 'No such assistant thread.' });
+          return sendJson(res, 404, {
+            error: 'not_found',
+            message: 'No such assistant thread.',
+          });
         }
 
         const plane = opts.vaults.current();
@@ -250,7 +258,10 @@ export function makeAssistantRouteHandler(opts: AssistantRouteOptions): RouteHan
         return true;
       }
 
-      return sendJson(res, 404, { error: 'not_found', message: 'unknown assistant route' });
+      return sendJson(res, 404, {
+        error: 'not_found',
+        message: 'unknown assistant route',
+      });
     } catch (err) {
       if (res.headersSent) {
         if (!res.writableEnded) res.end();

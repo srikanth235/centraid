@@ -3,6 +3,7 @@
  * Settings merge contract: omit preserves, set replaces, blanks fall back.
  */
 import { describe, expect, test } from 'vitest';
+
 import { mergePersistedSettings } from './settings-merge.ts';
 
 describe('matrix-contracts', () => {

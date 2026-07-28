@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+
 // The v2 sidebar's render orchestrator — replaces toolbar.jsx (and folds in
 // what Chips.jsx/AlbumTools.jsx used to own): the nav list, the album list's
 // inline new-album/rename editors, the narrow-width drawer's open/closed
@@ -5,10 +7,9 @@
 // `selectedAlbum` stays app.tsx's own state (refresh/renderGrid/the picker
 // all read it directly), threaded through as a getter/setter pair.
 import { deleteAlbumConfirmed, submitNewAlbum, submitRenameAlbum } from './albums-actions.ts';
-import { fmtBytes } from './kit.ts';
 import { SidebarView } from './components/Sidebar.tsx';
 import { $ } from './dom.ts';
-import type { ReactNode } from 'react';
+import { fmtBytes } from './kit.ts';
 import type { Album, Asset } from './types.ts';
 
 type Root = { render: (node: ReactNode) => void };

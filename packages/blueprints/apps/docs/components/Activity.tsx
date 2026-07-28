@@ -5,8 +5,10 @@
 // load/denied/empty pattern exactly, down to the async-effect shape — the
 // two panels are siblings inside the same drawer.
 import { useEffect, useState } from 'react';
+
 import { activityLabel, actorLabel, fmtFull } from '../format.ts';
 import type { ActivityEvent } from '../types.ts';
+
 import styles from './Activity.module.css';
 
 interface ActivityResult {
@@ -35,7 +37,7 @@ export function Activity({
       cancelled = true;
     };
     // (#360) loadActivity is a stable prop; Details.tsx keys this component by doc.document_id, so a real document change already remounts it fresh instead of re-running this effect
-  }, [documentId]);
+  }, [documentId, loadActivity]);
 
   if (events === null) return <div className={styles.activityStatus}>Loading activity…</div>;
   if (denied)

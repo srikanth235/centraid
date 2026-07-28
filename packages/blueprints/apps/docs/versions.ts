@@ -1,10 +1,10 @@
+import { fmtBytes } from './format.ts';
 // Document content lifecycle (issue #352): in-place text edits, whole-file
 // replacement, and version-history reads/restores. Split out of logic.ts
 // purely to keep both files under the file-size cap — same factory pattern,
 // closing over app.tsx's own `data`/`refresh` plus logic.ts's own
 // `act`/`narrate`/`notice` (passed in, never re-implemented).
 import { isPendingOffsite, stageFileBytes, toast } from './kit.ts';
-import { fmtBytes } from './format.ts';
 import type { AppData, DriveDoc, VersionEntry } from './types.ts';
 
 const MAX_UPLOAD_BYTES = 512 * 1024 * 1024;

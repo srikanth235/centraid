@@ -15,6 +15,7 @@
  */
 
 import { type DatabaseSync } from 'node:sqlite';
+
 import type { DatabaseProvider } from '../stores/gateway-db.js';
 import { prepareInsightsStatements, type InsightsPreparedStatements } from './insights-sql.js';
 import type {
@@ -86,9 +87,13 @@ export class InsightsStore {
     };
 
     const apps = new Set<string>();
-    for (const r of stmts.appsTouched.all(since) as Array<{ app_id: string | null }>)
+    for (const r of stmts.appsTouched.all(since) as Array<{
+      app_id: string | null;
+    }>)
       if (r.app_id !== null) apps.add(r.app_id);
-    for (const r of stmts.appsTouchedDigest.all(since) as Array<{ app_id: string | null }>)
+    for (const r of stmts.appsTouchedDigest.all(since) as Array<{
+      app_id: string | null;
+    }>)
       if (r.app_id !== null) apps.add(r.app_id);
 
     const agentReportedCostUsd = round(split.agent_cost ?? 0);
@@ -173,7 +178,12 @@ function foldDaily(stmts: InsightsPreparedStatements, since: number): InsightsDa
     addDay(d.day, d.tokens ?? 0, d.cost ?? 0, d.runs);
   return [...dayBuckets.entries()]
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-    .map(([date, b]) => ({ date, tokens: b.tokens, costUsd: round(b.cost), runs: b.runs }));
+    .map(([date, b]) => ({
+      date,
+      tokens: b.tokens,
+      costUsd: round(b.cost),
+      runs: b.runs,
+    }));
 }
 
 function foldBySource(stmts: InsightsPreparedStatements, since: number): InsightsSourceRow[] {
@@ -265,7 +275,12 @@ function foldByModel(stmts: InsightsPreparedStatements, since: number): Insights
     add(r.model, r.runs, r.tokens ?? 0, r.cost ?? 0);
   return [...groups.entries()]
     .sort(([, a], [, b]) => b.cost - a.cost || b.tokens - a.tokens)
-    .map(([model, g]) => ({ model, runs: g.runs, tokens: g.tokens, costUsd: round(g.cost) }));
+    .map(([model, g]) => ({
+      model,
+      runs: g.runs,
+      tokens: g.tokens,
+      costUsd: round(g.cost),
+    }));
 }
 
 function foldByEffort(stmts: InsightsPreparedStatements, since: number): InsightsEffortRow[] {
@@ -293,7 +308,12 @@ function foldByEffort(stmts: InsightsPreparedStatements, since: number): Insight
     add(r.effort, r.runs, r.tokens ?? 0, r.cost ?? 0);
   return [...groups.entries()]
     .sort(([, a], [, b]) => b.cost - a.cost || b.tokens - a.tokens)
-    .map(([effort, g]) => ({ effort, runs: g.runs, tokens: g.tokens, costUsd: round(g.cost) }));
+    .map(([effort, g]) => ({
+      effort,
+      runs: g.runs,
+      tokens: g.tokens,
+      costUsd: round(g.cost),
+    }));
 }
 
 function foldRecent(

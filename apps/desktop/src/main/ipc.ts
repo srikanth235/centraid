@@ -1,12 +1,31 @@
 // governance: allow-repo-hygiene file-size-limit ipc-hub pending split per-feature handler modules (agent, chat, apps, provider) once the surface stabilizes
 import { ipcMain, BrowserWindow, shell } from 'electron';
+
+import { resolveAppRevealDir, resetAppSessions } from './app-sessions.js';
+import { resetAppsStoreAuthCache } from './apps-store-client.js';
+import { refreshAuthInjector } from './auth-injector.js';
+import { getChangelog } from './changelog.js';
 import {
-  loadSettings,
-  saveSettings,
-  setActiveGatewayId,
-  setActiveVaultId,
-  type DesktopSettings,
-} from './settings.js';
+  deviceTranscriptionAvailable,
+  transcribeDeviceMedia,
+  type DeviceTranscriptionInput,
+} from './device-transcription.js';
+import {
+  testGatewayConnection,
+  type ConnectivityReport,
+  type TestConnectionInput,
+} from './gateway-connectivity.js';
+import { getGatewayRuntimeSnapshot, nudgeGatewayMonitor } from './gateway-monitor.js';
+import {
+  redeemGatewayPairing,
+  type RedeemGatewayPairingInput,
+  type RedeemGatewayPairingResult,
+} from './gateway-pairing.js';
+import {
+  sshConnectGateway,
+  sshEnrollIntoVault,
+  type SshConnectResult,
+} from './gateway-ssh-connect.js';
 import {
   GatewayError,
   listGateways,
@@ -15,44 +34,26 @@ import {
   updateProfileMetadata,
   type GatewayProfile,
 } from './gateway-store.js';
-import { getGatewayRuntimeSnapshot, nudgeGatewayMonitor } from './gateway-monitor.js';
+import { listGatewayVaults, type ListGatewayVaultsResult } from './gateway-vaults.js';
+import { Channel, gatewayChangedPayload, vaultChangedPayload } from './ipc-core.js';
 import { applyLaunchAtLogin } from './login-item.js';
-import { refreshAuthInjector } from './auth-injector.js';
-import { resetAppsStoreAuthCache } from './apps-store-client.js';
-import { resolveAppRevealDir, resetAppSessions } from './app-sessions.js';
 import {
   beginPhonePairing,
   cancelPhonePairing,
   phoneLinkStatus,
   revokePhoneDevice,
 } from './phone-link.js';
-import { checkForUpdatesManual, getUpdateStatus, relaunchToUpdate } from './update-watcher.js';
-import { getChangelog } from './changelog.js';
 import {
-  redeemGatewayPairing,
-  type RedeemGatewayPairingInput,
-  type RedeemGatewayPairingResult,
-} from './gateway-pairing.js';
-import { listGatewayVaults, type ListGatewayVaultsResult } from './gateway-vaults.js';
-import {
-  testGatewayConnection,
-  type ConnectivityReport,
-  type TestConnectionInput,
-} from './gateway-connectivity.js';
-import {
-  sshConnectGateway,
-  sshEnrollIntoVault,
-  type SshConnectResult,
-} from './gateway-ssh-connect.js';
+  loadSettings,
+  saveSettings,
+  setActiveGatewayId,
+  setActiveVaultId,
+  type DesktopSettings,
+} from './settings.js';
 import { sshVaultCreate } from './ssh-host.js';
-import {
-  deviceTranscriptionAvailable,
-  transcribeDeviceMedia,
-  type DeviceTranscriptionInput,
-} from './device-transcription.js';
-import { Channel, gatewayChangedPayload, vaultChangedPayload } from './ipc-core.js';
+import { checkForUpdatesManual, getUpdateStatus, relaunchToUpdate } from './update-watcher.js';
 
-export { Channel };
+export { Channel } from './ipc-core.js';
 
 /**
  * Status read for the auto-publish queue (issue #137: there is no
@@ -62,7 +63,11 @@ export { Channel };
  * similarly never fired post-#137 — the renderer's onPublishEvent
  * subscription just stays quiet.
  */
-type PublishStatus = { inFlight: boolean; lastError?: string; lastPublishedAt?: number };
+type PublishStatus = {
+  inFlight: boolean;
+  lastError?: string;
+  lastPublishedAt?: number;
+};
 const getPublishStatus = (_id: string): PublishStatus => ({ inFlight: false });
 
 export function registerIpcHandlers(): void {
@@ -566,7 +571,10 @@ export function registerIpcHandlers(): void {
       const { restartLocalGateway } = await import('./local-gateway.js');
       await restartLocalGateway(settings.activeGatewayId);
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      };
     }
     await invalidateGatewayCaches();
     const next = await loadSettings();

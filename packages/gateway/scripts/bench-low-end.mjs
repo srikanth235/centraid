@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 
+import { spawnSync } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
-import { spawnSync } from 'node:child_process';
+
 import { serve } from '../dist/index.js';
 
 const here = import.meta.dirname;
@@ -57,7 +58,6 @@ function resourceCounters() {
 }
 
 async function directoryBytes(dir) {
-  let total = 0;
   let entries;
   try {
     entries = await fs.readdir(dir, { withFileTypes: true });
@@ -68,22 +68,29 @@ async function directoryBytes(dir) {
     if (error?.code === 'ENOENT') return 0;
     throw error;
   }
-  for (const entry of entries) {
-    const target = path.join(dir, entry.name);
-    if (entry.isDirectory()) total += await directoryBytes(target);
-    else if (entry.isFile()) {
-      try {
-        total += (await fs.stat(target)).size;
-      } catch (error) {
-        if (error?.code !== 'ENOENT') throw error;
+  const sizes = await Promise.all(
+    entries.map(async (entry) => {
+      const target = path.join(dir, entry.name);
+      if (entry.isDirectory()) return directoryBytes(target);
+      if (entry.isFile()) {
+        try {
+          return (await fs.stat(target)).size;
+        } catch (error) {
+          if (error?.code !== 'ENOENT') throw error;
+        }
       }
-    }
-  }
-  return total;
+      return 0;
+    }),
+  );
+  return sizes.reduce((total, size) => total + size, 0);
 }
 
 function quietLogger() {
-  return { info: () => undefined, warn: () => undefined, error: () => undefined };
+  return {
+    info: () => undefined,
+    warn: () => undefined,
+    error: () => undefined,
+  };
 }
 
 async function markTraceEpoch(suffix) {
@@ -113,11 +120,15 @@ async function runInternal() {
 
     // Warm routing, auth, prepared statements, and the native lag histogram
     // without adding unmeasured writes to the fsync denominator.
-    for (let i = 0; i < 12; i += 1) {
-      const response = await fetch(`${handle.url}/centraid/_vault/status`, { headers });
-      if (!response.ok)
-        throw new Error(`warmup failed: ${response.status} ${await response.text()}`);
-    }
+    await Promise.all(
+      Array.from({ length: 12 }, async () => {
+        const response = await fetch(`${handle.url}/centraid/_vault/status`, {
+          headers,
+        });
+        if (!response.ok)
+          throw new Error(`warmup failed: ${response.status} ${await response.text()}`);
+      }),
+    );
 
     // Boot/install prewarming has its own latency metrics. Start the CI lag
     // epoch here so peak p99 describes the authenticated write workload, not
@@ -132,13 +143,17 @@ async function runInternal() {
     let next = 0;
     const workload = [];
     for (let index = 0; index < writes; index += 1) {
-      workload.push({ kind: 'write', shape: index % 2 === 0 ? 'core.party' : 'core.place', index });
+      workload.push({
+        kind: 'write',
+        shape: index % 2 === 0 ? 'core.party' : 'core.place',
+        index,
+      });
       if ((index + 1) % 4 === 0) workload.push({ kind: 'read', shape: 'vault.status', index });
     }
     const reads = workload.length - writes;
 
     const worker = async () => {
-      while (next < workload.length) {
+      const runNextOperation = async () => {
         const operation = workload[next++];
         if (!operation) return;
         const { index } = operation;
@@ -180,7 +195,9 @@ async function runInternal() {
         }
         (operation.kind === 'write' ? writeLatencies : readLatencies).push(elapsed);
         maxRssBytes = Math.max(maxRssBytes, process.memoryUsage().rss);
-      }
+        return runNextOperation();
+      };
+      return runNextOperation();
     };
 
     await markTraceEpoch('start');
@@ -353,7 +370,11 @@ function checkBudgets(report, budgets, requireFsync) {
   }
   const failures = checks.filter(([, actual, ceiling]) => actual === null || actual > ceiling);
   return {
-    checks: checks.map(([metric, actual, ceiling]) => ({ metric, actual, ceiling })),
+    checks: checks.map(([metric, actual, ceiling]) => ({
+      metric,
+      actual,
+      ceiling,
+    })),
     failures,
   };
 }

@@ -1,9 +1,11 @@
 import { fork, type ChildProcess } from 'node:child_process';
 import path from 'node:path';
+
 import { recordQualityResult } from '@centraid/test-kit/quality-result';
 import { tempDir } from '@centraid/test-kit/temp-dir';
-import { openVaultPlane } from '../../packages/gateway/src/serve/vault-plane.js';
 import { describe, expect, onTestFinished, test } from 'vitest';
+
+import { openVaultPlane } from '../../packages/gateway/src/serve/vault-plane.js';
 
 const OWNER = 'tests/perf/blob-egress.perf.test.ts';
 
@@ -15,7 +17,11 @@ describe('blob-egress.perf', () => {
     // file must ask the OS for those pages instead of reusing seed-time slabs.
     const seed = openVaultPlane({
       dir: directory,
-      logger: { info: () => undefined, warn: () => undefined, error: () => undefined },
+      logger: {
+        info: () => undefined,
+        warn: () => undefined,
+        error: () => undefined,
+      },
       ownerName: 'Perf owner',
     });
     const bytes = Buffer.alloc(128 * 1024 * 1024, 0x5a);
@@ -70,11 +76,13 @@ describe('blob-egress.perf', () => {
     const first = await reader.read();
     const ttfbMs = performance.now() - started;
     let received = first.value?.byteLength ?? 0;
-    for (;;) {
+    const readNext = async (): Promise<void> => {
       const chunk = await reader.read();
-      if (chunk.done) break;
+      if (chunk.done) return;
       received += chunk.value.byteLength;
-    }
+      return readNext();
+    };
+    await readNext();
     const { rssGrowthBytes } = await served;
     // Node may retain the stream's short-lived chunk slabs until its next GC.
     // The 96 MiB ceiling remains below the fixture's 128 MiB payload, so a
@@ -88,8 +96,18 @@ describe('blob-egress.perf', () => {
       status: passed ? 'passed' : 'failed',
       measurements: [
         { name: 'TTFB', value: ttfbMs, unit: 'ms', budget: 500 },
-        { name: 'RSS growth', value: rssGrowthBytes, unit: 'bytes', budget: memoryBudget },
-        { name: 'bytes streamed', value: received, unit: 'bytes', budget: ready.size },
+        {
+          name: 'RSS growth',
+          value: rssGrowthBytes,
+          unit: 'bytes',
+          budget: memoryBudget,
+        },
+        {
+          name: 'bytes streamed',
+          value: received,
+          unit: 'bytes',
+          budget: ready.size,
+        },
       ],
     });
     expect(first.value?.byteLength).toBeGreaterThan(0);

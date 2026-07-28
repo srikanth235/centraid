@@ -1,6 +1,7 @@
 // List view: the head row (#listHead root), each row (#list root's mapped
 // children) and the truncation footer (#windowFoot root).
 import type { CSSProperties, MouseEvent } from 'react';
+
 import {
   fmtBytes,
   fmtDate,
@@ -13,6 +14,7 @@ import {
 import { I } from '../icons.ts';
 import type { DriveDoc } from '../types.ts';
 import { Checkbox, CustodyDot, Icon, Snippet } from './Shared.tsx';
+
 import styles from './List.module.css';
 import shared from './shared.module.css';
 

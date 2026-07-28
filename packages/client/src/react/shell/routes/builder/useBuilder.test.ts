@@ -18,7 +18,12 @@ vi.mock(import('../../../../format.js'), () => ({
 vi.mock(import('../../../../app-format.js'), () => ({
   // `color` uses a real palette hex (violet, matching `colorKey`) so it's a
   // valid `ColorHex` literal rather than the arbitrary `'#000'`.
-  inferAppVisual: () => ({ iconKey: 'Sparkle', colorKey: 'violet', color: '#7C5BD9', name: 'x' }),
+  inferAppVisual: () => ({
+    iconKey: 'Sparkle',
+    colorKey: 'violet',
+    color: '#7C5BD9',
+    name: 'x',
+  }),
 }));
 vi.mock(import('../../../../cron.js'), () => ({ describeCron: () => '' }));
 
@@ -37,7 +42,7 @@ describe('useBuilder module', () => {
         appKind: 'app',
         showToast: () => undefined,
       }),
-    ).toThrow(/Cannot read properties of null \(reading 'useState'\)/);
+    ).toThrow(/Cannot read properties of null \(reading 'useState'\)/u);
   });
 
   it('restores a persisted conversation runner ahead of the builder default', () => {

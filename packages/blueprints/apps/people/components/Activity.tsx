@@ -6,6 +6,7 @@ import { daysSinceIso, fmt, hashInt, PALETTE } from '../format.ts';
 import { I } from '../icons.ts';
 import type { RecentItem } from '../types.ts';
 import { Icon, KitAvatar } from './Shared.tsx';
+
 import shared from './shared.module.css';
 
 function ActivityItem({

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { patchAndroidVersions, patchIosPbxproj, patchInfoPlist } from './sync-versions.mjs';
 
 describe('sync-versions native patches', () => {

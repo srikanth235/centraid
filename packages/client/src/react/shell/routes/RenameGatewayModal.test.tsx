@@ -1,6 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
 import RenameGatewayModal from './RenameGatewayModal.js';
 
 let root: Root | null = null;

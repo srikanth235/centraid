@@ -13,6 +13,7 @@
 
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+
 import { runFlow } from '../lib/harness.mjs';
 
 const __dirname = import.meta.dirname;
@@ -107,7 +108,9 @@ await runFlow('template-gate', async (ctx) => {
     // `kind === 'app'`, which is exactly the bundled set, so every id here
     // takes the install path. Automation templates still clone, since the
     // hidden builder is their compiler.
-    for (const tmpl of templates) {
+    const installNext = async (index) => {
+      const tmpl = templates[index];
+      if (tmpl === undefined) return;
       const res = await gw('/centraid/_apps/_install', {
         body: JSON.stringify({ templateId: tmpl.id }),
         method: 'POST',
@@ -125,9 +128,13 @@ await runFlow('template-gate', async (ctx) => {
         `installed ${tmpl.id} -> ${res.app.id} ("${res.app.name}")` +
           (res.alreadyInstalled === true ? ' [already present — will not delete]' : ''),
       );
-    }
+      return installNext(index + 1);
+    };
+    await installNext(0);
 
-    for (const c of installed) {
+    const exerciseNext = async (index) => {
+      const c = installed[index];
+      if (c === undefined) return;
       const marker = await templateMarker(c.templateId);
       // Accept either the template's own header text or the registered app
       // name — the HTML header and app.json need not agree.
@@ -181,17 +188,25 @@ await runFlow('template-gate', async (ctx) => {
         failures.push(`${c.templateId}: ${err.message.split('\n')[0]}`);
         ctx.note(`${c.templateId}: FAILED — ${err.message.split('\n')[0]}`);
       }
-    }
+      return exerciseNext(index + 1);
+    };
+    await exerciseNext(0);
   } finally {
     // Best-effort cleanup so repeat runs start from a known state. Skips
     // anything that was already installed before this run.
-    for (const c of installed.filter((entry) => !entry.preexisting)) {
-      try {
-        await gw(`/centraid/_apps/${encodeURIComponent(c.appId)}`, { method: 'DELETE' });
-      } catch (err) {
-        ctx.note(`cleanup: could not delete ${c.appId} — ${err.message.split('\n')[0]}`);
-      }
-    }
+    await Promise.all(
+      installed
+        .filter((entry) => !entry.preexisting)
+        .map(async (c) => {
+          try {
+            await gw(`/centraid/_apps/${encodeURIComponent(c.appId)}`, {
+              method: 'DELETE',
+            });
+          } catch (err) {
+            ctx.note(`cleanup: could not delete ${c.appId} — ${err.message.split('\n')[0]}`);
+          }
+        }),
+    );
   }
 
   if (failures.length > 0) {

@@ -1,12 +1,14 @@
+import { spawn, type ChildProcess } from 'node:child_process';
 import crypto from 'node:crypto';
 import { once } from 'node:events';
 import { promises as fs } from 'node:fs';
 import http, { type Server } from 'node:http';
 import net from 'node:net';
 import path from 'node:path';
-import { spawn, type ChildProcess } from 'node:child_process';
-import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+
 import { tempDir } from '@centraid/test-kit/temp-dir';
+import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+
 import { createBlobHandoffUrl } from '../serve/data-plane-handoff.js';
 import {
   startTypeScriptBytePlane,
@@ -43,15 +45,17 @@ async function unusedPort(): Promise<number> {
 }
 
 async function waitForHealth(): Promise<void> {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
+  const poll = async (attempt: number): Promise<void> => {
     try {
       if ((await fetch(`${baseUrl}/v1/health`)).ok) return;
     } catch {
       // Process is still binding.
     }
+    if (attempt >= 99) throw new Error('byte-plane test daemon did not become healthy');
     await new Promise((resolve) => setTimeout(resolve, 25));
-  }
-  throw new Error('byte-plane test daemon did not become healthy');
+    return poll(attempt + 1);
+  };
+  return poll(0);
 }
 
 describe.skipIf(!enabled)(
@@ -64,7 +68,7 @@ describe.skipIf(!enabled)(
           throw new Error('CENTRAID_BYTE_PLANE_ROOT is required with CENTRAID_BYTE_PLANE_BASE_URL');
         }
         root = path.resolve(externalRoot);
-        baseUrl = externalBaseUrl.replace(/\/+$/, '');
+        baseUrl = externalBaseUrl.replace(/\/+$/u, '');
       } else {
         // tempDir cleans owned roots after the file; external roots stay.
         root = await tempDir('centraid-byte-plane-contract-');

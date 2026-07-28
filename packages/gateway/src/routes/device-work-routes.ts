@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+
 import { AUTHED_DEVICE_HEADER } from '@centraid/app-engine';
 import {
   ENRICHMENT_CAPABILITIES,
@@ -8,6 +9,7 @@ import {
   releaseEnrichmentLease,
   type EnrichmentCapability,
 } from '@centraid/vault';
+
 import type { RouteHandler } from '../serve/build-gateway.js';
 import type { EnrollmentStore } from '../serve/enrollment-store.js';
 import type { VaultRegistry } from '../serve/vault-registry.js';

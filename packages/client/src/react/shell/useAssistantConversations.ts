@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+
 import { ASSISTANT_APP_ID, listConversations } from '../../gateway-client.js';
 
 export interface AssistantConversationsController {
@@ -33,9 +34,10 @@ export function useAssistantConversations(): AssistantConversationsController {
 
   useEffect(() => {
     let alive = true;
-    void loadAssistantConversations().then((next) => {
+    void (async () => {
+      const next = await loadAssistantConversations();
       if (alive) setConversations(next);
-    });
+    })();
     return () => {
       alive = false;
     };

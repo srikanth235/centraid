@@ -5,20 +5,19 @@
  * `ConversationStore.close()` is a no-op on a host-owned connection.
  */
 
-import path from 'node:path';
-import { afterEach, describe, expect, test } from 'vitest';
-import { tempDir } from '@centraid/test-kit/temp-dir';
 import { promises as fs } from 'node:fs';
+import path from 'node:path';
+
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { afterEach, describe, expect, test } from 'vitest';
+
 import { closeJournalConversationStores, journalConversationStore } from './journal-stores.js';
 
 const dirs: string[] = [];
 describe('journal-stores', () => {
   afterEach(async () => {
     closeJournalConversationStores();
-    while (dirs.length > 0) {
-      const dir = dirs.pop();
-      if (dir) await fs.rm(dir, { recursive: true, force: true });
-    }
+    await Promise.all(dirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
   });
 
   async function journalFile(): Promise<string> {

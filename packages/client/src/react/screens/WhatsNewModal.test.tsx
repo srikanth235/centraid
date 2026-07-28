@@ -1,6 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import type { CentraidChangelogResult } from '../../centraid-api.js';
 import WhatsNewModal from './WhatsNewModal.js';
 
@@ -8,7 +9,9 @@ let root: Root | null = null;
 let host: HTMLElement | null = null;
 
 function mockChangelog(impl: () => Promise<CentraidChangelogResult>): void {
-  (globalThis as unknown as { CentraidApi: unknown }).CentraidApi = { getChangelog: impl };
+  (globalThis as unknown as { CentraidApi: unknown }).CentraidApi = {
+    getChangelog: impl,
+  };
 }
 
 async function mount(onClose = (): void => {}): Promise<void> {
@@ -95,7 +98,7 @@ describe('screens/WhatsNewModal', () => {
       expect(text()).toContain('Installed');
       // Only the current one is tagged.
       expect(host?.querySelectorAll('*')).toBeTruthy();
-      expect(text().match(/Installed/g)?.length).toBe(1);
+      expect(text().match(/Installed/gu)?.length).toBe(1);
     });
 
     it('shows an empty state when there are no releases', async () => {

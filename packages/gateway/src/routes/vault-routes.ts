@@ -48,18 +48,8 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
+
 import { ROUTES } from '@centraid/protocol';
-import type { RouteHandler } from '../serve/build-gateway.js';
-import type { GrantRequest, OutboxItemSummary, VaultPlane } from '../serve/vault-plane.js';
-import type { AnchorSelector } from '../serve/vault-picker.js';
-import { VaultRegistryError, type VaultInfo, type VaultRegistry } from '../serve/vault-registry.js';
-import { vaultContext, type DeviceAccess } from '../serve/vault-context.js';
-import {
-  assertArtifactShapeUnchanged,
-  outboxVerbIsEditable,
-  rebuilderForVerb,
-  type OutboxWireRequest,
-} from '../serve/outbox-edit.js';
 import {
   atlasCensus,
   atlasGraph,
@@ -83,13 +73,25 @@ import {
   type KeyStore,
   type EnrichTier,
 } from '@centraid/vault';
-import { readJson, sendJson } from './route-helpers.js';
-import type { StorageConnectionStore } from '../backup/storage-connections.js';
+
 import type { RecoveryKitStateStore } from '../backup/recovery-kit-state.js';
+import type { StorageConnectionStore } from '../backup/storage-connections.js';
+import { ensureProviderCasTarget } from '../backup/storage-credentials.js';
+import type { RouteHandler } from '../serve/build-gateway.js';
 import type { EnrollmentStore } from '../serve/enrollment-store.js';
 import type { GatewayDatabase } from '../serve/gateway-db.js';
-import { ensureProviderCasTarget } from '../backup/storage-credentials.js';
+import {
+  assertArtifactShapeUnchanged,
+  outboxVerbIsEditable,
+  rebuilderForVerb,
+  type OutboxWireRequest,
+} from '../serve/outbox-edit.js';
+import { vaultContext, type DeviceAccess } from '../serve/vault-context.js';
+import type { AnchorSelector } from '../serve/vault-picker.js';
+import type { GrantRequest, OutboxItemSummary, VaultPlane } from '../serve/vault-plane.js';
+import { VaultRegistryError, type VaultInfo, type VaultRegistry } from '../serve/vault-registry.js';
 import { COMPANION_MODULES, companionModuleState } from './companion-grants.js';
+import { readJson, sendJson } from './route-helpers.js';
 
 const PREFIX = '/centraid/_vault';
 
@@ -156,7 +158,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function withCanEdit(
   items: readonly OutboxItemSummary[],
 ): Array<OutboxItemSummary & { canEdit: boolean }> {
-  return items.map((item) => ({ ...item, canEdit: outboxVerbIsEditable(item.verb) }));
+  return items.map((item) => ({
+    ...item,
+    canEdit: outboxVerbIsEditable(item.verb),
+  }));
 }
 
 export function makeVaultRouteHandler(
@@ -190,7 +195,10 @@ export function makeVaultRouteHandler(
     try {
       if (url.pathname === ROUTES.vaultErase) {
         if (method !== 'POST') {
-          return sendJson(res, 405, { error: 'method_not_allowed', message: 'POST only' });
+          return sendJson(res, 405, {
+            error: 'method_not_allowed',
+            message: 'POST only',
+          });
         }
         const deviceKey = vaultContext()?.deviceKey;
         const enrollment =
@@ -320,8 +328,10 @@ export function makeVaultRouteHandler(
           const priorBlobStore = readBlobStoreSettings(plane.db.vault);
           const body = await readJson(req);
           const blobStore = body.blob_store;
-          const policyPatch: { storageClass?: string | null; throttleBytesPerSec?: number | null } =
-            {};
+          const policyPatch: {
+            storageClass?: string | null;
+            throttleBytesPerSec?: number | null;
+          } = {};
           if (blobStore !== undefined && blobStore !== null) {
             if (typeof blobStore !== 'object' || Array.isArray(blobStore)) {
               return sendJson(res, 400, {
@@ -657,7 +667,9 @@ export function makeVaultRouteHandler(
               .map((s) => s.trim())
               .filter(Boolean)
           : undefined;
-        return sendJson(res, 200, { items: withCanEdit(plane.listOutbox(statuses)) });
+        return sendJson(res, 200, {
+          items: withCanEdit(plane.listOutbox(statuses)),
+        });
       }
 
       if (method === 'POST' && segments[0] === 'outbox' && segments.length === 2) {
@@ -758,7 +770,10 @@ export function makeVaultRouteHandler(
               blocking.scopeRequests.length,
           });
         }
-        return sendJson(res, 200, { ...blocking, outbox: withCanEdit(blocking.outbox) });
+        return sendJson(res, 200, {
+          ...blocking,
+          outbox: withCanEdit(blocking.outbox),
+        });
       }
 
       // Manifest scope-widening requests (issue #308 A3): a published
@@ -835,7 +850,9 @@ export function makeVaultRouteHandler(
         const table = url.searchParams.get('table') ?? '';
         try {
           if (method === 'GET' && sub === 'tables') {
-            return sendJson(res, 200, { tables: browseTableList(plane.db.vault) });
+            return sendJson(res, 200, {
+              tables: browseTableList(plane.db.vault),
+            });
           }
           if (method === 'GET' && sub === 'columns') {
             return sendJson(res, 200, browseColumns(plane.db.vault, table));
@@ -881,7 +898,10 @@ export function makeVaultRouteHandler(
         } catch (err) {
           if (err instanceof BrowseError) {
             const status = err.code === 'bad_request' ? 400 : 404;
-            return sendJson(res, status, { error: err.code, message: err.message });
+            return sendJson(res, status, {
+              error: err.code,
+              message: err.message,
+            });
           }
           throw err;
         }
@@ -923,7 +943,10 @@ export function makeVaultRouteHandler(
           } catch (err) {
             if (err instanceof BrowseError) {
               const status = err.code === 'bad_request' ? 400 : 404;
-              return sendJson(res, status, { error: err.code, message: err.message });
+              return sendJson(res, status, {
+                error: err.code,
+                message: err.message,
+              });
             }
             throw err;
           }
@@ -1046,7 +1069,10 @@ export function makeVaultRouteHandler(
         }
       }
 
-      return sendJson(res, 404, { error: 'not_found', message: 'unknown _vault route' });
+      return sendJson(res, 404, {
+        error: 'not_found',
+        message: 'unknown _vault route',
+      });
     } catch (err) {
       return sendJson(res, 500, {
         error: 'internal_error',
@@ -1089,7 +1115,10 @@ async function handleVaultsRoute(
       }
       const body = await readJson(req);
       if (body.name !== undefined && typeof body.name !== 'string') {
-        return sendJson(res, 400, { error: 'bad_request', message: 'name must be a string' });
+        return sendJson(res, 400, {
+          error: 'bad_request',
+          message: 'name must be a string',
+        });
       }
       const created = vaults.create(
         typeof body.name === 'string' && body.name.trim() ? body.name.trim() : undefined,
@@ -1139,11 +1168,17 @@ async function handleVaultsRoute(
         });
       }
       if (body.name !== undefined && typeof body.name !== 'string') {
-        return sendJson(res, 400, { error: 'bad_request', message: 'name must be a string' });
+        return sendJson(res, 400, {
+          error: 'bad_request',
+          message: 'name must be a string',
+        });
       }
       for (const k of presentationKeys) {
         if (body[k] !== undefined && body[k] !== null && typeof body[k] !== 'string') {
-          return sendJson(res, 400, { error: 'bad_request', message: `${k} must be a string` });
+          return sendJson(res, 400, {
+            error: 'bad_request',
+            message: `${k} must be a string`,
+          });
         }
       }
       let info = typeof body.name === 'string' ? vaults.rename(vaultId, body.name) : undefined;
@@ -1159,7 +1194,10 @@ async function handleVaultsRoute(
       return sendJson(res, 200, info);
     }
 
-    return sendJson(res, 404, { error: 'not_found', message: 'unknown _vault/vaults route' });
+    return sendJson(res, 404, {
+      error: 'not_found',
+      message: 'unknown _vault/vaults route',
+    });
   } catch (err) {
     return sendRegistryError(res, err);
   }
@@ -1184,10 +1222,16 @@ async function runBrowseWrite(
     purpose: 'dpv:ServiceProvision',
   });
   if (outcome.status === 'executed') {
-    return sendJson(res, 200, { ok: true, ...(outcome.output as Record<string, unknown>) });
+    return sendJson(res, 200, {
+      ok: true,
+      ...(outcome.output as Record<string, unknown>),
+    });
   }
   if (outcome.status === 'replayed') {
-    return sendJson(res, 200, { ok: true, ...(outcome.output as Record<string, unknown>) });
+    return sendJson(res, 200, {
+      ok: true,
+      ...(outcome.output as Record<string, unknown>),
+    });
   }
   // Everything else — denied / parked / failed — carries a reason.
   return sendJson(res, outcome.status === 'denied' ? 403 : 400, {

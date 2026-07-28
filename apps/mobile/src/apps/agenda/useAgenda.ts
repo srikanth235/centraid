@@ -1,5 +1,6 @@
-import { useMemo } from 'react';
 import type { ReplicaRow } from '@centraid/client/replica/native';
+import { useMemo } from 'react';
+
 import { useReplicaQuery } from '../../kit/hooks/useReplicaQuery';
 import { expandEvent } from './recurrence';
 

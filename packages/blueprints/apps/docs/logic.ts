@@ -1,3 +1,4 @@
+import { fmtBytes, typeMeta } from './format.ts';
 // Non-visual business logic: data/selection helpers, the plain-DOM popovers
 // (kebab / move-to), and every vault write (documents, folders, upload).
 //
@@ -11,12 +12,11 @@
 // roots). Everything returned here is then wired into app.tsx's render
 // functions as props/callbacks, exactly like any other value flowing down.
 import { isPendingOffsite, outcomeMessage, runBulk as runBulkBase, toast } from './kit.ts';
-import { fmtBytes, typeMeta } from './format.ts';
 import { createMetadata } from './metadata.ts';
 import { createPopovers } from './popovers.ts';
-import { createVersions } from './versions.ts';
-import { stageDocumentFile } from './upload.ts';
 import type { AppData, AppState, DriveDoc, Folder } from './types.ts';
+import { stageDocumentFile } from './upload.ts';
+import { createVersions } from './versions.ts';
 
 const $ = (id: string) => document.querySelector<HTMLElement>(`#${id}`)!;
 // Bytes stream to the blob staging route (issue #296) — no base64 through
@@ -216,7 +216,9 @@ export function createLogic({ state, data, render, refresh, openQuick }: LogicDe
   // wrapper, so favorites from Photos and stars from here are the same
   // judgment.
   async function toggleStar(doc: DriveDoc) {
-    const outcome = await act(doc.starred ? 'unstar' : 'star', { document_id: doc.document_id });
+    const outcome = await act(doc.starred ? 'unstar' : 'star', {
+      document_id: doc.document_id,
+    });
     if (narrate(outcome)) {
       toast(doc.starred ? 'Star removed · receipted.' : 'Starred · receipted.');
       await refresh();
@@ -248,7 +250,10 @@ export function createLogic({ state, data, render, refresh, openQuick }: LogicDe
     if (title == null) return;
     const trimmed = title.trim();
     if (!trimmed || trimmed === doc.title) return;
-    const outcome = await act('rename', { document_id: doc.document_id, title: trimmed });
+    const outcome = await act('rename', {
+      document_id: doc.document_id,
+      title: trimmed,
+    });
     if (narrate(outcome)) {
       toast('Renamed · receipted.');
       await refresh();
@@ -360,7 +365,10 @@ export function createLogic({ state, data, render, refresh, openQuick }: LogicDe
     let ok = 0;
     let parked = 0;
     let pendingOffsite = 0;
-    for (let i = 0; i < accepted.length; i += 1) {
+    // The visible progress and consent outcomes are a user-selected sequence;
+    // stage and commit each file before moving to the next.
+    const uploadNext = async (i: number): Promise<void> => {
+      if (i >= accepted.length) return;
       const file = accepted[i]!;
       notice(`Uploading ${i + 1} of ${accepted.length}…`);
       let staged;
@@ -368,7 +376,7 @@ export function createLogic({ state, data, render, refresh, openQuick }: LogicDe
         staged = await stageDocumentFile(file);
       } catch {
         failures.push(`Could not read “${file.name}”.`);
-        continue;
+        return uploadNext(i + 1);
       }
       const outcome = await act('upload', {
         staged_sha: staged.sha256,
@@ -380,7 +388,9 @@ export function createLogic({ state, data, render, refresh, openQuick }: LogicDe
         else ok += 1;
       } else if (outcome?.status === 'parked') parked += 1;
       else failures.push(`“${file.name}”: ${friendlyOutcome(outcome) ?? 'the upload failed'}`);
-    }
+      return uploadNext(i + 1);
+    };
+    await uploadNext(0);
     state.uploading = false;
     notice(failures.join(' '));
     if (accepted.length > 0) {
@@ -408,7 +418,11 @@ export function createLogic({ state, data, render, refresh, openQuick }: LogicDe
   // ---------- Metadata (tags + real activity) ----------
   // Another file-size split (metadata.ts) — closes over this factory's own
   // act/narrate/refresh rather than re-implementing them.
-  const { addTag, removeTag, loadActivity } = createMetadata({ refresh, act, narrate });
+  const { addTag, removeTag, loadActivity } = createMetadata({
+    refresh,
+    act,
+    narrate,
+  });
 
   // ---------- Popovers (kebab + move) ----------
   // Another file-size split (popovers.ts) — closes over data.folders plus

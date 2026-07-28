@@ -22,9 +22,11 @@
  */
 
 import fs from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { describe, expect, it } from 'vitest';
+
 import { GW_PAIR_ALPN } from './gateway-endpoint.js';
 import {
   alpnBytes,
@@ -85,7 +87,10 @@ const VECTORS: Array<{ name: string; note: string; value: unknown }> = [
     note: 'Edge: a repeated header is carried as a JSON array (set-cookie).',
     value: {
       status: 200,
-      headers: { 'set-cookie': ['a=1; HttpOnly', 'b=2; HttpOnly'], vary: 'accept' },
+      headers: {
+        'set-cookie': ['a=1; HttpOnly', 'b=2; HttpOnly'],
+        vary: 'accept',
+      },
     },
   },
   {
@@ -94,7 +99,10 @@ const VECTORS: Array<{ name: string; note: string; value: unknown }> = [
     value: {
       method: 'POST',
       target: '/centraid/notes/?q=r%C3%A9sum%C3%A9',
-      headers: { 'x-note-title': 'résumé 🔒', 'content-type': 'application/json' },
+      headers: {
+        'x-note-title': 'résumé 🔒',
+        'content-type': 'application/json',
+      },
     },
   },
   {
@@ -226,7 +234,9 @@ if (process.env.UPDATE_GOLDEN) {
 }
 
 /** A recv half over a fixed byte buffer — feeds readHeaderFrame in-process. */
-function bufferRecv(bytes: Buffer): { readExact(size: number): Promise<Array<number>> } {
+function bufferRecv(bytes: Buffer): {
+  readExact: (size: number) => Promise<Array<number>>;
+} {
   let offset = 0;
   return {
     async readExact(size: number): Promise<Array<number>> {
@@ -306,11 +316,11 @@ describe('framing bounds', () => {
   it('rejects a header frame whose length prefix exceeds the cap', async () => {
     const prefix = Buffer.alloc(4);
     prefix.writeUInt32BE(MAX_HEADER_FRAME_BYTES + 1, 0);
-    await expect(readHeaderFrame(bufferRecv(prefix))).rejects.toThrow(/out of bounds/);
+    await expect(readHeaderFrame(bufferRecv(prefix))).rejects.toThrow(/out of bounds/u);
   });
 
   it('rejects a zero-length header frame on read', async () => {
     const zero = frame(Buffer.alloc(0));
-    await expect(readHeaderFrame(bufferRecv(zero))).rejects.toThrow(/out of bounds/);
+    await expect(readHeaderFrame(bufferRecv(zero))).rejects.toThrow(/out of bounds/u);
   });
 });

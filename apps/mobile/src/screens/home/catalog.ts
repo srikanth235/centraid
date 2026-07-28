@@ -12,6 +12,7 @@
 // unit-testable and the routing decision lives in exactly one place.
 
 import type { AppMetaResolved } from '@centraid/design-tokens';
+
 import { resolveAppMeta } from '../../lib/gateway';
 
 // Where a launcher tile goes when tapped. The three native kinds map onto the
@@ -143,14 +144,22 @@ export function buildLauncherItems(remoteApps: readonly AppMetaResolved[]): Laun
     const live = liveById.get(meta.id);
     items.push(
       live
-        ? { installed: true, meta: live, route: { kind: 'app', appId: live.id } }
+        ? {
+            installed: true,
+            meta: live,
+            route: { kind: 'app', appId: live.id },
+          }
         : { installed: false, meta, route: { kind: 'pair' } },
     );
   }
 
   for (const app of remoteApps) {
     if (catalogIds.has(app.id)) continue;
-    items.push({ installed: true, meta: app, route: { kind: 'app', appId: app.id } });
+    items.push({
+      installed: true,
+      meta: app,
+      route: { kind: 'app', appId: app.id },
+    });
   }
 
   return items;

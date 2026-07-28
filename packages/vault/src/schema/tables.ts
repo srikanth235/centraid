@@ -11,6 +11,7 @@
 // without a handle only the canonical model resolves.
 
 import type { DatabaseSync } from 'node:sqlite';
+
 import { parseExtLogical } from './ext.js';
 
 export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {

@@ -1,4 +1,5 @@
 import type { JSX } from 'react';
+
 import { vaultAtlasGraph, vaultAtlasPulse, vaultAtlasStats } from '../../../gateway-client.js';
 import AtlasScreen from '../../screens/AtlasScreen.js';
 import PageScroll from '../PageScroll.js';

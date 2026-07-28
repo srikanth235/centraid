@@ -47,7 +47,9 @@ export function toUploadFollowup(row: PersistedUploadFollowupRow): UploadFollowu
     attempts: row.attempts ?? 0,
     ...(row.derivatives_json === null
       ? {}
-      : { derivatives: JSON.parse(row.derivatives_json) as UploadDerivativeFollowup[] }),
+      : {
+          derivatives: JSON.parse(row.derivatives_json) as UploadDerivativeFollowup[],
+        }),
   };
 }
 

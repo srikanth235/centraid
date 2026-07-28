@@ -1,4 +1,4 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import crypto from 'node:crypto';
 /*
  * Webhook-trigger route on the CORE gateway (issue #96). The desktop/daemon
  * gateway (`serve()`) IS the always-on host for desktop-only users — a
@@ -9,14 +9,15 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  * the shared secret is the whole auth story (no gateway owner bearer),
  * a wrong secret 401s, and an unknown id 404s.
  */
-
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import { serve, type GatewayServeHandle } from '../serve/serve.ts';
+
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+
 import type { GatewayPaths } from '../paths.ts';
+import { serve, type GatewayServeHandle } from '../serve/serve.ts';
 
 let dataDir: string;
 let handle: GatewayServeHandle;
@@ -109,7 +110,7 @@ async function createWebhookAutomation(
   };
   expect(body.webhook).toBeTruthy();
   expect(body.row?.ref).toBeTruthy();
-  expect(body.webhook!.url).toMatch(/\/_centraid-hook\//);
+  expect(body.webhook!.url).toMatch(/\/_centraid-hook\//u);
 
   const sessionId = `edit-${appId}`;
   await openSession(sessionId);
@@ -121,13 +122,20 @@ async function createWebhookAutomation(
   );
   await publish(appId, sessionId, 'swap in a no-dispatch handler for the test');
 
-  return { id: body.webhook!.id, secret: body.webhook!.secret, ref: body.row!.ref };
+  return {
+    id: body.webhook!.id,
+    secret: body.webhook!.secret,
+    ref: body.row!.ref,
+  };
 }
 
 describe('webhook-route-over-http', () => {
   beforeEach(async () => {
     dataDir = await tempDir(`gw-webhook-${crypto.randomUUID()}-`);
-    handle = await serve({ initVaultName: "Owner's vault", paths: pathsUnder(dataDir) });
+    handle = await serve({
+      initVaultName: "Owner's vault",
+      paths: pathsUnder(dataDir),
+    });
   });
 
   afterEach(async () => {
@@ -142,7 +150,10 @@ describe('webhook-route-over-http', () => {
     // intentionally absent. The shared webhook secret is the only auth here.
     const res = await fetch(`${handle.url}/_centraid-hook/${id}`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/json' },
+      headers: {
+        Authorization: `Bearer ${secret}`,
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify({ hello: 'world' }),
     });
     expect(res.status).toBe(202);
@@ -159,7 +170,11 @@ describe('webhook-route-over-http', () => {
       const db = new DatabaseSync(await journalDbPath(), { readOnly: true });
       try {
         expect(
-          (db.prepare('SELECT COUNT(*) AS n FROM trigger_ingress').get() as { n: number }).n,
+          (
+            db.prepare('SELECT COUNT(*) AS n FROM trigger_ingress').get() as {
+              n: number;
+            }
+          ).n,
         ).toBe(1);
         const cursor = db
           .prepare(
@@ -206,7 +221,11 @@ describe('webhook-route-over-http', () => {
           { headers: auth() },
         );
         const payload = (await feed.json()) as {
-          turns: Array<{ triggerOrigin?: string; endedAt?: number; ok?: boolean }>;
+          turns: Array<{
+            triggerOrigin?: string;
+            endedAt?: number;
+            ok?: boolean;
+          }>;
         };
         expect(payload.turns).toContainEqual(
           expect.objectContaining({

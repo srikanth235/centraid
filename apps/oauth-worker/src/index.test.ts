@@ -1,6 +1,8 @@
+import { readFileSync } from 'node:fs';
+
 // governance: allow-repo-hygiene file-size-limit #545 cohesive security/ACID suite for one module
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { readFileSync } from 'node:fs';
+
 import { handleRequest } from './worker.js';
 
 const NOW = Date.UTC(2026, 6, 23, 10, 0, 0);
@@ -19,7 +21,9 @@ function environment(): Env {
     GOOGLE_CLIENT_ID: 'shared.apps.googleusercontent.com',
     GOOGLE_CLIENT_SECRET: 'worker-only-google-secret',
     IP_LIMITER: { limit: async () => ({ success: true }) } as RateLimit,
-    METRICS: { writeDataPoint: vi.fn() } as unknown as AnalyticsEngineDataset,
+    METRICS: {
+      writeDataPoint: vi.fn<AnalyticsEngineDataset['writeDataPoint']>(),
+    } as unknown as AnalyticsEngineDataset,
     RESTRICTED_SCOPES_ENABLED: 'false',
   };
 }
@@ -43,7 +47,10 @@ describe('index', () => {
           'content-type': 'application/json',
           'cf-connecting-ip': '203.0.113.7',
         },
-        body: JSON.stringify({ state: STATE, browser_binding: BROWSER_BINDING }),
+        body: JSON.stringify({
+          state: STATE,
+          browser_binding: BROWSER_BINDING,
+        }),
       }),
       env,
       context,
@@ -103,7 +110,7 @@ describe('index', () => {
       expect(config).toContain('"traces": {\n      "enabled": false');
       expect(config).toContain('"logs": {\n      "enabled": false');
       expect(config).not.toMatch(
-        /kv_namespaces|d1_databases|durable_objects|r2_buckets|queues|hyperdrive|browser/,
+        /kv_namespaces|d1_databases|durable_objects|r2_buckets|queues|hyperdrive|browser/u,
       );
     });
 
@@ -124,19 +131,21 @@ describe('index', () => {
     test('callback mints a short-lived receipt and exchange attaches the Worker-only secret', async () => {
       const env = environment();
       const receipt = await callbackReceipt(env);
-      const upstream = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
-        const form = new URLSearchParams(String(init?.body));
-        expect(form.get('client_id')).toBe(env.GOOGLE_CLIENT_ID);
-        expect(form.get('client_secret')).toBe(env.GOOGLE_CLIENT_SECRET);
-        expect(form.get('code_verifier')).toBe(VERIFIER);
-        return Response.json({
-          access_token: 'ya29.gateway-only',
-          refresh_token: '1//gateway-only',
-          expires_in: 3600,
-          token_type: 'Bearer',
-          scope: 'https://www.googleapis.com/auth/calendar.readonly',
-        });
-      });
+      const upstream = vi.fn<typeof fetch>(
+        async (_url: string | URL | Request, init?: RequestInit) => {
+          const form = new URLSearchParams(String(init?.body));
+          expect(form.get('client_id')).toBe(env.GOOGLE_CLIENT_ID);
+          expect(form.get('client_secret')).toBe(env.GOOGLE_CLIENT_SECRET);
+          expect(form.get('code_verifier')).toBe(VERIFIER);
+          return Response.json({
+            access_token: 'ya29.gateway-only',
+            refresh_token: '1//gateway-only',
+            expires_in: 3600,
+            token_type: 'Bearer',
+            scope: 'https://www.googleapis.com/auth/calendar.readonly',
+          });
+        },
+      );
       const response = await handleRequest(exchangeRequest(receipt), env, context, {
         fetch: upstream as typeof fetch,
         now: () => NOW,
@@ -164,7 +173,10 @@ describe('index', () => {
         new Request('https://oauth.centraid.dev/bind', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ state: desktopState, browser_binding: desktopBinding }),
+          body: JSON.stringify({
+            state: desktopState,
+            browser_binding: desktopBinding,
+          }),
         }),
         env,
         context,
@@ -194,7 +206,7 @@ describe('index', () => {
 
     test('browser binding plus missing, forged, and expired receipts fail before Google is called', async () => {
       const env = environment();
-      const upstream = vi.fn();
+      const upstream = vi.fn<typeof fetch>();
       const unboundCallback = await handleRequest(
         new Request(
           `https://oauth.centraid.dev/callback?state=${encodeURIComponent(STATE)}&code=${encodeURIComponent(CODE)}`,
@@ -210,7 +222,9 @@ describe('index', () => {
         now: () => NOW,
       });
       expect(missing.status).toBe(400);
-      await expect(missing.json()).resolves.toStrictEqual({ error: 'invalid_body' });
+      await expect(missing.json()).resolves.toStrictEqual({
+        error: 'invalid_body',
+      });
 
       const receipt = await callbackReceipt(env);
       const forged = `${receipt.slice(0, -1)}${receipt.endsWith('A') ? 'B' : 'A'}`;
@@ -218,7 +232,9 @@ describe('index', () => {
         fetch: upstream as typeof fetch,
         now: () => NOW,
       });
-      await expect(forgedResponse.json()).resolves.toStrictEqual({ error: 'invalid_receipt' });
+      await expect(forgedResponse.json()).resolves.toStrictEqual({
+        error: 'invalid_receipt',
+      });
 
       const wrongBrowser = await handleRequest(
         exchangeRequest(receipt, { browser_binding: 'x'.repeat(43) }),
@@ -226,19 +242,23 @@ describe('index', () => {
         context,
         { fetch: upstream as typeof fetch, now: () => NOW },
       );
-      await expect(wrongBrowser.json()).resolves.toStrictEqual({ error: 'invalid_receipt' });
+      await expect(wrongBrowser.json()).resolves.toStrictEqual({
+        error: 'invalid_receipt',
+      });
 
       const expired = await handleRequest(exchangeRequest(receipt), env, context, {
         fetch: upstream as typeof fetch,
         now: () => NOW + 121_000,
       });
-      await expect(expired.json()).resolves.toStrictEqual({ error: 'expired_receipt' });
+      await expect(expired.json()).resolves.toStrictEqual({
+        error: 'expired_receipt',
+      });
       expect(upstream).toHaveBeenCalledTimes(0);
     });
 
     test('invalid body shape and PKCE verifier are rejected before any upstream call', async () => {
       const env = environment();
-      const upstream = vi.fn();
+      const upstream = vi.fn<typeof fetch>();
       const nonObject = new Request('https://oauth.centraid.dev/exchange', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -259,7 +279,9 @@ describe('index', () => {
         context,
         { fetch: upstream as typeof fetch, now: () => NOW },
       );
-      await expect(weakPkce.json()).resolves.toStrictEqual({ error: 'invalid_body' });
+      await expect(weakPkce.json()).resolves.toStrictEqual({
+        error: 'invalid_body',
+      });
       const restricted = await handleRequest(
         exchangeRequest(receipt, {
           scopes: ['https://www.googleapis.com/auth/gmail.readonly'],
@@ -268,14 +290,16 @@ describe('index', () => {
         context,
         { fetch: upstream as typeof fetch, now: () => NOW },
       );
-      await expect(restricted.json()).resolves.toStrictEqual({ error: 'invalid_body' });
+      await expect(restricted.json()).resolves.toStrictEqual({
+        error: 'invalid_body',
+      });
       expect(upstream).toHaveBeenCalledTimes(0);
     });
 
     test('Google must return the exact requested allowlisted scope set', async () => {
       const env = environment();
       const receipt = await callbackReceipt(env);
-      const upstream = vi.fn(async () =>
+      const upstream = vi.fn<typeof fetch>(async () =>
         Response.json({
           access_token: 'ya29.must-not-leave-worker',
           refresh_token: '1//must-not-leave-worker',
@@ -287,22 +311,26 @@ describe('index', () => {
         now: () => NOW,
       });
       expect(response.status).toBe(502);
-      await expect(response.json()).resolves.toStrictEqual({ error: 'invalid_upstream_response' });
+      await expect(response.json()).resolves.toStrictEqual({
+        error: 'invalid_upstream_response',
+      });
     });
 
     test('refresh is stateless and returns only allowlisted OAuth fields', async () => {
       const env = environment();
-      const upstream = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
-        const form = new URLSearchParams(String(init?.body));
-        expect(form.get('grant_type')).toBe('refresh_token');
-        expect(form.get('refresh_token')).toBe('1//stored-on-gateway');
-        expect(form.get('client_secret')).toBe(env.GOOGLE_CLIENT_SECRET);
-        return Response.json({
-          access_token: 'ya29.refreshed',
-          expires_in: 3600,
-          id_token: 'must-not-leave-worker',
-        });
-      });
+      const upstream = vi.fn<typeof fetch>(
+        async (_url: string | URL | Request, init?: RequestInit) => {
+          const form = new URLSearchParams(String(init?.body));
+          expect(form.get('grant_type')).toBe('refresh_token');
+          expect(form.get('refresh_token')).toBe('1//stored-on-gateway');
+          expect(form.get('client_secret')).toBe(env.GOOGLE_CLIENT_SECRET);
+          return Response.json({
+            access_token: 'ya29.refreshed',
+            expires_in: 3600,
+            id_token: 'must-not-leave-worker',
+          });
+        },
+      );
       const response = await handleRequest(
         new Request('https://oauth.centraid.dev/refresh', {
           method: 'POST',
@@ -328,7 +356,7 @@ describe('index', () => {
         ...environment(),
         EXCHANGE_ENABLED: 'false',
       } as unknown as Env;
-      const upstream = vi.fn();
+      const upstream = vi.fn<typeof fetch>();
       const response = await handleRequest(
         exchangeRequest('v1.0000000000.bad'),
         disabled,
@@ -339,11 +367,15 @@ describe('index', () => {
         },
       );
       expect(response.status).toBe(503);
-      await expect(response.json()).resolves.toStrictEqual({ error: 'assist_disabled' });
+      await expect(response.json()).resolves.toStrictEqual({
+        error: 'assist_disabled',
+      });
       expect(upstream).toHaveBeenCalledTimes(0);
 
       const limited = environment();
-      limited.IP_LIMITER = { limit: async () => ({ success: false }) } as RateLimit;
+      limited.IP_LIMITER = {
+        limit: async () => ({ success: false }),
+      } as RateLimit;
       const limitedResponse = await handleRequest(
         exchangeRequest('v1.0000000000.bad'),
         limited,
@@ -414,7 +446,7 @@ describe('index', () => {
       );
       expect(response.status).toBe(303);
       expect(response.headers.get('location')).toMatch(
-        /^http:\/\/127\.0\.0\.1:4173\/oauth\/finish#/,
+        /^http:\/\/127\.0\.0\.1:4173\/oauth\/finish#/u,
       );
 
       const wrongPort = await handleRequest(
@@ -433,7 +465,7 @@ describe('index', () => {
       const env = environment();
       const receipt = await callbackReceipt(env);
 
-      const timeoutUpstream = vi.fn(async () => {
+      const timeoutUpstream = vi.fn<typeof fetch>(async () => {
         throw new Error('Google token endpoint timed out');
       });
       const timeoutResponse = await handleRequest(exchangeRequest(receipt), env, context, {
@@ -449,7 +481,7 @@ describe('index', () => {
         'https://oauth2.googleapis.com/token',
       );
 
-      const fiveXxUpstream = vi.fn(async () =>
+      const fiveXxUpstream = vi.fn<typeof fetch>(async () =>
         Response.json(
           { error: 'server_error', error_description: 'ya29.must-not-leak' },
           { status: 503 },
@@ -468,7 +500,7 @@ describe('index', () => {
     test('malformed Google responses fail closed as invalid_upstream_response', async () => {
       const env = environment();
       const receipt = await callbackReceipt(env);
-      const notJson = vi.fn(async () => new Response('not-json{', { status: 200 }));
+      const notJson = vi.fn<typeof fetch>(async () => new Response('not-json{', { status: 200 }));
       const notJsonResponse = await handleRequest(exchangeRequest(receipt), env, context, {
         fetch: notJson as typeof fetch,
         now: () => NOW,
@@ -478,7 +510,7 @@ describe('index', () => {
         error: 'invalid_upstream_response',
       });
 
-      const missingToken = vi.fn(async () =>
+      const missingToken = vi.fn<typeof fetch>(async () =>
         Response.json({
           token_type: 'Bearer',
           scope: 'https://www.googleapis.com/auth/calendar.readonly',
@@ -489,20 +521,24 @@ describe('index', () => {
         now: () => NOW,
       });
       expect(missing.status).toBe(502);
-      await expect(missing.json()).resolves.toStrictEqual({ error: 'invalid_upstream_response' });
+      await expect(missing.json()).resolves.toStrictEqual({
+        error: 'invalid_upstream_response',
+      });
     });
 
     test('receipt clock-skew beyond the TTL window is rejected as expired_receipt', async () => {
       const env = environment();
       const receipt = await callbackReceipt(env);
-      const upstream = vi.fn();
+      const upstream = vi.fn<typeof fetch>();
       // Receipt expiresAt is NOW/1000 + 120. A clock that is more than TTL
       // *ahead* of mint time also fails closed (future skew).
       const skewedFuture = await handleRequest(exchangeRequest(receipt), env, context, {
         fetch: upstream as typeof fetch,
         now: () => NOW - 121_000,
       });
-      await expect(skewedFuture.json()).resolves.toStrictEqual({ error: 'expired_receipt' });
+      await expect(skewedFuture.json()).resolves.toStrictEqual({
+        error: 'expired_receipt',
+      });
       expect(upstream.mock.calls).toStrictEqual([]);
     });
 
@@ -513,7 +549,7 @@ describe('index', () => {
       env.IP_LIMITER = {
         limit: async () => ({ success: open }),
       } as RateLimit;
-      const upstream = vi.fn(async () =>
+      const upstream = vi.fn<typeof fetch>(async () =>
         Response.json({
           access_token: 'ya29.recovered',
           expires_in: 3600,
@@ -527,7 +563,9 @@ describe('index', () => {
         now: () => NOW,
       });
       expect(blocked.status).toBe(429);
-      await expect(blocked.json()).resolves.toStrictEqual({ error: 'rate_limited' });
+      await expect(blocked.json()).resolves.toStrictEqual({
+        error: 'rate_limited',
+      });
       expect(upstream.mock.calls).toStrictEqual([]);
 
       open = true;
@@ -536,7 +574,9 @@ describe('index', () => {
         now: () => NOW,
       });
       expect(recovered.status).toBe(200);
-      await expect(recovered.json()).resolves.toMatchObject({ access_token: 'ya29.recovered' });
+      await expect(recovered.json()).resolves.toMatchObject({
+        access_token: 'ya29.recovered',
+      });
       expect(upstream).toHaveBeenCalledOnce();
     });
   });

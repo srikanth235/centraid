@@ -46,17 +46,21 @@ export interface RunnerHealthEntry {
 }
 
 export interface RunnerHealthController {
-  canAttempt(workspaceContext: string, runnerKind: RunnerKind, now?: number): RunnerHealthStatus;
-  reportFailure(
+  canAttempt: (
+    workspaceContext: string,
+    runnerKind: RunnerKind,
+    now?: number,
+  ) => RunnerHealthStatus;
+  reportFailure: (
     workspaceContext: string,
     runnerKind: RunnerKind,
     failureClass: AgentFailureClass,
     error: string,
     now?: number,
-  ): void;
-  reportOk(workspaceContext: string, runnerKind: RunnerKind, now?: number): void;
-  reportPreflightOk(workspaceContext: string, runnerKind: RunnerKind, now?: number): void;
-  list(workspaceContext?: string, now?: number): RunnerHealthEntry[];
+  ) => void;
+  reportOk: (workspaceContext: string, runnerKind: RunnerKind, now?: number) => void;
+  reportPreflightOk: (workspaceContext: string, runnerKind: RunnerKind, now?: number) => void;
+  list: (workspaceContext?: string, now?: number) => RunnerHealthEntry[];
 }
 
 interface BreakerRow {
@@ -228,8 +232,8 @@ export class RunnerHealthStore implements RunnerHealthController {
           ? { breakerUntil: row.breaker_until }
           : {}),
         ...(row.last_error ? { lastError: row.last_error } : {}),
-        ...(row.last_failure_at !== null ? { lastFailureAt: row.last_failure_at } : {}),
-        ...(row.last_ok_at !== null ? { lastOkAt: row.last_ok_at } : {}),
+        ...(row.last_failure_at === null ? {} : { lastFailureAt: row.last_failure_at }),
+        ...(row.last_ok_at === null ? {} : { lastOkAt: row.last_ok_at }),
       };
     });
   }

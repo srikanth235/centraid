@@ -11,6 +11,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+
 import {
   NATIVE_PLATFORMS,
   auditNativeArtifacts,

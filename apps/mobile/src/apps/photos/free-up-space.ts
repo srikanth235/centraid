@@ -95,14 +95,22 @@ export async function revalidateBackedUp(
   let changedCount = 0;
   let missingCount = 0;
   let inCloudCount = 0;
-  for (const candidate of candidates) {
-    for (const localId of candidate.localIds) {
-      let current: Awaited<ReturnType<DeviceByteProbe>>;
-      try {
-        current = await probe(localId);
-      } catch {
-        current = null;
-      }
+  const candidatesWithCopies = await Promise.all(
+    candidates.map(async (candidate) => ({
+      candidate,
+      currentCopies: await Promise.all(
+        candidate.localIds.map(async (localId) => {
+          try {
+            return { localId, current: await probe(localId) };
+          } catch {
+            return { localId, current: null };
+          }
+        }),
+      ),
+    })),
+  );
+  for (const { candidate, currentCopies } of candidatesWithCopies) {
+    for (const { localId, current } of currentCopies) {
       if (current === 'in-cloud') {
         inCloudCount += 1;
         continue;
@@ -119,5 +127,11 @@ export async function revalidateBackedUp(
       }
     }
   }
-  return { deletableLocalIds, eligibleBytes, changedCount, missingCount, inCloudCount };
+  return {
+    deletableLocalIds,
+    eligibleBytes,
+    changedCount,
+    missingCount,
+    inCloudCount,
+  };
 }

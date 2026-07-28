@@ -56,7 +56,11 @@ export interface SubtleCryptoLike {
     keyUsages: readonly string[],
   ): Promise<CryptoKeyLike>;
   encrypt(
-    algorithm: { name: 'AES-GCM'; iv: ArrayBuffer; additionalData: ArrayBuffer },
+    algorithm: {
+      name: 'AES-GCM';
+      iv: ArrayBuffer;
+      additionalData: ArrayBuffer;
+    },
     key: CryptoKeyLike,
     data: ArrayBuffer,
   ): Promise<ArrayBuffer>;
@@ -77,7 +81,11 @@ export function webCryptoUploadCrypto(subtle?: SubtleCryptoLike): UploadCrypto {
         'encrypt',
       ]);
       const sealed = await impl.encrypt(
-        { name: 'AES-GCM', iv: bufferOf(nonce), additionalData: bufferOf(additionalData) },
+        {
+          name: 'AES-GCM',
+          iv: bufferOf(nonce),
+          additionalData: bufferOf(additionalData),
+        },
         material,
         bufferOf(plain),
       );

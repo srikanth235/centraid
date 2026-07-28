@@ -1,6 +1,6 @@
+import { Feather } from '@expo/vector-icons';
 import React, { useMemo } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Feather } from '@expo/vector-icons';
 
 import { family, useTheme } from '../../kit/theme';
 import type { ThemeColors } from '../../kit/theme/resolve';
@@ -69,7 +69,13 @@ const MAKE: Array<{
     title: 'Video remix',
     subtitle: 'Recut an existing clip',
   },
-  { key: 'book', color: '#5C677D', icon: 'book', title: 'Photo book', subtitle: 'Print and bind' },
+  {
+    key: 'book',
+    color: '#5C677D',
+    icon: 'book',
+    title: 'Photo book',
+    subtitle: 'Print and bind',
+  },
 ];
 
 const GET: Array<{
@@ -236,7 +242,12 @@ const makeStyles = (colors: ThemeColors): ReturnType<typeof StyleSheet.create> =
       letterSpacing: 0.9,
     },
     getList: { paddingHorizontal: 16 },
-    getRow: { alignItems: 'center', flexDirection: 'row', gap: 13, paddingVertical: 13 },
+    getRow: {
+      alignItems: 'center',
+      flexDirection: 'row',
+      gap: 13,
+      paddingVertical: 13,
+    },
     getSub: { fontFamily: family.sansRegular, fontSize: 13, marginTop: 1 },
     getText: { flex: 1, minWidth: 0 },
     getTile: {
@@ -257,7 +268,12 @@ const makeStyles = (colors: ThemeColors): ReturnType<typeof StyleSheet.create> =
       marginHorizontal: 16,
       overflow: 'hidden',
     },
-    heroCopy: { fontFamily: family.sansRegular, fontSize: 13, lineHeight: 18, marginTop: 5 },
+    heroCopy: {
+      fontFamily: family.sansRegular,
+      fontSize: 13,
+      lineHeight: 18,
+      marginTop: 5,
+    },
     heroMedia: { backgroundColor: '#a06f7a', height: 132 },
     heroTitle: {
       fontFamily: family.displayBold,
@@ -309,7 +325,11 @@ const makeStyles = (colors: ThemeColors): ReturnType<typeof StyleSheet.create> =
       height: 40,
       paddingHorizontal: 18,
     },
-    primaryBtnText: { color: '#fff', fontFamily: family.sansBold, fontSize: 14 },
+    primaryBtnText: {
+      color: '#fff',
+      fontFamily: family.sansBold,
+      fontSize: 14,
+    },
     scroll: { paddingBottom: 24, paddingTop: 2 },
     secondaryBtn: {
       alignItems: 'center',
@@ -320,5 +340,9 @@ const makeStyles = (colors: ThemeColors): ReturnType<typeof StyleSheet.create> =
       paddingHorizontal: 16,
     },
     secondaryBtnText: { fontFamily: family.sansBold, fontSize: 14 },
-    sectionEyebrow: { paddingBottom: 12, paddingHorizontal: 16, paddingTop: 24 },
+    sectionEyebrow: {
+      paddingBottom: 12,
+      paddingHorizontal: 16,
+      paddingTop: 24,
+    },
   });

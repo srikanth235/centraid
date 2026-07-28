@@ -1,8 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
+
 import { richAnswerHtml } from './assistantRich.js';
 
 // `vi.mock` is hoisted above the import by vitest, so the stub lands first.
-vi.mock(import('../../../gateway-client.js'), () => ({ resolveAssistantRefs: vi.fn() }));
+vi.mock(import('../../../gateway-client.js'), () => ({
+  resolveAssistantRefs: vi.fn<typeof import('../../../gateway-client.js').resolveAssistantRefs>(),
+}));
 
 describe(richAnswerHtml, () => {
   it('renders prose paragraphs with inline formatting', () => {
@@ -16,7 +19,7 @@ describe(richAnswerHtml, () => {
     const html = richAnswerHtml('# Title\n- one\n- two');
     expect(html).toContain('asstH');
     expect(html).toContain('asstUl');
-    expect(html.match(/<li>/g)?.length).toBe(2);
+    expect(html.match(/<li>/gu)?.length).toBe(2);
   });
 
   it('renders a ref chip for an entity reference', () => {
@@ -28,7 +31,11 @@ describe(richAnswerHtml, () => {
   });
 
   it('renders a typed table block', () => {
-    const spec = JSON.stringify({ columns: ['A', 'B'], rows: [[1, 2]], caption: 'Cap' });
+    const spec = JSON.stringify({
+      columns: ['A', 'B'],
+      rows: [[1, 2]],
+      caption: 'Cap',
+    });
     const html = richAnswerHtml('Before\n```block:table\n' + spec + '\n```\nAfter');
     expect(html).toContain('asstTable');
     expect(html).toContain('<th>A</th>');
@@ -42,7 +49,11 @@ describe(richAnswerHtml, () => {
     expect(stat).toContain('asstStatValue');
     const chart = richAnswerHtml(
       '```block:chart\n' +
-        JSON.stringify({ type: 'bar', x: ['a', 'b'], series: [{ values: [1, 2] }] }) +
+        JSON.stringify({
+          type: 'bar',
+          x: ['a', 'b'],
+          series: [{ values: [1, 2] }],
+        }) +
         '\n```',
     );
     expect(chart).toContain('asstChart');

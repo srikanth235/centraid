@@ -1,5 +1,6 @@
-import { describe, expect, test } from 'vitest';
 import { fc } from '@centraid/test-kit/fast-check';
+import { describe, expect, test } from 'vitest';
+
 import {
   decrypt,
   deriveDataKey,
@@ -41,7 +42,9 @@ describe('backup crypto property', () => {
         keyBytes,
         fc.uint8Array({ minLength: 12, maxLength: 12 }),
         plainBytes,
-        fc.option(fc.uint8Array({ minLength: 0, maxLength: 32 }), { nil: undefined }),
+        fc.option(fc.uint8Array({ minLength: 0, maxLength: 32 }), {
+          nil: undefined,
+        }),
         (key, nonceArr, plain, aadOpt) => {
           const nonce = new Uint8Array(nonceArr);
           const aad = aadOpt === undefined ? undefined : new Uint8Array(aadOpt);
@@ -66,7 +69,7 @@ describe('backup crypto property', () => {
         // If flip produced identical byte (impossible with XOR 0xff on byte), skip.
         if (tampered[idx] === blob[idx]) return;
         expect(() => decrypt(key, tampered)).toThrow(
-          /unsupported state or unable to authenticate data/i,
+          /unsupported state or unable to authenticate data/iu,
         );
       }),
       { numRuns: 32, seed: 53242 },
@@ -79,7 +82,7 @@ describe('backup crypto property', () => {
         fc.pre([...key].some((b, i) => b !== wrong[i]));
         const blob = encrypt(key, plain);
         expect(() => decrypt(wrong, blob)).toThrow(
-          /unsupported state or unable to authenticate data/i,
+          /unsupported state or unable to authenticate data/iu,
         );
       }),
       { numRuns: 24, seed: 53243 },

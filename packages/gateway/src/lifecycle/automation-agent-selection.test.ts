@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
+
 import {
   resolveAutomationAgentSelection,
   resolveAutomationRewriteModel,
 } from './automation-agent-selection.js';
 
-describe('resolveAutomationAgentSelection', () => {
+describe(resolveAutomationAgentSelection, () => {
   const prefs = {
     'model.codex.automations': 'codex-auto',
     'model.claude-code.automations': 'claude-auto',
@@ -20,7 +21,7 @@ describe('resolveAutomationAgentSelection', () => {
         prefs,
         'codex',
       ),
-    ).toEqual({
+    ).toStrictEqual({
       runner: 'claude-code',
       // The manifest named a provider the user's automations lane does not
       // use, so this selection is not consent for unattended egress (#567).
@@ -31,7 +32,9 @@ describe('resolveAutomationAgentSelection', () => {
   });
 
   it('falls back from an unregistered open key and scopes model prefs to that fallback', () => {
-    expect(resolveAutomationAgentSelection({ runner: 'future-runner' }, prefs, 'codex')).toEqual({
+    expect(
+      resolveAutomationAgentSelection({ runner: 'future-runner' }, prefs, 'codex'),
+    ).toStrictEqual({
       runner: 'codex',
       // Falling back lands on the user's own automations runner.
       selectionSource: 'prefs',
@@ -40,7 +43,9 @@ describe('resolveAutomationAgentSelection', () => {
   });
 
   it('uses the pinned runner subsystem model when no model is explicit', () => {
-    expect(resolveAutomationAgentSelection({ runner: 'claude-code' }, prefs, 'codex')).toEqual({
+    expect(
+      resolveAutomationAgentSelection({ runner: 'claude-code' }, prefs, 'codex'),
+    ).toStrictEqual({
       runner: 'claude-code',
       selectionSource: 'manifest',
       model: 'claude-auto',

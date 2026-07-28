@@ -1,5 +1,6 @@
 import { type JSX, useEffect, useRef } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+
 import { formatDuration, triggersSummary } from '../../../app-format.js';
 import {
   listAutomations,
@@ -10,7 +11,6 @@ import type { AppSettingsSnapshot } from '../../screen-contracts.js';
 import AppSettingsPanel from '../../screens/AppSettingsPanel.js';
 import VaultScreen from '../../screens/VaultScreen.js';
 import { iconSvg } from '../iconSvg.js';
-import RunsPane from './RunsPane.js';
 import {
   type AppKnob,
   buildVaultProps,
@@ -24,11 +24,23 @@ import {
   waitForAutomationRun,
   writeAppKnobValue,
 } from './appSettingsData.js';
+import RunsPane from './RunsPane.js';
 
 type RunState =
   | { kind: 'idle' }
   | { kind: 'running' }
   | { kind: 'done'; ok: boolean; durationMs: number; error?: string };
+
+function mountRunsPane(
+  host: HTMLElement,
+  roots: Map<HTMLElement, Root>,
+  automationId: string,
+): void {
+  roots.get(host)?.unmount();
+  const root = createRoot(host);
+  root.render(<RunsPane automationId={automationId} />);
+  roots.set(host, root);
+}
 
 export interface AppSettingsControllerProps {
   app: AppMetaResolvedType;
@@ -167,7 +179,7 @@ export default function AppSettingsController({
       roots.forEach((r) => r.unmount());
       roots.clear();
     };
-  }, [appId]);
+  }, [appId, push]);
 
   const pushKnob = (key: string, value: string): void => {
     if (inlineRoot) pushKnobToInlineRoot(inlineRoot, key, value);
@@ -257,7 +269,7 @@ export default function AppSettingsController({
       onReveal={onReveal}
       onDelete={onDelete}
       {...(bundled ? { bundled: true } : {})}
-      onMountRuns={(ref, host) => mountInto(host, <RunsPane automationId={ref} />)}
+      onMountRuns={(ref, host) => mountRunsPane(host, subRoots.current, ref)}
       onMountVault={(host) => {
         void fetchAppManifestRaw(appId).then((raw) => {
           const block = manifestVaultBlock(raw);

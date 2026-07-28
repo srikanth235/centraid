@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import vectors from '../spec/origin-matching-v1.json';
 import { isEligiblePageUrl, isLoopback, matchesOrigin } from './origin-matching.js';
 

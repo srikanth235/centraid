@@ -94,7 +94,9 @@ async function serveAppAsset(req, res, appId, rel) {
   // so ask for identity bytes and let node send them plain.
   const headers = { ...req.headers };
   delete headers['accept-encoding'];
-  const plainReq = Object.create(req, { headers: { value: headers, enumerable: true } });
+  const plainReq = Object.create(req, {
+    headers: { value: headers, enumerable: true },
+  });
   await serveStatic(plainReq, cap, appDir, rel, { sharedAssetsDir: KIT_DIR });
 
   const contentType = String(cap.headers['Content-Type'] || '');
@@ -177,7 +179,10 @@ async function handleBlobRoute(req, res, url) {
       req.on('error', reject);
     });
     const sha256 = hash.digest('hex');
-    const body = JSON.stringify({ sha256, media_type: url.searchParams.get('media_type') || null });
+    const body = JSON.stringify({
+      sha256,
+      media_type: url.searchParams.get('media_type') || null,
+    });
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.end(body);

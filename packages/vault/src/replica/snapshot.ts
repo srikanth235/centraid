@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
+
 import { sealedColumnsOf } from '../schema/sealed.js';
 import { resolveEntity } from '../schema/tables.js';
 import { currentReplicaLogState, type ReplicaLogState } from './change-log.js';

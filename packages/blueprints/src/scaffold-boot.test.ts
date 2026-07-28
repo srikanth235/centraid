@@ -6,7 +6,9 @@ import assert from 'node:assert';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+
 import { scaffoldAppFiles } from './scaffold-files.js';
 
 const packageDir = path.resolve(import.meta.dirname, '..');
@@ -41,7 +43,7 @@ describe('dependency-free app scaffold', () => {
     const html = scaffoldAppFiles('demo', { name: 'Demo' }).find(
       (file) => file.path === 'index.html',
     )!.content;
-    const body = /<body[^>]*>([\s\S]*)<\/body>/.exec(html);
+    const body = /<body[^>]*>(?<body>[\s\S]*)<\/body>/u.exec(html);
     expect(body, 'scaffold index.html has no body').toBeTruthy();
     document.body.innerHTML = body![1]!;
 

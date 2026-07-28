@@ -21,6 +21,7 @@
 // Electron). This file only wires them onto `session.webRequest`.
 
 import { session, type Session } from 'electron';
+
 import {
   applyIncomingFrameRelaxation,
   applyOutgoingAuthHeaders,

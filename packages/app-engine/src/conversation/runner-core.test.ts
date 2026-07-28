@@ -9,10 +9,11 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { makeConversationRunnerCore, type ConversationRunnerCoreOptions } from './runner-core.js';
-import type { ConversationTurnInput } from './runner.js';
+
 import type { Dispatcher } from '../handlers/dispatcher.js';
 import type { ModelSubsystem } from '../stores/prefs-store.js';
+import { makeConversationRunnerCore, type ConversationRunnerCoreOptions } from './runner-core.js';
+import type { ConversationTurnInput } from './runner.js';
 import type { RunnerPrefs, RunTurnFn, TurnInput } from './turn.js';
 
 type PrefsLoader = ConversationRunnerCoreOptions['prefsLoader'];
@@ -52,7 +53,9 @@ function build(opts: { prefsLoader: PrefsLoader; subsystem?: ModelSubsystem }) {
 
 describe('makeConversationRunnerCore — per-subsystem prefs loading', () => {
   it("passes the register's subsystem to the prefs loader on every turn", async () => {
-    const prefsLoader = vi.fn<PrefsLoader>(async () => ({ kind: 'claude-code' as const }));
+    const prefsLoader = vi.fn<PrefsLoader>(async () => ({
+      kind: 'claude-code' as const,
+    }));
     const { runner } = build({ prefsLoader, subsystem: 'ask' });
 
     await runner.run(turnInput());
@@ -66,7 +69,9 @@ describe('makeConversationRunnerCore — per-subsystem prefs loading', () => {
   });
 
   it('calls the loader bare when the register has no subsystem (back-compat)', async () => {
-    const prefsLoader = vi.fn<PrefsLoader>(async () => ({ kind: 'codex' as const }));
+    const prefsLoader = vi.fn<PrefsLoader>(async () => ({
+      kind: 'codex' as const,
+    }));
     const { runner } = build({ prefsLoader });
 
     await runner.run(turnInput());
@@ -84,12 +89,16 @@ describe('makeConversationRunnerCore — per-subsystem prefs loading', () => {
     });
 
     await runner.run(turnInput());
-    expect(runTurn.mock.calls[0]![1]).toStrictEqual({ prefs: { kind: 'codex' } });
+    expect(runTurn.mock.calls[0]![1]).toStrictEqual({
+      prefs: { kind: 'codex' },
+    });
 
     // The owner re-pins `runner.assistant` between turns.
     kind = 'claude-code';
     await runner.run(turnInput());
-    expect(runTurn.mock.calls[1]![1]).toStrictEqual({ prefs: { kind: 'claude-code' } });
+    expect(runTurn.mock.calls[1]![1]).toStrictEqual({
+      prefs: { kind: 'claude-code' },
+    });
   });
 
   it('lets a validated automation turn override only the loaded runner kind', async () => {
@@ -133,7 +142,9 @@ describe('makeConversationRunnerCore — per-subsystem prefs loading', () => {
 
     await runner.run(turnInput({ runnerKind: 'claude-code' }));
 
-    expect(runTurn.mock.calls[0]![1]).toStrictEqual({ prefs: { kind: 'claude-code' } });
+    expect(runTurn.mock.calls[0]![1]).toStrictEqual({
+      prefs: { kind: 'claude-code' },
+    });
   });
 });
 
@@ -182,7 +193,12 @@ describe('makeConversationRunnerCore — session resume gating', () => {
       subsystem: 'assistant',
     });
 
-    await runner.run(turnInput({ prevAdapterKind: 'codex', prevAdapterSessionId: 'thread-abc' }));
+    await runner.run(
+      turnInput({
+        prevAdapterKind: 'codex',
+        prevAdapterSessionId: 'thread-abc',
+      }),
+    );
 
     expect(seen[0]!.prevSessionId).toBe('thread-abc');
   });
@@ -192,7 +208,10 @@ describe('makeConversationRunnerCore — session resume gating', () => {
       prefsLoader: async () => ({ kind: 'codex' }),
       subsystem: 'assistant',
     });
-    const snapshot = { inputTokens: 90, cost: { amount: 0.2, currency: 'USD' } };
+    const snapshot = {
+      inputTokens: 90,
+      cost: { amount: 0.2, currency: 'USD' },
+    };
 
     await runner.run(
       turnInput({
@@ -214,7 +233,12 @@ describe('makeConversationRunnerCore — session resume gating', () => {
       subsystem: 'assistant',
     });
 
-    await runner.run(turnInput({ prevAdapterKind: 'codex', prevAdapterSessionId: 'thread-abc' }));
+    await runner.run(
+      turnInput({
+        prevAdapterKind: 'codex',
+        prevAdapterSessionId: 'thread-abc',
+      }),
+    );
 
     expect(seen[0]!.prevSessionId).toBeUndefined();
     expect(seen[0]!.prevUsageSnapshot).toBeUndefined();
@@ -232,7 +256,10 @@ describe('makeConversationRunnerCore — session resume gating', () => {
       prefsLoader: async () => ({ kind: 'codex' }),
       subsystem: 'builder',
     });
-    const prior = { prevAdapterKind: 'codex', prevAdapterSessionId: 'thread-abc' };
+    const prior = {
+      prevAdapterKind: 'codex',
+      prevAdapterSessionId: 'thread-abc',
+    };
 
     await ask.runner.run(turnInput(prior));
     await builder.runner.run(turnInput(prior));

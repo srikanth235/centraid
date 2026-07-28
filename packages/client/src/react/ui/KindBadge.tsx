@@ -1,5 +1,7 @@
 import type { JSX, ReactNode } from 'react';
+
 import { cx } from './cx.js';
+
 import styles from './KindBadge.module.css';
 
 export interface KindBadgeProps {

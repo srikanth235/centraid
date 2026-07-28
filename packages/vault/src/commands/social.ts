@@ -81,7 +81,12 @@ const RESOLVE_IDENTITY: CommandDefinition = {
 };
 
 function resolveIdentity(ctx: HandlerCtx): Record<string, unknown> {
-  const input = ctx.input as { party_id: string; scheme: string; value: string; label?: string };
+  const input = ctx.input as {
+    party_id: string;
+    scheme: string;
+    value: string;
+    label?: string;
+  };
   const existing = ctx.db
     .prepare('SELECT identifier_id FROM core_party_identifier WHERE scheme = ? AND value = ?')
     .get(input.scheme, input.value) as { identifier_id: string } | undefined;
@@ -260,7 +265,11 @@ function draftMessage(ctx: HandlerCtx): Record<string, unknown> {
     entityType: 'social.thread',
     entityId: threadId,
   });
-  return { message_id: messageId, thread_id: threadId, body_content_id: contentId };
+  return {
+    message_id: messageId,
+    thread_id: threadId,
+    body_content_id: contentId,
+  };
 }
 
 const SEND_MESSAGE: CommandDefinition = {
@@ -275,7 +284,10 @@ const SEND_MESSAGE: CommandDefinition = {
   outputSchema: {
     type: 'object',
     required: ['message_id', 'delivery'],
-    properties: { message_id: { type: 'string' }, delivery: { type: 'string' } },
+    properties: {
+      message_id: { type: 'string' },
+      delivery: { type: 'string' },
+    },
   },
   preconditions: [
     {

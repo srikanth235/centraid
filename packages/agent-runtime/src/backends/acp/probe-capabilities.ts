@@ -11,6 +11,7 @@ import { promises as fs } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { Readable, Writable } from 'node:stream';
+
 import { lowPriorityCommand } from '../../low-priority.js';
 import { classifyAgentFailureDetail } from './agent-errors.js';
 import { ACP_PROTOCOL_VERSION, createAcpConnection } from './json-rpc.js';
@@ -208,8 +209,15 @@ export async function probeAcpCapabilities(
   try {
     const init = await conn.request<InitializeResult>('initialize', {
       protocolVersion: ACP_PROTOCOL_VERSION,
-      clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
-      clientInfo: { name: 'centraid-capability-probe', title: 'Centraid', version: '0.1.0' },
+      clientCapabilities: {
+        fs: { readTextFile: false, writeTextFile: false },
+        terminal: false,
+      },
+      clientInfo: {
+        name: 'centraid-capability-probe',
+        title: 'Centraid',
+        version: '0.1.0',
+      },
     });
 
     const ac = init?.agentCapabilities;

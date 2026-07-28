@@ -21,9 +21,11 @@
 // not only engine FKs".
 
 import type { DatabaseSync } from 'node:sqlite';
-import { SEALED_PLACEHOLDER, sealedColumnsOf } from './sealed.js';
-import { resolveEntity, type EntityRef } from './tables.js';
+
+import { maskSealed } from './atlas-browse-mask.js';
 import { atlasTables, packKindOf, type AtlasPackKind } from './atlas.js';
+import { sealedColumnsOf } from './sealed.js';
+import { resolveEntity, type EntityRef } from './tables.js';
 
 /** Hard cap on a Browse page — some tables are 40k+ rows (issue #441 B3). */
 export const BROWSE_MAX_LIMIT = 100;
@@ -77,7 +79,11 @@ export function foreignKeys(vault: DatabaseSync, physical: string): ForeignKeyRo
 
 function countRows(vault: DatabaseSync, physical: string): number {
   try {
-    return (vault.prepare(`SELECT COUNT(*) AS n FROM "${physical}"`).get() as { n: number }).n;
+    return (
+      vault.prepare(`SELECT COUNT(*) AS n FROM "${physical}"`).get() as {
+        n: number;
+      }
+    ).n;
   } catch {
     return 0;
   }
@@ -328,12 +334,11 @@ export function browseRows(vault: DatabaseSync, params: BrowseRowsParams): Brows
           // After a NULL boundary ascending: remaining NULLs (k > kv), then
           // every non-null row.
           where.push(`((${oExpr} IS NULL AND ${kExpr} ${cmp} ?) OR ${oExpr} IS NOT NULL)`);
-          bind.push(cur.k);
         } else {
           // Descending, NULLs last: only later NULLs remain.
           where.push(`(${oExpr} IS NULL AND ${kExpr} ${cmp} ?)`);
-          bind.push(cur.k);
         }
+        bind.push(cur.k);
       } else {
         const tail = `(${oExpr} ${cmp} ? OR (${oExpr} = ? AND ${kExpr} ${cmp} ?))`;
         if (dir === 'asc') {
@@ -425,23 +430,10 @@ export function browseRow(vault: DatabaseSync, table: string, id: string): Brows
     .get(...bind) as Record<string, unknown> | undefined;
   if (!row) throw new BrowseError('not_found', `no row ${id} in ${table}`);
   maskSealed(vault, table, [row]);
-  return { logical: table, physical: ref.physical, row, columns: info.map((c) => c.name) };
-}
-
-// ---------------------------------------------------------------------------
-// FK reference-picker search
-// ---------------------------------------------------------------------------
-
-/** Mask sealed cells in-place — the same placeholder the read path shows. */
-function maskSealed(vault: DatabaseSync, logical: string, rows: Record<string, unknown>[]): void {
-  const sealed = sealedColumnsOf(logical, vault);
-  if (sealed.length === 0) return;
-  for (const row of rows) {
-    for (const col of sealed) {
-      // Any non-empty sealed cell reads as the placeholder — never plaintext,
-      // whether it is ciphertext at rest or a legacy plaintext value.
-      const v = row[col];
-      if (v != null && v !== '') row[col] = SEALED_PLACEHOLDER;
-    }
-  }
+  return {
+    logical: table,
+    physical: ref.physical,
+    row,
+    columns: info.map((c) => c.name),
+  };
 }

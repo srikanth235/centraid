@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+
 import {
   appEntry,
   cleanupEnv,
@@ -106,7 +107,7 @@ test('1.2 — completing onboarding persists the profile and lands on home', asy
     });
     await founded.page
       .getByRole('checkbox', {
-        name: /losing this file or password makes backed-up vaults unrecoverable/i,
+        name: /losing this file or password makes backed-up vaults unrecoverable/iu,
       })
       .check();
     await founded.page.getByRole('button', { name: 'Verify and enter' }).click();
@@ -221,16 +222,19 @@ test('2.3 — renaming a tile via the context menu patches meta and shows a toas
     // Realigned: renaming is a prompt modal now, not an inline editable name
     // field — HomeRoute.tsx:176-195 (`openPrompt({ title: 'Rename app' })`),
     // shell/prompt.ts builds the role=dialog + text input + Rename button.
-    const dialog = page.getByRole('dialog', { name: 'Rename app', exact: true });
+    const dialog = page.getByRole('dialog', {
+      name: 'Rename app',
+      exact: true,
+    });
     await dialog.waitFor({ state: 'visible' });
     await dialog.getByRole('textbox').fill('New Name');
     await dialog.getByRole('button', { name: 'Rename', exact: true }).click();
 
-    await expect(page.locator('[data-global-toast]')).toContainText(/Renamed/i);
+    await expect(page.locator('[data-global-toast]')).toContainText(/Renamed/iu);
     // The meta POST went to the gateway.
     expect(
       gateway.calls.some(
-        (c) => c.method === 'POST' && /\/centraid\/_apps\/.*\/meta$/.test(c.pathname),
+        (c) => c.method === 'POST' && /\/centraid\/_apps\/.*\/meta$/u.test(c.pathname),
       ),
     ).toBe(true);
   } finally {
@@ -303,8 +307,11 @@ test('2.8 — the command palette opens from the sidebar Search item', async () 
     // The sidebar Search item renders its ⌘K shortcut inside the button, so its
     // accessible name is "Search ⌘K" (Sidebar.tsx:354-360) — `gotoNav`'s exact
     // match doesn't fit.
-    await page.getByRole('button', { name: /^Search\s*⌘K$/ }).click();
-    const palette = page.getByRole('dialog', { name: 'Command palette', exact: true });
+    await page.getByRole('button', { name: /^Search\s*⌘K$/u }).click();
+    const palette = page.getByRole('dialog', {
+      name: 'Command palette',
+      exact: true,
+    });
     await expect(palette).toBeVisible();
     await expect(palette.getByRole('textbox')).toBeVisible();
     await page.keyboard.press('Escape');

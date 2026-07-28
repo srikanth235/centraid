@@ -1,24 +1,26 @@
-import { Store } from '../../store.js';
 import { type JSX, type ReactNode, useEffect, useRef, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+
 import type { AppearancePrefs } from '../../../../app-shell-context.js';
+import BuilderChatPane from '../../../screens/BuilderChatPane.js';
+import { cx } from '../../../ui/cx.js';
 import { useShellActions } from '../../actions.js';
 import { iconSvg } from '../../iconSvg.js';
 import type { ShellNav } from '../../ShellApp.js';
 import ShellFrame from '../../ShellFrame.js';
-import BuilderChatPane from '../../../screens/BuilderChatPane.js';
+import { Store } from '../../store.js';
 import BuilderAutomationPane from './BuilderAutomationPane.js';
 import BuilderCloud from './BuilderCloud.js';
 import BuilderCode from './BuilderCode.js';
 import BuilderHistory from './BuilderHistory.js';
-import BuilderPreview from './BuilderPreview.js';
 import type { Tab } from './builderModel.js';
+import BuilderPreview from './BuilderPreview.js';
 import { type UseBuilderInput, useBuilder } from './useBuilder.js';
-import styles from './BuilderShell.module.css';
-import chrome from '../../chrome.module.css';
-import rightPaneCss from './rightPane.module.css';
+
 import buttonCss from '../../../ui/Button.module.css';
-import { cx } from '../../../ui/cx.js';
+import chrome from '../../chrome.module.css';
+import styles from './BuilderShell.module.css';
+import rightPaneCss from './rightPane.module.css';
 
 // Inline device/reload glyphs (mirror builder.ts) — not in the design-token set.
 const SmartphoneIcon =
@@ -57,6 +59,19 @@ const CHAT_PANE_PREF = 'builder.chatPaneOpen';
 /** Character width for the rename input, clamped to the old lockup's range. */
 function nameSize(name: string): number {
   return Math.min(24, Math.max(4, name.length));
+}
+
+function mountBuilderHistory(
+  host: HTMLElement,
+  roots: Map<HTMLElement, Root>,
+  appId: string,
+  onRestored: (id: string) => void,
+  showToast: (message: string) => void,
+): void {
+  roots.get(host)?.unmount();
+  const root = createRoot(host);
+  root.render(<BuilderHistory appId={appId} onRestored={onRestored} showToast={showToast} />);
+  roots.set(host, root);
 }
 
 export interface BuilderShellProps extends UseBuilderInput {
@@ -118,7 +133,7 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [chatEligible]);
+  }, [chatEligible, toggleChat]);
 
   const finish = window.CentraidTokens.tileFinish(vm.projColor, 'gradient');
 
@@ -132,7 +147,9 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
           color: finish.glyphColor,
           boxShadow: finish.boxShadow || undefined,
         }}
-        dangerouslySetInnerHTML={{ __html: iconSvg(vm.projIcon || 'Sparkle', 11, 1.9) }}
+        dangerouslySetInnerHTML={{
+          __html: iconSvg(vm.projIcon || 'Sparkle', 11, 1.9),
+        }}
       />
       {/* The rename field is a text field, so it is a real <input> — a
           contenteditable <b> claiming `role="textbox"` was neither, and it
@@ -340,7 +357,11 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
             <BuilderChatPane
               onReady={(u) => vm.registerChatUpdater(u)}
               onSend={(t, atts) => vm.sendUserPrompt(t, atts)}
-              {...(vm.appId ? { onUploadAttachment: (f: File) => vm.uploadChatAttachment(f) } : {})}
+              {...(vm.appId
+                ? {
+                    onUploadAttachment: (f: File) => vm.uploadChatAttachment(f),
+                  }
+                : {})}
               onCancel={() => vm.cancelTurn()}
               onToggleGroup={(id) => vm.toggleGroup(id)}
               onSetView={(v) => vm.setChatView(v)}
@@ -349,16 +370,7 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
               onSetModel={(model) => vm.setChatModel(model)}
               onSetEffort={(effort) => vm.setChatEffort(effort)}
               onMountHistory={(host) => {
-                historyRoots.current.get(host)?.unmount();
-                const root = createRoot(host);
-                root.render(
-                  <BuilderHistory
-                    appId={vm.appId}
-                    onRestored={(id) => vm.onRestored(id)}
-                    showToast={showToast}
-                  />,
-                );
-                historyRoots.current.set(host, root);
+                mountBuilderHistory(host, historyRoots.current, vm.appId, vm.onRestored, showToast);
               }}
             />
           </div>

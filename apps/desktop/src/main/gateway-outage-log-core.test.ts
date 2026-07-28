@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+
+import { initialRuntimeState, type GatewayRuntimeState } from './gateway-monitor-core.js';
 import {
   capOutageLog,
   deriveOutageEvents,
@@ -7,7 +9,6 @@ import {
   parseOutageLogLines,
   type OutageLogEvent,
 } from './gateway-outage-log-core.js';
-import { initialRuntimeState, type GatewayRuntimeState } from './gateway-monitor-core.js';
 
 const T0 = Date.UTC(2026, 6, 11, 12, 0, 0);
 
@@ -94,7 +95,11 @@ describe(deriveOutageEvents, () => {
     const events = deriveOutageEvents({
       prevStatus: 'up',
       prevHealthStatus: undefined,
-      state: state({ status: 'down', lastCheckAt: T0 + 5000, lastError: 'fetch failed' }),
+      state: state({
+        status: 'down',
+        lastCheckAt: T0 + 5000,
+        lastError: 'fetch failed',
+      }),
       componentActions: [],
       now: T0 + 5000,
     });
@@ -113,7 +118,11 @@ describe(deriveOutageEvents, () => {
     const events = deriveOutageEvents({
       prevStatus: 'up',
       prevHealthStatus: 'ok',
-      state: state({ status: 'up', healthStatus: 'ok', lastCheckAt: T0 + 5000 }),
+      state: state({
+        status: 'up',
+        healthStatus: 'ok',
+        lastCheckAt: T0 + 5000,
+      }),
       componentActions: [],
       now: T0 + 5000,
     });
@@ -147,7 +156,11 @@ describe(deriveOutageEvents, () => {
     const events = deriveOutageEvents({
       prevStatus: 'down',
       prevHealthStatus: undefined,
-      state: state({ status: 'up', lastCheckAt: T0 + 10_000, outages: [{ startedAt: T0 }] }),
+      state: state({
+        status: 'up',
+        lastCheckAt: T0 + 10_000,
+        outages: [{ startedAt: T0 }],
+      }),
       componentActions: [],
       now: T0 + 10_000,
     });
@@ -203,7 +216,11 @@ describe(deriveOutageEvents, () => {
     const events = deriveOutageEvents({
       prevStatus: 'up',
       prevHealthStatus: 'ok',
-      state: state({ status: 'up', healthStatus: 'error', lastCheckAt: T0 + 5000 }),
+      state: state({
+        status: 'up',
+        healthStatus: 'error',
+        lastCheckAt: T0 + 5000,
+      }),
       componentActions: [
         { component: 'connections', message: 'ETIMEDOUT', downForMs: 300_000 },
         { component: 'vaults', downForMs: 300_000 },

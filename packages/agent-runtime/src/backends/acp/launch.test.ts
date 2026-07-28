@@ -1,8 +1,9 @@
 // Coverage for launch planning: native vs adapter-backed spawns, the per-kind
 // launch env, and the root-bypass opt-in notice.
 
-import { afterEach, describe, expect, test } from 'vitest';
 import type { TurnStreamEvent } from '@centraid/app-engine';
+import { afterEach, describe, expect, test } from 'vitest';
+
 import { planLaunch } from './launch.ts';
 import type { AcpTurnConfig } from './types.ts';
 
@@ -17,7 +18,7 @@ describe('launch', () => {
 
   test('native kind throws an actionable error when no binary is configured', () => {
     const config: AcpTurnConfig = { kind: 'acp', acpArgs: [] };
-    expect(() => planLaunch(config, undefined, [])).toThrow(/No binary configured/);
+    expect(() => planLaunch(config, undefined, [])).toThrow(/No binary configured/u);
   });
 
   test('native kind spawns the configured bin with acpArgs + extraArgs and per-kind env', () => {
@@ -62,7 +63,7 @@ describe('launch', () => {
     };
     const plan = planLaunch(config, undefined, []);
     expect(plan.bin).toBe(process.execPath);
-    expect(plan.args[0]).toMatch(/claude-agent-acp/);
+    expect(plan.args[0]).toMatch(/claude-agent-acp/u);
     expect(plan.args.at(-1)).toBe('--foo');
     // binPath is redirected into the adapter's "real CLI" env var.
     expect(plan.env.CLAUDE_CODE_EXECUTABLE).toBe('/home/me/.local/bin/claude');

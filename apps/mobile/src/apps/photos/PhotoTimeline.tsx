@@ -1,17 +1,17 @@
+import { Feather } from '@expo/vector-icons';
+import { FlashList, type FlashListRef } from '@shopify/flash-list';
+import * as Haptics from 'expo-haptics';
+import { Image } from 'expo-image';
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import { FlashList, type FlashListRef } from '@shopify/flash-list';
-import { Image } from 'expo-image';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
-import { Feather } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
 
 import Icon from '../../kit/components/Icon';
 import { family, useTheme } from '../../kit/theme';
-import type { PhotoAsset, PhotoSection } from './timeline-source';
-import { addDragSelection } from './timeline-model';
 import { imageSource } from './media-source';
+import { addDragSelection } from './timeline-model';
+import type { PhotoAsset, PhotoSection } from './timeline-source';
 
 type TimelineRow =
   | { type: 'month'; key: string; title: string; assets: PhotoAsset[] }
@@ -25,7 +25,10 @@ type TimelineRow =
     };
 
 // Hoisted so the scrubber doesn't build a fresh Intl formatter on every move.
-const MONTH_YEAR_FORMAT = new Intl.DateTimeFormat(undefined, { month: 'short', year: 'numeric' });
+const MONTH_YEAR_FORMAT = new Intl.DateTimeFormat(undefined, {
+  month: 'short',
+  year: 'numeric',
+});
 
 const ratioFor = (asset: PhotoAsset): number =>
   Math.max(0.65, Math.min(1.9, asset.width && asset.height ? asset.width / asset.height : 1));
@@ -201,60 +204,64 @@ function TimelineGestureLayer({
   );
 }
 
-const AssetCell = memo(function AssetCell({
-  asset,
-  height,
-  width,
-  selected,
-  selecting,
-  onOpen,
-  onSelect,
-}: {
-  asset: PhotoAsset;
-  height: number;
-  width: number;
-  selected: boolean;
-  selecting: boolean;
-  onOpen: (asset: PhotoAsset) => void;
-  onSelect: (asset: PhotoAsset) => void;
-}) {
-  const { colors } = useTheme();
-  return (
-    <Pressable
-      accessibilityLabel={asset.filename ?? `Photo from ${asset.capturedAt}`}
-      accessibilityRole="imagebutton"
-      onPress={() => (selecting ? onSelect(asset) : onOpen(asset))}
-      style={{ height, width }}
-    >
-      <Image
-        source={imageSource(asset.uri)}
-        placeholder={asset.thumbhash ? { thumbhash: asset.thumbhash } : undefined}
-        contentFit="cover"
-        transition={120}
-        recyclingKey={asset.id}
-        style={[styles.image, { backgroundColor: colors.bgSunken }]}
-      />
-      <View style={styles.badges}>
-        {asset.kind === 'video' ? <Icon name="Play" size={14} color="#fff" /> : null}
-        {asset.backupState !== 'backed-up' && asset.backupState !== 'remote-only' ? (
-          <Feather name="cloud" size={14} color="#fff" />
-        ) : null}
-      </View>
-      {asset.duplicateHint ? (
-        <View style={styles.duplicate}>
-          <Icon name="Copy" size={12} color="#fff" />
+const AssetCell = memo(
+  ({
+    asset,
+    height,
+    width,
+    selected,
+    selecting,
+    onOpen,
+    onSelect,
+  }: {
+    asset: PhotoAsset;
+    height: number;
+    width: number;
+    selected: boolean;
+    selecting: boolean;
+    onOpen: (asset: PhotoAsset) => void;
+    onSelect: (asset: PhotoAsset) => void;
+  }) => {
+    const { colors } = useTheme();
+    return (
+      <Pressable
+        accessibilityLabel={asset.filename ?? `Photo from ${asset.capturedAt}`}
+        accessibilityRole="imagebutton"
+        onPress={() => (selecting ? onSelect(asset) : onOpen(asset))}
+        style={{ height, width }}
+      >
+        <Image
+          source={imageSource(asset.uri)}
+          placeholder={asset.thumbhash ? { thumbhash: asset.thumbhash } : undefined}
+          contentFit="cover"
+          transition={120}
+          recyclingKey={asset.id}
+          style={[styles.image, { backgroundColor: colors.bgSunken }]}
+        />
+        <View style={styles.badges}>
+          {asset.kind === 'video' ? <Icon name="Play" size={14} color="#fff" /> : null}
+          {asset.backupState !== 'backed-up' && asset.backupState !== 'remote-only' ? (
+            <Feather name="cloud" size={14} color="#fff" />
+          ) : null}
         </View>
-      ) : null}
-      {selected ? (
-        <View style={[styles.selection, { borderColor: colors.accent }]}>
-          <View style={[styles.check, { backgroundColor: colors.accent }]}>
-            <Icon name="Check" size={13} color="#fff" strokeWidth={2.5} />
+        {asset.duplicateHint ? (
+          <View style={styles.duplicate}>
+            <Icon name="Copy" size={12} color="#fff" />
           </View>
-        </View>
-      ) : null}
-    </Pressable>
-  );
-});
+        ) : null}
+        {selected ? (
+          <View style={[styles.selection, { borderColor: colors.accent }]}>
+            <View style={[styles.check, { backgroundColor: colors.accent }]}>
+              <Icon name="Check" size={13} color="#fff" strokeWidth={2.5} />
+            </View>
+          </View>
+        ) : null}
+      </Pressable>
+    );
+  },
+);
+
+AssetCell.displayName = 'AssetCell';
 
 export default function PhotoTimeline({
   sections,
@@ -336,7 +343,11 @@ export default function PhotoTimeline({
   const scrub = (pageY: number): void => {
     const ratio = Math.max(0, Math.min(1, (pageY - 100) / Math.max(1, height - 180)));
     const index = Math.min(rows.length - 1, Math.floor(ratio * rows.length));
-    void list.current?.scrollToIndex({ index, animated: false, viewPosition: 0 });
+    void list.current?.scrollToIndex({
+      index,
+      animated: false,
+      viewPosition: 0,
+    });
     const row = rows[index];
     const asset = row?.assets[0];
     if (asset) {
@@ -424,7 +435,13 @@ export default function PhotoTimeline({
 }
 
 const styles = StyleSheet.create({
-  badges: { position: 'absolute', bottom: 7, right: 7, flexDirection: 'row', gap: 5 },
+  badges: {
+    position: 'absolute',
+    bottom: 7,
+    right: 7,
+    flexDirection: 'row',
+    gap: 5,
+  },
   check: {
     alignItems: 'center',
     borderRadius: 14,
@@ -443,7 +460,12 @@ const styles = StyleSheet.create({
   },
   headerText: { fontFamily: family.sansBold, fontSize: 13 },
   image: { borderRadius: 3, height: '100%', width: '100%' },
-  monthHeader: { height: 52, justifyContent: 'flex-end', paddingHorizontal: 18, paddingBottom: 8 },
+  monthHeader: {
+    height: 52,
+    justifyContent: 'flex-end',
+    paddingHorizontal: 18,
+    paddingBottom: 8,
+  },
   monthText: { fontFamily: family.displayBold, fontSize: 20 },
   rail: { borderRadius: 2, height: '100%', width: 3 },
   row: { flexDirection: 'row', gap: 2, marginBottom: 2 },

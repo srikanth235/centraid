@@ -75,7 +75,13 @@ export function justify(
   if (row.length) {
     const h = Math.min(targetHeight, (containerWidth - (row.length - 1) * GAP) / sum);
     const clamped = Math.max(h, targetHeight * 0.72);
-    rows.push(row.map((r) => ({ asset: r.asset, width: r.ar * clamped, height: clamped })));
+    rows.push(
+      row.map((r) => ({
+        asset: r.asset,
+        width: r.ar * clamped,
+        height: clamped,
+      })),
+    );
   }
   return rows;
 }

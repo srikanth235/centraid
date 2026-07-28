@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
+
 import { cx } from '../ui/cx.js';
-import styles from './LogsScreen.module.css';
+
 import controlsCss from '../styles/controls.module.css';
+import styles from './LogsScreen.module.css';
 
 // Gateway → Logs: the gateway's realtime diagnostics surface. Streams
 // the gateway's log lines (SSE, replay-then-live) so a user whose
@@ -96,7 +98,10 @@ export default function LogsScreen({
   // request: the typed value only wins while it belongs to the CURRENT nonce.
   // A fresh jump (new nonce) therefore re-applies its text even when the text
   // is unchanged, without an effect that would paint the stale value first.
-  const [typed, setTyped] = useState<{ nonce: number | undefined; text: string } | null>(null);
+  const [typed, setTyped] = useState<{
+    nonce: number | undefined;
+    text: string;
+  } | null>(null);
   const query =
     typed !== null && typed.nonce === focusQuery?.nonce ? typed.text : (focusQuery?.text ?? '');
   const setQuery = (text: string): void => setTyped({ nonce: focusQuery?.nonce, text });
@@ -225,7 +230,10 @@ export default function LogsScreen({
       } else if (result.canceled) {
         setExportState({ kind: 'idle' });
       } else {
-        setExportState({ kind: 'error', message: result.error ?? 'Export failed.' });
+        setExportState({
+          kind: 'error',
+          message: result.error ?? 'Export failed.',
+        });
       }
     } catch (err) {
       if (mountedRef.current) {

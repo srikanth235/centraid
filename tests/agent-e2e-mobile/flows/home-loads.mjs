@@ -51,5 +51,8 @@ ${skipOnboarding(ctx.state.platform, FIRST_LAUNCH_TIMEOUT_MS)}- extendedWaitUnti
   );
 
   ctx.note('Home rendered no-gateway state after clearState launch');
-  return { pass: true, notes: 'no-gateway Home renders within 30s of fresh launch' };
+  return {
+    pass: true,
+    notes: 'no-gateway Home renders within 30s of fresh launch',
+  };
 });

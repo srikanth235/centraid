@@ -8,10 +8,11 @@
 
 import { apps as BUILTIN_APPS, icons, palette } from '@centraid/design-tokens';
 import type { AppMetaResolved, ColorKey, IconName } from '@centraid/design-tokens';
+
+import { Store } from '../storage';
 import { ensureTunnelStarted } from './phone-link';
 import { getSecure, hydrateSecure, setSecure } from './secure-storage';
 import { getActiveVaultId } from './spaces';
-import { Store } from '../storage';
 
 export const SETTINGS_KEY = 'settings.gatewayUrl';
 export const SETTINGS_TOKEN_KEY = 'settings.gatewayToken';

@@ -44,13 +44,13 @@ const CODE_CLOSE = '\u0001';
  * alt). Strips control + whitespace chars first so `java\tscript:` can't slip
  * past scheme detection, rejects protocol-relative `//host`, and permits only
  * http/https(+ mailto for links) schemes or scheme-less relative paths.
- * @param {string} url
- * @param {boolean} isImage
- * @returns {string | null}
+ * @param {string} url The escaped URL candidate.
+ * @param {boolean} isImage Whether the URL belongs to an image element.
+ * @returns {string | null} A safe URL, or null when it must be rejected.
  */
 export function sanitizeUrl(url, isImage) {
   // Strip control + whitespace chars browsers ignore during scheme detection.
-  const cleaned = String(url).replace(/[\u0000-\u0020]+/gu, '');
+  const cleaned = String(url).replace(/[\p{Cc}\s]+/gu, '');
   if (!cleaned) return null;
   if (cleaned.startsWith('//')) return null; // protocol-relative → external
   const scheme = cleaned.match(/^(?<scheme>[a-z][a-z0-9+.-]*):/iu);
@@ -66,9 +66,9 @@ export function sanitizeUrl(url, isImage) {
  * Inline markdown → HTML string. `raw` is escaped first; then ref-chips,
  * images, links, strikethrough, bold, italic, and inline code are applied.
  * Inline code is extracted before the others so its contents stay literal.
- * @param {string} raw
- * @param {Record<string, string>} C
- * @returns {string}
+ * @param {string} raw The inline markdown source.
+ * @param {Record<string, string>} C The resolved CSS class map.
+ * @returns {string} Escaped inline HTML.
  */
 export function inlineHtml(raw, C) {
   let s = escapeHtml(raw);
@@ -175,7 +175,10 @@ function buildTable(lines, start, C) {
     );
   }
   table.append(body);
-  return { node: el('div', { class: cx(C.asstBlock, C.asstTableWrap) }, table), next: i };
+  return {
+    node: el('div', { class: cx(C.asstBlock, C.asstTableWrap) }, table),
+    next: i,
+  };
 }
 
 /** Build a (possibly nested, mixed ul/ol) list from parsed marker rows. */
@@ -183,7 +186,9 @@ function buildList(items, C) {
   let idx = 0;
   const build = (indent) => {
     const ordered = items[idx].ordered;
-    const listEl = el(ordered ? 'ol' : 'ul', { class: ordered ? C.asstOl : C.asstUl });
+    const listEl = el(ordered ? 'ol' : 'ul', {
+      class: ordered ? C.asstOl : C.asstUl,
+    });
     while (idx < items.length) {
       const it = items[idx];
       if (it.indent < indent) break;
@@ -204,9 +209,9 @@ function buildList(items, C) {
  * GFM block parser: prose text (with code fences already split out upstream) →
  * an array of block-level DOM nodes. Handles headings, hr, blockquotes, nested
  * lists, pipe tables, and paragraphs.
- * @param {string} text
- * @param {Record<string, string>} C
- * @returns {HTMLElement[]}
+ * @param {string} text The block markdown source.
+ * @param {Record<string, string>} C The resolved CSS class map.
+ * @returns {HTMLElement[]} The rendered block nodes.
  */
 export function blockNodes(text, C) {
   const lines = text.split('\n');

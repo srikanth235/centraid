@@ -3,11 +3,13 @@
 // three separate React roots in app.tsx (#smartNav / #folderList / #storage),
 // so this file exports three top-level components rather than one.
 import { useEffect, useRef } from 'react';
-import { armConfirm } from '../kit.ts';
-import { DELETE_ICON, I, RENAME_ICON } from '../icons.ts';
+
 import { fmtBytes } from '../format.ts';
+import { DELETE_ICON, I, RENAME_ICON } from '../icons.ts';
+import { armConfirm } from '../kit.ts';
 import type { DriveDoc, Folder, Nav } from '../types.ts';
 import { Icon } from './Shared.tsx';
+
 import styles from './Sidebar.module.css';
 
 function NavItem({

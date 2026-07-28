@@ -170,14 +170,23 @@ async function readLinuxBattery(): Promise<BatteryProbeResult | null> {
   } catch {
     return null;
   }
-  for (const name of names) {
+  const findBattery = async (index: number): Promise<BatteryProbeResult> => {
+    const name = names[index];
+    if (name === undefined) {
+      return {
+        present: false,
+        percent: null,
+        charging: null,
+        discharging: null,
+      };
+    }
     let type: string;
     try {
       type = (await fs.readFile(`${base}/${name}/type`, 'utf8')).trim();
     } catch {
-      continue;
+      return findBattery(index + 1);
     }
-    if (type !== 'Battery') continue;
+    if (type !== 'Battery') return findBattery(index + 1);
     const capacity = await readNumberFile(`${base}/${name}/capacity`);
     const status = (await readTextFile(`${base}/${name}/status`))?.trim();
     return {
@@ -186,8 +195,8 @@ async function readLinuxBattery(): Promise<BatteryProbeResult | null> {
       charging: status === null ? null : status === 'Charging' || status === 'Full',
       discharging: status === null ? null : status === 'Discharging',
     };
-  }
-  return { present: false, percent: null, charging: null, discharging: null };
+  };
+  return findBattery(0);
 }
 
 async function readNumberFile(path: string): Promise<number | null> {
@@ -371,7 +380,7 @@ export class PowerContextMonitor {
       this.bootProbe = await this.probeBattery(this.platform);
       this.bootProbeOk = true;
     } catch {
-      this.bootProbeOk = this.bootProbeOk || false;
+      this.bootProbeOk ||= false;
     } finally {
       this.bootProbeDone = true;
       this.batteryReadAtMs = now;

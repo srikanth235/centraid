@@ -429,10 +429,17 @@
     {
       "name": "autofill-candidates",
       "description": "Secret-free live login metadata for Companion origin matching. OTP presence is a boolean; no password or OTP seed is returned.",
-      "input": { "type": "object", "properties": {}, "additionalProperties": false },
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
       "output": {
         "type": "object",
-        "properties": { "candidates": { "type": "array" }, "vaultDenied": { "type": "object" } }
+        "properties": {
+          "candidates": { "type": "array" },
+          "vaultDenied": { "type": "object" }
+        }
       }
     },
     {

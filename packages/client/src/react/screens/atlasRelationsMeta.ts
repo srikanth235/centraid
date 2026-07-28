@@ -8,7 +8,10 @@ export const fmt = (n: number): string => n.toLocaleString('en-US');
 /** The three question chips above the stage — each a saved "lens" over the
  *  chart. `q` is the stable key (also the `data-q` attribute); one is active at
  *  a time, and clicking the active one clears it. */
-export const QUESTIONS: readonly { q: 'connected' | 'heaviest' | 'unused'; label: string }[] = [
+export const QUESTIONS: readonly {
+  q: 'connected' | 'heaviest' | 'unused';
+  label: string;
+}[] = [
   { q: 'connected', label: "What's connected here?" },
   { q: 'heaviest', label: "Where's my data heaviest?" },
   { q: 'unused', label: "What's unused?" },

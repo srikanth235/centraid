@@ -1,6 +1,7 @@
 // Direct ICS parser unit tests (issue #545 B6) — pure string→struct.
 
 import { describe, expect, test } from 'vitest';
+
 import { parseIcs } from './ics.js';
 
 describe('ics', () => {

@@ -1,11 +1,11 @@
+import { Feather } from '@expo/vector-icons';
+import * as Notifications from 'expo-notifications';
 import React, { useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
-import * as Notifications from 'expo-notifications';
 
-import { family, useTheme } from '../../kit/theme';
 import { useReplica } from '../../kit/replica/ReplicaProvider';
+import { family, useTheme } from '../../kit/theme';
 import type { AgendaScreenProps } from '../../navigation';
 import { useAgenda } from './useAgenda';
 
@@ -70,7 +70,11 @@ export default function AgendaEvent({
             op: 'upsert',
             entity: 'core.event',
             rowId: event.id,
-            values: { ...(canonical ? withoutRowId(canonical) : {}), dtstart: start, dtend: end },
+            values: {
+              ...(canonical ? withoutRowId(canonical) : {}),
+              dtstart: start,
+              dtend: end,
+            },
           },
         ],
       });
@@ -90,7 +94,10 @@ export default function AgendaEvent({
             op: 'upsert',
             entity: 'core.event',
             rowId: event.id,
-            values: { ...(canonical ? withoutRowId(canonical) : {}), status: 'cancelled' },
+            values: {
+              ...(canonical ? withoutRowId(canonical) : {}),
+              status: 'cancelled',
+            },
           },
         ],
       });
@@ -137,7 +144,11 @@ export default function AgendaEvent({
       return;
     }
     await Notifications.scheduleNotificationAsync({
-      content: { title: event.summary, body: 'Starts in 15 minutes', data: { eventId: event.id } },
+      content: {
+        title: event.summary,
+        body: 'Starts in 15 minutes',
+        data: { eventId: event.id },
+      },
       trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date },
     });
     Alert.alert('Reminder set', 'This device will notify you 15 minutes before the event.');
@@ -156,7 +167,11 @@ export default function AgendaEvent({
       </View>
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={[styles.date, { color: colors.accent }]}>
-          {new Intl.DateTimeFormat(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
+          {new Intl.DateTimeFormat(undefined, {
+            weekday: 'long',
+            month: 'long',
+            day: 'numeric',
+          })
             .format(new Date(event.start))
             .toUpperCase()}
         </Text>
@@ -168,9 +183,10 @@ export default function AgendaEvent({
             timeZoneName: 'short',
           }).format(new Date(event.start))}{' '}
           –{' '}
-          {new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(
-            new Date(event.end),
-          )}
+          {new Intl.DateTimeFormat(undefined, {
+            hour: 'numeric',
+            minute: '2-digit',
+          }).format(new Date(event.end))}
         </Text>
         {event.description ? (
           <Text style={[styles.description, { color: colors.ink }]}>{event.description}</Text>
@@ -246,7 +262,11 @@ export default function AgendaEvent({
               'The event stays visible until the owner approves this medium-risk write.',
               [
                 { text: 'Keep' },
-                { text: 'Ask to cancel', style: 'destructive', onPress: () => void cancel() },
+                {
+                  text: 'Ask to cancel',
+                  style: 'destructive',
+                  onPress: () => void cancel(),
+                },
               ],
             )
           }
@@ -279,10 +299,25 @@ const styles = StyleSheet.create({
   avatarText: { fontFamily: family.sansBold, fontSize: 14 },
   content: { padding: 22, paddingBottom: 60 },
   date: { fontFamily: family.monoBold, fontSize: 10, letterSpacing: 1 },
-  description: { fontFamily: family.sansRegular, fontSize: 14, lineHeight: 21, marginTop: 22 },
+  description: {
+    fontFamily: family.sansRegular,
+    fontSize: 14,
+    lineHeight: 21,
+    marginTop: 22,
+  },
   empty: { fontFamily: family.sansRegular, fontSize: 13 },
-  guest: { alignItems: 'center', borderBottomWidth: 1, flexDirection: 'row', minHeight: 56 },
-  guestName: { flex: 1, fontFamily: family.sansMedium, fontSize: 14, marginLeft: 10 },
+  guest: {
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    minHeight: 56,
+  },
+  guestName: {
+    flex: 1,
+    fontFamily: family.sansMedium,
+    fontSize: 14,
+    marginLeft: 10,
+  },
   guestState: { fontFamily: family.sansRegular, fontSize: 12 },
   header: {
     alignItems: 'center',
@@ -303,7 +338,13 @@ const styles = StyleSheet.create({
   pendingText: { flex: 1, fontFamily: family.sansMedium, fontSize: 13 },
   risk: { fontFamily: family.monoRegular, fontSize: 10 },
   rsvp: { flexDirection: 'row', gap: 8, marginTop: 14 },
-  rsvpButton: { alignItems: 'center', borderRadius: 10, borderWidth: 1, flex: 1, padding: 10 },
+  rsvpButton: {
+    alignItems: 'center',
+    borderRadius: 10,
+    borderWidth: 1,
+    flex: 1,
+    padding: 10,
+  },
   rsvpText: { fontFamily: family.sansMedium, fontSize: 12 },
   safe: { flex: 1 },
   section: {
@@ -313,6 +354,11 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     marginTop: 30,
   },
-  title: { fontFamily: family.displayBold, fontSize: 28, letterSpacing: -0.7, marginTop: 10 },
+  title: {
+    fontFamily: family.displayBold,
+    fontSize: 28,
+    letterSpacing: -0.7,
+    marginTop: 10,
+  },
   when: { fontFamily: family.sansRegular, fontSize: 14, marginTop: 10 },
 });

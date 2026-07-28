@@ -1,17 +1,7 @@
-// The redesigned lightbox: near-black stage with prev/next arrows and a
-// bottom filmstrip, a top bar of icon actions, and the info panel (split out
-// to LightboxInfo.tsx — see its header comment). `refresh`/`onClose` are the
-// only app.tsx-owned pieces threaded down; every command fires through `act`
-// (outcomes.ts) directly, same contract as before. `onSlideshow`/`onEdit`
-// swap this region for a different one (slideshow.tsx / this file's own
-// EditorView), which only the shell here can do.
-// CSS split: React-owned classes in Lightbox.module.css; the imperatively
-// toggled `zoomable`/`zoomed`/`is-placeholder` markers stay global strings.
-import { toast } from '../kit.ts';
-import { gridSrc } from '../media.ts';
+import { useState } from 'react';
+
 import { toggleFavorite } from '../assets-actions.ts';
-import { EditorView } from './Editor.tsx';
-import { LightboxInfo } from './LightboxInfo.tsx';
+import { assetBytes, isAudioAsset, isRenderableUri, isVideoAsset } from '../format.ts';
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -24,12 +14,23 @@ import {
   ShareIcon,
   TrashIcon,
 } from '../icons.tsx';
-import { fmtBytes } from '../kit.ts';
-import { assetBytes, isAudioAsset, isRenderableUri, isVideoAsset } from '../format.ts';
+// The redesigned lightbox: near-black stage with prev/next arrows and a
+// bottom filmstrip, a top bar of icon actions, and the info panel (split out
+// to LightboxInfo.tsx — see its header comment). `refresh`/`onClose` are the
+// only app.tsx-owned pieces threaded down; every command fires through `act`
+// (outcomes.ts) directly, same contract as before. `onSlideshow`/`onEdit`
+// swap this region for a different one (slideshow.tsx / this file's own
+// EditorView), which only the shell here can do.
+// CSS split: React-owned classes in Lightbox.module.css; the imperatively
+// toggled `zoomable`/`zoomed`/`is-placeholder` markers stay global strings.
+import { fmtBytes, toast } from '../kit.ts';
+import { gridSrc } from '../media.ts';
 import { act, narrate } from '../outcomes.ts';
 import { canWriteScope, scopeAttr } from '../scopes.ts';
-import { useEffect, useState } from 'react';
 import type { Album, Asset, Place } from '../types.ts';
+import { EditorView } from './Editor.tsx';
+import { LightboxInfo } from './LightboxInfo.tsx';
+
 import styles from './Lightbox.module.css';
 
 interface Dims {
@@ -106,7 +107,7 @@ export function Stage({ asset, onDims }: { asset: Asset; onDims: (w: number, h: 
         preload="metadata"
         poster={asset.poster_uri ?? undefined}
         aria-label={asset.title ?? 'Video'}
-      ></video>
+      />
     );
   }
   if (isRenderableUri(asset.content_uri) && isAudioAsset(asset)) {
@@ -240,7 +241,7 @@ export function LightboxShell({
           <div className={styles.title}>{asset.title || asset.place?.name || 'Photo'}</div>
           <div className={styles.dateline}>{dateLine(displayAsset)}</div>
         </div>
-        {!editing ? (
+        {editing ? null : (
           <>
             <button
               type="button"
@@ -328,7 +329,7 @@ export function LightboxShell({
               <InfoIcon />
             </button>
           </>
-        ) : null}
+        )}
       </div>
 
       <div className={styles.body}>
@@ -392,7 +393,7 @@ export function LightboxShell({
         ) : null}
       </div>
 
-      {!editing ? (
+      {editing ? null : (
         <div className={styles.filmstrip}>
           {list.map((a) => {
             // Same cheap-source rule as the grid: a thumb (or inline data URI),
@@ -419,7 +420,7 @@ export function LightboxShell({
             );
           })}
         </div>
-      ) : null}
+      )}
     </div>
   );
 }

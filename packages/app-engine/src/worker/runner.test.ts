@@ -4,11 +4,12 @@
  * The entry requires worker_threads; we drive it as a pooled Worker.
  */
 
-import { tempDir } from '@centraid/test-kit/temp-dir';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Worker } from 'node:worker_threads';
+
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterEach, describe, expect, test } from 'vitest';
 
 const RUNNER = fileURLToPath(new URL('runner.ts', import.meta.url));
@@ -88,6 +89,6 @@ describe('runner', () => {
 
     const result = await waitFor(worker, (m) => m.type === 'result');
     expect(result.ok).toBe(false);
-    expect(String(result.error)).toMatch(/nope/);
+    expect(String(result.error)).toMatch(/nope/u);
   }, 20_000);
 });

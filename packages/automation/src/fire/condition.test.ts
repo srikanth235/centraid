@@ -5,10 +5,11 @@
  * what it actually returned.
  */
 
-import { describe, expect, it } from 'vitest';
 import type { VaultBridge } from '@centraid/app-engine';
-import { readConditionCursor, readDataCursor } from './condition.js';
+import { describe, expect, it } from 'vitest';
+
 import type { ConditionTrigger } from '../manifest/manifest.js';
+import { readConditionCursor, readDataCursor } from './condition.js';
 
 const TRIGGER: ConditionTrigger = {
   kind: 'condition',
@@ -36,7 +37,7 @@ describe(readConditionCursor, () => {
         call.op === 'read'
           ? { ok: true, result: { rows } }
           : { ok: false, code: 'VAULT_ERROR', error: 'unexpected op' },
-      ...(positionJson !== undefined ? { positionJson } : {}),
+      ...(positionJson === undefined ? {} : { positionJson }),
       limit,
       now,
     });
@@ -84,11 +85,15 @@ describe(readConditionCursor, () => {
         automationRef: 'billing/invoice-watch',
         trigger: TRIGGER,
         purpose: 'dpv:Billing',
-        vault: async () => ({ ok: false, code: 'VAULT_CONSENT', error: 'deny (receipt r1)' }),
+        vault: async () => ({
+          ok: false,
+          code: 'VAULT_CONSENT',
+          error: 'deny (receipt r1)',
+        }),
         limit: 50,
         now: new Date(1_000),
       }),
-    ).rejects.toThrow(/VAULT_CONSENT/);
+    ).rejects.toThrow(/VAULT_CONSENT/u);
     await expect(
       readConditionCursor({
         automationRef: 'not-a-ref',
@@ -98,12 +103,15 @@ describe(readConditionCursor, () => {
         limit: 50,
         now: new Date(1_000),
       }),
-    ).rejects.toThrow(/invalid ref/);
+    ).rejects.toThrow(/invalid ref/u);
   });
 });
 
 describe(readDataCursor, () => {
-  const DATA_TRIGGER = { kind: 'data', entities: ['core.transaction'] } as const;
+  const DATA_TRIGGER = {
+    kind: 'data',
+    entities: ['core.transaction'],
+  } as const;
 
   function feed(changes: Record<string, unknown>[], cursor: string) {
     const requests: Array<{ cursor: string | null; limit: number }> = [];
@@ -156,8 +164,18 @@ describe(readDataCursor, () => {
     // honest when every returned row is delivered.
     expect(requests).toStrictEqual([{ cursor: 'p1', limit: 2 }]);
     expect(result.elements).toStrictEqual([
-      { position: 'p2', occurredAt: 5_000, payload: changes[0], positionJson: '"p2"' },
-      { position: 'p3', occurredAt: 5_000, payload: changes[1], positionJson: '"p3"' },
+      {
+        position: 'p2',
+        occurredAt: 5_000,
+        payload: changes[0],
+        positionJson: '"p2"',
+      },
+      {
+        position: 'p3',
+        occurredAt: 5_000,
+        payload: changes[1],
+        positionJson: '"p3"',
+      },
     ]);
     expect(result.positionJson).toBe('"p3"');
     expect(result.skipped).toBe(0);
@@ -176,7 +194,7 @@ describe(readDataCursor, () => {
       now: new Date(5_000),
     });
 
-    expect(result.elements[0]?.position).toMatch(/:0$/);
+    expect(result.elements[0]?.position).toMatch(/:0$/u);
     expect(result.elements[0]?.positionJson).toBeUndefined();
   });
 
@@ -186,20 +204,27 @@ describe(readDataCursor, () => {
         automationRef: 'studio/reconciler',
         trigger: DATA_TRIGGER,
         purpose: 'dpv:Billing',
-        vault: async () => ({ ok: false, code: 'VAULT_CONSENT', error: 'deny (receipt r1)' }),
+        vault: async () => ({
+          ok: false,
+          code: 'VAULT_CONSENT',
+          error: 'deny (receipt r1)',
+        }),
         limit: 50,
         now: new Date(1_000),
       }),
-    ).rejects.toThrow(/VAULT_CONSENT/);
+    ).rejects.toThrow(/VAULT_CONSENT/u);
     await expect(
       readDataCursor({
         automationRef: 'nope',
         trigger: DATA_TRIGGER,
         purpose: 'dpv:Billing',
-        vault: async () => ({ ok: true, result: { changes: [], cursor: 'p1' } }),
+        vault: async () => ({
+          ok: true,
+          result: { changes: [], cursor: 'p1' },
+        }),
         limit: 50,
         now: new Date(1_000),
       }),
-    ).rejects.toThrow(/invalid ref/);
+    ).rejects.toThrow(/invalid ref/u);
   });
 });

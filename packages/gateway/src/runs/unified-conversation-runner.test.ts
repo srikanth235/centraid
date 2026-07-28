@@ -1,4 +1,4 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import crypto from 'node:crypto';
 /*
  * Unified chat runner (issue #141, Phase 3). One chat surface, both jobs:
  * a turn runs in the app's draft session worktree (native file edits stage
@@ -11,14 +11,15 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  * that records what it was handed and simulates the agent authoring an
  * automation with a pending webhook trigger.
  */
-
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
-import { WorktreeStore } from '../worktree-store/index.js';
-import type { Dispatcher, ConversationTurnInput, TurnStreamEvent } from '@centraid/app-engine';
+
 import type { TurnInput, TurnConfig, TurnResult } from '@centraid/agent-runtime';
+import type { Dispatcher, ConversationTurnInput, TurnStreamEvent } from '@centraid/app-engine';
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+
+import { WorktreeStore } from '../worktree-store/index.js';
 import { makeUnifiedConversationRunner } from './unified-conversation-runner.ts';
 
 let root: string;
@@ -83,7 +84,7 @@ describe('unified-conversation-runner', () => {
 
     // Unified prompt: the data preamble is kept AND the builder authoring
     // block is folded in (app kind → CENTRAID_APPEND_PROMPT).
-    expect(captured!.input.extraSystemPrompt).toMatch(/BASE_DATA_PREAMBLE/);
+    expect(captured!.input.extraSystemPrompt).toMatch(/BASE_DATA_PREAMBLE/u);
     expect(
       captured!.input.extraSystemPrompt.length > 'BASE_DATA_PREAMBLE'.length + 100,
     ).toBeTruthy();
@@ -171,7 +172,7 @@ describe('unified-conversation-runner', () => {
     expect(minted.automationId).toBe('notify');
     expect(minted.ownerApp).toBe('notes');
     expect(minted.secret.length > 0).toBeTruthy();
-    expect(minted.url).toMatch(/^http:\/\/127\.0\.0\.1:9999\/_centraid-hook\//);
+    expect(minted.url).toMatch(/^http:\/\/127\.0\.0\.1:9999\/_centraid-hook\//u);
 
     // The staged manifest no longer carries the plaintext secret — only a hash.
     const appDir = await store.snapshotSessionAppDir('chat-notes', 'notes');

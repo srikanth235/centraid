@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+
 import type { RouteHandler } from '../serve/build-gateway.js';
 import { readJson, sendJson } from './route-helpers.js';
 
@@ -8,7 +9,10 @@ export const DATA_PLANE_PAIR_PATH = '/centraid/_gateway/tunnel/pair';
 
 export interface DataPlaneControlOptions {
   secret: string;
-  authorize: (endpointId: string) => { allowed: boolean; headers?: Record<string, string> };
+  authorize: (endpointId: string) => {
+    allowed: boolean;
+    headers?: Record<string, string>;
+  };
   pair: (request: unknown, endpointId: string) => unknown | Promise<unknown>;
 }
 

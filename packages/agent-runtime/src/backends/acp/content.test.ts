@@ -1,6 +1,7 @@
 // Pure-function coverage for reading ACP ContentBlock payloads off the wire.
 
 import { describe, expect, test } from 'vitest';
+
 import { firstString, isObject, textOf } from './content.ts';
 
 describe('content', () => {

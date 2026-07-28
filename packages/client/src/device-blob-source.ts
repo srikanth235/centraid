@@ -122,7 +122,8 @@ export async function readDirectBlob(
   const parts: BlobPart[] = [];
   let offset = HEADER_BYTES;
   let plaintextBytes = 0;
-  for (let index = 0; index < directory.sealedLens.length; index += 1) {
+  async function readFrame(index: number): Promise<void> {
+    if (index >= directory.sealedLens.length) return;
     const length = directory.sealedLens[index]!;
     const frame = await range(plan.url, `bytes=${offset}-${offset + length - 1}`);
     if (frame.bytes.byteLength !== length) throw new Error('provider returned a short CBSF frame');
@@ -131,7 +132,11 @@ export async function readDirectBlob(
     parts.push(plain.buffer);
     plaintextBytes += plain.byteLength;
     offset += length;
+    return readFrame(index + 1);
   }
+  // Offset and authenticated-frame index advance together; this is a CBSF
+  // ordered-read boundary, not independent fetch work.
+  await readFrame(0);
   if (plaintextBytes !== directory.totalSize) throw new Error('CBSF plaintext size mismatch');
   return new Blob(parts, { type: mediaType });
 }

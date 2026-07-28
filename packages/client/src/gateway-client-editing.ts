@@ -279,7 +279,12 @@ interface ClonedTemplateMeta {
 
 /** Clone a bundled template into a fresh app; mints any webhook secrets. */
 export async function cloneTemplate(input: { templateId: string }): Promise<{
-  app: { id: string; name?: string; description?: string; kind?: 'app' | 'automation' };
+  app: {
+    id: string;
+    name?: string;
+    description?: string;
+    kind?: 'app' | 'automation';
+  };
   template: ClonedTemplateMeta;
   webhooks: CentraidMintedWebhook[];
 }> {
@@ -290,7 +295,12 @@ export async function cloneTemplate(input: { templateId: string }): Promise<{
     body: JSON.stringify({ templateId: input.templateId, publish: true }),
   });
   const out = await readJson<{
-    app: { id: string; name?: string; description?: string; kind?: 'app' | 'automation' };
+    app: {
+      id: string;
+      name?: string;
+      description?: string;
+      kind?: 'app' | 'automation';
+    };
     template: ClonedTemplateMeta;
     webhooks?: CentraidMintedWebhook[];
   }>(res, 'clone template');
@@ -311,7 +321,13 @@ export async function installTemplate(input: {
    *  picker names it; omitted falls back to the internal default. */
   scopeId?: string;
 }): Promise<{
-  app: { id: string; name?: string; description?: string; iconKey?: string; colorKey?: string };
+  app: {
+    id: string;
+    name?: string;
+    description?: string;
+    iconKey?: string;
+    colorKey?: string;
+  };
   alreadyInstalled: boolean;
 }> {
   const { baseUrl, token } = await auth();
@@ -321,7 +337,13 @@ export async function installTemplate(input: {
     body: JSON.stringify({ templateId: input.templateId }),
   });
   const out = await readJson<{
-    app: { id: string; name?: string; description?: string; iconKey?: string; colorKey?: string };
+    app: {
+      id: string;
+      name?: string;
+      description?: string;
+      iconKey?: string;
+      colorKey?: string;
+    };
     alreadyInstalled?: boolean;
   }>(res, 'install template');
   return { app: out.app, alreadyInstalled: out.alreadyInstalled ?? false };

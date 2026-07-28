@@ -17,18 +17,15 @@ import vitest from 'ultracite/oxlint/vitest';
 // ours. See TESTING.md, "ultracite vitest preset (#573)".
 export default defineConfig({
   extends: [core, react],
-  ignorePatterns: [
-    ...(core.ignorePatterns ?? []),
-    ...[
-      '**/dist/**',
-      '**/.expo/**',
-      '**/node_modules/**',
-      'apps/oauth-worker/worker-configuration.d.ts',
-      'apps/web/src/generated/**',
-      'packages/blueprints/automations/**',
-      'packages/blueprints/visual-harness/mock-centraid.js',
-    ],
-  ],
+  ignorePatterns: (core.ignorePatterns ?? []).concat([
+    '**/dist/**',
+    '**/.expo/**',
+    '**/node_modules/**',
+    'apps/oauth-worker/worker-configuration.d.ts',
+    'apps/web/src/generated/**',
+    'packages/blueprints/automations/**',
+    'packages/blueprints/visual-harness/mock-centraid.js',
+  ]),
   rules: {
     // Rules ultracite 7.9's presets newly enable. Issue #210 fixed this
     // repo's profile as correctness + suspicious + perf with explicit
@@ -42,17 +39,12 @@ export default defineConfig({
     // that family belongs in this list again. Families C-F followed; what is
     // left in this list is what survived being audited, not what was skipped.
     //
-    // `no-await-in-loop` is the one rule audited and deliberately DECLINED.
-    // The old annotation said 722; the measured number is 2276 (1765 in
-    // tests, 511 in source). In tests the loop is the scenario. In source the
-    // hits sit exactly where ordering IS the correctness property —
-    // wal-restore.ts (14: WAL segments applied concurrently corrupt the
-    // restore), backup-service.ts (19), build-gateway.ts (17: ordered
-    // startup), automation/handler/runner.ts (10: user-authored steps in
-    // author order). A rule whose findings mean "correct" in most of its hits
-    // is not a gate; enabling it buys ~550 suppressions and teaches readers to
-    // skim past the marker. Do not re-adopt without re-reading #573.
-    'no-await-in-loop': 'off', // 2276 sites — declined, see above
+    // Every loop must declare whether its work is independent (concurrent) or
+    // intentionally ordered. Raw awaits in loops obscure that contract, so the
+    // rule applies equally to production code and test scenarios. Ordered work
+    // belongs behind a named, tested primitive; independent work uses bounded
+    // or unbounded concurrency as its resource contract permits. #573
+    'no-await-in-loop': 'error',
 
     // Repo profile (#210).
     'arrow-body-style': 'off',
@@ -210,7 +202,10 @@ export default defineConfig({
         // repo already documents in TESTING.md. Same class of decision as
         // valid-expect above: configuring the rule for this codebase, not
         // relaxing it.
-        'vitest/max-expects': ['error', { max: 20 }],
+        // One behavior-focused integration test may need a compact assertion
+        // matrix. 31 still catches sprawling tests while avoiding test splits
+        // driven solely by one additional assertion in a shared contract matrix.
+        'vitest/max-expects': ['error', { max: 31 }],
       },
     },
     {

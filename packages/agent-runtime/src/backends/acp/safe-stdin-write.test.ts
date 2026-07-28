@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+
 import { isIgnorableStdinError, safeStdinWrite } from './safe-stdin-write.js';
 
 type ErrorListener = (err: Error) => void;
@@ -6,9 +7,9 @@ type ErrorListener = (err: Error) => void;
 interface FakeStdin {
   writable: boolean;
   writes: string[];
-  write(chunk: string, cb?: (err?: Error | null) => void): boolean;
-  on(event: string, listener: ErrorListener): FakeStdin;
-  emit(event: string, err: Error): void;
+  write: (chunk: string, cb?: (err?: Error | null) => void) => boolean;
+  on: (event: string, listener: ErrorListener) => FakeStdin;
+  emit: (event: string, err: Error) => void;
 }
 
 /** Minimal Writable stand-in with on/emit (no EventEmitter). */

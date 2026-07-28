@@ -1,5 +1,10 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
+
+import { collectNodeArtifacts, copyArtifacts } from './merge-native-artifacts.mjs';
 import {
   NATIVE_PLATFORMS,
   auditNativeArtifacts,
@@ -8,10 +13,6 @@ import {
   nativeArtifactNameForId,
   requiredNativePlatformIds,
 } from './native-platforms.mjs';
-import { collectNodeArtifacts, copyArtifacts } from './merge-native-artifacts.mjs';
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 
 test('required native platforms cover linux, mac arm, windows x64', () => {
   const req = requiredNativePlatformIds();

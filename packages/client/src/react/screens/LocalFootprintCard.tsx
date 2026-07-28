@@ -1,12 +1,8 @@
 import { useMemo, useState, type JSX } from 'react';
-import Icon from '../ui/Icon.js';
-import { cx } from '../ui/cx.js';
-import buttonCss from '../ui/Button.module.css';
-import controlsCss from '../styles/controls.module.css';
-import gwStyles from './GatewayScreen.module.css';
-import styles from './LocalFootprintCard.module.css';
-import a11y from '../styles/a11y.module.css';
+
 import type { LocalUsageReportDTO } from '../../gateway-client-local-storage.js';
+import { cx } from '../ui/cx.js';
+import Icon from '../ui/Icon.js';
 import {
   COMPONENT_PRESENTATION,
   budgetSummary,
@@ -14,6 +10,12 @@ import {
   footprintSlices,
   formatBytes,
 } from './localUsageView.js';
+
+import a11y from '../styles/a11y.module.css';
+import controlsCss from '../styles/controls.module.css';
+import buttonCss from '../ui/Button.module.css';
+import gwStyles from './GatewayScreen.module.css';
+import styles from './LocalFootprintCard.module.css';
 
 // Storage → Footprint (issue #544): what Centraid is using on THIS machine,
 // split by component. The page's opening statement, so it leads with one
@@ -104,7 +106,9 @@ function VaultBreakdown({ report }: { report: LocalUsageReportDTO }): JSX.Elemen
                   <span key={component.component} className={styles.vaultPart}>
                     <i
                       className={styles.chip}
-                      style={{ background: COMPONENT_PRESENTATION[component.component].color }}
+                      style={{
+                        background: COMPONENT_PRESENTATION[component.component].color,
+                      }}
                     />
                     {COMPONENT_PRESENTATION[component.component].label}
                     <b className={styles.figure}>{formatBytes(component.bytes)}</b>

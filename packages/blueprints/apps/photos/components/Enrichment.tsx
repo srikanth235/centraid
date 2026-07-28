@@ -1,3 +1,6 @@
+import { useEffect, useRef, useState } from 'react';
+
+import { SparkleIcon } from '../icons.tsx';
 // Face-proposer on-demand (issue #352 phase 3/4): a header icon-button +
 // popover that reads `enrichment-status` (enrich.policy for the photos
 // domain) on mount and either offers "Detect faces now" (fires
@@ -8,8 +11,7 @@
 // state is threaded in. v2: lives in the main header's icon-button group
 // (next to zoom) instead of the old text "✨ Faces" toolbar button.
 import { act, narrate } from '../outcomes.ts';
-import { SparkleIcon } from '../icons.tsx';
-import { useEffect, useRef, useState } from 'react';
+
 import styles from './Enrichment.module.css';
 
 interface EnrichmentStatus {
@@ -33,7 +35,11 @@ export function EnrichmentPanel() {
         if (!cancelled) setStatus(data ?? {});
       })
       .catch(() => {
-        if (!cancelled) setStatus({ tier: null, vaultDenied: { message: 'Could not check.' } });
+        if (!cancelled)
+          setStatus({
+            tier: null,
+            vaultDenied: { message: 'Could not check.' },
+          });
       });
     return () => {
       cancelled = true;

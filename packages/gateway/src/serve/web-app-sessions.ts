@@ -1,14 +1,16 @@
 import crypto from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+
 import type { BearerAuthorization } from '@centraid/app-engine';
+
 import { sendJson } from '../routes/route-helpers.js';
+import type { RouteHandler } from './build-gateway.js';
 import { vaultContext, VAULT_HEADER } from './vault-context.js';
 import {
   WebControlSessionStore,
   hashControlToken,
   CONTROL_ABSOLUTE_TTL_MS,
 } from './web-session-store.js';
-import type { RouteHandler } from './build-gateway.js';
 
 export const WEB_SESSION_REDEEM_PATH = '/centraid/_web/session';
 export const WEB_CONTROL_PATH = '/centraid/_web/control';

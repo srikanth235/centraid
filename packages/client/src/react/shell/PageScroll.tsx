@@ -1,6 +1,8 @@
 import type { JSX, ReactNode } from 'react';
-import mainScrollCss from '../styles/mainScroll.module.css';
+
 import { cx } from '../ui/cx.js';
+
+import mainScrollCss from '../styles/mainScroll.module.css';
 import styles from './PageScroll.module.css';
 
 // Port of the vanilla `pageScroll` — the standard `.has-wall > .cd-main-scroll`

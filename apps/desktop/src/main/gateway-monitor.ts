@@ -29,9 +29,7 @@
  */
 
 import { BrowserWindow, Notification } from 'electron';
-import { loadSettings } from './settings.js';
-import { getLocalGatewaySupervisorState } from './local-gateway.js';
-import { CRASH_LOOP_THRESHOLD, CRASH_LOOP_WINDOW_MS } from './gateway-supervisor-core.js';
+
 import {
   applyComponentAlerts,
   applyProbe,
@@ -44,22 +42,21 @@ import {
   type GatewayAlertAction,
   type GatewayAlertConfig,
   type GatewayComponentAlertAction,
-  type GatewayComponentIssue,
   type GatewayProbe,
   type GatewayRuntimeState,
   type GatewayVersionSkewAction,
 } from './gateway-monitor-core.js';
 import { deriveOutageEvents, type OutageLogEvent } from './gateway-outage-log-core.js';
 import { loadOutageLog, persistOutageEvents } from './gateway-outage-log.js';
+import { probeGateway } from './gateway-monitor-probe.js';
+import { CRASH_LOOP_THRESHOLD, CRASH_LOOP_WINDOW_MS } from './gateway-supervisor-core.js';
+import { getLocalGatewaySupervisorState } from './local-gateway.js';
 import { pushPowerContext } from './power-context-push.js';
+import { loadSettings } from './settings.js';
 
 export const GATEWAY_RUNTIME_POLL_MS = 5000;
-/** A hung probe counts as down well before the next tick would queue up. */
-const PROBE_TIMEOUT_MS = 4000;
 /** Broadcast channel — keep in sync with `Channel` in ipc.ts + preload.ts. */
 const RUNTIME_EVENT_CHANNEL = 'centraid:gateway-runtime:event';
-const HEALTH_PATH = '/centraid/_gateway/health';
-const INFO_PATH = '/centraid/_gateway/info';
 
 /**
  * One durable alert-history entry as the renderer sees it (issue #351 wave
@@ -107,99 +104,6 @@ const crashLoopNotified = new Set<string>();
  */
 let outageHistory: OutageLogEvent[] | undefined;
 let historyBootAt: number | undefined;
-
-/** Plain liveness probe — used as the primary probe on a `/health` 404 (older gateway). */
-async function probeInfo(baseUrl: string, token: string | undefined): Promise<GatewayProbe> {
-  const startedAt = Date.now();
-  try {
-    const res = await fetch(new URL(INFO_PATH, `${baseUrl}/`).toString(), {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
-    });
-    const at = Date.now();
-    if (!res.ok) return { at, ok: false, detail: `HTTP ${res.status}` };
-    const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-    return {
-      at,
-      ok: true,
-      latencyMs: at - startedAt,
-      ...(typeof body.startedAt === 'number' ? { gatewayStartedAt: body.startedAt } : {}),
-      ...(typeof body.uptimeMs === 'number' ? { gatewayUptimeMs: body.uptimeMs } : {}),
-      ...(typeof body.version === 'string' ? { version: body.version } : {}),
-      ...(typeof body.schemaEpoch === 'number' ? { schemaEpoch: body.schemaEpoch } : {}),
-    };
-  } catch (err) {
-    return {
-      at: Date.now(),
-      ok: false,
-      detail: err instanceof Error ? err.message : String(err),
-    };
-  }
-}
-
-/** Pull the non-'ok' components out of a `/health` payload's `components` array. */
-function extractComponentIssues(body: Record<string, unknown>): GatewayComponentIssue[] {
-  const raw = Array.isArray(body.components) ? body.components : [];
-  const issues: GatewayComponentIssue[] = [];
-  for (const entry of raw) {
-    if (!entry || typeof entry !== 'object') continue;
-    const rec = entry as Record<string, unknown>;
-    if (rec.status !== 'degraded' && rec.status !== 'error') continue;
-    if (typeof rec.component !== 'string') continue;
-    const message =
-      typeof rec.lastError === 'string'
-        ? rec.lastError
-        : typeof rec.detail === 'string'
-          ? rec.detail
-          : undefined;
-    issues.push({ component: rec.component, status: rec.status, ...(message ? { message } : {}) });
-  }
-  return issues;
-}
-
-/**
- * Heartbeat probe: `/centraid/_gateway/health` (component-level status — a
- * hung-but-listening gateway shows up here, not just "is a compatible
- * gateway listening"), falling back to the plain `/info` liveness probe on
- * a 404 (a gateway built before #347/#351 that doesn't expose `/health`
- * yet). `healthStatus`/`componentIssues` simply stay unpopulated for a
- * gateway served via the fallback.
- */
-async function probeGateway(baseUrl: string, token: string | undefined): Promise<GatewayProbe> {
-  const startedAt = Date.now();
-  try {
-    const res = await fetch(new URL(HEALTH_PATH, `${baseUrl}/`).toString(), {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
-    });
-    if (res.status === 404) return probeInfo(baseUrl, token);
-    const at = Date.now();
-    if (!res.ok) return { at, ok: false, detail: `HTTP ${res.status}` };
-    const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-    const healthStatus =
-      body.status === 'ok' || body.status === 'degraded' || body.status === 'error'
-        ? body.status
-        : undefined;
-    return {
-      at,
-      ok: true,
-      latencyMs: at - startedAt,
-      ...(healthStatus ? { healthStatus } : {}),
-      componentIssues: extractComponentIssues(body),
-      // `/health`'s `startedAt` is an ISO timestamp (vs `/info`'s epoch ms).
-      ...(typeof body.startedAt === 'string' && !Number.isNaN(Date.parse(body.startedAt))
-        ? { gatewayStartedAt: Date.parse(body.startedAt) }
-        : {}),
-      ...(typeof body.uptimeMs === 'number' ? { gatewayUptimeMs: body.uptimeMs } : {}),
-    };
-  } catch (err) {
-    return {
-      at: Date.now(),
-      ok: false,
-      detail: err instanceof Error ? err.message : String(err),
-    };
-  }
-}
 
 function notify(action: GatewayAlertAction, label: string): void {
   if (!Notification.isSupported()) return;
@@ -344,7 +248,11 @@ async function tick(): Promise<void> {
       : settings.gatewayUrl
         ? await probeGateway(settings.gatewayUrl, settings.gatewayToken)
         : { at: Date.now(), ok: false, detail: 'gateway URL not resolved yet' }
-    : { at: Date.now(), ok: false, detail: settingsError ?? 'settings unavailable' };
+    : {
+        at: Date.now(),
+        ok: false,
+        detail: settingsError ?? 'settings unavailable',
+      };
   // Piggyback the power-context push (#528 Phase D) on the heartbeat so the
   // gateway's live host power posture never approaches its 120s staleness
   // window while the desktop runs. Best-effort and independent of the probe

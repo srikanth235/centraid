@@ -1,4 +1,5 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import { spawnSync } from 'node:child_process';
+import crypto from 'node:crypto';
 // governance: allow-repo-hygiene file-size-limit (#408) the WAL-shipper acceptance suite is one story — continuous loop, PITR, multi-process generation break, offline drain, restore-verification and the O(change) measurement all share one fixture vocabulary; splitting it would scatter the acceptance criteria across files that only change together
 /*
  * System-level acceptance tests for the WAL segment shipper (issue #408):
@@ -11,13 +12,10 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  * The only seam is the offline-provider proxy (every call rejects), which
  * stands in for "the network is down", not for any provider behavior.
  */
-
-import { afterEach, describe, expect, test, vi } from 'vitest';
-import { spawnSync } from 'node:child_process';
-import crypto from 'node:crypto';
 import { existsSync, statSync, promises as fs } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+
 import {
   createSnapshot,
   openLocalBackupProvider,
@@ -27,6 +25,8 @@ import {
   type BackupProvider,
   type ObjectStore,
 } from '@centraid/backup';
+import { forEachSequentially } from '@centraid/test-kit/sequential';
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import {
   readBackupPolicy,
   KeyStore,
@@ -36,18 +36,24 @@ import {
   type WalShipper,
   type WalShipperOptions,
 } from '@centraid/vault';
+import { afterEach, describe, expect, test, vi } from 'vitest';
+
+import { HealthRegistry } from '../serve/health-registry.js';
 import { openVaultPlane, type VaultPlane } from '../serve/vault-plane.js';
 import type { VaultRegistry } from '../serve/vault-registry.js';
-import { HealthRegistry } from '../serve/health-registry.js';
+import type { BackupConfig } from './backup-config.js';
+import { evaluateBackupHealth } from './backup-health.js';
 import { BackupService, type BackupServiceOptions } from './backup-service.js';
 import { assembleSourceEntries } from './backup-sources.js';
-import { evaluateBackupHealth } from './backup-health.js';
 import type { BackupTargetState } from './backup-state.js';
-import type { BackupConfig } from './backup-config.js';
 
 vi.setConfig({ testTimeout: 30_000 });
 
-const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
+const silentLogger = {
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+};
 
 /** Tiny rollover threshold so a few-KB write batch closes a group. */
 const WAL_THRESHOLD = 8 * 1024;
@@ -58,7 +64,7 @@ const WAL_FRAME_BYTES = 24 + 8 * 1024;
 const cleanups: Array<() => Promise<void> | void> = [];
 describe('wal', () => {
   afterEach(async () => {
-    while (cleanups.length > 0) await cleanups.pop()?.();
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
   });
   interface Fx {
     providerDir: string;
@@ -119,7 +125,10 @@ describe('wal', () => {
         ...opts.walShipper,
       },
     });
-    updateBackupPolicy(plane.db.vault, { snapshotIntervalHours: 1, verifyEveryDays: 1 });
+    updateBackupPolicy(plane.db.vault, {
+      snapshotIntervalHours: 1,
+      verifyEveryDays: 1,
+    });
     cleanups.push(() => plane.stop());
     // Scratch tables for volume writes, created before the first tick so they
     // are part of the first-run base snapshots.
@@ -192,7 +201,9 @@ describe('wal', () => {
 
   function vaultTitles(db: DatabaseSync): string[] {
     return (
-      db.prepare('SELECT title FROM schedule_task ORDER BY title').all() as { title: string }[]
+      db.prepare('SELECT title FROM schedule_task ORDER BY title').all() as {
+        title: string;
+      }[]
     ).map((r) => r.title);
   }
 
@@ -201,7 +212,11 @@ describe('wal', () => {
   }
 
   function receiptCount(db: DatabaseSync): number {
-    return (db.prepare('SELECT COUNT(*) AS n FROM consent_receipt').get() as { n: number }).n;
+    return (
+      db.prepare('SELECT COUNT(*) AS n FROM consent_receipt').get() as {
+        n: number;
+      }
+    ).n;
   }
 
   /** Open a restored database read-only, auto-closed at cleanup. */
@@ -228,11 +243,15 @@ describe('wal', () => {
       } catch {
         return;
       }
-      for (const entry of entries) {
+      const walkNextEntry = async (index: number): Promise<void> => {
+        const entry = entries[index];
+        if (!entry) return;
         const full = path.join(dir, entry.name);
         if (entry.isDirectory()) await walk(full);
         else out.push(full);
-      }
+        return walkNextEntry(index + 1);
+      };
+      await walkNextEntry(0);
     };
     await walk(root);
     return out.sort();
@@ -243,10 +262,12 @@ describe('wal', () => {
     let objects = 0;
     let bytes = 0;
     for (const line of logs.slice(from)) {
-      const m = /drained (\d+) wal object\(s\), (\d+) sealed byte\(s\)/.exec(line);
+      const m = /drained (?<objects>\d+) wal object\(s\), (?<bytes>\d+) sealed byte\(s\)/u.exec(
+        line,
+      );
       if (m) {
-        objects += Number.parseInt(m[1]!, 10);
-        bytes += Number.parseInt(m[2]!, 10);
+        objects += Math.trunc(Number(m[1]!));
+        bytes += Math.trunc(Number(m[2]!));
       }
     }
     return { objects, bytes };
@@ -287,12 +308,14 @@ describe('wal', () => {
     const dbEntries = manifest.entries.filter((e) => e.kind === 'db');
     expect(dbEntries.map((e) => e.path).sort()).toStrictEqual(['journal.db', 'vault.db']);
     for (const entry of dbEntries) {
-      expect(entry.walGeneration).toMatch(/^[0-9a-f]{32}$/);
-      expect(entry.sha256).toMatch(/^[0-9a-f]{64}$/);
+      expect(entry.walGeneration).toMatch(/^[0-9a-f]{32}$/u);
+      expect(entry.sha256).toMatch(/^[0-9a-f]{64}$/u);
     }
 
     // THE point of WAL shipping: these writes land AFTER the only manifest.
-    invoke(f.plane, 'schedule.add_task', { title: 'Pay the invoice (post-manifest)' });
+    invoke(f.plane, 'schedule.add_task', {
+      title: 'Pay the invoice (post-manifest)',
+    });
     insertVault(f.plane, 30, 200, 'post-manifest');
     f.plane.walTick();
     await f.service.drainWal();
@@ -350,7 +373,7 @@ describe('wal', () => {
     // Distinct states at every tick, or the assertions below prove nothing.
     expect(new Set(points.map((p) => p.titles.length)).size).toBe(3);
 
-    for (const point of points) {
+    await forEachSequentially(points, async (point) => {
       const dest = await restoreTo(f, { pointInTimeMs: point.tickMs });
       const rv = openRestored(dest, 'vault.db');
       const rj = openRestored(dest, 'journal.db');
@@ -358,7 +381,7 @@ describe('wal', () => {
       expect(probeCount(rv, '_wale2e_probe')).toBe(point.probe);
       expect(probeCount(rj, '_wale2e_jprobe')).toBe(point.jprobe);
       expect(receiptCount(rj)).toBe(point.receipts);
-    }
+    });
   }, 30_000);
 
   // ── 3. G5: a SECOND PROCESS checkpoints the journal ────────────────────────
@@ -543,7 +566,7 @@ describe('wal', () => {
     const foreignSnap = await f.health.snapshot();
     const foreignBackups = foreignSnap.components.find((c) => c.component === 'backups');
     expect(foreignBackups?.status).toBe('degraded');
-    expect(foreignBackups?.detail).toMatch(/foreign checkpoint/);
+    expect(foreignBackups?.detail).toMatch(/foreign checkpoint/u);
     const manifest = await openNewestManifest(f);
     const journalEntry = manifest.entries.find((e) => e.kind === 'db' && e.path === 'journal.db')!;
     const vaultEntry = manifest.entries.find((e) => e.kind === 'db' && e.path === 'vault.db')!;
@@ -596,15 +619,15 @@ describe('wal', () => {
       journal: f.shipper.status().dbs.journal!.generation,
     };
 
-    const reports = [];
-    for (let i = 0; i < 6; i++) {
+    const reports: ReturnType<typeof f.shipper.tick>[] = [];
+    await forEachSequentially(Array.from({ length: 6 }), async (_, i) => {
       invoke(f.plane, 'schedule.add_task', { title: `offline-task-${i}` });
       insertVault(f.plane, 30, 400, `offline-${i}`); // ~12KB > threshold ⇒ rollover
       reports.push(f.shipper.tick());
       // Checkpoints still run while offline — the live WAL never balloons.
       expect(walSize(f.plane, 'vault.db')).toBeLessThanOrEqual(2 * WAL_THRESHOLD);
       await f.service.drainWal(); // fails inside (offline), never throws, never deletes
-    }
+    });
     expect(reports.flatMap((r) => r.breaks)).toStrictEqual([]);
     expect(reports.flatMap((r) => r.errors)).toStrictEqual([]);
 
@@ -669,14 +692,14 @@ describe('wal', () => {
     // (day N looks like day 1); eight days only lengthened wall clock (~2×).
     const DAYS = 4;
     const TICKS_PER_DAY = 6; // one every four hours
-    const reports = [];
+    const reports: ReturnType<typeof f.shipper.tick>[] = [];
     const written: string[] = [];
     /** Per-day: the largest WAL either database reached, and the local segment dir. */
     const perDay: { wal: number; local: number }[] = [];
-    for (let day = 0; day < DAYS; day++) {
+    await forEachSequentially(Array.from({ length: DAYS }), async (_, day) => {
       let maxWal = 0;
       let maxLocal = 0;
-      for (let t = 0; t < TICKS_PER_DAY; t++) {
+      await forEachSequentially(Array.from({ length: TICKS_PER_DAY }), async (_, t) => {
         const title = `outage-d${day}-t${t}`;
         invoke(f.plane, 'schedule.add_task', { title });
         written.push(title);
@@ -702,9 +725,9 @@ describe('wal', () => {
         maxLocal = Math.max(maxLocal, f.shipper.status().localBytes);
         expect(f.shipper.status().localBytes).toBeLessThanOrEqual(LOCAL_BUDGET);
         await f.service.drainWal(); // fails inside (offline): never throws, never deletes
-      }
+      });
       perDay.push({ wal: maxWal, local: maxLocal });
-    }
+    });
     expect(reports.flatMap((r) => r.errors)).toStrictEqual([]);
 
     // Neither the WAL nor the local segment dir GROWS WITH THE OUTAGE. This is
@@ -737,7 +760,7 @@ describe('wal', () => {
     // nothing yet captured. Two more ticks of ordinary work, so what reconnect
     // has to drain is a real, partially-filled generation.
     const TAIL_TICKS = 2;
-    for (let t = 0; t < TAIL_TICKS; t++) {
+    await forEachSequentially(Array.from({ length: TAIL_TICKS }), async (_, t) => {
       const title = `outage-tail-${t}`;
       invoke(f.plane, 'schedule.add_task', { title });
       written.push(title);
@@ -749,13 +772,13 @@ describe('wal', () => {
       reports.push(f.shipper.tick());
       expect(walSize(f.plane, 'vault.db')).toBeLessThanOrEqual(2 * WAL_THRESHOLD);
       await f.service.drainWal();
-    }
+    });
 
     // (3) The daily base cadence ACTUALLY FIRED — one roll per day boundary —
     // and every break is a cadence roll: nothing detected a violation, and the
     // budget was never breached.
     const breaks = reports.flatMap((r) => r.breaks);
-    const cadence = breaks.filter((b) => /base-cadence/.test(b.reason));
+    const cadence = breaks.filter((b) => /base-cadence/u.test(b.reason));
     const vaultRolls = cadence.filter((b) => b.db === 'vault').length;
     expect(vaultRolls).toBeGreaterThanOrEqual(DAYS - 1); // one per day-boundary crossed
     expect(vaultRolls).toBeLessThanOrEqual(DAYS);
@@ -875,7 +898,7 @@ describe('wal', () => {
     expect(new Set(points.map((p) => p.digest)).size).toBe(points.length);
 
     const ticks = new Set(points.map((p) => p.tickMs));
-    for (const i of [2, 4, 6]) {
+    await forEachSequentially([2, 4, 6], async (i) => {
       const at = points[i]!;
       const next = points[i + 1]!;
       // An ARBITRARY instant strictly inside the interval — 37% of the way to the
@@ -896,7 +919,7 @@ describe('wal', () => {
       expect(next.rows).toBeGreaterThan(at.rows);
       expect(contentDigest(rv, rj)).not.toBe(next.digest);
       expect(verifyRestoredPair(dest).danglingReceipts).toStrictEqual([]);
-    }
+    });
 
     // And an instant BEFORE the first tick of the loop still restores the base
     // pair coherently — the floor of the ladder, not an error.
@@ -917,7 +940,8 @@ describe('wal', () => {
     const keyring = fixtureKeyring(f);
     const store = await provider.openDataPlane(targetId, 'backup', 'read');
     const out = new Set<string>();
-    for (const row of await provider.listSnapshots(targetId)) {
+    const rows = await provider.listSnapshots(targetId);
+    await forEachSequentially(rows, async (row) => {
       const opened = openManifest(
         await store.get(row.manifestKey),
         keyring,
@@ -927,7 +951,7 @@ describe('wal', () => {
       for (const entry of opened.entries) {
         if (entry.walGeneration !== undefined) out.add(entry.walGeneration);
       }
-    }
+    });
     return out;
   }
 
@@ -986,7 +1010,7 @@ describe('wal', () => {
         .map((b) => b.generation)
         .sort(),
     ).toStrictEqual([gen1, jgen1].sort());
-    expect(f.logs.some((l) => /no manifest anchors/.test(l))).toBe(true);
+    expect(f.logs.some((l) => /no manifest anchors/u.test(l))).toBe(true);
 
     // And the retry HEALS it: the moment a manifest names the pair, and only
     // then, the bases stop being pending.
@@ -1044,7 +1068,11 @@ describe('wal', () => {
       vaultId: f.vaultId,
       entries,
       generation: target.generation,
-      appMeta: { gatewayVersion: '0.0.0', vaultUserVersion: '1', ontologyVersion: '1.2' },
+      appMeta: {
+        gatewayVersion: '0.0.0',
+        vaultUserVersion: '1',
+        ontologyVersion: '1.2',
+      },
     });
     const anchored = await anchoredGenerations(f);
     expect(anchored.has(gen)).toBe(true); // the provider HAS the anchor…
@@ -1085,7 +1113,7 @@ describe('wal', () => {
 
     // Flip one byte of a REAL remote segment object (GCM tag now fails).
     const segments = (await walObjectFiles(f, state.targetId)).filter((file) =>
-      /^\d{12}-\d{12}-\d{13}$/.test(path.basename(file)),
+      /^\d{12}-\d{12}-\d{13}$/u.test(path.basename(file)),
     );
     expect(segments.length).toBeGreaterThan(0);
     const victim = segments[segments.length - 1]!;
@@ -1096,9 +1124,9 @@ describe('wal', () => {
 
     // Damage degrades the restore to an earlier consistent state — but the
     // verification job's contract is to be LOUD about it, not to shrug.
-    await expect(f.service.runRestoreVerify(f.vaultId)).rejects.toThrow(/damaged wal object/);
+    await expect(f.service.runRestoreVerify(f.vaultId)).rejects.toThrow(/damaged wal object/u);
     expect((await f.service.status())[f.vaultId]!.lastRestoreVerifyError).toMatch(
-      /damaged wal object/,
+      /damaged wal object/u,
     );
     // The probe recomputes from persisted state at snapshot time (and its
     // status wins) — the persisted failure keeps the health surface red, not
@@ -1106,8 +1134,8 @@ describe('wal', () => {
     const snap = await f.health.snapshot();
     const backups = snap.components.find((c) => c.component === 'backups');
     expect(backups?.status).toBe('error');
-    expect(backups?.detail).toMatch(/restore-verification failed/);
-    expect(backups?.lastError).toMatch(/restore-verify failed/);
+    expect(backups?.detail).toMatch(/restore-verification failed/u);
+    expect(backups?.lastError).toMatch(/restore-verify failed/u);
 
     // Heal: put the original sealed object back (uploads are idempotent
     // byte-identical PUTs) — the next verification succeeds and clears it.
@@ -1141,7 +1169,7 @@ describe('wal', () => {
       now,
     });
     expect(health.status).toBe('error');
-    expect(health.detail).toMatch(/restore-verification/);
+    expect(health.detail).toMatch(/restore-verification/u);
   }, 45_000);
 
   test('G8/G9 restore-verify: dangling receipts leave health DEGRADED, and the probe KEEPS it degraded', async () => {
@@ -1213,7 +1241,7 @@ describe('wal', () => {
     const snap = await f.health.snapshot();
     const backups = snap.components.find((c) => c.component === 'backups');
     expect(backups?.status).toBe('degraded');
-    expect(backups?.detail).toMatch(/receipt\(s\) referencing absent vault rows/);
+    expect(backups?.detail).toMatch(/receipt\(s\) referencing absent vault rows/u);
 
     // Unit-level, same module the probe uses: the count alone is what degrades,
     // and its absence is what clears.
@@ -1278,7 +1306,7 @@ describe('wal', () => {
     }
     await f.service.drainWal();
 
-    for (const point of [points[1]!, points[3]!, points[5]!]) {
+    await forEachSequentially([points[1]!, points[3]!, points[5]!], async (point) => {
       const dest = await restoreTo(f, { pointInTimeMs: point.tickMs });
       const pair = verifyRestoredPair(dest);
       expect(pair.vault.integrity).toBe('ok');
@@ -1289,7 +1317,7 @@ describe('wal', () => {
       const rj = openRestored(dest, 'journal.db');
       expect(vaultTitles(rv)).toStrictEqual(point.titles);
       expect(probeCount(rj, '_wale2e_ledger')).toBe(point.ledger);
-    }
+    });
 
     // Now LOSE the vault's newest segment objects. There is no hole and no
     // damage — the vault's listing simply ENDS, exactly as it would if the vault
@@ -1300,13 +1328,13 @@ describe('wal', () => {
     // ahead of its vault.
     const targetId = (await f.service.status())[f.vaultId]!.targetId;
     const vaultSegments = (await walObjectFiles(f, targetId))
-      .filter((file) => /wal[/\\]vault[/\\]/.test(file))
-      .filter((file) => /^\d{12}-\d{12}-\d{13}$/.test(path.basename(file)))
+      .filter((file) => /wal[/\\]vault[/\\]/u.test(file))
+      .filter((file) => /^\d{12}-\d{12}-\d{13}$/u.test(path.basename(file)))
       .sort();
     expect(vaultSegments.length).toBeGreaterThan(2);
-    for (const victim of vaultSegments.slice(-2)) await fs.rm(victim);
+    await forEachSequentially(vaultSegments.slice(-2), async (victim) => fs.rm(victim));
 
-    for (const point of points) {
+    await forEachSequentially(points, async (point) => {
       const dest = await restoreTo(f, { pointInTimeMs: point.tickMs });
       const pair = verifyRestoredPair(dest);
       expect(pair.vault.integrity).toBe('ok');
@@ -1316,7 +1344,7 @@ describe('wal', () => {
       // ahead of the vault state it is paired with.
       const rj = openRestored(dest, 'journal.db');
       expect(probeCount(rj, '_wale2e_ledger')).toBeLessThanOrEqual(point.ledger);
-    }
+    });
   }, 60_000);
 
   // ── 8. G9: an entirely-lost segment stream must be LOUD, not green ─────────
@@ -1344,23 +1372,23 @@ describe('wal', () => {
     // newest hours were unrecoverable.
     const state = (await f.service.status())[f.vaultId]!;
     const vaultSegments = (await walObjectFiles(f, state.targetId))
-      .filter((file) => /wal[/\\]vault[/\\]/.test(file))
-      .filter((file) => /^\d{12}-\d{12}-\d{13}$/.test(path.basename(file)));
+      .filter((file) => /wal[/\\]vault[/\\]/u.test(file))
+      .filter((file) => /^\d{12}-\d{12}-\d{13}$/u.test(path.basename(file)));
     expect(vaultSegments.length).toBeGreaterThan(0);
-    for (const file of vaultSegments) await fs.rm(file);
+    await forEachSequentially(vaultSegments, async (file) => fs.rm(file));
 
     await expect(f.service.runRestoreVerify(f.vaultId)).rejects.toThrow(
-      /not restorable at their newest registered point/,
+      /not restorable at their newest registered point/u,
     );
     expect((await f.service.status())[f.vaultId]!.lastRestoreVerifyError).toMatch(
-      /not restorable at their newest registered point/,
+      /not restorable at their newest registered point/u,
     );
 
     // The cheap scheduled verifier sees it too — it plans the same coordinated
     // cut restore does, rather than trusting a per-stream hole check that an
     // empty listing can never trip.
     const verify = await f.service.runVerify(f.vaultId);
-    expect(verify!.missing.some((m) => /cannot be reassembled/.test(m))).toBe(true);
+    expect(verify!.missing.some((m) => /cannot be reassembled/u.test(m))).toBe(true);
   }, 60_000);
 
   // ── 7. Measured: drained bytes are O(change), not O(database) ───────────────
@@ -1485,17 +1513,17 @@ describe('wal', () => {
     const state = (await f.service.status())[f.vaultId]!;
     const markers = await markerObjectFiles(f, state.targetId);
     expect(markers.length).toBeGreaterThan(0);
-    for (const file of markers) await fs.rm(file);
+    await forEachSequentially(markers, async (file) => fs.rm(file));
     await expect(markerObjectFiles(f, state.targetId)).resolves.toStrictEqual([]);
     expect((await walObjectFiles(f, state.targetId)).length).toBeGreaterThan(0); // segments intact
 
     // The scheduled verifier sees it.
     const verify = await f.service.runVerify(f.vaultId);
-    expect(verify!.missing.some((m) => /pair marker/.test(m))).toBe(true);
+    expect(verify!.missing.some((m) => /pair marker/u.test(m))).toBe(true);
 
     // The weekly restore-verification goes RED rather than green…
     await expect(f.service.runRestoreVerify(f.vaultId)).rejects.toThrow(
-      /not restorable at their newest registered point/,
+      /not restorable at their newest registered point/u,
     );
 
     // …and the restore itself still SUCCEEDS at the older coordinated point (G6:
@@ -1520,7 +1548,9 @@ describe('wal', () => {
     // and every read helper in this file (walObjectFiles, openNewestManifest)
     // reads that same dir — a second root would be a different world.
     let inner: BackupProvider | undefined;
-    const f = await fx({ provider: markerBlockingProvider(() => inner!, blocked) });
+    const f = await fx({
+      provider: markerBlockingProvider(() => inner!, blocked),
+    });
     inner = openLocalBackupProvider({ rootDir: f.providerDir });
 
     invoke(f.plane, 'schedule.add_task', { title: 'drain-interrupt' });

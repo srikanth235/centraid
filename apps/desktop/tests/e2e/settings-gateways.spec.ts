@@ -1,6 +1,8 @@
-import { test, expect, type Page } from '@playwright/test';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+
+import { test, expect, type Page } from '@playwright/test';
+
 import {
   appEntry,
   cleanupEnv,
@@ -35,7 +37,7 @@ import {
 // (https://github.com/srikanth235/centraid/issues/473) this can collapse back
 // to `gotoNav(page, 'Settings')`.
 async function gotoSettings(page: Page): Promise<void> {
-  await page.getByRole('button', { name: /^Settings\b/ }).click();
+  await page.getByRole('button', { name: /^Settings\b/u }).click();
 }
 
 let env: TestEnv;
@@ -114,7 +116,9 @@ test('12.6 — an explicit dark theme survives a full Electron restart', async (
     // (SettingsAppearanceScreen.tsx:76-102); `dark` is also the shipped default
     // (appearance.ts:13-21), so pass through Centraid Light first — otherwise
     // "survives a restart" would be satisfied by the default alone.
-    const themes = launched.page.getByRole('radiogroup', { name: 'Color theme' });
+    const themes = launched.page.getByRole('radiogroup', {
+      name: 'Color theme',
+    });
     await themes.getByRole('radio', { name: 'Centraid Light' }).click();
     await expect
       .poll(() => launched.page.evaluate(() => document.documentElement.dataset.theme))
@@ -150,7 +154,7 @@ test('12.2 — "Match system" resolves the OS scheme to a theme and persists it'
     // A concrete theme is applied to the document root…
     await expect
       .poll(() => page.evaluate(() => document.documentElement.dataset.theme))
-      .toMatch(/^(light|dark)$/);
+      .toMatch(/^(?:light|dark)$/u);
     // …and the choice is mirrored to the gateway prefs store with a theme key.
     await expect
       .poll(() =>
@@ -158,7 +162,7 @@ test('12.2 — "Match system" resolves the OS scheme to a theme and persists it'
           (c) =>
             c.method === 'PUT' &&
             c.pathname === '/_centraid-user/prefs' &&
-            /"theme"/.test(c.body ?? ''),
+            /"theme"/u.test(c.body ?? ''),
         ),
       )
       .toBe(true);
@@ -204,13 +208,14 @@ test('13.2 — desktop exposes pairing-only gateway enrollment', async () => {
     expect(rows.find((row) => row.id === env.gatewayId)).toMatchObject({
       endpointId: env.gatewayId,
     });
-    expect(JSON.stringify(rows)).not.toMatch(/"(?:url|token|transport)"/);
+    expect(JSON.stringify(rows)).not.toMatch(/"(?:url|token|transport)"/u);
     await expect(fs.access(path.join(env.userData, 'gateways'))).rejects.toMatchObject({
       code: 'ENOENT',
     });
     const rendererConnectionState = await page.evaluate(() =>
       Object.keys(localStorage).filter(
-        (key) => key.startsWith('centraid.v1.') && /gateway|connection|credential|token/i.test(key),
+        (key) =>
+          key.startsWith('centraid.v1.') && /gateway|connection|credential|token/iu.test(key),
       ),
     );
     expect(rendererConnectionState).toEqual([]);
@@ -222,7 +227,9 @@ test('13.2 — desktop exposes pairing-only gateway enrollment', async () => {
 test('13.4 — switching the active gateway re-scopes home', async () => {
   // A second gateway pointing at the same mock, so its app list resolves.
   gateway.state.apps = [appEntry({ id: 'shared', name: 'Shared App' })];
-  const newId = await seedRemoteGatewayProfile(env, gateway, { label: 'Second' });
+  const newId = await seedRemoteGatewayProfile(env, gateway, {
+    label: 'Second',
+  });
   const { app, page } = await launchApp(env);
   try {
     await waitForHome(page);
@@ -293,7 +300,7 @@ test('13.5 + 13.6 — a paired remote gateway can be renamed without creating ad
       endpointId: id,
       label: 'New Label',
     });
-    expect(JSON.stringify(rows)).not.toMatch(/"(?:url|token|transport)"/);
+    expect(JSON.stringify(rows)).not.toMatch(/"(?:url|token|transport)"/u);
   } finally {
     await closeApp(app);
   }
@@ -334,7 +341,7 @@ test('14.2 — an auth failure on publish surfaces a token/Settings prompt', asy
 
     gateway.state.forceStatus = 401; // every call now rejects with auth_required
     await page.getByTestId('builder-publish').click();
-    await expect(page.getByTestId('builder-body')).toContainText(/token|Settings/i, {
+    await expect(page.getByTestId('builder-body')).toContainText(/token|Settings/iu, {
       timeout: 15_000,
     });
   } finally {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import {
   removedRunnerLadderMembers,
   resolveGatewayRunnerPrefs,
@@ -39,7 +40,7 @@ describe(resolveGatewayRunnerPrefs, () => {
   });
 });
 
-describe('removedRunnerLadderMembers', () => {
+describe(removedRunnerLadderMembers, () => {
   it('reports removal from one subsystem even when another ladder retains the runner', () => {
     const before = {
       'agent.runner.kind': 'codex',
@@ -51,7 +52,7 @@ describe('removedRunnerLadderMembers', () => {
       'runner.ladder.assistant': [],
     };
 
-    expect(removedRunnerLadderMembers(before, after)).toEqual([
+    expect(removedRunnerLadderMembers(before, after)).toStrictEqual([
       { subsystem: 'assistant', kind: 'claude-code' },
     ]);
   });
@@ -67,7 +68,7 @@ describe('removedRunnerLadderMembers', () => {
       'runner.ladder.default': [],
     };
 
-    expect(removedRunnerLadderMembers(before, after)).toEqual([
+    expect(removedRunnerLadderMembers(before, after)).toStrictEqual([
       { subsystem: 'ask', kind: 'claude-code' },
       { subsystem: 'builder', kind: 'claude-code' },
       { subsystem: 'automations', kind: 'claude-code' },

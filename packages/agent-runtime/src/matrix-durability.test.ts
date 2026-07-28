@@ -3,6 +3,7 @@
  * Preflight cache must be clearable and semver parse must be stable.
  */
 import { describe, expect, test } from 'vitest';
+
 import {
   compareSemver,
   invalidatePreflightCache,

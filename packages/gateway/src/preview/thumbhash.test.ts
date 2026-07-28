@@ -1,6 +1,7 @@
 // ThumbHash pure encoder unit tests (issue #545 B7).
 
 import { describe, expect, test } from 'vitest';
+
 import { rgbaToThumbHash } from './thumbhash.js';
 
 /** Solid opaque red 2×2 raster (RGBA). */
@@ -18,10 +19,10 @@ function solid(w: number, h: number, r: number, g: number, b: number, a = 255): 
 describe('thumbhash', () => {
   test('rgbaToThumbHash rejects rasters larger than 100×100', () => {
     expect(() => rgbaToThumbHash(101, 10, solid(101, 10, 0, 0, 0))).toThrow(
-      /doesn't fit in 100x100/,
+      /doesn't fit in 100x100/u,
     );
     expect(() => rgbaToThumbHash(10, 101, solid(10, 101, 0, 0, 0))).toThrow(
-      /doesn't fit in 100x100/,
+      /doesn't fit in 100x100/u,
     );
   });
 

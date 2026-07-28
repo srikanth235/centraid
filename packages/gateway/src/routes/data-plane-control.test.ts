@@ -1,11 +1,18 @@
-import { Readable } from 'node:stream';
-import { describe, expect, test, vi } from 'vitest';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { Readable } from 'node:stream';
+
+import { describe, expect, test, vi } from 'vitest';
+
 import { makeDataPlaneControlHandler, type DataPlaneControlOptions } from './data-plane-control.js';
 
 async function invokeRoute(
   handler: ReturnType<typeof makeDataPlaneControlHandler>,
-  input: { method: string; url: string; headers?: Record<string, string>; body?: unknown },
+  input: {
+    method: string;
+    url: string;
+    headers?: Record<string, string>;
+    body?: unknown;
+  },
 ) {
   let statusCode = 0;
   let body = '';
@@ -51,9 +58,14 @@ describe('data-plane-control', () => {
     const allowed = await invokeRoute(handler, {
       method: 'GET',
       url: '/centraid/_gateway/tunnel/authorize?endpointId=paired',
-      headers: { 'x-centraid-data-plane-secret': '0123456789abcdef0123456789abcdef' },
+      headers: {
+        'x-centraid-data-plane-secret': '0123456789abcdef0123456789abcdef',
+      },
     });
-    expect(allowed.json()).toStrictEqual({ allowed: true, headers: { 'x-device': 'paired' } });
+    expect(allowed.json()).toStrictEqual({
+      allowed: true,
+      headers: { 'x-device': 'paired' },
+    });
   });
 
   test('native relay pairing delegates metadata only after control authentication', async () => {
@@ -78,7 +90,9 @@ describe('data-plane-control', () => {
     const allowed = await invokeRoute(handler, {
       method: 'POST',
       url: '/centraid/_gateway/tunnel/pair?endpointId=device',
-      headers: { 'x-centraid-data-plane-secret': '0123456789abcdef0123456789abcdef' },
+      headers: {
+        'x-centraid-data-plane-secret': '0123456789abcdef0123456789abcdef',
+      },
       body,
     });
     expect(allowed.statusCode).toBe(200);

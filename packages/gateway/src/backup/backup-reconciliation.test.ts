@@ -1,10 +1,11 @@
-import { describe, expect, test, vi } from 'vitest';
 import {
   walGroupCloserKey,
   walPairMarkerKey,
   walSegmentKey,
   type SnapshotRow,
 } from '@centraid/backup';
+import { describe, expect, test, vi } from 'vitest';
+
 import {
   reconcileCasInventory,
   snapshotInventorySummary,
@@ -102,7 +103,12 @@ describe('backup-reconciliation', () => {
         endOffset: 200,
         tickMs: 2,
       }),
-      walGroupCloserKey({ db: 'vault', generation: GEN, group: 0, endOffset: 200 }),
+      walGroupCloserKey({
+        db: 'vault',
+        generation: GEN,
+        group: 0,
+        endOffset: 200,
+      }),
     ];
     expect(walInventoryGaps(keys, new Set([GEN]))).toContain(`vault/${GEN}/group-0: 100-120`);
   });
@@ -117,7 +123,12 @@ describe('backup-reconciliation', () => {
         endOffset: 100,
         tickMs: 1,
       }),
-      walGroupCloserKey({ db: 'journal', generation: GEN, group: 0, endOffset: 100 }),
+      walGroupCloserKey({
+        db: 'journal',
+        generation: GEN,
+        group: 0,
+        endOffset: 100,
+      }),
     ];
     expect(walInventoryGaps(keys, new Set([GEN]))).toStrictEqual([]);
   });

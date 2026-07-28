@@ -1,25 +1,27 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
-import Icon from '../ui/Icon.js';
-import { cx } from '../ui/cx.js';
-import { formatDuration } from '../shell/routes/gatewayData.js';
-import buttonCss from '../ui/Button.module.css';
-import controlsCss from '../styles/controls.module.css';
-import gwStyles from './GatewayScreen.module.css';
-import styles from './BackupCard.module.css';
-import type { UsageInput } from '../../storage-metrics.js';
+
 import type { GatewayHomeDiscoveryDTO } from '../../gateway-client.js';
-import { computeStorageMetrics } from './backupMetrics.js';
+import type { UsageInput } from '../../storage-metrics.js';
+import { formatDuration } from '../shell/routes/gatewayData.js';
+import { cx } from '../ui/cx.js';
+import Icon from '../ui/Icon.js';
 import BackupHealthMetrics, { ClockLine } from './BackupHealthMetrics.js';
+import BackupInventoryPanel, {
+  type BackupReconciliationDTO,
+  type ProviderPolicyStatusDTO,
+} from './BackupInventoryPanel.js';
+import { computeStorageMetrics } from './backupMetrics.js';
 import BackupPolicyPanel, {
   type BackupDestinationDTO,
   type BackupPolicyDTO,
   type BackupPolicyPatchDTO,
 } from './BackupPolicyPanel.js';
-import BackupInventoryPanel, {
-  type BackupReconciliationDTO,
-  type ProviderPolicyStatusDTO,
-} from './BackupInventoryPanel.js';
 import RecoveryKitGate from './RecoveryKitGate.js';
+
+import controlsCss from '../styles/controls.module.css';
+import buttonCss from '../ui/Button.module.css';
+import styles from './BackupCard.module.css';
+import gwStyles from './GatewayScreen.module.css';
 
 // Gateway → Backups: the owner surface over the offsite backup engine. This
 // card now renders EXACTLY the five metrics of the §6 contract (issue #436)

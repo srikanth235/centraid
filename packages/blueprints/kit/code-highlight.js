@@ -105,9 +105,9 @@ const isDigit = (c) => c >= '0' && c <= '9';
 /**
  * Highlight `code` for a known `lang`, returning an HTML string (escaped text +
  * `hl…` spans), or `null` when the language is unknown. Never throws.
- * @param {string} code
- * @param {string} [lang]
- * @returns {string | null}
+ * @param {string} code The source code to highlight.
+ * @param {string} [lang] The optional source language.
+ * @returns {string | null} Escaped highlighted HTML, or null for an unknown language.
  */
 export function highlightCode(code, lang) {
   const cfg = configFor(lang);

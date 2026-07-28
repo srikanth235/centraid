@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import {
   automationLinksToConnection,
   buildAutomationConnectionsPayload,
@@ -128,13 +129,25 @@ describe('connectorPlatform', () => {
     const conn = { connectionId: 'c1', kind: 'pull.gmail', label: 'Work' };
     expect(
       automationLinksToConnection(
-        { manifest: { connector: { kind: 'pull.gmail', label: 'Work', connectionId: 'c1' } } },
+        {
+          manifest: {
+            connector: {
+              kind: 'pull.gmail',
+              label: 'Work',
+              connectionId: 'c1',
+            },
+          },
+        },
         conn,
       ),
     ).toBe(true);
     expect(
       automationLinksToConnection(
-        { manifest: { connections: [{ connectionId: 'c1', kind: 'pull.gmail' }] } },
+        {
+          manifest: {
+            connections: [{ connectionId: 'c1', kind: 'pull.gmail' }],
+          },
+        },
         conn,
       ),
     ).toBe(true);

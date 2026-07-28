@@ -1,9 +1,10 @@
+import { RUNNER_KINDS } from '@centraid/app-engine';
 /**
  * Matrix cell agent-runtime.contracts (#535 coverable-today).
  * Registry shape is the public contract every runner kind must satisfy.
  */
 import { describe, expect, test } from 'vitest';
-import { RUNNER_KINDS } from '@centraid/app-engine';
+
 import { RUNNER_BACKENDS, getRunnerBackend } from './registry.ts';
 
 describe('matrix-contracts', () => {

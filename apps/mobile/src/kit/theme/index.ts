@@ -12,9 +12,11 @@
 // legacy `colors` export stays light-only for callers that read it at module
 // scope; anything that needs to follow the OS theme should call `useTheme()`.
 
-import { spacing, radii, type as typeTokens } from '@centraid/design-tokens';
+import { type as typeTokens } from '@centraid/design-tokens';
 import type { TypeKey } from '@centraid/design-tokens';
 import type { TextStyle } from 'react-native';
+
+export { spacing, radii } from '@centraid/design-tokens';
 
 // One family name per (family, weight) pair. Keep in sync with the
 // imports in App.tsx — anything referenced here must be loaded there.
@@ -37,8 +39,16 @@ type FamilyKey = 'sans' | 'display' | 'mono';
 
 const FAMILY_BY_WEIGHT: Record<FamilyKey, Record<string, string>> = {
   display: { '500': family.displayMedium, '600': family.displayBold },
-  mono: { '400': family.monoRegular, '500': family.monoMedium, '600': family.monoBold },
-  sans: { '400': family.sansRegular, '500': family.sansMedium, '600': family.sansBold },
+  mono: {
+    '400': family.monoRegular,
+    '500': family.monoMedium,
+    '600': family.monoBold,
+  },
+  sans: {
+    '400': family.sansRegular,
+    '500': family.sansMedium,
+    '600': family.sansBold,
+  },
 };
 
 export const t = (key: TypeKey): Pick<TextStyle, 'fontSize' | 'lineHeight' | 'fontFamily'> => {
@@ -51,8 +61,6 @@ export const t = (key: TypeKey): Pick<TextStyle, 'fontSize' | 'lineHeight' | 'fo
     lineHeight: def.lineHeight,
   };
 };
-
-export { spacing, radii };
 
 // Dark-mode-aware theme API, lowered from the canonical blueprint token source.
 export { useTheme } from './useTheme';

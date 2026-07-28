@@ -1,7 +1,9 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+
 import { tempDir } from '@centraid/test-kit/temp-dir';
+import { afterEach, describe, expect, it } from 'vitest';
+
 import {
   DEFAULT_WARN_AT_PERCENT,
   MIN_JOURNAL_LIMIT_BYTES,
@@ -23,7 +25,7 @@ const dirs: string[] = [];
 
 describe('storage-limits', () => {
   afterEach(async () => {
-    for (const dir of dirs.splice(0)) await fs.rm(dir, { recursive: true, force: true });
+    await Promise.all(dirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
   });
 
   async function storeDir(): Promise<string> {
@@ -40,12 +42,16 @@ describe('storage-limits', () => {
 
   describe(applyLimitsPatch, () => {
     it('sets and clears each limit independently', () => {
-      const withBudget = applyLimitsPatch(OFF, { totalLimitBytes: 30 * 1024 ** 3 });
+      const withBudget = applyLimitsPatch(OFF, {
+        totalLimitBytes: 30 * 1024 ** 3,
+      });
       expect(withBudget).toMatchObject({
         totalLimitBytes: 30 * 1024 ** 3,
         journalLimitBytes: null,
       });
-      const withBoth = applyLimitsPatch(withBudget, { journalLimitBytes: 1024 ** 3 });
+      const withBoth = applyLimitsPatch(withBudget, {
+        journalLimitBytes: 1024 ** 3,
+      });
       expect(withBoth.totalLimitBytes).toBe(30 * 1024 ** 3);
       // Clearing one must not disturb the other — the two controls are separate
       // PUTs from the same panel.
@@ -110,7 +116,10 @@ describe('storage-limits', () => {
       const store = new StorageLimitsStore(dir);
       await expect(store.load()).resolves.toMatchObject(OFF);
 
-      await store.update({ totalLimitBytes: 10 * 1024 ** 3, journalLimitBytes: 1024 ** 3 });
+      await store.update({
+        totalLimitBytes: 10 * 1024 ** 3,
+        journalLimitBytes: 1024 ** 3,
+      });
       await expect(loadStorageLimits(dir)).resolves.toMatchObject({
         totalLimitBytes: 10 * 1024 ** 3,
         journalLimitBytes: 1024 ** 3,
@@ -132,7 +141,11 @@ describe('storage-limits', () => {
       const dir = await storeDir();
       await fs.writeFile(
         path.join(dir, 'storage-limits.json'),
-        JSON.stringify({ totalLimitBytes: 'lots', warnAtPercent: 900, journalLimitBytes: -5 }),
+        JSON.stringify({
+          totalLimitBytes: 'lots',
+          warnAtPercent: 900,
+          journalLimitBytes: -5,
+        }),
       );
       await expect(loadStorageLimits(dir)).resolves.toMatchObject({
         totalLimitBytes: null,

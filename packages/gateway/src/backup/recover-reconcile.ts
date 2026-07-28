@@ -33,6 +33,7 @@
 
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+
 import type { EngineLogger } from '@centraid/backup';
 import { FsBlobStore, ReplicaIndex } from '@centraid/vault';
 
@@ -93,7 +94,13 @@ export async function reconcileAdoptedInventory(
       'recover: provider attests no inventory — skipping adopt-time reconcile; the restored ' +
         'blob_replica index is trusted as-is',
     );
-    return { checked: 0, missing: 0, repinned: [], lost: [], skipped: 'no-inventory-capability' };
+    return {
+      checked: 0,
+      missing: 0,
+      repinned: [],
+      lost: [],
+      skipped: 'no-inventory-capability',
+    };
   }
 
   const carried = snapshotBlobShas(snapshotEntries);
@@ -132,7 +139,12 @@ export async function reconcileAdoptedInventory(
       );
     }
 
-    return { checked: believed.length, missing: missing.length, repinned, lost };
+    return {
+      checked: believed.length,
+      missing: missing.length,
+      repinned,
+      lost,
+    };
   } finally {
     db.close();
   }

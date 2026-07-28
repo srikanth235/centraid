@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+
 import { ReplicaRebootstrapRequiredError } from './errors.js';
 import {
   fetchReplicaChanges,
@@ -70,14 +71,15 @@ describe(fetchReplicaChanges, () => {
   });
 
   it('turns a stale shape attestation conflict into a typed rebootstrap', async () => {
-    const fetcher = vi
-      .fn<ReplicaFetcher>()
-      .mockResolvedValue(
-        new Response(
-          JSON.stringify({ error: 'replica_rebootstrap_required', reason: 'shape-changed' }),
-          { status: 409, headers: { 'content-type': 'application/json' } },
-        ),
-      );
+    const fetcher = vi.fn<ReplicaFetcher>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: 'replica_rebootstrap_required',
+          reason: 'shape-changed',
+        }),
+        { status: 409, headers: { 'content-type': 'application/json' } },
+      ),
+    );
 
     await expect(
       fetchReplicaChanges(
@@ -106,7 +108,10 @@ describe(fetchReplicaIntentOutcomes, () => {
         expect(body.through).toStrictEqual(through);
         return new Response(
           JSON.stringify({
-            outcomes: body.intentIds.map((intentId) => ({ intentId, status: 'executed' })),
+            outcomes: body.intentIds.map((intentId) => ({
+              intentId,
+              status: 'executed',
+            })),
           }),
           { status: 200, headers: { 'content-type': 'application/json' } },
         );
@@ -121,6 +126,9 @@ describe(fetchReplicaIntentOutcomes, () => {
 
     expect(fetcher).toHaveBeenCalledTimes(2);
     expect(outcomes).toHaveLength(501);
-    expect(outcomes.at(-1)).toStrictEqual({ intentId: 'intent-500', status: 'executed' });
+    expect(outcomes.at(-1)).toStrictEqual({
+      intentId: 'intent-500',
+      status: 'executed',
+    });
   });
 });

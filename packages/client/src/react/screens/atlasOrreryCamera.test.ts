@@ -5,6 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+
 import { useOrreryCamera } from './atlasOrreryCamera.js';
 
 describe('useOrreryCamera module', () => {
@@ -13,7 +14,7 @@ describe('useOrreryCamera module', () => {
     // React 19 reports a null dispatcher via useState property access rather
     // than the classic "Invalid hook call" string — either is a real pin.
     expect(() => useOrreryCamera()).toThrow(
-      /Invalid hook call|dispatcher|useState|Cannot read properties of null/i,
+      /Invalid hook call|dispatcher|useState|Cannot read properties of null/iu,
     );
   });
 });

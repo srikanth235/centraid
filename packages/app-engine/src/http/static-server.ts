@@ -1,20 +1,12 @@
+import { randomBytes } from 'node:crypto';
 // governance: allow-repo-hygiene file-size-limit cohesive per-file static asset server; the .ts/.tsx transform, .module.css compile branch, and range/etag plumbing are one request path and share the cache/mtime helpers
 import { promises as fs } from 'node:fs';
-import { randomBytes } from 'node:crypto';
-import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import path from 'node:path';
+
 import * as esbuild from 'esbuild';
-import {
-  contentTypeFor,
-  isCssModuleFile,
-  resolveStaticPath,
-  SHARED_ASSET_FILES,
-  staticSecurityHeaders,
-} from './security.js';
+
 import { BUNDLE_REL_RE, findBundleByHash, prepareBundledIndex } from './app-bundle.js';
-import { compileCssModule } from './css-module.js';
-import { sendError } from './http-utils.js';
-import { DYNAMIC_QUALITY } from './compression.js';
 import {
   computeEtag,
   cssModuleVariantCache,
@@ -25,6 +17,16 @@ import {
   writeCompressible,
 } from './asset-variants.js';
 import { injectChangeBridge } from './bridge-script.js';
+import { DYNAMIC_QUALITY } from './compression.js';
+import { compileCssModule } from './css-module.js';
+import { sendError } from './http-utils.js';
+import {
+  contentTypeFor,
+  isCssModuleFile,
+  resolveStaticPath,
+  SHARED_ASSET_FILES,
+  staticSecurityHeaders,
+} from './security.js';
 
 /**
  * Assets that are shared verbatim by every app and therefore served from a
@@ -187,7 +189,12 @@ async function transformJsx(
     const message = err instanceof Error ? err.message : String(err);
     const shim = errorShim(message);
     const etag = computeEtag(Buffer.from(shim, 'utf8'));
-    jsxCache.set(cacheKey, { mtimeMs: stat.mtimeMs, ok: false, error: message, etag });
+    jsxCache.set(cacheKey, {
+      mtimeMs: stat.mtimeMs,
+      ok: false,
+      error: message,
+      etag,
+    });
     return { code: shim, etag };
   }
 }
@@ -345,7 +352,10 @@ export async function serveStatic(
     res.setHeader('Content-Type', contentType);
     res.setHeader('Cache-Control', 'no-store');
     for (const [k, v] of Object.entries(
-      staticSecurityHeaders({ inlineScriptNonce, frameAncestor: opts.frameAncestor }),
+      staticSecurityHeaders({
+        inlineScriptNonce,
+        frameAncestor: opts.frameAncestor,
+      }),
     )) {
       res.setHeader(k, v);
     }
@@ -367,7 +377,11 @@ export async function serveStatic(
     let cachedCss = cssModuleCache.get(file);
     if (!cachedCss || cachedCss.mtimeMs !== stat.mtimeMs) {
       const compiled = await compileCssModule(file, appDir);
-      cachedCss = { mtimeMs: stat.mtimeMs, code: compiled.js, etag: compiled.etag };
+      cachedCss = {
+        mtimeMs: stat.mtimeMs,
+        code: compiled.js,
+        etag: compiled.etag,
+      };
       cssModuleCache.set(file, cachedCss);
     }
     const raw = Buffer.from(cachedCss.code, 'utf8');

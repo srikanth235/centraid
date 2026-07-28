@@ -130,7 +130,7 @@ export function cronFieldMatch(
     let step = 1;
     const slash = part.indexOf('/');
     if (slash >= 0) {
-      step = parseInt(part.slice(slash + 1), 10) || 1;
+      step = Math.trunc(Number(part.slice(slash + 1))) || 1;
       part = part.slice(0, slash);
     }
     let lo = min;
@@ -138,7 +138,7 @@ export function cronFieldMatch(
     if (part !== '*' && part !== '?' && part !== '') {
       const resolve = (t: string): number => {
         const named = names[t.trim().toUpperCase()];
-        return named === undefined ? parseInt(t, 10) : named;
+        return named === undefined ? Math.trunc(Number(t)) : named;
       };
       if (part.includes('-')) {
         const [a, b] = part.split('-');

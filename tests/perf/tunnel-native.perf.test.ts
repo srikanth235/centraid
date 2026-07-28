@@ -5,6 +5,7 @@
  */
 import { existsSync } from 'node:fs';
 import path from 'node:path';
+
 import { recordQualityResult } from '@centraid/test-kit/quality-result';
 import { describe, expect, test } from 'vitest';
 
@@ -43,7 +44,14 @@ describe('tunnel-native.perf', () => {
       owner: OWNER,
       name: 'Native tunnel module load',
       status: passed ? 'passed' : 'failed',
-      measurements: [{ name: 'load wall clock', value: durationMs, unit: 'ms', budget: BUDGET_MS }],
+      measurements: [
+        {
+          name: 'load wall clock',
+          value: durationMs,
+          unit: 'ms',
+          budget: BUDGET_MS,
+        },
+      ],
     });
     expect(durationMs).toBeLessThan(BUDGET_MS);
   });

@@ -57,7 +57,12 @@ export interface MarketingTypeStyle {
 }
 
 export const marketingType = {
-  'display-1': { family: 'display', lineHeight: '1.1', size: 40, weight: '700' },
+  'display-1': {
+    family: 'display',
+    lineHeight: '1.1',
+    size: 40,
+    weight: '700',
+  },
   h2: { family: 'display', lineHeight: '1.25', size: 22, weight: '600' },
   h3: { family: 'sans', lineHeight: '1.3', size: 16, weight: '600' },
 } as const satisfies Record<string, MarketingTypeStyle>;

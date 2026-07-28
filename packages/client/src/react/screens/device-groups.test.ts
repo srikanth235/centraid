@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import type { CentraidGatewayDevice, GatewayMember } from '../../gateway-client.js';
 import { groupDevicesByMember, spacesFromGroups } from './device-groups.js';
 
@@ -32,12 +33,14 @@ const roster: GatewayMember[] = [
   },
 ];
 
-describe('groupDevicesByMember', () => {
+describe(groupDevicesByMember, () => {
   it('reads a person’s access off their bindings when the roster is unavailable', () => {
     const groups = groupDevicesByMember([device()], []);
     expect(groups).toHaveLength(1);
     expect(groups[0]?.label).toBe('Priya');
-    expect(groups[0]?.roles).toEqual([{ vaultId: 'v1', vaultName: 'Personal', role: 'write' }]);
+    expect(groups[0]?.roles).toStrictEqual([
+      { vaultId: 'v1', vaultName: 'Personal', role: 'write' },
+    ]);
   });
 
   it('prefers the roster’s authored roles over the inherited ones', () => {
@@ -50,8 +53,8 @@ describe('groupDevicesByMember', () => {
       [device(), device({ deviceId: 'enr_2', role: 'revoked' })],
       roster,
     );
-    expect(groups[0]?.devices.map((d) => d.deviceId)).toEqual(['enr_1']);
-    expect(groups[0]?.revoked.map((d) => d.deviceId)).toEqual(['enr_2']);
+    expect(groups[0]?.devices.map((d) => d.deviceId)).toStrictEqual(['enr_1']);
+    expect(groups[0]?.revoked.map((d) => d.deviceId)).toStrictEqual(['enr_2']);
   });
 
   it('lists a person with no devices, and sorts the caller first', () => {
@@ -59,17 +62,25 @@ describe('groupDevicesByMember', () => {
       [device({ memberId: 'mem_arun', memberLabel: 'Arun', current: true })],
       roster,
     );
-    expect(groups.map((group) => group.label)).toEqual(['Arun', 'Priya']);
+    expect(groups.map((group) => group.label)).toStrictEqual(['Arun', 'Priya']);
     expect(groups[0]?.isSelf).toBe(true);
-    expect(groups[1]?.devices).toEqual([]);
+    expect(groups[1]?.devices).toStrictEqual([]);
   });
 
   it('collects every space the caller can see, de-duplicated', () => {
     const groups = groupDevicesByMember(
-      [device(), device({ deviceId: 'enr_2', vaultId: 'v2', vaultName: 'Photos', role: 'read' })],
+      [
+        device(),
+        device({
+          deviceId: 'enr_2',
+          vaultId: 'v2',
+          vaultName: 'Photos',
+          role: 'read',
+        }),
+      ],
       [],
     );
-    expect(spacesFromGroups(groups)).toEqual([
+    expect(spacesFromGroups(groups)).toStrictEqual([
       { vaultId: 'v1', vaultName: 'Personal', role: 'write' },
       { vaultId: 'v2', vaultName: 'Photos', role: 'read' },
     ]);

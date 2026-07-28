@@ -1,17 +1,19 @@
+import crypto from 'node:crypto';
+import { promises as fs, mkdirSync } from 'node:fs';
+import path from 'node:path';
+
 import { tempDir, tempDirSync } from '@centraid/test-kit/temp-dir';
 // governance: allow-repo-hygiene file-size-limit (#408) one HTTP turn-routing suite sharing the same runtime and conversation-runner fixture; splitting would duplicate the protocol harness and its state assertions
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { promises as fs, mkdirSync } from 'node:fs';
-import path from 'node:path';
-import crypto from 'node:crypto';
-import { Runtime } from '../runtime.ts';
-import { startRuntimeHttpServer, type RuntimeHttpServerHandle } from './http-server.ts';
-import type { ConversationRunner } from '../conversation/runner.ts';
+
 import { ConversationHistoryStore } from '../conversation/history.ts';
+import type { ConversationRunner } from '../conversation/runner.ts';
+import { Runtime } from '../runtime.ts';
 import { makeJournalDbProvider } from '../stores/gateway-db.ts';
 import type { WorkspaceProvider } from '../stores/vault-workspace.ts';
-import type { AskModelInfo, AskModelPrefs } from './turn-routes.ts';
+import { startRuntimeHttpServer, type RuntimeHttpServerHandle } from './http-server.ts';
 import { TurnLimiter } from './turn-limiter.ts';
+import type { AskModelInfo, AskModelPrefs } from './turn-routes.ts';
 
 let workspace: string;
 let server: RuntimeHttpServerHandle;
@@ -19,7 +21,10 @@ let runtime: Runtime;
 
 async function bootstrap(opts: { runner?: ConversationRunner } = {}): Promise<void> {
   workspace = await tempDir(`centraid-chat-routes-${crypto.randomUUID()}-`);
-  runtime = new Runtime({ appsDir: workspace, conversationRunner: opts.runner });
+  runtime = new Runtime({
+    appsDir: workspace,
+    conversationRunner: opts.runner,
+  });
   server = await startRuntimeHttpServer({ runtime });
   await runtime.bootstrap();
 }
@@ -132,14 +137,14 @@ describe('turn-routes', () => {
       body: JSON.stringify({ conversationId: 'w1', message: 'hello' }),
     });
     expect(res.status).toBe(200);
-    expect(res.headers.get('content-type') ?? '').toMatch(/text\/event-stream/);
+    expect(res.headers.get('content-type') ?? '').toMatch(/text\/event-stream/u);
     const text = await res.text();
     // SSE frames: each event line + data line + blank.
-    expect(text).toMatch(/event: assistant.start/);
-    expect(text).toMatch(/event: assistant.delta/);
-    expect(text).toMatch(/"delta":"Hi "/);
-    expect(text).toMatch(/event: final/);
-    expect(text).toMatch(/event: end/);
+    expect(text).toMatch(/event: assistant.start/u);
+    expect(text).toMatch(/event: assistant.delta/u);
+    expect(text).toMatch(/"delta":"Hi "/u);
+    expect(text).toMatch(/event: final/u);
+    expect(text).toMatch(/event: end/u);
   });
 
   test('POST /_turn passes the runner-owned session file under the scratch dir', async () => {
@@ -154,7 +159,10 @@ describe('turn-routes', () => {
     await registerApp('demo');
     await fetch(`${server.url}/centraid/demo/_turn`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${server.token}`, 'content-type': 'application/json' },
+      headers: {
+        Authorization: `Bearer ${server.token}`,
+        'content-type': 'application/json',
+      },
       body: JSON.stringify({ conversationId: 'w1', message: 'hello' }),
     }).then((r) => r.text());
     expect(path.basename(seenSessionFile)).toBe('w1.jsonl');
@@ -185,10 +193,16 @@ describe('turn-routes', () => {
       await registerApp('demo');
       const res = await fetch(`${server.url}/centraid/demo/_turn`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${server.token}`, 'content-type': 'application/json' },
+        headers: {
+          Authorization: `Bearer ${server.token}`,
+          'content-type': 'application/json',
+        },
         // A client-minted id (crypto.randomUUID(), never provisioned via
         // `/_centraid-conversations/apps/demo/sessions`) has no matching row.
-        body: JSON.stringify({ conversationId: crypto.randomUUID(), message: 'hi' }),
+        body: JSON.stringify({
+          conversationId: crypto.randomUUID(),
+          message: 'hi',
+        }),
       });
       expect(res.status).toBe(404);
       const body = (await res.json()) as { error: string; message: string };
@@ -208,7 +222,10 @@ describe('turn-routes', () => {
     const post = (body: unknown): Promise<Response> =>
       fetch(`${server.url}/centraid/demo/_turn`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${server.token}`, 'content-type': 'application/json' },
+        headers: {
+          Authorization: `Bearer ${server.token}`,
+          'content-type': 'application/json',
+        },
         body: JSON.stringify(body),
       });
     await (await post({ conversationId: session.id, message: 'why' })).text();
@@ -217,14 +234,22 @@ describe('turn-routes', () => {
     };
     // Regenerate: same prompt, pointing retryOf at the first answer's turn.
     await (
-      await post({ conversationId: session.id, message: 'why', retryOf: firstAi.turnId })
+      await post({
+        conversationId: session.id,
+        message: 'why',
+        retryOf: firstAi.turnId,
+      })
     ).text();
 
     const loaded = store.getSession('demo', session.id);
     // The family collapses to one user + one ai row, with a 2-attempt pager.
     expect(loaded?.messages.length).toBe(2);
     const ai = loaded?.messages[1]!.payload as {
-      retry?: { count: number; index: number; attempts: Array<{ turnId: string }> };
+      retry?: {
+        count: number;
+        index: number;
+        attempts: Array<{ turnId: string }>;
+      };
     };
     expect(ai.retry?.count).toBe(2);
     expect(ai.retry?.attempts[0]?.turnId).toBe(firstAi.turnId);
@@ -245,17 +270,24 @@ describe('turn-routes', () => {
     const post = (): Promise<Response> =>
       fetch(`${server.url}/centraid/demo/_turn`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${server.token}`, 'content-type': 'application/json' },
-        body: JSON.stringify({ conversationId: session.id, message: 'q', idempotencyKey: key }),
+        headers: {
+          Authorization: `Bearer ${server.token}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          conversationId: session.id,
+          message: 'q',
+          idempotencyKey: key,
+        }),
       });
     const first = await (await post()).text();
-    expect(first).toMatch(/event: final/);
+    expect(first).toMatch(/event: final/u);
     // Second POST, SAME key: the runner is NOT invoked again; the recorded final
     // answer is replayed from the ledger as a fresh stream.
     const second = await (await post()).text();
     expect(runs).toBe(1);
-    expect(second).toMatch(/event: final/);
-    expect(second).toMatch(/"text":"answer once"/);
+    expect(second).toMatch(/event: final/u);
+    expect(second).toMatch(/"text":"answer once"/u);
     // Only one turn was recorded — the replay never wrote a second row.
     expect(store.getSession('demo', session.id)?.messages.length).toBe(2);
   });
@@ -280,8 +312,15 @@ describe('turn-routes', () => {
     const post = (): Promise<Response> =>
       fetch(`${server.url}/centraid/demo/_turn`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${server.token}`, 'content-type': 'application/json' },
-        body: JSON.stringify({ conversationId: session.id, message: 'q', idempotencyKey: key }),
+        headers: {
+          Authorization: `Bearer ${server.token}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          conversationId: session.id,
+          message: 'q',
+          idempotencyKey: key,
+        }),
       });
     const p1 = post();
     const p2 = post();
@@ -293,8 +332,8 @@ describe('turn-routes', () => {
     release();
     const [t1, t2] = await Promise.all([p1.then((r) => r.text()), p2.then((r) => r.text())]);
     expect(runs).toBe(1);
-    expect(t1).toMatch(/event: final/);
-    expect(t2).toMatch(/event: final/);
+    expect(t1).toMatch(/event: final/u);
+    expect(t2).toMatch(/event: final/u);
     expect(store.getSession('demo', session.id)?.messages.length).toBe(2);
   });
 
@@ -313,14 +352,21 @@ describe('turn-routes', () => {
     const post = (): Promise<Response> =>
       fetch(`${server.url}/centraid/demo/_turn`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${server.token}`, 'content-type': 'application/json' },
-        body: JSON.stringify({ conversationId: session.id, message: 'q', idempotencyKey: key }),
+        headers: {
+          Authorization: `Bearer ${server.token}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          conversationId: session.id,
+          message: 'q',
+          idempotencyKey: key,
+        }),
       });
     await (await post()).text();
     const second = await (await post()).text();
     expect(runs).toBe(1);
-    expect(second).toMatch(/event: error/);
-    expect(second).toMatch(/"message":"boom"/);
+    expect(second).toMatch(/event: error/u);
+    expect(second).toMatch(/"message":"boom"/u);
   });
 
   test('POST /_turn is rejected with 429 + Retry-After when the vault turn limiter is saturated (#420)', async () => {
@@ -330,7 +376,10 @@ describe('turn-routes', () => {
       },
     };
     const limiter = new TurnLimiter(1);
-    const { store } = await bootstrapWithStore({ runner, turnLimiter: () => limiter });
+    const { store } = await bootstrapWithStore({
+      runner,
+      turnLimiter: () => limiter,
+    });
     await registerApp('demo');
     const session = store.createSession('demo', '');
     // Pre-acquire the single slot so the route sees a saturated limiter.
@@ -338,7 +387,10 @@ describe('turn-routes', () => {
     expect(release).toBeDefined();
     const res = await fetch(`${server.url}/centraid/demo/_turn`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${server.token}`, 'content-type': 'application/json' },
+      headers: {
+        Authorization: `Bearer ${server.token}`,
+        'content-type': 'application/json',
+      },
       body: JSON.stringify({ conversationId: session.id, message: 'hi' }),
     });
     expect(res.status).toBe(429);
@@ -349,7 +401,10 @@ describe('turn-routes', () => {
     release?.();
     const ok = await fetch(`${server.url}/centraid/demo/_turn`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${server.token}`, 'content-type': 'application/json' },
+      headers: {
+        Authorization: `Bearer ${server.token}`,
+        'content-type': 'application/json',
+      },
       body: JSON.stringify({ conversationId: session.id, message: 'hi' }),
     });
     expect(ok.status).toBe(200);
@@ -363,18 +418,30 @@ describe('turn-routes', () => {
       },
     };
     const limiter = new TurnLimiter(2);
-    const { store } = await bootstrapWithStore({ runner, turnLimiter: () => limiter });
+    const { store } = await bootstrapWithStore({
+      runner,
+      turnLimiter: () => limiter,
+    });
     await registerApp('demo');
     const session = store.createSession('demo', '');
-    for (let i = 0; i < 5; i++) {
+    const completeTurn = async (index: number): Promise<void> => {
+      if (index >= 5) return;
       await (
         await fetch(`${server.url}/centraid/demo/_turn`, {
           method: 'POST',
-          headers: { Authorization: `Bearer ${server.token}`, 'content-type': 'application/json' },
-          body: JSON.stringify({ conversationId: session.id, message: `hi ${i}` }),
+          headers: {
+            Authorization: `Bearer ${server.token}`,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            conversationId: session.id,
+            message: `hi ${index}`,
+          }),
         })
       ).text();
-    }
+      return completeTurn(index + 1);
+    };
+    await completeTurn(0);
     // Every turn ran to completion, so the count is back to zero.
     expect(limiter.count()).toBe(0);
   });
@@ -393,13 +460,16 @@ describe('turn-routes', () => {
     const session = store.createSession('demo', '');
     const res = await fetch(`${server.url}/centraid/demo/_turn`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${server.token}`, 'content-type': 'application/json' },
+      headers: {
+        Authorization: `Bearer ${server.token}`,
+        'content-type': 'application/json',
+      },
       body: JSON.stringify({ conversationId: session.id, message: 'hi' }),
     });
     expect(res.status).toBe(200);
     const text = await res.text();
-    expect(text).toMatch(/event: final/);
-    expect(text).toMatch(/"text":"ok"/);
+    expect(text).toMatch(/event: final/u);
+    expect(text).toMatch(/"text":"ok"/u);
   });
 
   test('GET /centraid/_turn/runner-status returns "none" when no runner configured', async () => {
@@ -423,12 +493,15 @@ describe('turn-routes', () => {
     await registerApp('demo');
     const res = await fetch(`${server.url}/centraid/demo/_turn`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${server.token}`, 'content-type': 'application/json' },
+      headers: {
+        Authorization: `Bearer ${server.token}`,
+        'content-type': 'application/json',
+      },
       body: JSON.stringify({ conversationId: 'w1', message: 'hello' }),
     });
     const text = await res.text();
-    expect(text).toMatch(/event: error/);
-    expect(text).toMatch(/"message":"model went poof"/);
+    expect(text).toMatch(/event: error/u);
+    expect(text).toMatch(/"message":"model went poof"/u);
   });
 
   test('conversationLocks are per-runtime — two runtimes sharing appId+conversationId do not cross-block (#113)', async () => {
@@ -457,7 +530,10 @@ describe('turn-routes', () => {
       },
     };
     const workspaceA = await tempDir(`centraid-chat-iso-A-${crypto.randomUUID()}-`);
-    const runtimeA = new Runtime({ appsDir: workspaceA, conversationRunner: runnerA });
+    const runtimeA = new Runtime({
+      appsDir: workspaceA,
+      conversationRunner: runnerA,
+    });
     const serverA = await startRuntimeHttpServer({ runtime: runtimeA });
     await runtimeA.bootstrap();
     await runtimeA.registry.ensureUploaded('demo');
@@ -469,7 +545,10 @@ describe('turn-routes', () => {
       },
     };
     const workspaceB = await tempDir(`centraid-chat-iso-B-${crypto.randomUUID()}-`);
-    const runtimeB = new Runtime({ appsDir: workspaceB, conversationRunner: runnerB });
+    const runtimeB = new Runtime({
+      appsDir: workspaceB,
+      conversationRunner: runnerB,
+    });
     const serverB = await startRuntimeHttpServer({ runtime: runtimeB });
     await runtimeB.bootstrap();
     await runtimeB.registry.ensureUploaded('demo');
@@ -510,13 +589,13 @@ describe('turn-routes', () => {
         ),
       ]);
 
-      expect(bText).toMatch(/event: final/);
-      expect(bText).toMatch(/"text":"b-final"/);
+      expect(bText).toMatch(/event: final/u);
+      expect(bText).toMatch(/"text":"b-final"/u);
 
       // Now release A and confirm it completes too.
       releaseA();
       const aText = await aResponsePromise;
-      expect(aText).toMatch(/"text":"a-final"/);
+      expect(aText).toMatch(/"text":"a-final"/u);
     } finally {
       releaseA();
       await Promise.all([
@@ -568,7 +647,11 @@ describe('turn-routes', () => {
         queries: [
           {
             name: 'listNotes',
-            input: { type: 'object', properties: {}, additionalProperties: false },
+            input: {
+              type: 'object',
+              properties: {},
+              additionalProperties: false,
+            },
           },
         ],
       }),
@@ -584,14 +667,17 @@ describe('turn-routes', () => {
 
     await fetch(`${server.url}/centraid/demo/_turn`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${server.token}`, 'content-type': 'application/json' },
+      headers: {
+        Authorization: `Bearer ${server.token}`,
+        'content-type': 'application/json',
+      },
       body: JSON.stringify({ conversationId: 'w1', message: 'hi' }),
     }).then((r) => r.text());
 
     await fs.rm(codeDir, { recursive: true, force: true });
-    expect(seenPrompt).toMatch(/addNote/);
-    expect(seenPrompt).toMatch(/listNotes/);
-    expect(seenPrompt).not.toMatch(/manifest unavailable/);
+    expect(seenPrompt).toMatch(/addNote/u);
+    expect(seenPrompt).toMatch(/listNotes/u);
+    expect(seenPrompt).not.toMatch(/manifest unavailable/u);
   });
 
   // ---------- Ask-model picker (GET/PUT /centraid/<appId>/_turn/model) ----------
@@ -645,7 +731,10 @@ describe('turn-routes', () => {
     await registerApp('demo');
     const res = await fetch(`${server.url}/centraid/demo/_turn/model`, {
       method: 'PUT',
-      headers: { Authorization: `Bearer ${server.token}`, 'content-type': 'application/json' },
+      headers: {
+        Authorization: `Bearer ${server.token}`,
+        'content-type': 'application/json',
+      },
       body: JSON.stringify({ model: 'gpt-5.5' }),
     });
     expect(res.status).toBe(503);
@@ -687,13 +776,19 @@ describe('turn-routes', () => {
   });
 
   test('PUT /_turn/model sets the override and GET reflects it', async () => {
-    const askModel = fakeAskModel({ runnerKind: 'codex', defaultModel: 'gpt-5.5' });
+    const askModel = fakeAskModel({
+      runnerKind: 'codex',
+      defaultModel: 'gpt-5.5',
+    });
     await bootstrapWithAskModel(askModel);
     await registerApp('demo');
 
     const putRes = await fetch(`${server.url}/centraid/demo/_turn/model`, {
       method: 'PUT',
-      headers: { Authorization: `Bearer ${server.token}`, 'content-type': 'application/json' },
+      headers: {
+        Authorization: `Bearer ${server.token}`,
+        'content-type': 'application/json',
+      },
       body: JSON.stringify({ model: 'gpt-5.5-mini' }),
     });
     expect(putRes.status).toBe(200);
@@ -708,14 +803,20 @@ describe('turn-routes', () => {
   });
 
   test('PUT /_turn/model with model: null clears the override back to default', async () => {
-    const askModel = fakeAskModel({ runnerKind: 'codex', defaultModel: 'gpt-5.5' });
+    const askModel = fakeAskModel({
+      runnerKind: 'codex',
+      defaultModel: 'gpt-5.5',
+    });
     askModel.current = 'gpt-5.5-mini'; // pre-existing override
     await bootstrapWithAskModel(askModel);
     await registerApp('demo');
 
     const res = await fetch(`${server.url}/centraid/demo/_turn/model`, {
       method: 'PUT',
-      headers: { Authorization: `Bearer ${server.token}`, 'content-type': 'application/json' },
+      headers: {
+        Authorization: `Bearer ${server.token}`,
+        'content-type': 'application/json',
+      },
       body: JSON.stringify({ model: null }),
     });
     expect(res.status).toBe(200);
@@ -728,7 +829,10 @@ describe('turn-routes', () => {
     await registerApp('demo');
     const res = await fetch(`${server.url}/centraid/demo/_turn/model`, {
       method: 'PUT',
-      headers: { Authorization: `Bearer ${server.token}`, 'content-type': 'application/json' },
+      headers: {
+        Authorization: `Bearer ${server.token}`,
+        'content-type': 'application/json',
+      },
       body: JSON.stringify({ model: 42 }),
     });
     expect(res.status).toBe(400);

@@ -165,7 +165,11 @@ export function validateAddGatewayFields(input: {
 }): AddGatewayFieldError {
   const label = input.label.trim();
   if (!label)
-    return { ok: false, code: 'invalid_input', message: 'Gateway label cannot be empty.' };
+    return {
+      ok: false,
+      code: 'invalid_input',
+      message: 'Gateway label cannot be empty.',
+    };
   const endpointId = input.endpointId.trim();
   if (!endpointId || !isValidGatewayId(endpointId)) {
     return {

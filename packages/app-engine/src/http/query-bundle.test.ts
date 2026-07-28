@@ -1,9 +1,11 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
 import { Buffer } from 'node:buffer';
 import { promises as fs } from 'node:fs';
 import type { IncomingHttpHeaders, IncomingMessage, ServerResponse } from 'node:http';
 import path from 'node:path';
+
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
 import { Runtime } from '../runtime.js';
 import {
   clearQueryBundleCaches,
@@ -133,14 +135,14 @@ describe('query-bundle', () => {
     it('serves a directly importable declared query with its helper', async () => {
       const response = await request('/centraid/demo/_query/list.mjs');
       expect(response.status).toBe(200);
-      expect(response.headers.get('content-type')).toMatch(/^application\/javascript/);
+      expect(response.headers.get('content-type')).toMatch(/^application\/javascript/u);
       expect(response.headers.get('cache-control')).toBe('private, no-cache');
       expect(response.headers.get(QUERY_NAME_HEADER)).toBe('list');
-      expect(response.headers.get(QUERY_SOURCE_HASH_HEADER)).toMatch(/^[0-9a-f]{64}$/);
+      expect(response.headers.get(QUERY_SOURCE_HASH_HEADER)).toMatch(/^[0-9a-f]{64}$/u);
       expect(response.headers.get('access-control-expose-headers')).toContain(
         QUERY_SOURCE_HASH_HEADER,
       );
-      expect(response.headers.get('etag')).toMatch(/^"[0-9a-f]{64}"$/);
+      expect(response.headers.get('etag')).toMatch(/^"[0-9a-f]{64}"$/u);
       const code = await response.text();
       expect(code).toContain('live-v1');
       expect(code).not.toContain('ACTION_SECRET_MUST_NOT_BUNDLE');
@@ -152,12 +154,12 @@ describe('query-bundle', () => {
     it('bundles a TypeScript query entry with a .ts sibling import, stripping types', async () => {
       const response = await request('/centraid/demo/_query/typed.mjs');
       expect(response.status).toBe(200);
-      expect(response.headers.get('content-type')).toMatch(/^application\/javascript/);
+      expect(response.headers.get('content-type')).toMatch(/^application\/javascript/u);
       expect(response.headers.get(QUERY_NAME_HEADER)).toBe('typed');
       const code = await response.text();
       // Type syntax is gone; the sibling helper's runtime code is bundled in.
-      expect(code).not.toMatch(/interface\s+Out/);
-      expect(code).not.toMatch(/:\s*string/);
+      expect(code).not.toMatch(/interface\s+Out/u);
+      expect(code).not.toMatch(/:\s*string/u);
       await expect(evaluateDefault(code, response.headers.get('etag')!)).resolves.toStrictEqual({
         value: 'typed-live-v1',
       });
@@ -168,20 +170,27 @@ describe('query-bundle', () => {
         headers: { 'x-centraid-web-app': 'another-app' },
       });
       expect(response.status).toBe(403);
-      await expect(response.json()).resolves.toMatchObject({ error: 'app_session_scope' });
+      await expect(response.json()).resolves.toMatchObject({
+        error: 'app_session_scope',
+      });
     });
 
     it('keeps action sources inaccessible and refuses query imports that leave queries/', async () => {
       const actionAsQuery = await request('/centraid/demo/_query/mutate.mjs');
       expect(actionAsQuery.status).toBe(404);
-      await expect(actionAsQuery.json()).resolves.toMatchObject({ error: 'unknown_query' });
+      await expect(actionAsQuery.json()).resolves.toMatchObject({
+        error: 'unknown_query',
+      });
 
       expect((await request('/centraid/demo/actions/mutate.js')).status).toBe(404);
       expect((await request('/centraid/demo/queries/list.js')).status).toBe(404);
 
       const leakingQuery = await request('/centraid/demo/_query/leak.mjs');
       expect(leakingQuery.status).toBe(422);
-      const failure = (await leakingQuery.json()) as { error: string; message: string };
+      const failure = (await leakingQuery.json()) as {
+        error: string;
+        message: string;
+      };
       expect(failure.error).toBe('query_bundle_failed');
       expect(failure.message).toContain('escapes queries/');
       expect(failure.message).not.toContain('ACTION_SECRET_MUST_NOT_BUNDLE');
@@ -209,11 +218,15 @@ describe('query-bundle', () => {
     it('rejects undeclared and traversal-shaped query names with typed errors', async () => {
       const undeclared = await request('/centraid/demo/_query/not-declared.mjs');
       expect(undeclared.status).toBe(404);
-      await expect(undeclared.json()).resolves.toMatchObject({ error: 'unknown_query' });
+      await expect(undeclared.json()).resolves.toMatchObject({
+        error: 'unknown_query',
+      });
 
       const traversal = await request('/centraid/demo/_query/%2E%2E%2Faction%2Fmutate.mjs');
       expect(traversal.status).toBe(400);
-      await expect(traversal.json()).resolves.toMatchObject({ error: 'invalid_query_name' });
+      await expect(traversal.json()).resolves.toMatchObject({
+        error: 'invalid_query_name',
+      });
     });
 
     it('returns stable hashes and ETags, 304s matches, and invalidates on source edits', async () => {
@@ -266,8 +279,11 @@ describe('query-bundle', () => {
     it('fails syntax errors as typed JSON without serving executable fallback code', async () => {
       const response = await request('/centraid/demo/_query/broken.mjs');
       expect(response.status).toBe(422);
-      expect(response.headers.get('content-type')).toMatch(/^application\/json/);
-      const body = (await response.json()) as { error: string; message: string };
+      expect(response.headers.get('content-type')).toMatch(/^application\/json/u);
+      const body = (await response.json()) as {
+        error: string;
+        message: string;
+      };
       expect(body.error).toBe('query_bundle_failed');
       expect(body.message).toContain('broken.js');
     });

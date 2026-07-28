@@ -1,13 +1,15 @@
 import { type JSX, useEffect, useState } from 'react';
+
+import { cx } from '../../ui/cx.js';
 import { iconSvg } from '../iconSvg.js';
-import spaceModalStyles from './SpaceModal.module.css';
-import connectFlowStyles from './ConnectFlow.module.css';
+import type { ConnectivityReport } from './connectFlow-core.js';
+import { runConnectivityTest } from './connectFlowIO.js';
+import HandshakeLadder, { reportSummaryText } from './HandshakeLadder.js';
+
 import controlsCss from '../../styles/controls.module.css';
 import buttonCss from '../../ui/Button.module.css';
-import { cx } from '../../ui/cx.js';
-import HandshakeLadder, { reportSummaryText } from './HandshakeLadder.js';
-import { runConnectivityTest } from './connectFlowIO.js';
-import type { ConnectivityReport } from './connectFlow-core.js';
+import connectFlowStyles from './ConnectFlow.module.css';
+import spaceModalStyles from './SpaceModal.module.css';
 
 export interface TestConnectionModalProps {
   gatewayId: string;
@@ -27,7 +29,10 @@ export default function TestConnectionModal({
   // The report is stamped with the (gateway, attempt) that produced it, so a
   // retry reads as pending during render rather than needing the effect to
   // clear the previous report first.
-  const [settled, setSettled] = useState<{ key: string; report: ConnectivityReport } | null>(null);
+  const [settled, setSettled] = useState<{
+    key: string;
+    report: ConnectivityReport;
+  } | null>(null);
   const key = `${gatewayId} ${attempt}`;
   const report = settled !== null && settled.key === key ? settled.report : null;
   const pending = report === null;

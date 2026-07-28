@@ -20,7 +20,10 @@ await runFlow('cross-network-relay', async (ctx) => {
   // the gateway's container, no relay override. Whatever createTunnelClient's
   // real default does (n0 production preset — confirmed by reading
   // packages/tunnel/src/client.ts, not assumed) is what runs here.
-  const device = await ctx.runDevice({ ticket: raw, probeTarget: '/centraid/_vault/vaults' });
+  const device = await ctx.runDevice({
+    ticket: raw,
+    probeTarget: '/centraid/_vault/vaults',
+  });
   if (device.error && !device.paired) {
     throw new Error(`device container reported a fatal error: ${device.error}`);
   }

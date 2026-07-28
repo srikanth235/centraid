@@ -86,7 +86,12 @@ export function lintWorkflowSource(name, source) {
     if (/^jobs:\s*$/u.test(line)) inJobs = true;
     // A job key is exactly two-space indented under `jobs:`.
     if (inJobs && /^ {2}[A-Za-z0-9_-]+:\s*$/u.test(line)) {
-      job = { name: trimmed.slice(0, -1), line: lineNo, hasTimeout: false, callsWorkflow: false };
+      job = {
+        name: trimmed.slice(0, -1),
+        line: lineNo,
+        hasTimeout: false,
+        callsWorkflow: false,
+      };
       jobs.push(job);
     }
     if (job && /^ {4}timeout-minutes:/u.test(line)) job.hasTimeout = true;

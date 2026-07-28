@@ -1,9 +1,12 @@
-import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { createHash } from 'node:crypto';
 import { rmSync } from 'node:fs';
 import path from 'node:path';
 import { Readable } from 'node:stream';
+
+import { forEachSequentially } from '@centraid/test-kit/sequential';
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { afterEach, describe, expect, test } from 'vitest';
+
 import { readBackupPolicy } from '../backup-policy.js';
 import { bootstrapVault } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
@@ -24,13 +27,12 @@ const TEST_CHUNK_BYTES = 1024 * 1024;
 describe('stream-ingress', () => {
   const cleanups: Array<() => Promise<void> | void> = [];
   afterEach(async () => {
-    while (cleanups.length > 0) await cleanups.pop()?.();
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
   });
 
   test('stream-ingress module exports the 16 MiB default chunk size', () => {
     expect(STREAM_INGRESS_CHUNK_BYTES).toBe(16 * 1024 * 1024);
-    // Class is exercised by the coordinator stream-through suites below; pin
-    // the named export remains constructible without a typeof-only smoke.
+    // Keep the named export constructible; coordinator suites exercise it below.
     expect(RemoteStreamIngress.name).toBe('RemoteStreamIngress');
   });
 
@@ -122,7 +124,12 @@ describe('stream-ingress', () => {
       temporary,
       partUploads,
       copies,
-      remote: { store, transfer, keyFor: (sha) => keys.getOrCreate(sha), frameSize: 1024 * 1024 },
+      remote: {
+        store,
+        transfer,
+        keyFor: (sha) => keys.getOrCreate(sha),
+        frameSize: 1024 * 1024,
+      },
     };
   }
 
@@ -170,7 +177,10 @@ describe('stream-ingress', () => {
     const MiB = 1024 ** 2;
     const h = await harness({ budgetBytes: 200 * MiB, freeBytes: 210 * MiB });
     const begin = await h.coordinator().beginIngress({ expectedSize: 500 * MiB });
-    expect(begin).toStrictEqual({ mode: 'one-shot-hash-pending', expectedSize: 500 * MiB });
+    expect(begin).toStrictEqual({
+      mode: 'one-shot-hash-pending',
+      expectedSize: 500 * MiB,
+    });
   });
 
   test('capacity pressure plus an unreachable provider stays typed 429-ready backpressure', async () => {
@@ -243,7 +253,7 @@ describe('stream-ingress', () => {
           { expectedSha256: '0'.repeat(64), expectedSize: plain.length },
           Readable.from([plain]),
         ),
-    ).rejects.toThrow(/SHA-256 mismatch/i);
+    ).rejects.toThrow(/SHA-256 mismatch/iu);
     expect(h.fake.objects.size).toBe(0);
     expect(h.fake.temporary.size).toBe(0);
   });
@@ -298,7 +308,7 @@ describe('stream-ingress', () => {
     const missing = await begin(Buffer.from('missing provider temp'));
     await expect(
       coordinator.completeDirect(missing.sessionId, 'paired-tablet-key'),
-    ).rejects.toThrow(/size mismatch/);
+    ).rejects.toThrow(/size mismatch/u);
 
     const corrupt = await begin(Buffer.from('tampered provider temp'));
     const corruptRow = coordinator.state.session(corrupt.sessionId)!;
@@ -307,7 +317,7 @@ describe('stream-ingress', () => {
     h.fake.temporary.set(corruptRow.remote_temp_id!, tampered);
     await expect(
       coordinator.completeDirect(corrupt.sessionId, 'paired-tablet-key'),
-    ).rejects.toThrow(/magic/);
+    ).rejects.toThrow(/magic/u);
     expect(h.cache.replica.has(corrupt.sha)).toBe(false);
 
     const wrongSize = await begin(Buffer.from('declared size must bind the directory'), 999);
@@ -315,7 +325,7 @@ describe('stream-ingress', () => {
     h.fake.temporary.set(wrongRow.remote_temp_id!, wrongSize.sealed);
     await expect(
       coordinator.completeDirect(wrongSize.sessionId, 'paired-tablet-key'),
-    ).rejects.toThrow(/plaintext size mismatch/);
+    ).rejects.toThrow(/plaintext size mismatch/u);
     expect(h.cache.replica.has(wrongSize.sha)).toBe(false);
   });
 
@@ -331,7 +341,6 @@ describe('stream-ingress', () => {
     const plain = Buffer.from('these bytes already live in the remote content-addressed store');
     const sha = sha256OfBytes(plain);
     const sealed = sealBlob(h.keys.getOrCreate(sha), sha, plain, 1024 * 1024);
-    // Remote tier holds the sealed object ⇒ custody remote-only, casAck replicated.
     h.fake.objects.set(sha, sealed);
 
     const result = await coordinator.beginDirect({
@@ -364,7 +373,6 @@ describe('stream-ingress', () => {
     const plain = Buffer.from('these bytes are on disk but not yet pushed offsite');
     const sha = sha256OfBytes(plain);
     const sealed = sealBlob(h.keys.getOrCreate(sha), sha, plain, 1024 * 1024);
-    // Local tier only; the remote provider genuinely does not hold it yet.
     h.local.putSync(sha, sealed);
 
     const result = await coordinator.beginDirect({
@@ -406,7 +414,10 @@ describe('stream-ingress', () => {
       stagedBy: 'device-a',
       resumable: true,
     });
-    expect(resumed).toMatchObject({ mode: 'stream-through', offset: TEST_CHUNK_BYTES });
+    expect(resumed).toMatchObject({
+      mode: 'stream-through',
+      offset: TEST_CHUNK_BYTES,
+    });
     if (resumed.mode !== 'stream-through') throw new Error('expected resumed stream-through');
     await second.appendIngress(resumed.sessionId, resumed.offset, plain.subarray(TEST_CHUNK_BYTES));
     second.state.setSessionState(resumed.sessionId, 'committing');
@@ -418,22 +429,16 @@ describe('stream-ingress', () => {
       stagedBy: 'device-a',
       resumable: true,
     });
-    expect(committing).toMatchObject({ mode: 'stream-through', offset: plain.length });
+    expect(committing).toMatchObject({
+      mode: 'stream-through',
+      offset: plain.length,
+    });
     if (committing.mode !== 'stream-through') throw new Error('expected committing session');
     const committed = await third.commitIngress(committing.sessionId);
     expect(committed).toMatchObject({ sha256: sha, custody: 'remote-only' });
     expect(h.fake.partUploads).toStrictEqual([1, 2]);
     expect(unsealBlob(h.keys.getOrCreate(sha), sha, h.fake.objects.get(sha)!)).toStrictEqual(plain);
-    // Raised, not removed. This is the test whose 15s cap surfaced the whole
-    // sweep: written as a RAISE against the old 5s default, it silently became a
-    // CAP when the default moved to 30s, and it timed out at exactly 15000ms in
-    // ci run 29755774783 while passing locally with zero assertion failures.
-    // Dropping to the 30s default is still not enough headroom — it seals, hashes
-    // and writes two full 1 MiB chunks through the real multipart path, ~4.6s
-    // locally, and the ~10x worst-case hosted-runner disk penalty documented in
-    // packages/test-kit/src/vitest.ts puts that near 46s. The payload is left
-    // alone deliberately: `streamChunkBytes` is injectable, but 1 MiB is what
-    // makes this a genuine multi-part resume, so shrinking it to buy time would
-    // quietly narrow what the test covers.
+    // This is a deliberate 60s raise: real two-part sealing/hashing/writes take
+    // ~4.6s locally and can approach 46s under hosted-runner disk variance.
   }, 60_000);
 });

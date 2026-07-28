@@ -2,10 +2,11 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import BackupCard, { type BackupCardProps, type BackupStatusDTO } from './BackupCard.js';
-import type { BackupPolicyDTO, BackupPolicyPatchDTO } from './BackupPolicyPanel.js';
-import type { BackupReconciliationDTO } from './BackupInventoryPanel.js';
+
 import type { UsageInput } from '../../storage-metrics.js';
+import BackupCard, { type BackupCardProps, type BackupStatusDTO } from './BackupCard.js';
+import type { BackupReconciliationDTO } from './BackupInventoryPanel.js';
+import type { BackupPolicyDTO, BackupPolicyPatchDTO } from './BackupPolicyPanel.js';
 
 const NOW = Date.UTC(2026, 6, 11, 12, 0, 0);
 
@@ -82,7 +83,10 @@ describe('screens/BackupCard', () => {
       type: 'application/json',
     });
     Object.defineProperty(file, 'text', { value: async () => contents });
-    Object.defineProperty(fileInput, 'files', { configurable: true, value: [file] });
+    Object.defineProperty(fileInput, 'files', {
+      configurable: true,
+      value: [file],
+    });
     fileInput.dispatchEvent(new Event('change', { bubbles: true }));
     await Promise.resolve();
     await Promise.resolve();
@@ -133,7 +137,13 @@ describe('screens/BackupCard', () => {
       );
       const loadStatus = vi.fn<BackupCardProps['loadStatus']>().mockResolvedValue({
         configured: true,
-        vaults: [{ vaultId: 'v1', name: 'Main', pendingOffsite: { count: 1, bytes: 9 } }],
+        vaults: [
+          {
+            vaultId: 'v1',
+            name: 'Main',
+            pendingOffsite: { count: 1, bytes: 9 },
+          },
+        ],
       });
       await mount({ loadStatus, streamCustody, onRunNow: neverRun });
 
@@ -249,8 +259,16 @@ describe('screens/BackupCard', () => {
       const bucketResult: BackupReconciliationDTO = {
         ...reconciliation,
         mode: 'bucket',
-        backup: { ...reconciliation.backup, source: 'bucket', providerAttested: false },
-        cas: { ...reconciliation.cas, source: 'bucket', providerAttested: false },
+        backup: {
+          ...reconciliation.backup,
+          source: 'bucket',
+          providerAttested: false,
+        },
+        cas: {
+          ...reconciliation.cas,
+          source: 'bucket',
+          providerAttested: false,
+        },
       };
       const onVerifyBucket = vi
         .fn<NonNullable<BackupCardProps['onVerifyBucket']>>()
@@ -362,7 +380,13 @@ describe('screens/BackupCard', () => {
       };
       const after: BackupStatusDTO = {
         configured: true,
-        vaults: [{ vaultId: 'v1', name: 'Main', lastBackupAt: new Date(NOW).toISOString() }],
+        vaults: [
+          {
+            vaultId: 'v1',
+            name: 'Main',
+            lastBackupAt: new Date(NOW).toISOString(),
+          },
+        ],
       };
       const loadStatus = vi
         .fn<BackupCardProps['loadStatus']>()
@@ -508,7 +532,9 @@ describe('screens/BackupCard', () => {
         await Promise.resolve();
       });
 
-      expect(onExportRecoveryKit).toHaveBeenCalledWith({ password: 'correct horse' });
+      expect(onExportRecoveryKit).toHaveBeenCalledWith({
+        password: 'correct horse',
+      });
       expect(onConfirmRecoveryKit).toHaveBeenCalledWith({
         kit: { format: 'centraid-recovery-kit/2' },
         password: 'correct horse',
@@ -546,7 +572,9 @@ describe('screens/BackupCard', () => {
         await Promise.resolve();
         await Promise.resolve();
       });
-      expect(onExportRecoveryKit).toHaveBeenCalledWith({ password: 'correct horse' });
+      expect(onExportRecoveryKit).toHaveBeenCalledWith({
+        password: 'correct horse',
+      });
       expect(onConfirmRecoveryKit).not.toHaveBeenCalled();
       expect(el.textContent).toContain('Re-select the saved file');
     });
@@ -629,7 +657,12 @@ describe('screens/BackupCard', () => {
       ],
       recoveryKit: { confirmedAt: Math.floor(NOW / 1000) },
       home: {
-        retention: { kind: 'ladder', keepAllDays: 7, dailyDays: 30, weeklyDays: 90 },
+        retention: {
+          kind: 'ladder',
+          keepAllDays: 7,
+          dailyDays: 30,
+          weeklyDays: 90,
+        },
         restoreCostClass: 'metered-egress',
       },
     };
@@ -672,7 +705,10 @@ describe('screens/BackupCard', () => {
       const el = await mount({
         loadStatus: vi.fn<BackupCardProps['loadStatus']>().mockResolvedValue({
           ...freshStatus,
-          home: { retention: { kind: 'none' }, restoreCostClass: 'free-egress' },
+          home: {
+            retention: { kind: 'none' },
+            restoreCostClass: 'free-egress',
+          },
         }),
         onRunNow: neverRun,
       });
@@ -683,9 +719,9 @@ describe('screens/BackupCard', () => {
     it('reads Cost as unmetered when the provider reports no quota', async () => {
       const el = await mount({
         loadStatus: vi.fn<BackupCardProps['loadStatus']>().mockResolvedValue(freshStatus),
-        loadUsage: vi
-          .fn<NonNullable<BackupCardProps['loadUsage']>>()
-          .mockResolvedValue({ backup: { bytesStored: 512 * 1024 ** 2, quotaBytes: null } }),
+        loadUsage: vi.fn<NonNullable<BackupCardProps['loadUsage']>>().mockResolvedValue({
+          backup: { bytesStored: 512 * 1024 ** 2, quotaBytes: null },
+        }),
         onRunNow: neverRun,
       });
       const cost = el.querySelector('[data-testid="metric-cost"]');

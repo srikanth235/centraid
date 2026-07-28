@@ -1,5 +1,6 @@
 // governance: allow-repo-hygiene file-size-limit shared shell relocation keeps this cohesive route intact; split later under #392
 import { type JSX, useEffect, useRef, useState } from 'react';
+
 import {
   ASSISTANT_APP_ID,
   conversationStatus,
@@ -16,17 +17,7 @@ import {
   type ConversationAttachmentRef,
   type TurnStreamEvent,
 } from '../../../gateway-client.js';
-import { openPrompt } from '../prompt.js';
 import { providerConsentWire, withProviderConsent } from '../../providerConsent.js';
-import { useMemberScopes } from '../useMemberScopes.js';
-import { conversationScope, rememberConversationScope } from './conversationScopes.js';
-import ScopePicker from './ScopePicker.js';
-import scopeBarCss from './ScopePicker.module.css';
-import { catchUpAfterDrop } from './assistantCatchUp.js';
-import { rejectScopedDirectory } from './scopedDirectory.js';
-import { downloadConversation } from './conversationExport.js';
-import { DEFAULT_STARTERS, resolveStarters } from './assistantStarters.js';
-import mainScrollCss from '../../styles/mainScroll.module.css';
 import type {
   AssistantSnapshot,
   AsstModelPickerDTO,
@@ -35,7 +26,11 @@ import type {
 } from '../../screen-contracts.js';
 import AssistantScreen from '../../screens/AssistantScreen.js';
 import { useShellActions } from '../actions.js';
+import { openPrompt } from '../prompt.js';
+import { useMemberScopes } from '../useMemberScopes.js';
+import { catchUpAfterDrop } from './assistantCatchUp.js';
 import { hydrateRefs, wireCodeCopy } from './assistantRich.js';
+import { DEFAULT_STARTERS, resolveStarters } from './assistantStarters.js';
 import {
   activeAttemptOf,
   hydrateMessages,
@@ -45,12 +40,19 @@ import {
   type AsstToolCall,
   type PendingAttachment,
 } from './assistantTranscript.js';
+import { downloadConversation } from './conversationExport.js';
+import { conversationScope, rememberConversationScope } from './conversationScopes.js';
+import { rejectScopedDirectory } from './scopedDirectory.js';
+import ScopePicker from './ScopePicker.js';
 import {
   loadProviders,
   resolveReportedRunnerKind,
   setSubsystemConfigPin,
   setSubsystemModel,
 } from './settingsProvidersData.js';
+
+import mainScrollCss from '../../styles/mainScroll.module.css';
+import scopeBarCss from './ScopePicker.module.css';
 
 type ReadyAttachment = PendingAttachment & { ref: ConversationAttachmentRef };
 
@@ -404,7 +406,11 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
     // Live reasoning row (issue #420, Wave 2) — ported from BuilderChatPane. It
     // streams `reasoning.delta`, collapses once the answer/tools begin, and (as
     // reasoning is not persisted) vanishes when the turn reloads from the ledger.
-    let thinking: { kind: 'thinking'; text: string; streaming?: boolean } | null = null;
+    let thinking: {
+      kind: 'thinking';
+      text: string;
+      streaming?: boolean;
+    } | null = null;
     const collapseThinking = (): void => {
       if (thinking && thinking.streaming) {
         thinking.streaming = false;
@@ -429,7 +435,11 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
         case 'notice': {
           // A non-fatal runner notice. The SSE path renders immediately and
           // the ledger copy restores it after reload.
-          m.current.msgs.push({ kind: 'notice', level: event.level, text: event.message });
+          m.current.msgs.push({
+            kind: 'notice',
+            level: event.level,
+            text: event.message,
+          });
           push();
           return;
         }
@@ -498,7 +508,7 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
           if (outputText) call.outputText = outputText;
           const artifacts = [
             ...(event.locations ?? []).map((location) => ({
-              label: location.path.split(/[\\/]/).at(-1) ?? location.path,
+              label: location.path.split(/[\\/]/u).at(-1) ?? location.path,
               workspacePath: location.path,
             })),
             // Keep the live chip identical to the reload path: when the runner
@@ -515,7 +525,7 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
         case 'final': {
           collapseThinking();
           const msg = ensureAi();
-          msg.text = msg.text || event.text;
+          msg.text ||= event.text;
           msg.streaming = false;
           push();
           return;
@@ -550,7 +560,7 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
           idempotencyKey: opts.idempotencyKey,
           ...(opts.retryOf ? { retryOf: opts.retryOf } : {}),
           ...(opts.attachments.length ? { attachments: opts.attachments.map((a) => a.ref) } : {}),
-          ...(consentWire !== undefined ? { providerConsent: consentWire } : {}),
+          ...(consentWire === undefined ? {} : { providerConsent: consentWire }),
           ...(m.current.runnerKind ? { runnerKind: m.current.runnerKind } : {}),
           ...(m.current.selectedModel ? { model: m.current.selectedModel } : {}),
           ...(m.current.selectedEffort ? { thinking: m.current.selectedEffort } : {}),
@@ -614,7 +624,13 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
           msg.kind === 'ai' && msg.streaming === true,
       );
       if (live) live.catchingUp = true;
-      else m.current.msgs.push({ kind: 'ai', text: '', streaming: true, catchingUp: true });
+      else
+        m.current.msgs.push({
+          kind: 'ai',
+          text: '',
+          streaming: true,
+          catchingUp: true,
+        });
       push();
       const settled = await catchUpAfterDrop({
         baselineTurnCount,
@@ -654,7 +670,7 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
       // A rejected shared folder is a rejection of the SELECTION, not a
       // transient turn failure: say so out of band, because the resend button
       // on the error bubble will keep failing until the chip is removed (#567).
-      if (/additional director/i.test(message)) {
+      if (/additional director/iu.test(message)) {
         showToast(`The gateway rejected a shared folder — remove it and try again. ${message}`);
       }
       m.current.msgs.push({
@@ -860,8 +876,18 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
   // Slash commands (§4) — minimal + extensible, each firing an existing UI
   // action. Export/Rename need an open (created) conversation.
   const slashCommands: AsstSlashCommand[] = [
-    { id: 'export', label: 'export', hint: 'Download as Markdown', enabled: hasThread },
-    { id: 'rename', label: 'rename', hint: 'Rename this conversation', enabled: hasThread },
+    {
+      id: 'export',
+      label: 'export',
+      hint: 'Download as Markdown',
+      enabled: hasThread,
+    },
+    {
+      id: 'rename',
+      label: 'rename',
+      hint: 'Rename this conversation',
+      enabled: hasThread,
+    },
     { id: 'new', label: 'new', hint: 'Start a new conversation' },
   ];
   const runSlash = (id: string): void => {

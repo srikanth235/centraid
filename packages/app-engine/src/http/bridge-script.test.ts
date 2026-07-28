@@ -6,7 +6,9 @@
 // contains the API.
 
 import { runInNewContext } from 'node:vm';
+
 import { afterEach, describe, expect, test, vi } from 'vitest';
+
 import { changeBridgeScript } from './bridge-script.js';
 
 interface FetchCall {
@@ -34,10 +36,10 @@ interface Centraid {
 }
 
 interface TestPort {
-  postMessage(data: unknown, transfer?: readonly unknown[]): void;
-  addEventListener(type: 'message', listener: (event: { data: unknown }) => void): void;
-  start(): void;
-  close(): void;
+  postMessage: (data: unknown, transfer?: readonly unknown[]) => void;
+  addEventListener: (type: 'message', listener: (event: { data: unknown }) => void) => void;
+  start: () => void;
+  close: () => void;
   onmessage?: (event: { data: unknown }) => void;
 }
 
@@ -78,8 +80,8 @@ describe('bridge-script', () => {
   /** Load the bridge into a sandbox; returns the wired `centraid` API + fetch log. */
   function loadBridge(): { centraid: Centraid; calls: FetchCall[] } {
     const src = changeBridgeScript()
-      .replace(/^<script>/, '')
-      .replace(/<\/script>$/, '');
+      .replace(/^<script>/u, '')
+      .replace(/<\/script>$/u, '');
     const calls: FetchCall[] = [];
     const fetchMock = (url: string, init: FetchCall['init']): Promise<unknown> => {
       return new Promise((resolve, reject) => {
@@ -88,7 +90,11 @@ describe('bridge-script', () => {
           init,
           // Resolve with a Response-like object the bridge can `.text()`.
           resolve: (value: unknown) =>
-            resolve({ ok: true, status: 200, text: () => Promise.resolve(JSON.stringify(value)) }),
+            resolve({
+              ok: true,
+              status: 200,
+              text: () => Promise.resolve(JSON.stringify(value)),
+            }),
           reject,
         });
       });
@@ -169,7 +175,11 @@ describe('bridge-script', () => {
   test('aborting one sharer rejects only that caller; the shared fetch continues', async () => {
     const { centraid, calls } = loadBridge();
     const ac = new AbortController();
-    const aborter = centraid.read({ query: 'list', input: {}, signal: ac.signal });
+    const aborter = centraid.read({
+      query: 'list',
+      input: {},
+      signal: ac.signal,
+    });
     const other = centraid.read({ query: 'list', input: {} });
     expect(calls).toHaveLength(1);
 
@@ -223,8 +233,8 @@ describe('bridge-script', () => {
     sendFromParent: (data: unknown) => void;
   } {
     const src = changeBridgeScript()
-      .replace(/^<script>/, '')
-      .replace(/<\/script>$/, '');
+      .replace(/^<script>/u, '')
+      .replace(/<\/script>$/u, '');
     const parentPosts: unknown[] = [];
     const messageListeners: Array<
       (event: { source: unknown; data: unknown; ports?: TestPort[] }) => void
@@ -247,7 +257,10 @@ describe('bridge-script', () => {
           for (const listener of messageListeners) {
             listener({
               source: parent,
-              data: { type: 'centraid:replica-parent', documentNonce: message.documentNonce },
+              data: {
+                type: 'centraid:replica-parent',
+                documentNonce: message.documentNonce,
+              },
               ports: [channel.child],
             });
           }
@@ -327,7 +340,9 @@ describe('bridge-script', () => {
     // compares the posted data (the contract) without asserting the realm's
     // prototype identity.
     expect(
-      bridge.parentPosts.map((post) => ({ ...(post as Record<string, unknown>) })),
+      bridge.parentPosts.map((post) => ({
+        ...(post as Record<string, unknown>),
+      })),
     ).toStrictEqual([
       { type: 'centraid:changes-ready', appId: 'demo', documentNonce: null },
       { type: 'centraid:replica-ready', appId: 'demo', documentNonce: null },
@@ -383,14 +398,14 @@ describe('bridge-script', () => {
     centraid: Centraid;
     fetches: Array<{ url: string; body: Record<string, unknown> }>;
     parentPosts: Array<Record<string, unknown>>;
-    setRows(rows: unknown[]): void;
-    setReplicaError(error?: { code: string; message: string }): void;
-    setFetchError(error?: Error): void;
-    sendFromParent(data: unknown): void;
+    setRows: (rows: unknown[]) => void;
+    setReplicaError: (error?: { code: string; message: string }) => void;
+    setFetchError: (error?: Error) => void;
+    sendFromParent: (data: unknown) => void;
   } {
     const src = changeBridgeScript()
-      .replace(/^<script>/, '')
-      .replace(/<\/script>$/, '');
+      .replace(/^<script>/u, '')
+      .replace(/<\/script>$/u, '');
     const messageListeners: Array<
       (event: { source: unknown; data: unknown; ports?: TestPort[] }) => void
     > = [];
@@ -408,7 +423,11 @@ describe('bridge-script', () => {
     let fetchError: Error | undefined;
     let parentPort: TestPort | undefined;
     let changesRequested = false;
-    const reply = (payload: unknown): void => parentPort?.postMessage(payload);
+    const reply = (payload: unknown): void => {
+      if (!parentPort) return;
+      const post = parentPort.postMessage.bind(parentPort);
+      post(payload);
+    };
     const handlePortMessage = (data: Record<string, unknown>): void => {
       parentPosts.push(data);
       if (data.type === 'centraid:replica-read' || data.type === 'centraid:replica-search') {
@@ -464,7 +483,10 @@ describe('bridge-script', () => {
           for (const listener of messageListeners) {
             listener({
               source: parent,
-              data: { type: 'centraid:replica-parent', documentNonce: data.documentNonce },
+              data: {
+                type: 'centraid:replica-parent',
+                documentNonce: data.documentNonce,
+              },
               ports: [channel.child],
             });
           }
@@ -492,7 +514,10 @@ describe('bridge-script', () => {
       document: { hidden: false, addEventListener: () => undefined },
       EventSource: undefined,
       fetch: async (url: string, init: { body: string }) => {
-        fetches.push({ url, body: JSON.parse(init.body) as Record<string, unknown> });
+        fetches.push({
+          url,
+          body: JSON.parse(init.body) as Record<string, unknown>,
+        });
         if (fetchError) throw fetchError;
         return {
           ok: true,
@@ -735,7 +760,12 @@ describe('bridge-script', () => {
         action: 'complete',
         input: { task_id: 'task-1' },
         optimistic: [
-          { op: 'upsert', entity: 'schedule.task', rowId: 'task-1', values: { status: 'done' } },
+          {
+            op: 'upsert',
+            entity: 'schedule.task',
+            rowId: 'task-1',
+            values: { status: 'done' },
+          },
         ],
       }),
     ).resolves.toStrictEqual({ status: 'queued', intentId: 'intent-1' });
@@ -750,7 +780,10 @@ describe('bridge-script', () => {
 
   test('replica-unavailable write fallback preserves its idempotency key', async () => {
     const bridge = loadReplicaBridge(async () => null);
-    bridge.setReplicaError({ code: 'REPLICA_UNAVAILABLE', message: 'admission timed out' });
+    bridge.setReplicaError({
+      code: 'REPLICA_UNAVAILABLE',
+      message: 'admission timed out',
+    });
 
     await expect(
       bridge.centraid.write({
@@ -793,13 +826,17 @@ describe('bridge-script', () => {
 
   test('a remembered opaque app prewarms every declared query without evaluating it or leaking failures', async () => {
     const src = changeBridgeScript()
-      .replace(/^<script>/, '')
-      .replace(/<\/script>$/, '');
+      .replace(/^<script>/u, '')
+      .replace(/<\/script>$/u, '');
     const messageListeners: Array<
       (event: { source: unknown; data: unknown; ports?: TestPort[] }) => void
     > = [];
     const resources: Array<Record<string, unknown>> = [];
     let parentPort: TestPort | undefined;
+    const reply = (payload: unknown): void => {
+      const post = parentPort?.postMessage.bind(parentPort);
+      post?.(payload);
+    };
     const parent = {
       postMessage(data: Record<string, unknown>): void {
         if (data.type !== 'centraid:replica-ready') return;
@@ -813,7 +850,7 @@ describe('bridge-script', () => {
           if (request.url.endsWith('/_query/search.mjs')) {
             // One broken bundle must neither reject globally nor prevent the
             // other declared modules from warming.
-            parentPort?.postMessage({
+            reply({
               type: 'centraid:replica-result',
               id: message.id,
               ok: false,
@@ -839,7 +876,7 @@ describe('bridge-script', () => {
           const body = new TextEncoder().encode(
             typeof payload === 'string' ? payload : JSON.stringify(payload),
           ).buffer;
-          parentPort?.postMessage({
+          reply({
             type: 'centraid:replica-result',
             id: message.id,
             ok: true,
@@ -860,7 +897,10 @@ describe('bridge-script', () => {
         for (const listener of messageListeners) {
           listener({
             source: parent,
-            data: { type: 'centraid:replica-parent', documentNonce: 'document-one' },
+            data: {
+              type: 'centraid:replica-parent',
+              documentNonce: 'document-one',
+            },
             ports: [channel.child],
           });
         }

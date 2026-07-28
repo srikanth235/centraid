@@ -18,8 +18,9 @@
 
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { BlobCustody, FsBlobStore, type RemoteTier } from '@centraid/vault';
+
 import type { EngineLogger } from '@centraid/backup';
+import { BlobCustody, FsBlobStore, type RemoteTier } from '@centraid/vault';
 
 export interface PreviewsWarmResult {
   /** Distinct `thumb` shas the restored vault references (the target set). */
@@ -63,7 +64,9 @@ const DEFAULT_WARM_CONCURRENCY = 6;
  * WAL-replayed) vault.db, read-only; mediums/originals are deliberately NOT
  * collected here (issue #405 §5 keeps them remote-only). */
 function collectThumbShas(destDir: string): string[] {
-  const db = new DatabaseSync(path.join(destDir, 'vault.db'), { readOnly: true });
+  const db = new DatabaseSync(path.join(destDir, 'vault.db'), {
+    readOnly: true,
+  });
   try {
     const rows = db
       .prepare(
@@ -98,25 +101,24 @@ export async function warmPreviewTinies(opts: WarmPreviewOptions): Promise<Previ
   let failed = 0;
   let next = 0;
   const worker = async (): Promise<void> => {
-    for (;;) {
-      const i = next++;
-      if (i >= shas.length) return;
-      const sha = shas[i]!;
-      try {
-        // Read-through: local hit is a no-op; a miss fetches + promotes locally.
-        const got = await custody.open(sha);
-        if (got) warmed += 1;
-        else {
-          failed += 1;
-          opts.log?.warn?.(`restore warm-pass: remote CAS has no tiny ${sha} — grid slot degraded`);
-        }
-      } catch (err) {
+    const i = next++;
+    if (i >= shas.length) return;
+    const sha = shas[i]!;
+    try {
+      // Read-through: local hit is a no-op; a miss fetches + promotes locally.
+      const got = await custody.open(sha);
+      if (got) warmed += 1;
+      else {
         failed += 1;
-        opts.log?.warn?.(
-          `restore warm-pass: tiny ${sha} failed to warm: ${err instanceof Error ? err.message : String(err)}`,
-        );
+        opts.log?.warn?.(`restore warm-pass: remote CAS has no tiny ${sha} — grid slot degraded`);
       }
+    } catch (err) {
+      failed += 1;
+      opts.log?.warn?.(
+        `restore warm-pass: tiny ${sha} failed to warm: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
+    return worker();
   };
   await Promise.all(
     Array.from({ length: Math.min(concurrency, shas.length || 1) }, () => worker()),

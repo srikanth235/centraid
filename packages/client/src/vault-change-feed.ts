@@ -97,7 +97,10 @@ function changeStreamPath(
   cursor: VaultChangeCursor,
   shapeIds: readonly string[] | undefined,
 ): string {
-  const params = new URLSearchParams({ since: `${cursor.epoch}:${cursor.seq}`, stream: '1' });
+  const params = new URLSearchParams({
+    since: `${cursor.epoch}:${cursor.seq}`,
+    stream: '1',
+  });
   // Presence is significant: `shapeIds=` attests a persisted empty catalog.
   if (shapeIds) params.set('shapeIds', shapeIds.join(','));
   return `/centraid/_vault/changes?${params}`;
@@ -197,7 +200,12 @@ class VaultFeed {
     }
     if (frame.event !== 'change' && frame.event !== 'message') return;
     const page = payload as
-      | { changes?: unknown; cursor?: unknown; next?: unknown; watermark?: unknown }
+      | {
+          changes?: unknown;
+          cursor?: unknown;
+          next?: unknown;
+          watermark?: unknown;
+        }
       | undefined;
     const pageCursor = parseCursor(page?.cursor ?? page?.next ?? page?.watermark);
     const values = Array.isArray(payload)
@@ -229,7 +237,10 @@ class VaultFeed {
     const path = changeStreamPath(this.cursor, this.shapeIds);
     void doFetch(this.gatewayAuth.baseUrl, path, {
       method: 'GET',
-      headers: { ...authHeaders(this.gatewayAuth.token), Accept: 'text/event-stream' },
+      headers: {
+        ...authHeaders(this.gatewayAuth.token),
+        Accept: 'text/event-stream',
+      },
       cache: 'no-store',
       signal: controller.signal,
     })

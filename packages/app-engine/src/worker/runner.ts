@@ -34,8 +34,8 @@
 import { existsSync } from 'node:fs';
 import { register } from 'node:module';
 import path from 'node:path';
-import { parentPort, workerData } from 'node:worker_threads';
 import { pathToFileURL } from 'node:url';
+import { parentPort, workerData } from 'node:worker_threads';
 
 /**
  * Install the `.ts`/`.tsx` module-customization hooks (worker/ts-loader-hooks)
@@ -120,7 +120,9 @@ port.on('message', (msg: VaultReplyMessage | RunMessage) => {
     pendingVaultCalls.delete(msg.id);
     if (msg.ok) pending.resolve(msg.result);
     else {
-      const err = new Error(msg.error ?? 'vault call failed') as Error & { code?: string };
+      const err = new Error(msg.error ?? 'vault call failed') as Error & {
+        code?: string;
+      };
       if (msg.code) err.code = msg.code;
       pending.reject(err);
     }
@@ -231,7 +233,11 @@ function execute(req: WorkerRequest): void {
       }
       const fullArgs = { ...(req.args as object), log, ctx };
       const value = await mod.default(fullArgs);
-      port.postMessage({ type: 'result', ok: true, value } satisfies ResultMessage);
+      port.postMessage({
+        type: 'result',
+        ok: true,
+        value,
+      } satisfies ResultMessage);
     } catch (err) {
       port.postMessage({
         type: 'result',

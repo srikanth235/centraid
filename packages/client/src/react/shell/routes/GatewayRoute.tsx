@@ -1,4 +1,5 @@
 import { type JSX, useCallback, useEffect, useState } from 'react';
+
 import {
   getUserPrefs,
   pauseBackgroundWork,
@@ -8,23 +9,23 @@ import {
 } from '../../../gateway-client.js';
 import GatewayScreen from '../../screens/GatewayScreen.js';
 import {
-  parseResourceModePref,
-  RESOURCE_MODE_PREF_KEY,
-  type ResourceMode,
-} from '../../screens/ResourceModeCard.js';
-import {
   knobPrefKey,
   parseResourceKnobPrefs,
   type ResourceKnobPrefs,
   type TunableKnobKey,
 } from '../../screens/resource-summary.js';
+import {
+  parseResourceModePref,
+  RESOURCE_MODE_PREF_KEY,
+  type ResourceMode,
+} from '../../screens/ResourceModeCard.js';
 import { useShellActions } from '../actions.js';
 import PageScroll from '../PageScroll.js';
 import { PageLoading } from '../status.js';
-import { startVisibilityTicker } from './visibility-ticker.js';
-import { loadDiagnosticsData } from './settingsDiagnosticsData.js';
 import { useGatewayHealth } from '../useGatewayHealth.js';
 import { useGatewayRuntime } from '../useGatewayRuntime.js';
+import { loadDiagnosticsData } from './settingsDiagnosticsData.js';
+import { startVisibilityTicker } from './visibility-ticker.js';
 
 // React-owned Gateway route — the runtime page over the main-process
 // heartbeat monitor, plus the component-health poll and the log stream

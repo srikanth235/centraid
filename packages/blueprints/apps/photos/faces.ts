@@ -49,7 +49,10 @@ export async function renderFaces(
 ): Promise<void> {
   let data: FacesData | undefined;
   try {
-    data = await window.centraid.read<FacesData>({ query: 'faces', input: { asset_id: assetId } });
+    data = await window.centraid.read<FacesData>({
+      query: 'faces',
+      input: { asset_id: assetId },
+    });
   } catch {
     return; // face queries never break the lightbox
   }
@@ -97,7 +100,10 @@ export async function renderFaces(
         note.textContent = 'Pick a person first.';
         return;
       }
-      const outcome = await act('confirm-face', { region_id: region.region_id, party_id: partyId });
+      const outcome = await act('confirm-face', {
+        region_id: region.region_id,
+        party_id: partyId,
+      });
       if (narrate(outcome, note)) await renderFaces(host, assetId, note);
     });
     const reject = kitBtn('✕', async () => {

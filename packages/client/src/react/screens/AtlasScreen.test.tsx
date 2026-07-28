@@ -1,12 +1,14 @@
+import { forEachSequentially } from '@centraid/test-kit/sequential';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import AtlasScreen, { type AtlasScreenProps } from './AtlasScreen.js';
+
 import type {
   AtlasCensusPayload,
   AtlasGraphPayload,
   AtlasPulsePayload,
 } from '../../gateway-client.js';
+import AtlasScreen, { type AtlasScreenProps } from './AtlasScreen.js';
 
 // The Browse tab (mounted when a Kinds card is clicked) self-fetches through the
 // vault client. Stub those helpers so the openBrowse seam can be exercised here
@@ -267,12 +269,11 @@ describe('screens/AtlasScreen', () => {
       const el = await mount(makeProps());
       await click(cardByLogical(el, 'core.party'));
       // Let the Browse tab's tables/columns/rows fetches settle.
-      for (let i = 0; i < 6; i += 1) {
-        // eslint-disable-next-line no-await-in-loop -- (#441) sequential microtask drain
+      await forEachSequentially(Array.from({ length: 6 }), async () => {
         await act(async () => {
           await Promise.resolve();
         });
-      }
+      });
       // Screen switched to the Browse tab, preselected to the clicked kind — the
       // editor header echoes the logical name and its insert control is present.
       expect(el.querySelector('[data-testid="atlas-browse-insert"]')).toBeTruthy();

@@ -34,6 +34,7 @@
 // desktop's.
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
+
 import { RUNNER_BACKENDS, minVersionString, probeCliAvailability } from '@centraid/agent-runtime';
 import type {
   RunnerHealthEntry,
@@ -41,6 +42,7 @@ import type {
   RunnerModel,
   SurfaceStatus,
 } from '@centraid/app-engine';
+
 import { sendJson } from './route-helpers.js';
 
 /**
@@ -177,7 +179,10 @@ export async function readAgentsStatus(opts?: {
   const resolveCapabilities = opts?.resolveCapabilities;
   const binPathFor = opts?.binPathFor;
   const refresh = opts?.refresh ?? false;
-  const emptyModels: ResolvedSurface<RunnerModel> = { list: [], status: 'empty' };
+  const emptyModels: ResolvedSurface<RunnerModel> = {
+    list: [],
+    status: 'empty',
+  };
 
   const agents = await Promise.all(
     Object.values(RUNNER_BACKENDS).map(async (backend): Promise<AgentStatusEntry> => {

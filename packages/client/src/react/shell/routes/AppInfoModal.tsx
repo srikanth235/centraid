@@ -1,14 +1,16 @@
 import { useEffect, useState, type JSX } from 'react';
+
 import type { VaultBlockDTO, VaultScopeDTO } from '../../screen-contracts.js';
 import VaultScreen from '../../screens/VaultScreen.js';
-import { iconSvg } from '../iconSvg.js';
 import { cx } from '../../ui/cx.js';
-import buttonCss from '../../ui/Button.module.css';
-import modalCss from '../../styles/modal.module.css';
-import appSettingsCss from '../../styles/appSettings.module.css';
-import vaultCss from '../../styles/vault.module.css';
-import styles from './AppInfoModal.module.css';
+import { iconSvg } from '../iconSvg.js';
 import { buildVaultProps, fetchAppManifestRaw, manifestVaultBlock } from './appSettingsData.js';
+
+import appSettingsCss from '../../styles/appSettings.module.css';
+import modalCss from '../../styles/modal.module.css';
+import vaultCss from '../../styles/vault.module.css';
+import buttonCss from '../../ui/Button.module.css';
+import styles from './AppInfoModal.module.css';
 
 // App info (issue #434) — the installed-app "what can this touch" surface,
 // reached from the Home / sidebar context menu. It reuses the existing per-app
@@ -129,7 +131,9 @@ export default function AppInfoModal({
               color: finish.glyphColor,
               boxShadow: finish.boxShadow || undefined,
             }}
-            dangerouslySetInnerHTML={{ __html: iconSvg(app.iconKey || 'Sparkle', 20, 1.85) }}
+            dangerouslySetInnerHTML={{
+              __html: iconSvg(app.iconKey || 'Sparkle', 20, 1.85),
+            }}
           />
           <div style={{ minWidth: 0 }}>
             <div className={styles.eyebrow}>App info</div>

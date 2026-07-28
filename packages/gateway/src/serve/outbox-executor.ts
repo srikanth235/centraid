@@ -28,11 +28,12 @@
  *     one pass; the surplus stays approved for later passes, logged.
  */
 
-import type { ConnectionAuth } from '@centraid/automation';
 import type { RuntimeLogger } from '@centraid/app-engine';
+import type { ConnectionAuth } from '@centraid/automation';
+
 import type { ConnectionBroker } from './connection-broker.js';
-import type { VaultPlane } from './vault-plane.js';
 import { timeoutSignal } from './fetch-timeout.js';
+import type { VaultPlane } from './vault-plane.js';
 
 const CONNECTION_REF_RE = /\{\{connection:(?<name>[a-z_]+)\}\}/gu;
 const BODY_SNIPPET_CHARS = 300;
@@ -60,6 +61,21 @@ interface ApprovedRow {
   target: string;
   request_json: string;
   decided_at: string | null;
+}
+
+/**
+ * An approved outbox is a consent ledger: later rows must not start until the
+ * preceding row has settled, so per-actor caps and durable receipts remain
+ * deterministic.
+ */
+function drainApprovedRowsInOrder(
+  rows: readonly ApprovedRow[],
+  drain: (row: ApprovedRow) => void | PromiseLike<void>,
+): Promise<void> {
+  return rows.reduce<Promise<void>>(
+    (sequence, row) => sequence.then(() => drain(row)),
+    Promise.resolve(),
+  );
 }
 
 export interface OutboxExecutorOptions {
@@ -138,7 +154,7 @@ export class OutboxExecutor {
     const now = Date.now();
     const perActor = new Map<string, number>();
     let drained = 0;
-    for (const row of rows) {
+    await drainApprovedRowsInOrder(rows, async (row) => {
       // A stale approval never drains (issue #308 A7): the owner said yes to
       // a send NOW, not to whenever the provider recovers. Repark first so
       // staleness is judged even when the caps would have deferred the item.
@@ -150,7 +166,7 @@ export class OutboxExecutor {
           `approval expired undrained after ${Math.round(this.staleAfterMs / 3_600_000)}h — approve again to send`,
         );
         report.reparked += 1;
-        continue;
+        return;
       }
       // Bounded passes (issue #308 A8): the surplus stays approved and the
       // next pass (event kick or the 60s clock) continues — no silent drop,
@@ -158,7 +174,7 @@ export class OutboxExecutor {
       const actorCount = perActor.get(row.actor_id) ?? 0;
       if (drained >= this.maxItemsPerDrain || actorCount >= this.maxItemsPerActor) {
         report.deferred += 1;
-        continue;
+        return;
       }
       drained += 1;
       perActor.set(row.actor_id, actorCount + 1);
@@ -172,7 +188,7 @@ export class OutboxExecutor {
             (err instanceof Error ? err.message : String(err)),
         );
       }
-    }
+    });
     if (report.approved > 0) {
       this.logger.info(
         `outbox: drained vault ${plane.boot.vaultId} — sent=${report.sent} failed=${report.failed} ` +
@@ -218,7 +234,7 @@ export class OutboxExecutor {
       return 'failed';
     }
     let refreshed = false;
-    for (;;) {
+    const send = async (): Promise<'sent' | 'failed' | 'deferred'> => {
       let response: { status: number; text: string };
       try {
         response = await this.fetchOnce(injectedSpec, auth);
@@ -235,7 +251,7 @@ export class OutboxExecutor {
           // Re-assert the pin on the RE-substituted URL: a placeholder in
           // the URL means new values can move the destination.
           assertDrainable(injectedSpec.url, auth);
-          continue;
+          return send();
         } catch (err) {
           this.logger.warn(`outbox: ${row.item_id} token refresh refused: ${errText(err, auth)}`);
           return 'deferred';
@@ -270,7 +286,8 @@ export class OutboxExecutor {
           : undefined,
       );
       return disposition;
-    }
+    };
+    return send();
   }
 
   private async fetchOnce(

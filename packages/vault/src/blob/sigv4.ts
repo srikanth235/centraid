@@ -7,6 +7,7 @@
 // together, and unit-testable without a live endpoint.
 
 import { createHash, createHmac } from 'node:crypto';
+
 import type { S3Credentials } from './s3.js';
 
 function hmac(key: Buffer | string, data: string): Buffer {

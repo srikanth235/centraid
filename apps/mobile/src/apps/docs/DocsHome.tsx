@@ -1,28 +1,24 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { OnlineOnlyError } from '@centraid/client/replica/native';
 import { Feather } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
 import * as Haptics from 'expo-haptics';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Alert, FlatList, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { OnlineOnlyError } from '@centraid/client/replica/native';
-
-import { backupDocument } from '../../lib/upload/media-producer';
-import { useTheme } from '../../kit/theme';
-import { useReplica } from '../../kit/replica/ReplicaProvider';
 import HomeKey from '../../kit/components/HomeKey';
+import { useReplica } from '../../kit/replica/ReplicaProvider';
+import { useTheme } from '../../kit/theme';
+import { backupDocument } from '../../lib/upload/media-producer';
 import type { DocsScreenProps } from '../../navigation';
 import type { NativeDocument, NativeFolder } from './docs-model';
 import { styles } from './DocsHome.styles';
+import { GridItem, ListItem, type DriveItem } from './DocsLibraryItems';
 import { useDocsLibrary } from './useDocsLibrary';
 
 type LibraryFilter = 'all' | 'recent' | 'starred' | 'trash';
 type ViewMode = 'list' | 'grid';
-type DriveItem =
-  | { kind: 'folder'; folder: NativeFolder }
-  | { kind: 'document'; document: NativeDocument; location?: string };
-
 const FILTERS: readonly {
   key: LibraryFilter;
   label: string;
@@ -47,7 +43,11 @@ export default function DocsHome({
   // ever be shown against its own query — clearing them when the box empties is
   // then a derivation rather than a state update from the effect body, and a
   // stale hit list can't survive into the next query's debounce window.
-  const [searched, setSearched] = useState<{ query: string; ids?: Set<string>; error?: string }>();
+  const [searched, setSearched] = useState<{
+    query: string;
+    ids?: Set<string>;
+    error?: string;
+  }>();
   const [filter, setFilter] = useState<LibraryFilter>('all');
   const [view, setView] = useState<ViewMode>('list');
   const [addOpen, setAddOpen] = useState(false);
@@ -60,7 +60,11 @@ export default function DocsHome({
     const timeout = setTimeout(
       () =>
         void session
-          .search('docs', { entity: 'core.document', query: needle, limit: 100 })
+          .search('docs', {
+            entity: 'core.document',
+            query: needle,
+            limit: 100,
+          })
           .then((result) => {
             if (!active) return;
             setSearched({
@@ -159,7 +163,9 @@ export default function DocsHome({
       multiple: true,
     });
     if (result.canceled) return;
-    for (const asset of result.assets)
+    const uploadNext = async (index: number): Promise<void> => {
+      const asset = result.assets[index];
+      if (!asset) return;
       await backupDocument(session, gatewayBase, {
         localUri: asset.uri,
         title: asset.name,
@@ -167,6 +173,9 @@ export default function DocsHome({
         plaintextSize: asset.size ?? new File(asset.uri).size,
         ...(folderId ? { folderId } : {}),
       });
+      return uploadNext(index + 1);
+    };
+    await uploadNext(0);
   };
   const createFolder = async (): Promise<void> => {
     if (!session || !folderName.trim()) return;
@@ -278,7 +287,8 @@ export default function DocsHome({
               : FILTERS.find((item) => item.key === filter)?.label}
           </Text>
           <Text style={[styles.libraryMeta, { color: colors.ink2 }]}>
-            {documents.length} documents{folders.length ? ` · ${folders.length} folders` : ''}
+            {documents.length} documents
+            {folders.length ? ` · ${folders.length} folders` : ''}
           </Text>
         </View>
         <View style={[styles.viewSwitch, { backgroundColor: colors.bgSunken }]}>
@@ -379,7 +389,9 @@ export default function DocsHome({
                 disabled={!folderName.trim()}
                 style={[
                   styles.create,
-                  { backgroundColor: folderName.trim() ? colors.accent : colors.bgSunken },
+                  {
+                    backgroundColor: folderName.trim() ? colors.accent : colors.bgSunken,
+                  },
                 ]}
                 onPress={() => void createFolder()}
               >
@@ -396,93 +408,3 @@ export default function DocsHome({
     </SafeAreaView>
   );
 }
-
-function ListItem({ item, navigation, colors }: ItemProps): React.JSX.Element {
-  if (item.kind === 'folder') {
-    return (
-      <Pressable
-        style={[styles.row, { borderBottomColor: colors.line }]}
-        onPress={() => navigation.push('DocsHome', { folderId: item.folder.id })}
-      >
-        <View style={[styles.icon, { backgroundColor: colors.bgSunken }]}>
-          <Feather name="folder" size={20} color={colors.accent} />
-        </View>
-        <View style={styles.copy}>
-          <Text style={[styles.rowTitle, { color: colors.ink }]}>{item.folder.name}</Text>
-          <Text style={[styles.meta, { color: colors.ink2 }]}>Folder</Text>
-        </View>
-        <Feather name="chevron-right" size={18} color={colors.ink3} />
-      </Pressable>
-    );
-  }
-  return (
-    <Pressable
-      style={[styles.row, { borderBottomColor: colors.line }]}
-      onPress={() => navigation.navigate('DocumentViewer', { documentId: item.document.id })}
-    >
-      <View style={[styles.icon, { backgroundColor: colors.bgSunken }]}>
-        <Feather name={iconFor(item.document.mediaType)} size={20} color={colors.accent} />
-      </View>
-      <View style={styles.copy}>
-        <Text numberOfLines={1} style={[styles.rowTitle, { color: colors.ink }]}>
-          {item.document.title}
-        </Text>
-        <Text style={[styles.meta, { color: colors.ink2 }]}>
-          {item.location ? `${item.location} · ` : ''}
-          {formatType(item.document.mediaType)} · {formatBytes(item.document.byteSize)} ·{' '}
-          {item.document.custody ?? 'local'}
-        </Text>
-      </View>
-      {item.document.starred ? <Feather name="star" size={16} color="#d99b18" /> : null}
-    </Pressable>
-  );
-}
-
-function GridItem({ item, navigation, colors }: ItemProps): React.JSX.Element {
-  const document = item.kind === 'document' ? item.document : undefined;
-  return (
-    <Pressable
-      style={[styles.gridCard, { backgroundColor: colors.bgElev, borderColor: colors.line }]}
-      onPress={() =>
-        item.kind === 'folder'
-          ? navigation.push('DocsHome', { folderId: item.folder.id })
-          : navigation.navigate('DocumentViewer', { documentId: item.document.id })
-      }
-    >
-      <View style={[styles.gridPreview, { backgroundColor: colors.bgSunken }]}>
-        <Feather
-          name={item.kind === 'folder' ? 'folder' : iconFor(item.document.mediaType)}
-          size={30}
-          color={colors.accent}
-        />
-      </View>
-      <Text numberOfLines={2} style={[styles.gridTitle, { color: colors.ink }]}>
-        {item.kind === 'folder' ? item.folder.name : item.document.title}
-      </Text>
-      <Text style={[styles.meta, { color: colors.ink2 }]}>
-        {document
-          ? `${item.kind === 'document' && item.location ? `${item.location} · ` : ''}${formatType(document.mediaType)} · ${formatBytes(document.byteSize)}`
-          : 'Folder'}
-      </Text>
-    </Pressable>
-  );
-}
-
-type ItemProps = {
-  item: DriveItem;
-  navigation: DocsScreenProps<'DocsHome'>['navigation'];
-  colors: ReturnType<typeof useTheme>['colors'];
-};
-const iconFor = (mime: string): React.ComponentProps<typeof Feather>['name'] =>
-  mime.includes('pdf')
-    ? 'file-text'
-    : mime.startsWith('image/')
-      ? 'image'
-      : mime.startsWith('video/')
-        ? 'video'
-        : mime.startsWith('audio/')
-          ? 'headphones'
-          : 'file';
-const formatType = (mime: string): string => mime.split('/')[1]?.toUpperCase() || 'FILE';
-const formatBytes = (bytes: number): string =>
-  bytes < 1024 ** 2 ? `${Math.ceil(bytes / 1024)} KB` : `${(bytes / 1024 ** 2).toFixed(1)} MB`;

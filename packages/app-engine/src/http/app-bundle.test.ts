@@ -1,3 +1,8 @@
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, utimesSync, writeFileSync } from 'node:fs';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import path from 'node:path';
+
 import { tempDirSync } from '@centraid/test-kit/temp-dir';
 // governance: allow-repo-hygiene file-size-limit one suite per concern of the
 // whole-app bundling seam (issue #404): HTML rewrite, bundle serving/ETag/304,
@@ -5,12 +10,9 @@ import { tempDirSync } from '@centraid/test-kit/temp-dir';
 // inlining, and the request-count collapse the feature exists for — all share
 // one fixture builder.
 import { beforeEach, describe, expect, it } from 'vitest';
-import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, utimesSync, writeFileSync } from 'node:fs';
-import path, { join } from 'node:path';
-import type { IncomingMessage, ServerResponse } from 'node:http';
-import { serveStatic, type ServeStaticOptions } from './static-server.js';
+
 import { clearBundleCaches, findBundleByHash, prewarmAppAssets } from './app-bundle.js';
+import { serveStatic, type ServeStaticOptions } from './static-server.js';
 
 interface MockRes {
   statusCode: number;
@@ -47,8 +49,8 @@ function mockReq(headers: Record<string, string> = {}): IncomingMessage {
 
 function writeTree(dir: string, files: Record<string, string>): void {
   for (const [rel, content] of Object.entries(files)) {
-    const target = join(dir, rel);
-    mkdirSync(join(target, '..'), { recursive: true });
+    const target = path.join(dir, rel);
+    mkdirSync(path.join(target, '..'), { recursive: true });
     writeFileSync(target, content);
   }
 }
@@ -120,7 +122,7 @@ async function serve(
   return data;
 }
 
-const BUNDLE_URL_RE = /_bundle\.([0-9a-f]{16})\.js/;
+const BUNDLE_URL_RE = /_bundle\.(?<hash>[0-9a-f]{16})\.js/u;
 
 describe('app-bundle', () => {
   beforeEach(() => clearBundleCaches());
@@ -140,7 +142,7 @@ describe('app-bundle', () => {
       // Both links collapse into one <style> block, with per-app app.css and the
       // shared kit resolved.
       expect(html).not.toContain('<link rel="stylesheet"');
-      const styleBlocks = html.match(/<style data-centraid-inlined-css>/g) ?? [];
+      const styleBlocks = html.match(/<style data-centraid-inlined-css>/gu) ?? [];
       expect(styleBlocks).toHaveLength(1);
       for (const marker of ['display: grid', 'color: teal']) {
         expect(html).toContain(marker);
@@ -155,7 +157,9 @@ describe('app-bundle', () => {
           '<html><head></head><body><script type="module" src="./app.js"></script></body></html>',
         'app.js': "import { nope } from './missing.js'; void nope;",
       });
-      const data = await serve(app, 'index.html', { sharedAssetsDir: newSharedDir() });
+      const data = await serve(app, 'index.html', {
+        sharedAssetsDir: newSharedDir(),
+      });
       const html = data.body.toString('utf8');
       expect(html).toContain('src="./app.js"');
       expect(html).not.toMatch(BUNDLE_URL_RE);
@@ -199,7 +203,9 @@ describe('app-bundle', () => {
       const html = (await serve(app, 'index.html', { sharedAssetsDir: shared })).body.toString();
       const hash = BUNDLE_URL_RE.exec(html)![1]!;
 
-      const data = await serve(app, `_bundle.${hash}.js`, { sharedAssetsDir: shared });
+      const data = await serve(app, `_bundle.${hash}.js`, {
+        sharedAssetsDir: shared,
+      });
       expect(data.statusCode).toBe(200);
       expect(data.headers['Content-Type']).toContain('application/javascript');
       expect(data.headers['Cache-Control']).toBe('private, max-age=31536000, immutable');
@@ -235,10 +241,10 @@ describe('app-bundle', () => {
       ).body.toString('utf8');
 
       // No unresolved automatic-runtime import survives into the bundle…
-      expect(body).not.toMatch(/from\s*["'][^"']*jsx-runtime/);
+      expect(body).not.toMatch(/from\s*["'][^"']*jsx-runtime/u);
       // …and the app-owned runtime module appears exactly once,
       // even though app.jsx and components/Widget.jsx both need the runtime.
-      const copies = body.match(/__APP_REACT_COPIES = \(/g) ?? [];
+      const copies = body.match(/__APP_REACT_COPIES = \(/gu) ?? [];
       expect(copies).toHaveLength(1);
     });
 
@@ -273,7 +279,7 @@ describe('app-bundle', () => {
       const first = (await serve(app, 'index.html', opts)).body.toString();
       const hash1 = BUNDLE_URL_RE.exec(first)![1]!;
 
-      const edited = join(app, 'components/nested/deep.js');
+      const edited = path.join(app, 'components/nested/deep.js');
       writeFileSync(edited, "export const deep = 'deep-marker-EDITED';");
       // Guarantee a visible mtime change even on coarse-mtime filesystems.
       const future = Date.now() / 1000 + 5;
@@ -334,14 +340,14 @@ describe('app-bundle', () => {
 
       const body = (await serve(app, `_bundle.${m![1]}.js`)).body.toString('utf8');
       // TS type syntax is gone.
-      expect(body).not.toMatch(/interface\s+Props/);
-      expect(body).not.toMatch(/:\s*string/);
+      expect(body).not.toMatch(/interface\s+Props/u);
+      expect(body).not.toMatch(/:\s*string/u);
       // The CSS-module output was NOT dropped: its compiled CSS text is inlined
       // into the JS graph via the style injector (single-output invariant held).
       expect(body).toContain('padding: 8px');
-      expect(body).toMatch(/document\.createElement\(['"]style['"]\)/);
+      expect(body).toMatch(/document\.createElement\(['"]style['"]\)/u);
       // The hashed local class name is referenced by the app code.
-      expect(body).toMatch(/card:\s*["'][^"']*card[^"']*["']/);
+      expect(body).toMatch(/card:\s*["'][^"']*card[^"']*["']/u);
       expect(body).toContain('__CARD_CLASS');
     });
 
@@ -349,7 +355,7 @@ describe('app-bundle', () => {
       const app = newTsApp('.card { padding: 8px; }');
       const hash1 = BUNDLE_URL_RE.exec((await serve(app, 'index.html')).body.toString())![1]!;
 
-      const edited = join(app, 'styles.module.css');
+      const edited = path.join(app, 'styles.module.css');
       writeFileSync(edited, '.card { padding: 16px; }');
       const future = Date.now() / 1000 + 5;
       utimesSync(edited, future, future);
@@ -371,7 +377,10 @@ describe('app-bundle', () => {
 
     it('does not rewrite draft HTML (script + stylesheet links untouched)', async () => {
       const app = newApp();
-      const data = await serve(app, 'index.html', { ...draft, sharedAssetsDir: newSharedDir() });
+      const data = await serve(app, 'index.html', {
+        ...draft,
+        sharedAssetsDir: newSharedDir(),
+      });
       const html = data.body.toString('utf8');
       expect(html).toContain('src="./app.jsx"');
       expect(html).not.toMatch(BUNDLE_URL_RE);
@@ -385,7 +394,10 @@ describe('app-bundle', () => {
       const html = (await serve(app, 'index.html', { sharedAssetsDir: shared })).body.toString();
       const hash = BUNDLE_URL_RE.exec(html)![1]!;
       // …then ask for it through the draft path.
-      const data = await serve(app, `_bundle.${hash}.js`, { ...draft, sharedAssetsDir: shared });
+      const data = await serve(app, `_bundle.${hash}.js`, {
+        ...draft,
+        sharedAssetsDir: shared,
+      });
       expect(data.statusCode).toBe(404);
     });
   });
@@ -406,9 +418,10 @@ describe('app-bundle', () => {
     const html = htmlRes.body.toString('utf8');
 
     const queue: string[] = [];
-    for (const m of html.matchAll(/<script\b[^>]*\bsrc\s*=\s*"([^"]+)"/gi)) queue.push(m[1]!);
+    for (const m of html.matchAll(/<script\b[^>]*\bsrc\s*=\s*"(?<src>[^"]+)"/giu))
+      queue.push(m[1]!);
     for (const m of html.matchAll(
-      /<link\b[^>]*rel\s*=\s*"stylesheet"[^>]*href\s*=\s*"([^"]+)"/gi,
+      /<link\b[^>]*rel\s*=\s*"stylesheet"[^>]*href\s*=\s*"(?<href>[^"]+)"/giu,
     )) {
       queue.push(m[1]!);
     }
@@ -418,25 +431,30 @@ describe('app-bundle', () => {
       return path.posix.normalize(path.posix.join(baseDir, spec));
     };
 
-    const pending = queue.map((u) => resolveRel('index.html', u.replace(/^\.\//, '')));
-    while (pending.length > 0) {
+    const pending = queue.map((u) => resolveRel('index.html', u.replace(/^\.\//u, '')));
+    async function serveNextModule(): Promise<void> {
       const rel = pending.pop()!;
-      if (seen.has(rel)) continue;
+      if (!rel || seen.has(rel)) return pending.length > 0 ? serveNextModule() : undefined;
       const data = await serve(appDir, rel, opts);
-      if (data.statusCode !== 200) continue;
+      if (data.statusCode !== 200) return serveNextModule();
       seen.add(rel);
       // Recurse into every source module the per-file server transpiles — JS,
       // JSX, and (TS-authored apps) TS/TSX. A `.module.css` is served (counted)
       // but not walked: it imports no further app modules.
-      if (!/\.(js|jsx|ts|tsx|mjs)$/.test(rel)) continue;
-      const body = data.body.toString('utf8');
-      for (const m of body.matchAll(/(?:import|export)[^'"]*from\s*["']([^"']+)["']/g)) {
-        pending.push(resolveRel(rel, m[1]!));
+      if (/\.(?:js|jsx|ts|tsx|mjs)$/u.test(rel)) {
+        const body = data.body.toString('utf8');
+        for (const m of body.matchAll(
+          /(?:import|export)[^'"]*from\s*["'](?<specifier>[^"']+)["']/gu,
+        )) {
+          pending.push(resolveRel(rel, m[1]!));
+        }
+        for (const m of body.matchAll(/(?:^|\n)\s*import\s*["'](?<specifier>[^"']+)["']/gu)) {
+          pending.push(resolveRel(rel, m[1]!));
+        }
       }
-      for (const m of body.matchAll(/(?:^|\n)\s*import\s*["']([^"']+)["']/g)) {
-        pending.push(resolveRel(rel, m[1]!));
-      }
+      return serveNextModule();
     }
+    await serveNextModule();
     return seen.size;
   }
 
@@ -463,7 +481,10 @@ describe('app-bundle', () => {
       'does not build a served graph for the inline-only Photos system app',
       async () => {
         const opts = { sharedAssetsDir: kitDir };
-        const draftOpts = { ...opts, draft: { appId: 'photos', sessionId: 's' } };
+        const draftOpts = {
+          ...opts,
+          draft: { appId: 'photos', sessionId: 's' },
+        };
 
         const before = await countBootRequests(photosDir, opts, draftOpts);
         const after = await countBootRequests(photosDir, opts);

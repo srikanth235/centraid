@@ -157,7 +157,10 @@ describe('sqlite-store', () => {
 
       const store = new SqliteReplicaStore(db, 'vault-a');
       try {
-        expect(store.status()).toStrictEqual({ cursor: null, schemaEpoch: null });
+        expect(store.status()).toStrictEqual({
+          cursor: null,
+          schemaEpoch: null,
+        });
         expect(store.catalog()).toStrictEqual([]);
         // sqlite-wasm hands back null-prototype rows; spreading compares the
         // column data (which is the contract) without asserting the driver's
@@ -188,7 +191,10 @@ describe('sqlite-store', () => {
     test('atomically bootstraps a shape and executes bounded local reads', () => {
       const { store } = openStore();
       try {
-        expect(store.bootstrap(snapshot())).toStrictEqual({ epoch: 'replica-1', seq: 2 });
+        expect(store.bootstrap(snapshot())).toStrictEqual({
+          epoch: 'replica-1',
+          seq: 2,
+        });
         const result = store.read({
           shapeId: 'shape-agenda',
           entity: 'core.event',
@@ -215,7 +221,10 @@ describe('sqlite-store', () => {
         invalid.cursor = { epoch: 'replica-2', seq: 0 };
         invalid.rows[0]!.values.secret = 'plaintext';
         expect(() => store.bootstrap(invalid)).toThrow(ReplicaProtocolError);
-        expect(store.status().cursor).toStrictEqual({ epoch: 'replica-1', seq: 2 });
+        expect(store.status().cursor).toStrictEqual({
+          epoch: 'replica-1',
+          seq: 2,
+        });
         expect(store.read({ shapeId: 'shape-agenda', entity: 'core.event' }).rows).toHaveLength(2);
         expect(JSON.stringify(store.catalog())).not.toContain('secret');
         expect(
@@ -286,7 +295,10 @@ describe('sqlite-store', () => {
           ],
         };
         expect(() => store.applyChanges(batch)).toThrow(ReplicaProtocolError);
-        expect(store.status().cursor).toStrictEqual({ epoch: 'replica-1', seq: 2 });
+        expect(store.status().cursor).toStrictEqual({
+          epoch: 'replica-1',
+          seq: 2,
+        });
         expect(store.read({ shapeId: 'shape-agenda', entity: 'core.event' }).rows).toHaveLength(2);
       } finally {
         store.close();
@@ -485,7 +497,11 @@ describe('sqlite-store', () => {
           shapeId: 'shape-search-agenda',
           entity: 'knowledge.note',
           rowId: 'note-1',
-          values: { note_id: 'note-1', title: 'Budget', body_content_id: 'body-1' },
+          values: {
+            note_id: 'note-1',
+            title: 'Budget',
+            body_content_id: 'body-1',
+          },
         });
         store.bootstrap(complete);
         expect(() =>
@@ -533,7 +549,10 @@ describe('sqlite-store', () => {
             changes: [],
           }),
         ).toThrow(ReplicaRebootstrapRequiredError);
-        expect(store.status()).toStrictEqual({ cursor: null, schemaEpoch: null });
+        expect(store.status()).toStrictEqual({
+          cursor: null,
+          schemaEpoch: null,
+        });
       } finally {
         store.close();
       }

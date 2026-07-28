@@ -23,6 +23,7 @@
  */
 
 import crypto from 'node:crypto';
+
 import type { GatewayDatabase } from './gateway-db.js';
 
 /** A started restore may legitimately outlive the QR ticket's mint window. */
@@ -45,7 +46,12 @@ interface ReservationRow {
  */
 export function reserveFoundingWithinTransaction(
   db: GatewayDatabase,
-  input: { ticketId: string; secretHash: string; expiresAt: number; ttlMs: number },
+  input: {
+    ticketId: string;
+    secretHash: string;
+    expiresAt: number;
+    ttlMs: number;
+  },
 ): string | undefined {
   const now = Date.now();
   const existing = db.db
@@ -154,7 +160,10 @@ export function pendingFoundingVaults(
           WHERE pending_vault_ids_json IS NOT NULL
           ORDER BY reserved_at, reservation_id`,
       )
-      .all() as Array<{ reservation_id: string; pending_vault_ids_json: string }>
+      .all() as Array<{
+      reservation_id: string;
+      pending_vault_ids_json: string;
+    }>
   ).map((row) => {
     const parsed: unknown = JSON.parse(row.pending_vault_ids_json);
     if (
@@ -164,6 +173,9 @@ export function pendingFoundingVaults(
     ) {
       throw new Error(`invalid pending founding vault list for reservation ${row.reservation_id}`);
     }
-    return { reservationId: row.reservation_id, vaultIds: [...new Set(parsed)] };
+    return {
+      reservationId: row.reservation_id,
+      vaultIds: [...new Set(parsed)],
+    };
   });
 }

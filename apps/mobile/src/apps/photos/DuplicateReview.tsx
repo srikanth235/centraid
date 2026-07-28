@@ -1,7 +1,7 @@
+import { Feather } from '@expo/vector-icons';
 import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
 
 import { family, useTheme } from '../../kit/theme';
 import type { PhotosScreenProps } from '../../navigation';
@@ -53,7 +53,12 @@ const styles = StyleSheet.create({
   copy: { flex: 1, marginLeft: 10 },
   count: { fontFamily: family.monoMedium, fontSize: 11 },
   empty: { alignItems: 'center', flex: 1, justifyContent: 'center' },
-  header: { alignItems: 'center', flexDirection: 'row', minHeight: 56, paddingHorizontal: 14 },
+  header: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    minHeight: 56,
+    paddingHorizontal: 14,
+  },
   meta: { fontFamily: family.sansRegular, fontSize: 11, marginTop: 3 },
   safe: { flex: 1 },
   title: { fontFamily: family.displayBold, fontSize: 17 },

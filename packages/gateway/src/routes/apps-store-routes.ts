@@ -34,14 +34,16 @@
 // gateway owns the data.
 
 import { promises as fs } from 'node:fs';
-import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import path from 'node:path';
+
 import { ExtSpecError } from '@centraid/vault';
-import { WorktreeStore, WorktreeStoreError } from '../worktree-store/index.js';
-import { readBody, readJson, sendJson } from './route-helpers.js';
-import { validateManifestAt } from '../validate-manifest.js';
+
 import { applyExtOnPublish, readExtSpecs, type ExtBandOps } from '../lifecycle/ext-band.js';
+import { validateManifestAt } from '../validate-manifest.js';
+import { WorktreeStore, WorktreeStoreError } from '../worktree-store/index.js';
 import { readDraftFiles, writeDraftFile } from './apps-store-draft-files.js';
+import { readBody, readJson, sendJson } from './route-helpers.js';
 
 // Re-exported so existing importers (lifecycle-shared) keep their path; the
 // implementation moved to validate-manifest.ts (issue #167, file-size hygiene).
@@ -239,7 +241,10 @@ async function handlePublish(
   const sessionId = typeof body.sessionId === 'string' ? body.sessionId : '';
   const message = typeof body.message === 'string' ? body.message : '';
   if (!sessionId || !message) {
-    sendJson(res, 400, { error: 'bad_request', message: 'publish needs { sessionId, message }' });
+    sendJson(res, 400, {
+      error: 'bad_request',
+      message: 'publish needs { sessionId, message }',
+    });
     return true;
   }
 
@@ -301,7 +306,10 @@ async function handleRollback(
   const body = await readJson(req);
   const versionTag = typeof body.versionTag === 'string' ? body.versionTag : '';
   if (!versionTag) {
-    sendJson(res, 400, { error: 'bad_request', message: 'rollback needs { versionTag }' });
+    sendJson(res, 400, {
+      error: 'bad_request',
+      message: 'rollback needs { versionTag }',
+    });
     return true;
   }
   const result = await store.rollback({ appId, versionTag });
@@ -327,11 +335,17 @@ async function handleResetData(
   const body = await readJson(req);
   const sessionId = typeof body.sessionId === 'string' ? body.sessionId : '';
   if (!sessionId) {
-    sendJson(res, 400, { error: 'bad_request', message: 'reset-data needs { sessionId }' });
+    sendJson(res, 400, {
+      error: 'bad_request',
+      message: 'reset-data needs { sessionId }',
+    });
     return true;
   }
   if (!ext) {
-    sendJson(res, 400, { error: 'bad_request', message: 'reset-data needs a vault plane' });
+    sendJson(res, 400, {
+      error: 'bad_request',
+      message: 'reset-data needs a vault plane',
+    });
     return true;
   }
   // Throws `session_missing` (→ 404) via the outer handler when the worktree
@@ -366,7 +380,10 @@ async function handleFiles(
   if (method === 'GET') {
     const sessionId = url.searchParams.get('sessionId') ?? '';
     if (!sessionId) {
-      sendJson(res, 400, { error: 'bad_request', message: 'files read needs ?sessionId' });
+      sendJson(res, 400, {
+        error: 'bad_request',
+        message: 'files read needs ?sessionId',
+      });
       return true;
     }
     const appDir = await store.snapshotSessionAppDir(sessionId, appId);
@@ -381,7 +398,10 @@ async function handleFiles(
       .join('/');
     const sessionId = url.searchParams.get('sessionId') ?? '';
     if (!sessionId || !rel) {
-      sendJson(res, 400, { error: 'bad_request', message: 'files write needs ?sessionId + path' });
+      sendJson(res, 400, {
+        error: 'bad_request',
+        message: 'files write needs ?sessionId + path',
+      });
       return true;
     }
     const result = await writeDraftFile(store, sessionId, appId, rel, await readBody(req));
@@ -397,7 +417,10 @@ async function handleFiles(
       .join('/');
     const sessionId = url.searchParams.get('sessionId') ?? '';
     if (!sessionId || !rel) {
-      sendJson(res, 400, { error: 'bad_request', message: 'files delete needs ?sessionId + path' });
+      sendJson(res, 400, {
+        error: 'bad_request',
+        message: 'files delete needs ?sessionId + path',
+      });
       return true;
     }
     const appDir = await store.snapshotSessionAppDir(sessionId, appId);

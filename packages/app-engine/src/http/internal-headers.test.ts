@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { companionHandlerAllowed } from './internal-headers.js';
 
 describe('Companion capability profile', () => {

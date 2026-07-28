@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test } from 'vitest';
+
 import { bootstrapVault, type BootstrapResult } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { createGateway, Gateway } from '../gateway/gateway.js';
@@ -27,11 +28,19 @@ describe('tags', () => {
     registerTagCommands(gw);
     registerTaskCommands(gw);
     registerKnowledgeCommands(gw);
-    owner = { kind: 'device', deviceId: boot.deviceId, deviceKey: boot.deviceKey };
+    owner = {
+      kind: 'device',
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+    };
   });
 
   function invoke(command: string, input: Record<string, unknown>) {
-    return gw.invoke(owner, { command, input, purpose: 'dpv:ServiceProvision' });
+    return gw.invoke(owner, {
+      command,
+      input,
+      purpose: 'dpv:ServiceProvision',
+    });
   }
 
   function addTask(title: string): string {
@@ -69,8 +78,11 @@ describe('tags', () => {
       label: 'Urgent',
     });
     expect(out.status).toBe('executed');
-    const output = (out as { output: { tag_id: string; concept_id: string; notation: string } })
-      .output;
+    const output = (
+      out as {
+        output: { tag_id: string; concept_id: string; notation: string };
+      }
+    ).output;
     expect(output.notation).toBe('urgent');
     const scheme = db.vault
       .prepare('SELECT title FROM core_concept_scheme WHERE uri = ?')
@@ -81,11 +93,17 @@ describe('tags', () => {
     const concept = db.vault
       .prepare('SELECT pref_label, notation FROM core_concept WHERE concept_id = ?')
       .get(output.concept_id);
-    expect({ ...concept }).toStrictEqual({ pref_label: 'Urgent', notation: 'urgent' });
+    expect({ ...concept }).toStrictEqual({
+      pref_label: 'Urgent',
+      notation: 'urgent',
+    });
     const tag = db.vault
       .prepare('SELECT target_type, target_id, tagged_by_party_id FROM core_tag WHERE tag_id = ?')
       .get(output.tag_id);
-    expect(tag).toMatchObject({ target_type: 'schedule.task', target_id: taskId });
+    expect(tag).toMatchObject({
+      target_type: 'schedule.task',
+      target_id: taskId,
+    });
   });
 
   test('tag_item on the same subject+label twice is idempotent, not a duplicate', () => {
@@ -216,7 +234,9 @@ describe('tags', () => {
     const concept = db.vault
       .prepare('SELECT pref_label FROM core_concept WHERE concept_id = ?')
       .get(conceptId);
-    expect({ ...concept }).toStrictEqual({ pref_label: 'unmistakably-unique-label' });
+    expect({ ...concept }).toStrictEqual({
+      pref_label: 'unmistakably-unique-label',
+    });
   });
 
   test('untag_item removes exactly the named edge on a media asset, leaving others intact', () => {

@@ -23,7 +23,7 @@
  */
 
 import { requestStorageGrant } from './cas-grant.js';
-import { S3ObjectStore } from './s3-store.js';
+import type { ObjectStore } from './object-store.js';
 import {
   BackupProviderError,
   type AccountStatus,
@@ -43,7 +43,7 @@ import {
   type Usage,
   type UsageByStore,
 } from './provider.js';
-import type { ObjectStore } from './object-store.js';
+import { S3ObjectStore } from './s3-store.js';
 import { callProviderRoute } from './wire-client.js';
 
 const DEFAULT_GRANT_TTL_SECONDS = 3600;
@@ -94,7 +94,9 @@ export class RemoteBackupProvider implements BackupProvider {
   }
 
   async createTarget(opts: { label: string }): Promise<{ targetId: string }> {
-    const row = await this.call<{ id: string }>('POST', '/v1/storage/vaults', { name: opts.label });
+    const row = await this.call<{ id: string }>('POST', '/v1/storage/vaults', {
+      name: opts.label,
+    });
     return { targetId: row.id };
   }
 

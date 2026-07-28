@@ -1,6 +1,7 @@
-import buttonCss from '../ui/Button.module.css';
-import modalCss from '../styles/modal.module.css';
 import { cx } from '../ui/cx.js';
+
+import modalCss from '../styles/modal.module.css';
+import buttonCss from '../ui/Button.module.css';
 // Text-prompt dialog — a promise-based modal (backdrop + card + a single text
 // field + Cancel/Save, Esc = cancel, Enter = save). Sibling of confirm.ts's
 // `openConfirm`; it portals to document.body and resolves the trimmed string, or

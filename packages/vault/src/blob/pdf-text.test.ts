@@ -1,7 +1,9 @@
 // PDF text backstop + decompression-bomb guard (issue #545 B6).
 
 import { deflateSync } from 'node:zlib';
+
 import { describe, expect, test } from 'vitest';
+
 import { extractPdfText } from './pdf-text.js';
 
 /** Minimal born-digital PDF with one clear-text Tj operator. */

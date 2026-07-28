@@ -1,6 +1,7 @@
+import type { IconName } from '@centraid/design-tokens';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import type { IconName } from '@centraid/design-tokens';
+
 import Icon from './Icon.js';
 
 describe(Icon, () => {

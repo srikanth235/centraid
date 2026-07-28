@@ -50,7 +50,10 @@ describe(LiveQuery, () => {
     const query = new LiveQuery(async () => {
       runs += 1;
       if (runs === 1) await new Promise<void>((resolve) => (release = resolve));
-      return { value: runs, dependencies: [{ shapeId: 'shape', entity: 'entity' }] };
+      return {
+        value: runs,
+        dependencies: [{ shapeId: 'shape', entity: 'entity' }],
+      };
     });
     query.refresh();
     query.refresh();

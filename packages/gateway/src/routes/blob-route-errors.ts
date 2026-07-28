@@ -1,4 +1,5 @@
 import type { ServerResponse } from 'node:http';
+
 import {
   VaultBlobAuthorizationError,
   VaultBlobBackpressureError,
@@ -7,6 +8,7 @@ import {
   VaultBlobSessionError,
   VaultDiskFullError,
 } from '@centraid/vault';
+
 import { sendJson } from './route-helpers.js';
 
 /** Stable HTTP problem mapping for the blob transfer protocol. */

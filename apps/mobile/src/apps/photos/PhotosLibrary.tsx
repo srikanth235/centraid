@@ -1,32 +1,24 @@
-import React, { useCallback, useMemo, useState } from 'react';
-import {
-  Alert,
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import * as MediaLibrary from 'expo-media-library';
-import { Image } from 'expo-image';
 import { useFocusEffect } from '@react-navigation/native';
+import { Image } from 'expo-image';
+import * as MediaLibrary from 'expo-media-library';
+import React, { useCallback, useMemo, useState } from 'react';
+import { Alert, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { family, useTheme } from '../../kit/theme';
-import { useReplica } from '../../kit/replica/ReplicaProvider';
 import { useReplicaQuery } from '../../kit/hooks/useReplicaQuery';
+import { useReplica } from '../../kit/replica/ReplicaProvider';
+import { useTheme } from '../../kit/theme';
 import { sha256OfFile } from '../../lib/upload/enqueue';
 import { expoFileSource } from '../../lib/upload/expo-native';
 import { createNativeDigest } from '../../lib/upload/native-digest';
 import type { PhotosScreenProps } from '../../navigation';
-import { IN_CLOUD_MESSAGE, InCloudOriginalError, openDeviceOriginal } from './device-media';
-import { usePhotoTimeline } from './timeline-source';
-import { imageSource } from './media-source';
-import { revalidateBackedUp, selectFreeUpCandidates, type DeviceByteProbe } from './free-up-space';
 import { Store } from '../../storage';
+import { IN_CLOUD_MESSAGE, InCloudOriginalError, openDeviceOriginal } from './device-media';
+import { revalidateBackedUp, selectFreeUpCandidates, type DeviceByteProbe } from './free-up-space';
+import { imageSource } from './media-source';
+import { styles } from './PhotosLibrary.styles';
+import { usePhotoTimeline } from './timeline-source';
 
 const KEEP_ORIGINALS_KEY = 'photos.keepOriginalAlbums';
 
@@ -118,7 +110,10 @@ export default function PhotosLibrary({
 
   const createAlbum = async (): Promise<void> => {
     if (!session || !title.trim()) return;
-    await session.write('photos', { action: 'create-album', input: { title: title.trim() } });
+    await session.write('photos', {
+      action: 'create-album',
+      input: { title: title.trim() },
+    });
     setNewAlbum(false);
     setTitle('');
   };
@@ -260,7 +255,9 @@ export default function PhotosLibrary({
               <Pressable
                 key={album.__rowId}
                 onPress={() =>
-                  navigation.navigate('AlbumDetail', { albumId: String(album.collection_id) })
+                  navigation.navigate('AlbumDetail', {
+                    albumId: String(album.collection_id),
+                  })
                 }
                 style={styles.albumCard}
               >
@@ -370,46 +367,3 @@ function Row({
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  albumCard: { width: '48%' },
-  albumCover: { aspectRatio: 1.35, borderRadius: 10, width: '100%' },
-  albumGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 10 },
-  albumTitle: { fontFamily: family.sansMedium, fontSize: 13, marginTop: 7 },
-  albumInput: {
-    borderRadius: 10,
-    borderWidth: 1,
-    fontFamily: family.sansRegular,
-    fontSize: 15,
-    marginTop: 18,
-    padding: 12,
-  },
-  backdrop: { backgroundColor: 'rgba(0,0,0,.4)', flex: 1 },
-  content: { padding: 18, paddingBottom: 60 },
-  create: { alignItems: 'center', borderRadius: 10, marginTop: 12, padding: 12 },
-  createText: { color: '#fff', fontFamily: family.sansBold, fontSize: 14 },
-  dialog: { borderRadius: 16, left: 28, padding: 20, position: 'absolute', right: 28, top: '34%' },
-  dialogTitle: { fontFamily: family.displayBold, fontSize: 19 },
-  empty: { fontFamily: family.sansRegular, fontSize: 13, paddingVertical: 15 },
-  header: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    minHeight: 50,
-    paddingHorizontal: 14,
-  },
-  icon: { alignItems: 'center', borderRadius: 10, height: 38, justifyContent: 'center', width: 38 },
-  row: { alignItems: 'center', borderBottomWidth: 1, flexDirection: 'row', minHeight: 64 },
-  rowCopy: { flex: 1, marginLeft: 12 },
-  rowMeta: { fontFamily: family.sansRegular, fontSize: 12, marginTop: 3 },
-  rowTitle: { fontFamily: family.sansMedium, fontSize: 14 },
-  safe: { flex: 1 },
-  section: {
-    fontFamily: family.monoBold,
-    fontSize: 10,
-    letterSpacing: 1,
-    marginBottom: 4,
-    marginTop: 24,
-  },
-  title: { fontFamily: family.displayBold, fontSize: 18 },
-});

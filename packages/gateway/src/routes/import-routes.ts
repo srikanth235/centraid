@@ -14,6 +14,7 @@
 //   POST   /centraid/_vault/imports/connections/<id>/status  {status: paused|active}
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
+
 import type { RouteHandler } from '../serve/build-gateway.js';
 import type { VaultRegistry } from '../serve/vault-registry.js';
 import { readJson, sendJson } from './route-helpers.js';
@@ -131,7 +132,10 @@ export function makeImportRouteHandler(vaults: Pick<VaultRegistry, 'current'>): 
         const body = await readJson(req);
         const outcome = await plane.invoke(owner, {
           command: 'sync.set_connection_status',
-          input: { connection_id: segments[1], status: String(body.status ?? '') },
+          input: {
+            connection_id: segments[1],
+            status: String(body.status ?? ''),
+          },
           purpose,
         });
         return sendJson(res, outcome.status === 'executed' ? 200 : 400, outcome);
@@ -164,8 +168,12 @@ export function makeImportRouteHandler(vaults: Pick<VaultRegistry, 'current'>): 
         return sendJson(res, 200, plane.gateway.discardImport(owner, segments[0] ?? ''));
       }
     } catch (err) {
-      return sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+      return sendJson(res, 400, {
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
-    return sendJson(res, 405, { error: `unsupported ${method} on ${url.pathname}` });
+    return sendJson(res, 405, {
+      error: `unsupported ${method} on ${url.pathname}`,
+    });
   };
 }

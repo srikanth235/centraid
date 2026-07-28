@@ -35,7 +35,10 @@ export function restampReleaseDate(yml, hours, nowMs = Date.now()) {
       `$<versionLine>\nreleaseDate: '${target}'`,
     );
     if (withDate === yml) {
-      return { text: `${yml.trimEnd()}\nreleaseDate: '${target}'\n`, releaseDate: target };
+      return {
+        text: `${yml.trimEnd()}\nreleaseDate: '${target}'\n`,
+        releaseDate: target,
+      };
     }
     return { text: withDate, releaseDate: target };
   }

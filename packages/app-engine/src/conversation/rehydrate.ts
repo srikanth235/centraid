@@ -9,6 +9,7 @@
 // keyed by turn id fail cleanly — the pruned rows simply no longer exist).
 
 import { readArchivedConversationSegment } from './archive/index.js';
+import type { Attachment, Item, Turn } from './schema.js';
 import {
   attachmentFromRaw,
   itemFromRaw,
@@ -17,7 +18,6 @@ import {
   type RawItem,
   type RawTurn,
 } from './store-sql.js';
-import type { Attachment, Item, Turn } from './schema.js';
 
 /**
  * Injectable read-back of an archived segment blob by content hash. The gateway
@@ -81,22 +81,19 @@ export async function collectArchivedRows(
     return out;
   }
 
-  for (const ref of prunedRefs) {
-    let bytes: Uint8Array | null;
-    try {
-      bytes = await reader(ref.segmentSha256);
-    } catch {
-      out.unavailable = true;
-      continue;
-    }
-    if (!bytes) {
-      out.unavailable = true;
-      continue;
-    }
-    let segment: ReturnType<typeof readArchivedConversationSegment>;
-    try {
-      segment = readArchivedConversationSegment(Buffer.from(bytes));
-    } catch {
+  const segments = await Promise.all(
+    prunedRefs.map(async (ref) => {
+      try {
+        const bytes = await reader(ref.segmentSha256);
+        if (!bytes) return undefined;
+        return readArchivedConversationSegment(Buffer.from(bytes));
+      } catch {
+        return undefined;
+      }
+    }),
+  );
+  for (const segment of segments) {
+    if (!segment) {
       out.unavailable = true;
       continue;
     }

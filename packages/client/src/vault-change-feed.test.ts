@@ -1,5 +1,5 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushMacrotasks } from '@centraid/test-kit/flush';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const core = vi.hoisted(() => ({
   auth: vi.fn<typeof import('./gateway-client-core.js').auth>(),
@@ -217,8 +217,16 @@ describe('vault-change-feed', () => {
       const first = controlledBody();
       const second = controlledBody();
       core.doFetch
-        .mockResolvedValueOnce({ ok: true, status: 200, body: first.body } as unknown as Response)
-        .mockResolvedValueOnce({ ok: true, status: 200, body: second.body } as unknown as Response);
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          body: first.body,
+        } as unknown as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          body: second.body,
+        } as unknown as Response);
       const off = feedModule.subscribeVaultChanges(() => undefined);
       await vi.advanceTimersByTimeAsync(0);
       first.enqueue('event: cursor\ndata: "epoch-r:12"\n\n');
@@ -241,7 +249,11 @@ describe('vault-change-feed', () => {
       const stale = controlledBody();
       const resumed = controlledBody();
       core.doFetch
-        .mockResolvedValueOnce({ ok: true, status: 200, body: stale.body } as unknown as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          body: stale.body,
+        } as unknown as Response)
         .mockResolvedValueOnce({
           ok: true,
           status: 200,

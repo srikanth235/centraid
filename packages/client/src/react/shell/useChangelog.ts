@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+
 import type { CentraidChangelogResult } from '../../centraid-api.js';
 
 export type ChangelogState =
@@ -16,7 +17,11 @@ export type ChangelogState =
  *  missing bridge method resolves to the error state rather than throwing). */
 async function loadChangelog(): Promise<ChangelogState> {
   const get = window.CentraidApi.getChangelog;
-  if (!get) return { status: 'error', message: 'Changelog is unavailable in this build.' };
+  if (!get)
+    return {
+      status: 'error',
+      message: 'Changelog is unavailable in this build.',
+    };
   try {
     return { status: 'ready', result: await get() };
   } catch (err: unknown) {
@@ -34,7 +39,10 @@ export function useChangelog(): { state: ChangelogState; reload: () => void } {
   // attempt that produced it, so a reload reads as `loading` during render
   // rather than through a synchronous setState in the effect body.
   const [attempt, setAttempt] = useState(0);
-  const [settled, setSettled] = useState<{ attempt: number; state: ChangelogState } | null>(null);
+  const [settled, setSettled] = useState<{
+    attempt: number;
+    state: ChangelogState;
+  } | null>(null);
   const state = settled !== null && settled.attempt === attempt ? settled.state : LOADING;
 
   useEffect(() => {

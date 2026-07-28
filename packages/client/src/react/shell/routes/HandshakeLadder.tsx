@@ -1,6 +1,8 @@
 import type { CSSProperties, JSX } from 'react';
+
 import Icon from '../../ui/Icon.js';
 import type { ConnectivityReport, ConnectivityStage } from './connectFlow-core.js';
+
 import styles from './HandshakeLadder.module.css';
 
 // The connectivity-test "handshake ladder" (issue #382 design doc) — the

@@ -16,6 +16,7 @@
  */
 
 import { AsyncLocalStorage } from 'node:async_hooks';
+
 import type { DeviceRole } from './enrollment-store.js';
 
 export interface VaultRequestContext {

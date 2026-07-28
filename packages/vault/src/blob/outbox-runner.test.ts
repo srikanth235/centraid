@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
+
 import { openVaultDb } from '../db.js';
 import { BlobCache } from './cache.js';
 import { MemoryBlobStore } from './local.js';

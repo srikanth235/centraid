@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { companionRequestAllowed } from './companion-access.js';
 
 describe('Companion gateway surface', () => {

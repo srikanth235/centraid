@@ -8,15 +8,17 @@
  */
 
 import type { AgentFailureClass } from '@centraid/app-engine';
-import type { AcpTurnConfig } from './types.js';
+
 import { AUTH_REQUIRED_CODE, AcpRpcError } from './json-rpc.js';
+import type { AcpTurnConfig } from './types.js';
+
+export { type AgentFailureClass } from '@centraid/app-engine';
 
 /**
  * The taxonomy is owned by `@centraid/app-engine` (the `TurnStreamEvent`
  * contract the breakers key off). Re-exported, never re-declared — two copies
  * of the union is how the classifier and the runner drift apart.
  */
-export type { AgentFailureClass };
 
 /** ACP JSON-RPC "Internal error" — often a stand-in for "not configured". */
 const INTERNAL_ERROR_CODE = -32603;
@@ -34,19 +36,19 @@ const QUOTA_ERROR_CODES = new Set([-32029, 429, -429]);
  * These are structured signals — the stage name is in the string BECAUSE we
  * put it there — so they outrank any keyword scan of agent output.
  */
-const OWN_WEDGE = /idle watchdog timed out/i;
-const OWN_STAGE_TIMEOUT = /^ACP (?<stage>.+?) timed out after \d+ms/i;
-const INIT_STAGES = /^(initialize|session\/(new|load|resume))/i;
+const OWN_WEDGE = /idle watchdog timed out/iu;
+const OWN_STAGE_TIMEOUT = /^ACP (?<stage>.+?) timed out after \d+ms/iu;
+const INIT_STAGES = /^(?<stage>initialize|session\/(?<sessionStage>new|load|resume))/iu;
 
 const AUTHISH =
-  /\b(oauth|auth(?:entication|enticate(?:d|s)?|enticating)?|sign[\s-]?in|log[\s-]?in|not logged|unauthori[sz]ed|api[_ ]?key|credentials?|configure|provider)\b/i;
+  /\b(?<authTerm>oauth|auth(?:entication|enticate(?:d|s)?|enticating)?|sign[\s-]?in|log[\s-]?in|not logged|unauthori[sz]ed|api[_ ]?key|credentials?|configure|provider)\b/iu;
 
 const KEYWORD_CLASSES: Array<[RegExp, AgentFailureClass]> = [
-  [/\b(rate limit|quota|too many requests|429)\b/i, 'quota'],
-  [/\b(wedge|idle watchdog)\b/i, 'wedge'],
-  [/\b(timeout|timed out)\b/i, 'timeout'],
-  [/\b(spawn|enoent|binary)\b/i, 'spawn'],
-  [/\b(exit|exited|signal|broken pipe)\b/i, 'exit'],
+  [/\b(?<quota>rate limit|quota|too many requests|429)\b/iu, 'quota'],
+  [/\b(?<wedge>wedge|idle watchdog)\b/iu, 'wedge'],
+  [/\b(?<timeout>timeout|timed out)\b/iu, 'timeout'],
+  [/\b(?<spawn>spawn|enoent|binary)\b/iu, 'spawn'],
+  [/\b(?<exit>exit|exited|signal|broken pipe)\b/iu, 'exit'],
 ];
 
 function keywordClass(text: string): AgentFailureClass | undefined {
@@ -105,7 +107,7 @@ export function classifyAgentFailureDetail(
     };
   }
 
-  if (AUTHISH.test(combined) && (err instanceof AcpRpcError || /acp rpc/i.test(combined))) {
+  if (AUTHISH.test(combined) && (err instanceof AcpRpcError || /acp rpc/iu.test(combined))) {
     return {
       failureClass: 'auth',
       message:
@@ -117,7 +119,10 @@ export function classifyAgentFailureDetail(
 
   const msg = err instanceof Error ? err.message : String(err);
   const tail = stderr.trim() ? `\n${stderr.trim().slice(-2000)}` : '';
-  return { failureClass: failureClassOf(err, msg, stderr), message: `${msg}${tail}` };
+  return {
+    failureClass: failureClassOf(err, msg, stderr),
+    message: `${msg}${tail}`,
+  };
 }
 
 /**

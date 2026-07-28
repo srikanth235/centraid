@@ -26,9 +26,9 @@
  * stacks add it and decode the result. No custom gate header is needed.
  */
 
-import zlib from 'node:zlib';
-import { availableParallelism, totalmem } from 'node:os';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { availableParallelism, totalmem } from 'node:os';
+import zlib from 'node:zlib';
 
 /**
  * Below this raw-body size, compression's header + framing overhead and CPU
@@ -81,7 +81,7 @@ export function negotiateEncoding(header: string | string[] | undefined): Encodi
     for (const p of params) {
       const m = /^\s*q=(?<weight>[0-9.]+)\s*$/iu.exec(p);
       const parsed = m?.groups?.weight;
-      if (parsed !== undefined) weight = Number.parseFloat(parsed);
+      if (parsed !== undefined) weight = Number(parsed);
     }
     q.set(name, Number.isNaN(weight) ? 0 : weight);
   }
@@ -124,7 +124,7 @@ export function staticQualityForHost(
     (resolvedProfile !== 'standard' && (host.cores <= 4 || host.totalMemoryBytes <= 4 * 1024 ** 3));
   const parse = (raw: string | undefined, fallback: number, ceiling: number): number => {
     if (raw === undefined || raw === '') return fallback;
-    const parsed = Number.parseInt(raw, 10);
+    const parsed = Math.trunc(Number(raw));
     return Number.isFinite(parsed) && parsed >= 0 ? Math.min(parsed, ceiling) : fallback;
   };
   const fallback = constrained ? { brotli: 5, gzip: 6 } : STATIC_QUALITY;

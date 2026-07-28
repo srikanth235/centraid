@@ -2,6 +2,7 @@
 /* Replica HTTP protocol: authenticated bootstrap, pull/stream, lazy row and intent lanes. */
 import crypto from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+
 import {
   currentReplicaLogState,
   InvalidReplicaCursorError,
@@ -16,11 +17,11 @@ import {
   type ReplicaSnapshotResult,
   type ReplicaSnapshotReader,
 } from '@centraid/vault';
+
 import type { RouteHandler } from '../serve/build-gateway.js';
 import type { EnrollmentStore } from '../serve/enrollment-store.js';
 import { vaultContext } from '../serve/vault-context.js';
 import type { VaultRegistry } from '../serve/vault-registry.js';
-import { readJson, sendJson } from './route-helpers.js';
 import {
   expectedReplicaShapeIds,
   resolveReplicaAccess,
@@ -46,6 +47,7 @@ import {
   type ReplicaEntityShape,
   type ReplicaServerShape,
 } from './replica-shape.js';
+import { readJson, sendJson } from './route-helpers.js';
 
 const BOOTSTRAP_PATH = '/centraid/_vault/replica/bootstrap';
 const CHANGES_PATH = '/centraid/_vault/changes';
@@ -198,7 +200,11 @@ function collectBootstrapWindow(
   nowMs: number,
   start: BootstrapPosition,
   windowLimit: number,
-): { rows: BootstrapWireRow[]; position: BootstrapPosition; complete: boolean } {
+): {
+  rows: BootstrapWireRow[];
+  position: BootstrapPosition;
+  complete: boolean;
+} {
   const rows: BootstrapWireRow[] = [];
   let { shapeIdx, entityIdx, after } = start;
   while (shapeIdx < shapes.length) {
@@ -227,7 +233,11 @@ function collectBootstrapWindow(
     }
     if (rows.length >= windowLimit) break;
   }
-  return { rows, position: { shapeIdx, entityIdx, after }, complete: shapeIdx >= shapes.length };
+  return {
+    rows,
+    position: { shapeIdx, entityIdx, after },
+    complete: shapeIdx >= shapes.length,
+  };
 }
 
 export interface ReplicaRouteOptions {
@@ -347,7 +357,10 @@ function rawValues(
     const value = column === REPLICA_SYNTHETIC_PRIMARY_KEY ? rowId : row[column];
     values[column] =
       value instanceof Uint8Array
-        ? { base64: Buffer.from(value).toString('base64'), byteSize: value.byteLength }
+        ? {
+            base64: Buffer.from(value).toString('base64'),
+            byteSize: value.byteLength,
+          }
         : typeof value === 'bigint'
           ? value.toString()
           : value;
@@ -364,7 +377,9 @@ function rowForWireId(
   maxRows: number,
 ): ReplicaRow | undefined {
   if (schema.primaryKey !== REPLICA_SYNTHETIC_PRIMARY_KEY) {
-    return reader.readRow(entity, wireRowId, { maxValueBytes: REPLICA_MAX_VALUE_BYTES });
+    return reader.readRow(entity, wireRowId, {
+      maxValueBytes: REPLICA_MAX_VALUE_BYTES,
+    });
   }
   let after: string | undefined;
   let scanned = 0;
@@ -504,11 +519,12 @@ async function streamChanges(
     wake?.();
   });
   let heartbeatAt = Date.now();
-  while (!closed) {
+  const streamNext = async (): Promise<void> => {
+    if (closed) return;
     const access = resolveReplicaAccess(req, url, vaultId, options.enrollments);
     if (!access.ok) {
       sendSseRebootstrap(res, 'device-access-changed', currentReplicaLogState(db));
-      break;
+      return;
     }
     try {
       const page = projectReplicaPage(db, access.access, cursor, limit);
@@ -518,19 +534,22 @@ async function streamChanges(
           page.rebootstrapReason ?? 'shape-changed',
           currentReplicaLogState(db),
         );
-        break;
+        return;
       }
       baseline ??= replicaShapeIds(page.shapes);
       if (page.doorbell.length > 0) {
-        writeSse(res, 'change', { changes: page.doorbell, cursor: page.batch.to });
+        writeSse(res, 'change', {
+          changes: page.doorbell,
+          cursor: page.batch.to,
+        });
       }
       if (!sameCursor(cursor, page.batch.to)) writeSse(res, 'cursor', page.batch.to);
       cursor = page.batch.to;
-      if (page.batch.hasMore) continue;
+      if (page.batch.hasMore) return streamNext();
     } catch (error) {
       if (error instanceof ReplicaRebootstrapRequiredError) {
         sendSseRebootstrap(res, error.reason, error.state);
-        break;
+        return;
       }
       writeSse(res, 'retry', {
         error: 'replica_stream_retry',
@@ -569,7 +588,9 @@ async function streamChanges(
         settle();
       };
     });
-  }
+    return streamNext();
+  };
+  await streamNext();
   unsubscribe();
   req.off('close', close);
   res.off('close', close);
@@ -624,7 +645,11 @@ function handleWindowedBootstrap(
       if (token.first.seq < state.floor.seq) return { rebootstrap: 'snapshot-retention' };
       if (token.shapeSig !== shapeSig) return { rebootstrap: 'shape-changed' };
       if (token.shapeIdx > shapes.length) return { badToken: true };
-      start = { shapeIdx: token.shapeIdx, entityIdx: token.entityIdx, after: token.after };
+      start = {
+        shapeIdx: token.shapeIdx,
+        entityIdx: token.entityIdx,
+        after: token.after,
+      };
     }
     let collected: ReturnType<typeof collectBootstrapWindow>;
     try {
@@ -850,7 +875,10 @@ export function makeReplicaRouteHandler(
         if (error instanceof ReplicaRebootstrapRequiredError)
           return sendJson(res, 409, rebootstrapBody(error.reason, error.state));
         if (error instanceof InvalidReplicaCursorError || error instanceof RangeError)
-          return sendJson(res, 400, { error: 'invalid_replica_cursor', message: error.message });
+          return sendJson(res, 400, {
+            error: 'invalid_replica_cursor',
+            message: error.message,
+          });
         throw error;
       }
     }
@@ -959,6 +987,10 @@ export function makeReplicaRouteHandler(
     }
 
     if (method !== 'POST') return methodAllowed(res, 'POST');
-    return handleReplicaIntent(req, res, { plane, access, dispatch: options.dispatchIntent });
+    return handleReplicaIntent(req, res, {
+      plane,
+      access,
+      dispatch: options.dispatchIntent,
+    });
   };
 }

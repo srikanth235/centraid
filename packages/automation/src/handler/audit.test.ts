@@ -2,8 +2,9 @@
  * Direct unit tests for automation handler audit helpers (issue #545 B5).
  */
 
-import { describe, expect, it, vi } from 'vitest';
 import type { ConversationStore, Turn } from '@centraid/app-engine';
+import { describe, expect, it, vi } from 'vitest';
+
 import type { RunEventSink } from './audit.js';
 import {
   applyRetention,
@@ -74,7 +75,9 @@ describe('rowToRunRef / extractReturnEnvelope / makeNodeId', () => {
   });
 
   it('extractReturnEnvelope only lifts summary/output from plain objects', () => {
-    expect(extractReturnEnvelope(undefined)).toStrictEqual({ value: undefined });
+    expect(extractReturnEnvelope(undefined)).toStrictEqual({
+      value: undefined,
+    });
     expect(extractReturnEnvelope('x')).toStrictEqual({ value: 'x' });
     expect(extractReturnEnvelope([1])).toStrictEqual({ value: [1] });
     expect(extractReturnEnvelope({ summary: 's', output: { a: 1 }, extra: true })).toStrictEqual({
@@ -86,13 +89,15 @@ describe('rowToRunRef / extractReturnEnvelope / makeNodeId', () => {
 
   it('makeNodeId embeds runId + ordinal + a short uuid suffix', () => {
     const id = makeNodeId('run-1', 3);
-    expect(id).toMatch(/^run-1:3:[0-9a-f]{6}$/);
+    expect(id).toMatch(/^run-1:3:[0-9a-f]{6}$/u);
   });
 });
 
 describe('applyRetention / usageCloseFields / open+closeRunNode', () => {
   it('applyRetention maps history keep policies onto pruneAutomation', () => {
-    const store = { pruneAutomation: vi.fn<ConversationStore['pruneAutomation']>() };
+    const store = {
+      pruneAutomation: vi.fn<ConversationStore['pruneAutomation']>(),
+    };
     applyRetention(store as never, 'app/a', undefined);
     expect(store.pruneAutomation).not.toHaveBeenCalled();
 
@@ -100,7 +105,9 @@ describe('applyRetention / usageCloseFields / open+closeRunNode', () => {
     expect(store.pruneAutomation).not.toHaveBeenCalled();
 
     applyRetention(store as never, 'app/a', { keep: 'errors' });
-    expect(store.pruneAutomation).toHaveBeenCalledWith('app/a', { errorsOnly: true });
+    expect(store.pruneAutomation).toHaveBeenCalledWith('app/a', {
+      errorsOnly: true,
+    });
 
     applyRetention(store as never, 'app/a', { keep: { count: 5 } });
     expect(store.pruneAutomation).toHaveBeenCalledWith('app/a', { count: 5 });
@@ -221,7 +228,12 @@ describe('applyRetention / usageCloseFields / open+closeRunNode', () => {
 
   it('noopRunEventSink is callable', () => {
     expect(() =>
-      noopRunEventSink({ type: 'item.start', itemId: 'i0', ordinal: 0, kind: 'step' }),
+      noopRunEventSink({
+        type: 'item.start',
+        itemId: 'i0',
+        ordinal: 0,
+        kind: 'step',
+      }),
     ).not.toThrow();
   });
 });

@@ -64,7 +64,9 @@ export function validateOutputSchema(raw: unknown): OutputSchema | undefined {
           `outputSchema.properties.${key}.type`,
         );
       }
-      out[key] = { type: v.type as 'string' | 'number' | 'boolean' | 'object' | 'array' };
+      out[key] = {
+        type: v.type as 'string' | 'number' | 'boolean' | 'object' | 'array',
+      };
     }
     properties = out;
   }

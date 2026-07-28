@@ -5,8 +5,17 @@ import { family, radii, spacing, t, type ThemeColors } from '../../kit/theme';
 export const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     safe: { backgroundColor: colors.bg, flex: 1 },
-    header: { paddingBottom: spacing[3], paddingHorizontal: spacing[5], paddingTop: spacing[2] },
-    title: { color: colors.ink, fontFamily: family.serif, fontSize: 30, letterSpacing: -0.4 },
+    header: {
+      paddingBottom: spacing[3],
+      paddingHorizontal: spacing[5],
+      paddingTop: spacing[2],
+    },
+    title: {
+      color: colors.ink,
+      fontFamily: family.serif,
+      fontSize: 30,
+      letterSpacing: -0.4,
+    },
     subtitle: { ...t('small'), color: colors.ink3, marginTop: 4 },
     scroll: { paddingBottom: spacing[6], paddingHorizontal: spacing[5] },
 
@@ -30,12 +39,22 @@ export const makeStyles = (colors: ThemeColors) =>
     },
     heroTop: { alignItems: 'center', flexDirection: 'row', gap: 12 },
     heroDot: { borderRadius: 7, height: 14, width: 14 },
-    heroStatus: { color: colors.ink, fontFamily: family.serif, fontSize: 20, letterSpacing: -0.2 },
+    heroStatus: {
+      color: colors.ink,
+      fontFamily: family.serif,
+      fontSize: 20,
+      letterSpacing: -0.2,
+    },
     heroSub: { ...t('small'), color: colors.ink3, marginTop: 2 },
     heroMeta: { flex: 1, minWidth: 0 },
 
     // Metric chips strip inside the hero.
-    chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: spacing[4] },
+    chips: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginTop: spacing[4],
+    },
     chip: {
       backgroundColor: colors.bg,
       borderColor: colors.line,
@@ -52,11 +71,21 @@ export const makeStyles = (colors: ThemeColors) =>
       fontSize: 10,
       letterSpacing: 0.6,
     },
-    chipValue: { color: colors.ink, fontFamily: family.monoBold, fontSize: 16, marginTop: 3 },
+    chipValue: {
+      color: colors.ink,
+      fontFamily: family.monoBold,
+      fontSize: 16,
+      marginTop: 3,
+    },
 
     // Components list.
     components: { gap: 2, marginTop: spacing[4] },
-    compRow: { alignItems: 'center', flexDirection: 'row', gap: 10, paddingVertical: 9 },
+    compRow: {
+      alignItems: 'center',
+      flexDirection: 'row',
+      gap: 10,
+      paddingVertical: 9,
+    },
     compDot: { borderRadius: 4, height: 8, width: 8 },
     compName: { ...t('body'), color: colors.ink, flexShrink: 1 },
     compDetail: {
@@ -65,7 +94,12 @@ export const makeStyles = (colors: ThemeColors) =>
       flex: 1,
       textAlign: 'right',
     },
-    compError: { ...t('small'), color: colors.danger, marginLeft: 18, marginTop: -4 },
+    compError: {
+      ...t('small'),
+      color: colors.danger,
+      marginLeft: 18,
+      marginTop: -4,
+    },
     divider: { backgroundColor: colors.line, height: StyleSheet.hairlineWidth },
 
     // Recent events tail.
@@ -150,25 +184,55 @@ export const makeStyles = (colors: ThemeColors) =>
       fontSize: 10,
       letterSpacing: 0.5,
     },
-    chartStats: { flexDirection: 'row', gap: spacing[5], marginBottom: spacing[3] },
+    chartStats: {
+      flexDirection: 'row',
+      gap: spacing[5],
+      marginBottom: spacing[3],
+    },
     chartStatLabel: {
       color: colors.ink3,
       fontFamily: family.monoMedium,
       fontSize: 10,
       letterSpacing: 0.5,
     },
-    chartStatValue: { color: colors.ink, fontFamily: family.monoBold, fontSize: 16, marginTop: 2 },
-    chartAxis: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
-    chartAxisText: { color: colors.ink4, fontFamily: family.monoRegular, fontSize: 10 },
+    chartStatValue: {
+      color: colors.ink,
+      fontFamily: family.monoBold,
+      fontSize: 16,
+      marginTop: 2,
+    },
+    chartAxis: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginTop: 8,
+    },
+    chartAxisText: {
+      color: colors.ink4,
+      fontFamily: family.monoRegular,
+      fontSize: 10,
+    },
 
     // Model bars.
     model: { marginTop: spacing[3] },
     modelName: { ...t('small'), color: colors.ink2, marginBottom: 5 },
-    modelFoot: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 5 },
-    modelFootText: { color: colors.ink3, fontFamily: family.monoRegular, fontSize: 11 },
+    modelFoot: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginTop: 5,
+    },
+    modelFootText: {
+      color: colors.ink3,
+      fontFamily: family.monoRegular,
+      fontSize: 11,
+    },
 
     // Recent activity.
-    act: { alignItems: 'center', flexDirection: 'row', gap: 12, paddingVertical: 9 },
+    act: {
+      alignItems: 'center',
+      flexDirection: 'row',
+      gap: 12,
+      paddingVertical: 9,
+    },
     actAgo: {
       color: colors.ink4,
       fontFamily: family.monoRegular,
@@ -185,8 +249,17 @@ export const makeStyles = (colors: ThemeColors) =>
       marginTop: 2,
     },
     actNums: { alignItems: 'flex-end' },
-    actTokens: { color: colors.ink2, fontFamily: family.monoMedium, fontSize: 12 },
-    actUsd: { color: colors.ink3, fontFamily: family.monoRegular, fontSize: 11, marginTop: 2 },
+    actTokens: {
+      color: colors.ink2,
+      fontFamily: family.monoMedium,
+      fontSize: 12,
+    },
+    actUsd: {
+      color: colors.ink3,
+      fontFamily: family.monoRegular,
+      fontSize: 11,
+      marginTop: 2,
+    },
 
     // Section-level error / empty notes.
     note: {
@@ -200,7 +273,11 @@ export const makeStyles = (colors: ThemeColors) =>
       paddingHorizontal: spacing[4],
       paddingVertical: spacing[3],
     },
-    panelEmpty: { ...t('small'), color: colors.ink3, paddingVertical: spacing[2] },
+    panelEmpty: {
+      ...t('small'),
+      color: colors.ink3,
+      paddingVertical: spacing[2],
+    },
 
     // Full-screen empty states.
     emptyWrap: {

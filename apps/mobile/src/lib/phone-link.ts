@@ -21,6 +21,7 @@
 // — one EndpointId enrolls with every desktop — so it is never per-Space.
 
 import { Platform } from 'react-native';
+
 import {
   addTunnelStatusListener,
   generateSecretKey,
@@ -32,6 +33,8 @@ import {
   stopTunnel,
 } from '../../modules/centraid-tunnel';
 import type { TunnelStatus } from '../../modules/centraid-tunnel';
+import { Store } from '../storage';
+import { parsePairingInput } from './phone-link-parse';
 import { getSecure, hydrateSecure, setSecure } from './secure-storage';
 import {
   LINK_DESKTOP_NAME_KEY,
@@ -45,9 +48,9 @@ import {
   setActiveSpace,
   type Space,
 } from './spaces';
-import { Store } from '../storage';
-import { parsePairingInput } from './phone-link-parse';
 
+export { getTunnelStatus, isTunnelAvailable } from '../../modules/centraid-tunnel';
+export { type TunnelStatus } from '../../modules/centraid-tunnel';
 export { parsePairingInput } from './phone-link-parse';
 
 // The active-slot keys now live in their new owner, lib/spaces (the Spaces
@@ -286,7 +289,9 @@ export async function ensureTunnelStarted(): Promise<{ baseUrl: string } | undef
 }
 
 /** Status subscription passthrough — no-op remover when the module is unavailable. */
-export function subscribeTunnelStatus(cb: (status: TunnelStatus) => void): { remove: () => void } {
+export function subscribeTunnelStatus(cb: (status: TunnelStatus) => void): {
+  remove: () => void;
+} {
   if (!isTunnelAvailable()) {
     return {
       remove: () => {
@@ -296,6 +301,3 @@ export function subscribeTunnelStatus(cb: (status: TunnelStatus) => void): { rem
   }
   return addTunnelStatusListener(cb);
 }
-
-export { getTunnelStatus, isTunnelAvailable };
-export type { TunnelStatus };

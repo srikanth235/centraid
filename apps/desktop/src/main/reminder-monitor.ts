@@ -17,6 +17,7 @@
  */
 
 import { Notification } from 'electron';
+
 import { loadSettings } from './settings.js';
 
 export const REMINDER_POLL_MS = 30_000;
@@ -70,7 +71,9 @@ async function fetchDueReminders(
     signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
   });
   if (!res.ok) return [];
-  const body = (await res.json().catch(() => ({}))) as { reminders?: DueReminder[] };
+  const body = (await res.json().catch(() => ({}))) as {
+    reminders?: DueReminder[];
+  };
   return Array.isArray(body.reminders) ? body.reminders : [];
 }
 

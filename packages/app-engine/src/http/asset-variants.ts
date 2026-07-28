@@ -1,6 +1,6 @@
-import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createHash } from 'node:crypto';
-import { staticSecurityHeaders } from './security.js';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+
 import {
   compress,
   isCompressibleType,
@@ -10,6 +10,7 @@ import {
   type CompressQuality,
   type Encoding,
 } from './compression.js';
+import { staticSecurityHeaders } from './security.js';
 
 export function computeEtag(buf: Buffer): string {
   return `"${createHash('sha256').update(buf).digest('hex')}"`;

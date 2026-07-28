@@ -17,7 +17,9 @@
  */
 
 import { createHmac } from 'node:crypto';
+
 import { aesGcmKeyProtector, KeyStore } from '@centraid/vault';
+
 import { daemonKeyStore } from './key-store.js';
 import { daemonLayoutFor } from './paths.js';
 
@@ -49,7 +51,9 @@ export function landlordBearerForDataDir(
   const keysDir = daemonLayoutFor(dataDir).keysDir;
   try {
     const store = options.masterKey
-      ? new KeyStore(keysDir, { protector: aesGcmKeyProtector(options.masterKey) })
+      ? new KeyStore(keysDir, {
+          protector: aesGcmKeyProtector(options.masterKey),
+        })
       : daemonKeyStore(keysDir);
     const secret = store.load('endpoint-key.bin');
     return secret ? landlordBearerForEndpointSecret(secret) : undefined;

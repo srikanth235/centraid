@@ -4,10 +4,10 @@
 // state of its own. Identity is v0 key-equality, so the host (which owns the
 // database files) recovers credentials by reading the enrolled rows back.
 
-import type { VaultDb } from './db.js';
 import { enrollAgent, enrollApp, type BootstrapResult } from './bootstrap.js';
-import { nowIso } from './ids.js';
+import type { VaultDb } from './db.js';
 import type { FilterClause, Risk } from './gateway/types.js';
+import { nowIso } from './ids.js';
 
 export interface HostBootstrap extends BootstrapResult {
   /** true when this call created the vault; false when it recovered one. */
@@ -257,7 +257,13 @@ export function lookupAppByName(db: VaultDb, name: string): EnrolledApp | undefi
         WHERE name = ? AND status = 'active' ORDER BY installed_at LIMIT 1`,
     )
     .get(name) as
-    | { app_id: string; name: string; signing_key: string; status: string; risk_ceiling: Risk }
+    | {
+        app_id: string;
+        name: string;
+        signing_key: string;
+        status: string;
+        risk_ceiling: Risk;
+      }
     | undefined;
   if (!row) return undefined;
   return {
@@ -282,7 +288,11 @@ export function lookupAppByName(db: VaultDb, name: string): EnrolledApp | undefi
 export function ensureAppEnrolled(
   db: VaultDb,
   name: string,
-  options?: { origin?: 'installed' | 'generated'; riskCeiling?: Risk; displayName?: string },
+  options?: {
+    origin?: 'installed' | 'generated';
+    riskCeiling?: Risk;
+    displayName?: string;
+  },
 ): EnrolledApp & { created: boolean } {
   const resolvedDisplayName = options?.displayName ?? humanizeSlug(name);
   const existing = lookupAppByName(db, name);
@@ -408,7 +418,12 @@ export function lookupAgentByName(db: VaultDb, name: string): EnrolledAgent | un
         ORDER BY a.enrolled_at LIMIT 1`,
     )
     .get(name) as
-    | { agent_id: string; party_id: string; display_name: string; status: string }
+    | {
+        agent_id: string;
+        party_id: string;
+        display_name: string;
+        status: string;
+      }
     | undefined;
   if (!row) return undefined;
   return {

@@ -14,7 +14,11 @@ export interface MultipartPartReceipt {
 
 export type DirectUploadPlan =
   | { kind: 'single'; url: string }
-  | { kind: 'multipart'; uploadId: string; parts: { partNumber: number; url: string }[] };
+  | {
+      kind: 'multipart';
+      uploadId: string;
+      parts: { partNumber: number; url: string }[];
+    };
 
 export interface DirectBeginInput {
   sha256: string;

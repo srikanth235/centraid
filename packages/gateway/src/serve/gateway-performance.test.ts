@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
 import { GatewayPerformanceMonitor } from './gateway-performance.js';
 
 class FakeHistogram {
@@ -60,7 +61,10 @@ describe(GatewayPerformanceMonitor, () => {
     const histogram = new FakeHistogram();
     histogram.max = 20_000_000;
     histogram.p99 = 20_000_000;
-    const monitor = new GatewayPerformanceMonitor({ histogram, sampleWindowMs: 0 });
+    const monitor = new GatewayPerformanceMonitor({
+      histogram,
+      sampleWindowMs: 0,
+    });
 
     expect(monitor.snapshot()).toMatchObject({
       eventLoopLagP50Ms: 0,
@@ -74,7 +78,10 @@ describe(GatewayPerformanceMonitor, () => {
   it('does not shed while the histogram has no samples', () => {
     const histogram = new FakeHistogram();
     histogram.count = 0;
-    const monitor = new GatewayPerformanceMonitor({ histogram, sampleWindowMs: 0 });
+    const monitor = new GatewayPerformanceMonitor({
+      histogram,
+      sampleWindowMs: 0,
+    });
     expect(monitor.shouldDeferBackgroundWork()).toBe(false);
     expect(monitor.snapshot().eventLoopLagP99Ms).toBe(0);
     monitor.close();

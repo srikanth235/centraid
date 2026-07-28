@@ -1,4 +1,4 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import { writeFile } from 'node:fs/promises';
 // Worker-spawn admission control (issue #351 Tier 4 hygiene): `runHandler`
 // used to spawn one 256MB-capped worker thread per request with no cap at
 // all — a request burst could spawn unboundedly and OOM the host. These pin
@@ -9,10 +9,11 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
 // Each test builds its own small `WorkerAdmission` (2-4 slots) rather than
 // the shared production default (8 concurrent + 16 queued) so the cap is
 // cheap to exercise without spinning up dozens of real worker threads.
-
-import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
+
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { beforeEach, describe, expect, test } from 'vitest';
+
 import { runHandler, type HandlerOutcome } from './handler-runner.js';
 import { WorkerAdmission } from './worker-admission.js';
 
@@ -70,7 +71,7 @@ describe('handler-runner', () => {
     expect(admittedSettled).toBe(false);
     expect(fifth.ok).toBe(false);
     expect(fifth.busy).toBe(true);
-    expect(fifth.error).toMatch(/busy/i);
+    expect(fifth.error).toMatch(/busy/iu);
 
     // Release the gate once the busy refusal is proven so the admitted four finish.
     await writeFile(path.join(appDir, 'release.gate'), 'go');
@@ -132,7 +133,7 @@ describe('handler-runner', () => {
     const outcome = await queued;
     expect(outcome.ok).toBe(false);
     expect(outcome.busy).toBe(true);
-    expect(outcome.error).toMatch(/timed out/i);
+    expect(outcome.error).toMatch(/timed out/iu);
     await writeFile(path.join(appDir, 'release.gate'), 'go');
     await holder; // let the first handler finish and release its slot
   });

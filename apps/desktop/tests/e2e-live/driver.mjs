@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+import { promises as fs } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
 // Fresh, standalone Electron+Playwright launcher for the REAL desktop app —
 // real in-process gateway, real dev vault, no mocked HTTP. Distinct from the
 // stale `apps/desktop/tests/e2e/` suite (mock-gateway harness, pre-React
@@ -9,9 +13,6 @@
 // `bun run build` inside apps/desktop) so `dist/main.js` + `dist/renderer/`
 // exist. Re-run after any renderer/main change.
 import { _electron } from 'playwright';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import os from 'node:os';
 
 const __filename = import.meta.filename;
 const __dirname = import.meta.dirname;

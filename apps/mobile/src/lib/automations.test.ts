@@ -1,13 +1,14 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
+
 import { runAutomation } from './automations';
 
 const { fetchJson } = vi.hoisted(() => ({
   // `fetchJson` is generic (`<T>(href, init?) => Promise<T>`); a typed mock erases
   // the type parameter, so `Mock<...>` stops being assignable to the export.
-  fetchJson: vi.fn(),
+  fetchJson: vi.fn<(href: string, init?: RequestInit) => Promise<unknown>>(),
 }));
 
-vi.mock(import('./gateway'), () => ({
+vi.mock(import('./gateway') as Promise<unknown>, () => ({
   authHeader: () => ({ authorization: 'Bearer paired' }),
   fetchJson,
   requireGatewayBase: async () => 'https://gateway.example',

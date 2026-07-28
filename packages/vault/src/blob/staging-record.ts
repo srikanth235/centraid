@@ -5,6 +5,7 @@
 // multi-hundred-megabyte object into RAM.
 
 import type { DatabaseSync } from 'node:sqlite';
+
 import { nowIso, uuidv7 } from '../ids.js';
 import type { StagedBlob } from './staging.js';
 

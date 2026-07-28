@@ -13,7 +13,7 @@
 
 import os from 'node:os';
 import path from 'node:path';
-import { app, BrowserWindow } from 'electron';
+
 import {
   DeviceStore,
   loadEndpointSecret,
@@ -21,7 +21,9 @@ import {
   type DesktopTunnelHandle,
   type PairedDevice,
 } from '@centraid/tunnel';
+import { app, BrowserWindow } from 'electron';
 import QRCode from 'qrcode';
+
 import { deviceIrohKeyPersistence } from './gateway-secrets.js';
 import { loadSettings } from './settings.js';
 
@@ -79,7 +81,10 @@ export async function ensurePhoneLink(): Promise<DesktopTunnelHandle> {
         const settings = await loadSettings();
         if (settings.activeGatewayKind !== 'local') return undefined;
         if (!(settings.gatewayUrl && settings.gatewayToken)) return undefined;
-        return { baseUrl: settings.gatewayUrl.replace(/\/+$/u, ''), token: settings.gatewayToken };
+        return {
+          baseUrl: settings.gatewayUrl.replace(/\/+$/u, ''),
+          token: settings.gatewayToken,
+        };
       },
       onPaired: (device) => {
         for (const win of BrowserWindow.getAllWindows()) {
@@ -122,7 +127,11 @@ export async function beginPhonePairing(): Promise<PhonePairingInfo> {
     margin: 1,
     width: 512,
   });
-  return { payload: pairing.qrPayload, qrDataUrl, expiresAt: pairing.expiresAt };
+  return {
+    payload: pairing.qrPayload,
+    qrDataUrl,
+    expiresAt: pairing.expiresAt,
+  };
 }
 
 export function cancelPhonePairing(): void {

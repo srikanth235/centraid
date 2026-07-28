@@ -1,8 +1,9 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import AtlasRelationsTab, { type AtlasRelationsTabProps } from './AtlasRelationsTab.js';
-import type { AtlasDetailLevel } from './atlasOrreryGeometry.js';
+
 import type { AtlasFkEdge, AtlasGraphNode, AtlasGraphPayload } from '../../gateway-client.js';
+import type { AtlasDetailLevel } from './atlasOrreryGeometry.js';
+import AtlasRelationsTab, { type AtlasRelationsTabProps } from './AtlasRelationsTab.js';
 
 // Shared test kit for the Relations "Map" suites (issue #519). Fixtures, the
 // mount harness, and the DOM query helpers live here so the pure-geometry suite
@@ -114,8 +115,14 @@ export function makeGraph(over: Partial<AtlasGraphPayload> = {}): AtlasGraphPayl
       selfRef: true,
     }),
     // the isolated island
-    edge('locker_item', 'connection_id', 'sync_connection', { childRows: 63, fill: 63 }),
-    edge('locker_item_alias', 'item_id', 'locker_item', { childRows: 91, fill: 91 }),
+    edge('locker_item', 'connection_id', 'sync_connection', {
+      childRows: 63,
+      fill: 63,
+    }),
+    edge('locker_item_alias', 'item_id', 'locker_item', {
+      childRows: 91,
+      fill: 91,
+    }),
   ];
   return {
     generatedAt: '2026-07-17T12:00:00.000Z',
@@ -218,5 +225,5 @@ export const viewportTransform = (el: HTMLElement): string =>
 
 export const scaleOf = (el: HTMLElement): number => {
   const scale = /scale\((?<scale>[-\d.]+)\)/u.exec(viewportTransform(el))?.groups?.scale;
-  return scale !== undefined ? parseFloat(scale) : Number.NaN;
+  return scale === undefined ? Number.NaN : Number(scale);
 };

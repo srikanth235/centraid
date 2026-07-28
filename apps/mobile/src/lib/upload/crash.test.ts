@@ -1,4 +1,5 @@
-import { tempDirSync } from '@centraid/test-kit/temp-dir';
+import { rmSync } from 'node:fs';
+import path from 'node:path';
 // The property the issue asks for: kill the drainer at random points — including
 // mid-PUT byte offsets — reconstruct the queue from SQLite alone, and let it
 // run again. No duplicates, no loss, ever.
@@ -8,8 +9,8 @@ import { tempDirSync } from '@centraid/test-kit/temp-dir';
 // object assembled from parts that may have been sealed across many different
 // process lifetimes.
 
-import { rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { forEachSequentially } from '@centraid/test-kit/sequential';
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
@@ -20,7 +21,6 @@ import {
   TRAILER_BYTES,
   unsealFrame,
 } from '../../../../../packages/vault/src/blob/seal-frames.js';
-
 import { webCryptoUploadCrypto } from './crypto';
 import { enqueueLocalFile } from './enqueue';
 import {
@@ -69,7 +69,7 @@ class Harness {
   readonly killer = new Killer();
   readonly provider = new FakeProvider(this.killer);
   readonly gateway = new FakeGateway(this.provider, this.killer);
-  private driver = new NodeSqliteFileDriver(join(this.dir, 'uploads.db'));
+  private driver = new NodeSqliteFileDriver(path.join(this.dir, 'uploads.db'));
   store = UploadQueueStore.create(this.driver);
 
   private readonly files = new Map(FILES.map((file) => [`file://${file.name}`, file.bytes]));
@@ -83,7 +83,7 @@ class Harness {
   /** Simulate process death: drop every handle and reopen from disk alone. */
   remount(): void {
     this.driver.close();
-    this.driver = new NodeSqliteFileDriver(join(this.dir, 'uploads.db'));
+    this.driver = new NodeSqliteFileDriver(path.join(this.dir, 'uploads.db'));
     this.store = UploadQueueStore.create(this.driver);
   }
 
@@ -102,16 +102,20 @@ class Harness {
 
   async enqueueAll(): Promise<void> {
     let counter = 0;
-    for (const file of FILES) {
+    await forEachSequentially(FILES, async (file) => {
       await enqueueLocalFile(
-        { store: this.store, openFile: this.openFile, newId: () => `item-${++counter}` },
+        {
+          store: this.store,
+          openFile: this.openFile,
+          newId: () => `item-${++counter}`,
+        },
         {
           localUri: `file://${file.name}`,
           plaintextSize: file.bytes.byteLength,
           filename: file.name,
         },
       );
-    }
+    });
   }
 
   dispose(): void {
@@ -205,18 +209,21 @@ describe('crash', () => {
       async (seed) => {
         harness = new Harness();
         await harness.enqueueAll();
-        const next = rng(seed);
-        let rounds = 0;
-        for (; rounds < 200; rounds += 1) {
-          harness.killer.budget = Math.floor(next() * 25);
+        const activeHarness = harness;
+        const random = rng(seed);
+        const recoverAfterRandomKill = async (round: number): Promise<number> => {
+          if (round >= 200) return round;
+          activeHarness.killer.budget = Math.floor(random() * 25);
           try {
-            await harness.drainer(1 + Math.floor(next() * 3)).drainOnce();
+            await activeHarness.drainer(1 + Math.floor(random() * 3)).drainOnce();
           } catch (error) {
             if (!(error instanceof UploadKillSignalError)) throw error;
           }
-          harness.remount();
-          if (harness.store.pending().length === 0) break;
-        }
+          activeHarness.remount();
+          if (activeHarness.store.pending().length === 0) return round;
+          return recoverAfterRandomKill(round + 1);
+        };
+        const rounds = await recoverAfterRandomKill(0);
         expect(rounds, 'queue never reached a settled state').toBeLessThan(200);
         assertNoLossNoDupes(harness);
       },
@@ -225,7 +232,7 @@ describe('crash', () => {
     // Exhaustive rather than random: kill at EVERY step index in turn. This is
     // the strongest form of the property — no reachable seam is left untested.
     it('survives a kill at every single step index', async () => {
-      for (let budget = 0; budget < 40; budget += 1) {
+      await forEachSequentially(Array.from({ length: 40 }), async (_, budget) => {
         const local = new Harness();
         try {
           await local.enqueueAll();
@@ -237,11 +244,13 @@ describe('crash', () => {
           }
           // Unlimited budget from here: the queue must recover on its own.
           local.killer.budget = Number.POSITIVE_INFINITY;
-          for (let round = 0; round < 10; round += 1) {
+          const recoverNextRound = async (round: number): Promise<void> => {
+            if (round >= 10 || local.store.pending().length === 0) return;
             local.remount();
-            if (local.store.pending().length === 0) break;
-            await local.drainer().drainOnce();
-          }
+            if (local.store.pending().length > 0) await local.drainer().drainOnce();
+            return recoverNextRound(round + 1);
+          };
+          await recoverNextRound(0);
           local.remount();
           // Recovery is unbounded above: whatever step the kill landed on, the
           // remounted queue must have drained itself to empty by now.
@@ -250,7 +259,7 @@ describe('crash', () => {
         } finally {
           local.dispose();
         }
-      }
+      });
     });
 
     it('replays the receipt when a PUT lands but recordPart never does', async () => {
@@ -262,21 +271,24 @@ describe('crash', () => {
       harness.killer.budget = 0;
       const killAt = 'record:1';
       // Walk the budget forward until the kill lands on the first recordPart.
-      let budget = 0;
-      for (; budget < 40; budget += 1) {
+      const findKillBudget = async (budget: number): Promise<number> => {
+        if (budget >= 40) return budget;
         const probe = new Harness();
+        let hit = false;
         try {
           await probe.enqueueAll();
           probe.killer.budget = budget;
           try {
             await probe.drainer().drainOnce();
           } catch (error) {
-            if (error instanceof UploadKillSignalError && error.at === killAt) break;
+            hit = error instanceof UploadKillSignalError && error.at === killAt;
           }
         } finally {
           probe.dispose();
         }
-      }
+        return hit ? budget : findKillBudget(budget + 1);
+      };
+      const budget = await findKillBudget(0);
       expect(budget, 'no reachable kill point at the PUT/recordPart gap').toBeLessThan(40);
 
       harness.killer.budget = budget;
@@ -290,11 +302,15 @@ describe('crash', () => {
 
       const putsBefore = harness.provider.putLog.length;
       harness.killer.budget = Number.POSITIVE_INFINITY;
-      for (let round = 0; round < 10; round += 1) {
-        harness.remount();
-        if (harness.store.pending().length === 0) break;
-        await harness.drainer().drainOnce();
-      }
+      const activeHarness = harness;
+      const recoverNextRound = async (round: number): Promise<void> => {
+        if (round >= 10) return;
+        activeHarness.remount();
+        if (activeHarness.store.pending().length === 0) return;
+        await activeHarness.drainer().drainOnce();
+        return recoverNextRound(round + 1);
+      };
+      await recoverNextRound(0);
       harness.remount();
       assertNoLossNoDupes(harness);
 
@@ -312,7 +328,11 @@ describe('crash', () => {
       harness = new Harness();
       // One file plus its canonical follow-up; settle the bytes first.
       await enqueueLocalFile(
-        { store: harness.store, openFile: harness.openFile, newId: () => 'item-1' },
+        {
+          store: harness.store,
+          openFile: harness.openFile,
+          newId: () => 'item-1',
+        },
         { localUri: 'file://a.jpg', plaintextSize: FILES[0]!.bytes.byteLength },
         (addressed) => ({
           shape: 'docs',
@@ -358,7 +378,11 @@ describe('crash', () => {
       // Re-enqueue the same bytes under a fresh item id; begin must short-circuit.
       harness.remount();
       await enqueueLocalFile(
-        { store: harness.store, openFile: harness.openFile, newId: () => 'item-dupe' },
+        {
+          store: harness.store,
+          openFile: harness.openFile,
+          newId: () => 'item-dupe',
+        },
         { localUri: 'file://a.jpg', plaintextSize: FILES[0]!.bytes.byteLength },
       );
       // Same sha as an already-settled item, so the queue itself dedupes it.

@@ -20,6 +20,7 @@
  */
 
 import type { SchedulerLedgerSnapshot } from '@centraid/automation';
+
 import type { HealthProbe } from './health-registry.js';
 
 export interface SchedulerHealthVaultEntry {

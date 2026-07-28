@@ -1,13 +1,15 @@
 import * as tokens from '@centraid/design-tokens';
+
 import '@centraid/client/styles.css';
-import { installWebHost } from './web-host.js';
-import { installWebChrome } from './web-chrome.js';
 import {
   installIrohServiceWorkerBridge,
   ensureIrohServiceWorker,
   irohFetch,
   irohVirtualUrl,
 } from './iroh-transport.js';
+import { installWebChrome } from './web-chrome.js';
+import { installWebHost } from './web-host.js';
+
 import './web.css';
 
 window.CentraidIroh = { fetch: irohFetch, url: irohVirtualUrl };

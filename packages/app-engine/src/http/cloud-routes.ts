@@ -1,7 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { Registry } from '../registry/registry.js';
-import { appDataDir } from '../registry/app-paths.js';
+
 import { readLogs, type LogLevel } from '../data/log-store.js';
+import { appDataDir } from '../registry/app-paths.js';
+import type { Registry } from '../registry/registry.js';
 import {
   deleteAppSetting,
   readAppSettings,
@@ -30,7 +31,10 @@ export async function handleSettingsWrite(
 ): Promise<true> {
   let body: { key?: unknown; value?: unknown };
   try {
-    body = JSON.parse((await readBody(req)).toString('utf8')) as { key?: unknown; value?: unknown };
+    body = JSON.parse((await readBody(req)).toString('utf8')) as {
+      key?: unknown;
+      value?: unknown;
+    };
   } catch {
     return sendError(res, 400, 'bad_request', 'Body must be JSON: { key, value }.');
   }
@@ -63,7 +67,7 @@ export async function handleLogsRoute(
 
 function parseIntOpt(s: string | undefined): number | undefined {
   if (!s) return undefined;
-  const n = Number.parseInt(s, 10);
+  const n = Math.trunc(Number(s));
   return Number.isFinite(n) ? n : undefined;
 }
 

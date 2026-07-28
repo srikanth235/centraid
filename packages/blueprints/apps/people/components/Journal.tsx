@@ -6,9 +6,11 @@
 // old Lit version's module-level `journalDraft`/`journalMood` vars), so a
 // mood pick or partial line survives a trip to another view and back.
 import { useRef, useState } from 'react';
+
 import { fmtJournalDate, hashInt, PALETTE } from '../format.ts';
 import type { JournalItem } from '../types.ts';
 import { KitAvatar } from './Shared.tsx';
+
 import styles from './Journal.module.css';
 import shared from './shared.module.css';
 
@@ -99,7 +101,13 @@ export function Journal({
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
         />
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            marginTop: '8px',
+          }}
+        >
           <button
             type="button"
             className="kit-btn primary"
@@ -112,7 +120,13 @@ export function Journal({
       </div>
       <div style={{ marginTop: '8px' }}>
         {entries.length === 0 ? (
-          <p style={{ font: 'var(--t-small)', color: 'var(--ink-3)', padding: '16px 0' }}>
+          <p
+            style={{
+              font: 'var(--t-small)',
+              color: 'var(--ink-3)',
+              padding: '16px 0',
+            }}
+          >
             No entries yet — start with a line above.
           </p>
         ) : (

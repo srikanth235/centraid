@@ -8,13 +8,15 @@
  * cache-invalidation + broadcast plumbing with).
  */
 
-import { dialog } from 'electron';
 import { promises as fs } from 'node:fs';
-import { loadSettings } from './settings.js';
+
+import { dialog } from 'electron';
+
 import {
   exportGatewayDiagnostics as exportGatewayDiagnosticsCore,
   exportGatewayRecoveryKit as exportGatewayRecoveryKitCore,
 } from './gateway-ops-core.js';
+import { loadSettings } from './settings.js';
 
 /**
  * Fetch the active gateway's diagnostics bundle and save it through the

@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+
 import {
   formatEventLoopDetail,
   formatLoadShedDeferringDetail,
@@ -52,7 +53,7 @@ describe('resource-mode', () => {
         eventLoopLagP99Ms: 12,
         eventLoopLagMaxMs: 20,
       }),
-    ).toMatch(/^Responsive/);
+    ).toMatch(/^Responsive/u);
     expect(
       formatEventLoopDetail({
         eventLoopLagP50Ms: 20,

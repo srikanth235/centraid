@@ -1,6 +1,8 @@
-import { app } from 'electron';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+
+import { app } from 'electron';
+
 import { clampAlertSeconds } from './gateway-monitor-core.js';
 import { gatewayTemplatesCacheDir, LOCAL_GATEWAY_ID } from './gateway-paths.js';
 import { ensureLocalGateway, listGateways, resolveGateway } from './gateway-store.js';

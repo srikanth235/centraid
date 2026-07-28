@@ -167,7 +167,10 @@ export function sectionPhotoAssets(assets: PhotoAsset[], now = new Date()): Phot
     day: 'numeric',
     year: 'numeric',
   });
-  const monthFormat = new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' });
+  const monthFormat = new Intl.DateTimeFormat(undefined, {
+    month: 'long',
+    year: 'numeric',
+  });
   const currentYear = now.getFullYear();
   return [...sections.entries()].map(([day, rows]) => {
     const sameYear = new Date(day).getFullYear() === currentYear;

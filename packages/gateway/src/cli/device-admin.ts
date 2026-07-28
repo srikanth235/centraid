@@ -16,18 +16,19 @@
 
 import { handshakeGateway } from '@centraid/protocol';
 import { endpointIdForSecret } from '@centraid/tunnel';
+
+import { EnrollmentStore, type GrantableRole } from '../serve/enrollment-store.js';
+import { GatewayDatabase, GatewayLockError } from '../serve/gateway-db.js';
 import {
   openVaultRegistry,
   VaultRegistryError,
   type VaultRegistry,
 } from '../serve/vault-registry.js';
-import { EnrollmentStore, type GrantableRole } from '../serve/enrollment-store.js';
-import { GatewayDatabase, GatewayLockError } from '../serve/gateway-db.js';
-import { daemonLayoutFor } from './paths.js';
+import { jsonFail, runJson, type Fail } from './json-cli.js';
 import { daemonKeyStore } from './key-store.js';
 import { landlordBearerForEndpointSecret } from './landlord-auth.js';
-import { jsonFail, runJson, type Fail } from './json-cli.js';
 import { renderTerminalQr } from './pair-qr.js';
+import { daemonLayoutFor } from './paths.js';
 import { resolveDaemonConfig } from './resolve-config.js';
 
 const quietLogger = {
@@ -68,20 +69,20 @@ function parseDeviceArgs(args: string[], fail: (msg: string, code?: number) => n
   for (let i = 0; i < args.length; i++) {
     const flag = args[i];
     if (flag === undefined) continue;
-    const next = (): string => {
+    const readValue = (): string => {
       const v = args[++i];
       if (v === undefined) fail(`flag "${flag}" requires a value`, 2);
       return v;
     };
     switch (flag) {
       case '--data-dir':
-        out.dataDir = next();
+        out.dataDir = readValue();
         break;
       case '--config':
-        out.configPath = next();
+        out.configPath = readValue();
         break;
       case '--port': {
-        const n = Number(next());
+        const n = Number(readValue());
         if (!Number.isInteger(n) || n < 1 || n > 65_535) {
           fail('--port must be an integer in [1, 65535]', 2);
         }
@@ -89,19 +90,19 @@ function parseDeviceArgs(args: string[], fail: (msg: string, code?: number) => n
         break;
       }
       case '--vault':
-        out.vault = next();
+        out.vault = readValue();
         break;
       case '--label':
-        out.label = next();
+        out.label = readValue();
         break;
       case '--ttl-minutes': {
-        const n = Number(next());
+        const n = Number(readValue());
         if (!Number.isFinite(n) || n <= 0) fail('--ttl-minutes must be a positive number', 2);
         out.ttlMinutes = n;
         break;
       }
       case '--role': {
-        const role = next();
+        const role = readValue();
         if (role !== 'admin' && role !== 'write' && role !== 'read') {
           fail('--role must be "admin", "write", or "read"', 2);
         }
@@ -109,13 +110,13 @@ function parseDeviceArgs(args: string[], fail: (msg: string, code?: number) => n
         break;
       }
       case '--member':
-        out.member = next();
+        out.member = readValue();
         break;
       case '--new-member':
-        out.newMember = next();
+        out.newMember = readValue();
         break;
       case '--grant': {
-        const raw = next();
+        const raw = readValue();
         const split = raw.lastIndexOf(':');
         const vaultId = split === -1 ? '' : raw.slice(0, split);
         const role = split === -1 ? '' : raw.slice(split + 1);
@@ -126,7 +127,7 @@ function parseDeviceArgs(args: string[], fail: (msg: string, code?: number) => n
         break;
       }
       case '--confirm-last-admin':
-        out.confirmLastAdmin = next();
+        out.confirmLastAdmin = readValue();
         break;
       case '--json':
         out.json = true;
@@ -224,12 +225,12 @@ export async function commandPair(
           'content-type': 'application/json',
         },
         body: JSON.stringify({
-          ...(parsed.vault !== undefined ? { vaultId: parsed.vault } : {}),
-          ...(parsed.ttlMinutes !== undefined ? { ttlMinutes: parsed.ttlMinutes } : {}),
-          ...(parsed.role !== undefined ? { role: parsed.role } : {}),
-          ...(parsed.member !== undefined ? { memberId: parsed.member } : {}),
-          ...(parsed.newMember !== undefined ? { newMemberLabel: parsed.newMember } : {}),
-          ...(parsed.grants !== undefined ? { grants: parsed.grants } : {}),
+          ...(parsed.vault === undefined ? {} : { vaultId: parsed.vault }),
+          ...(parsed.ttlMinutes === undefined ? {} : { ttlMinutes: parsed.ttlMinutes }),
+          ...(parsed.role === undefined ? {} : { role: parsed.role }),
+          ...(parsed.member === undefined ? {} : { memberId: parsed.member }),
+          ...(parsed.newMember === undefined ? {} : { newMemberLabel: parsed.newMember }),
+          ...(parsed.grants === undefined ? {} : { grants: parsed.grants }),
         }),
       });
     } catch (error) {
@@ -249,7 +250,11 @@ export async function commandPair(
       role?: GrantableRole;
       memberId?: string;
       memberLabel?: string;
-      grants?: Array<{ vaultId: string; vaultName?: string; role: GrantableRole }>;
+      grants?: Array<{
+        vaultId: string;
+        vaultName?: string;
+        role: GrantableRole;
+      }>;
     };
     if (
       !response.ok ||
@@ -402,7 +407,7 @@ export async function commandDevices(
           label: parsed.label ?? `device ${endpointId.slice(0, 10)}…`,
           ...(parsed.role ? { role: parsed.role } : {}),
           ...(member ? { memberId: member.memberId } : {}),
-          ...(parsed.newMember !== undefined ? { memberLabel: parsed.newMember } : {}),
+          ...(parsed.newMember === undefined ? {} : { memberLabel: parsed.newMember }),
         });
         process.stdout.write(`${JSON.stringify(row)}\n`);
       } catch (err) {

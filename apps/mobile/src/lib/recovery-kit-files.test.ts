@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
+
 import { pickRecoveryKit, shareRecoveryKit } from './recovery-kit-files';
 
 const fixture = vi.hoisted(() => ({
@@ -8,7 +9,9 @@ const fixture = vi.hoisted(() => ({
   available: vi.fn<typeof import('expo-sharing').isAvailableAsync>(),
 }));
 
-vi.mock(import('expo-document-picker'), () => ({ getDocumentAsync: fixture.pick }));
+vi.mock(import('expo-document-picker'), () => ({
+  getDocumentAsync: fixture.pick,
+}));
 vi.mock(import('expo-sharing'), () => ({
   isAvailableAsync: fixture.available,
   shareAsync: fixture.share,
@@ -20,7 +23,9 @@ vi.mock(import('expo-file-system'), () => ({
   // and `.text()` (see recovery-kit-files.ts) — a faithful replacement is
   // impractical, so each stand-in is asserted to the real type rather than
   // the whole module being widened.
-  Paths: { cache: 'cache://' } as unknown as typeof import('expo-file-system').Paths,
+  Paths: {
+    cache: 'cache://',
+  } as unknown as typeof import('expo-file-system').Paths,
   File: class {
     readonly uri: string;
     constructor(baseOrUri: string, name?: string) {
@@ -68,7 +73,7 @@ describe('recovery-kit-files', () => {
   test('share refuses when the platform share sheet is unavailable', async () => {
     fixture.available.mockResolvedValue(false);
     await expect(shareRecoveryKit({ wrapped: true })).rejects.toThrow(
-      /share sheet is unavailable/i,
+      /share sheet is unavailable/iu,
     );
     expect(fixture.share).not.toHaveBeenCalled();
   });

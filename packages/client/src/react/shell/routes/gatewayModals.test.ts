@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
 import { connectGateway, friendlyGatewayError } from './gatewayModals.js';
 
 const redeemGatewayPairing = vi.fn<typeof window.CentraidApi.redeemGatewayPairing>();
@@ -19,7 +20,7 @@ describe('gatewayModals', () => {
       expect(friendlyGatewayError('ticket_expired', 'raw')).toBe(
         'This ticket has expired — ask for a new one.',
       );
-      expect(friendlyGatewayError('unreachable', 'raw')).toMatch(/Couldn't reach/);
+      expect(friendlyGatewayError('unreachable', 'raw')).toMatch(/Couldn't reach/u);
     });
 
     it('falls back to the raw message for an unrecognized code', () => {
@@ -35,13 +36,22 @@ describe('gatewayModals', () => {
         vaultId: 'v1',
         vaultName: 'Home',
       });
-      const result = await connectGateway({ kind: 'ticket', label: 'Mine', ticket: 't.icket' });
+      const result = await connectGateway({
+        kind: 'ticket',
+        label: 'Mine',
+        ticket: 't.icket',
+      });
       expect(redeemGatewayPairing).toHaveBeenCalledWith({
         label: 'Mine',
         rememberDevice: false,
         ticket: 't.icket',
       });
-      expect(result).toStrictEqual({ gatewayId: 'gw1', label: 'Home', ok: true, vaultId: 'v1' });
+      expect(result).toStrictEqual({
+        gatewayId: 'gw1',
+        label: 'Home',
+        ok: true,
+        vaultId: 'v1',
+      });
     });
 
     it('ticket: falls back to a generic label when vaultName is empty', async () => {

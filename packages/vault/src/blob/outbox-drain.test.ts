@@ -1,8 +1,10 @@
-import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { randomBytes } from 'node:crypto';
 import { rmSync } from 'node:fs';
 import path from 'node:path';
+
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { afterEach, describe, expect, test } from 'vitest';
+
 import { DEFAULT_BACKUP_POLICY } from '../backup-policy.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { BlobCache } from './cache.js';
@@ -10,11 +12,11 @@ import type { RemoteTier } from './custody-types.js';
 import { FsBlobStore } from './local.js';
 import { drainOutboxRow } from './outbox-drain.js';
 import type { MultipartPart, RemoteBlobTransfer } from './remote-transfer.js';
+import { ReplicaIndex } from './replica-index.js';
 import { sealBlob, unsealBlob } from './seal.js';
+import { desiredStoreForSha } from './store-routing.js';
 import type { BlobRange, BlobStat, BlobStore } from './store.js';
 import { sha256OfBytes } from './store.js';
-import { ReplicaIndex } from './replica-index.js';
-import { desiredStoreForSha } from './store-routing.js';
 import { BlobTransferState } from './transfer-state.js';
 
 const cleanups: (() => void)[] = [];
@@ -99,10 +101,21 @@ describe('outbox-drain', () => {
       presignTemporaryPart: async () => new URL('https://provider.invalid/part'),
       presignShaGet: async () => new URL('https://provider.invalid/get'),
     };
-    const remote: RemoteTier = { store, transfer, keyFor: () => key, frameSize: 32 * 1024 };
+    const remote: RemoteTier = {
+      store,
+      transfer,
+      keyFor: () => key,
+      frameSize: 32 * 1024,
+    };
 
     await drainOutboxRow(
-      { state, local, cache, remote: () => remote, onReplicated: () => undefined },
+      {
+        state,
+        local,
+        cache,
+        remote: () => remote,
+        onReplicated: () => undefined,
+      },
       state.outbox(sha)!,
     );
 
@@ -273,8 +286,19 @@ describe('outbox-drain', () => {
         return bytes ? { size: bytes.length } : null;
       },
     };
-    const remote: RemoteTier = { store, transfer, keyFor: () => key, frameSize: 1024 * 1024 };
-    const deps = { state, local, cache, remote: () => remote, onReplicated: () => undefined };
+    const remote: RemoteTier = {
+      store,
+      transfer,
+      keyFor: () => key,
+      frameSize: 1024 * 1024,
+    };
+    const deps = {
+      state,
+      local,
+      cache,
+      remote: () => remote,
+      onReplicated: () => undefined,
+    };
 
     await expect(drainOutboxRow(deps, state.outbox(sha)!)).rejects.toThrow(
       'provider interrupted part 2',
@@ -329,7 +353,9 @@ describe('outbox-drain', () => {
       (sha: string) => sealBlob(key, sha, Buffer.from('wrong-size'), 32),
     ];
 
-    for (const [index, bad] of badObjects.entries()) {
+    const drainBadObject = async (index: number): Promise<void> => {
+      const bad = badObjects[index];
+      if (bad === undefined) return;
       const plain = Buffer.from(`authoritative local object ${index} with enough bytes`);
       const sha = sha256OfBytes(plain);
       local.putSync(sha, plain);
@@ -347,7 +373,9 @@ describe('outbox-drain', () => {
       );
       expect(state.outbox(sha)).toBeNull();
       expect(unsealBlob(key, sha, final.get(sha)!).equals(plain)).toBe(true);
-    }
+      return drainBadObject(index + 1);
+    };
+    await drainBadObject(0);
     expect(puts).toBe(3);
   });
 

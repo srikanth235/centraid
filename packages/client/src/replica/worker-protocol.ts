@@ -32,7 +32,10 @@ export type ReplicaWorkerRequest =
   | {
       id: number;
       op: 'search';
-      payload: { request: ReplicaSearchRequest; mutations: OptimisticMutation[] };
+      payload: {
+        request: ReplicaSearchRequest;
+        mutations: OptimisticMutation[];
+      };
     }
   | { id: number; op: 'wipe'; payload: undefined }
   | { id: number; op: 'close'; payload: undefined }

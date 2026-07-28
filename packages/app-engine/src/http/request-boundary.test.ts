@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+
 import {
   decideCors,
   hasBearerAuthIntent,
@@ -37,17 +38,27 @@ describe('request-boundary', () => {
       credentialedOrigins: ['http://shell:1'],
       bearerAuthIntent: false,
     });
-    expect(shell).toStrictEqual({ allowOrigin: 'http://shell:1', credentials: true });
+    expect(shell).toStrictEqual({
+      allowOrigin: 'http://shell:1',
+      credentials: true,
+    });
 
     const bearer = decideCors({
       origin: 'http://attacker:9',
       credentialedOrigins: [],
       bearerAuthIntent: true,
     });
-    expect(bearer).toStrictEqual({ allowOrigin: 'http://attacker:9', credentials: true });
+    expect(bearer).toStrictEqual({
+      allowOrigin: 'http://attacker:9',
+      credentials: true,
+    });
 
     expect(
-      decideCors({ origin: 'null', credentialedOrigins: [], bearerAuthIntent: false }),
+      decideCors({
+        origin: 'null',
+        credentialedOrigins: [],
+        bearerAuthIntent: false,
+      }),
     ).toStrictEqual({
       allowOrigin: '*',
       credentials: false,

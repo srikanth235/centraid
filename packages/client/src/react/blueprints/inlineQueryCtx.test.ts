@@ -1,11 +1,12 @@
-import { describe, expect, it } from 'vitest';
 import boardQuery from '@centraid/blueprints/apps/tasks/queries/board';
+import { describe, expect, it } from 'vitest';
+
+import type { ShellReplicaReadRequest } from '../../replica/shell-session.js';
 import type {
   ReplicaReadWireResult,
   ReplicaRowEnvelope,
   ReplicaSearchWireResult,
 } from '../../replica/types.js';
-import type { ShellReplicaReadRequest } from '../../replica/shell-session.js';
 import {
   buildInlineCtx,
   createOnlineGuard,
@@ -30,8 +31,20 @@ function envelope(
 }
 
 const OPEN_TASKS = [
-  { task_id: 'b', status: 'needs-action', title: 'Second', due_at: null, priority: 0 },
-  { task_id: 'a', status: 'needs-action', title: 'First', due_at: '2026-07-22', priority: 1 },
+  {
+    task_id: 'b',
+    status: 'needs-action',
+    title: 'Second',
+    due_at: null,
+    priority: 0,
+  },
+  {
+    task_id: 'a',
+    status: 'needs-action',
+    title: 'First',
+    due_at: '2026-07-22',
+    priority: 1,
+  },
 ];
 
 /** A replica-session double: seeded open tasks; everything else empty. */
@@ -61,8 +74,16 @@ describe('inlineQueryCtx', () => {
   it('runs the real board query against the local replica and projects tasks', async () => {
     const result = (await runInlineQuery(
       { default: boardQuery },
-      { session: seededSession(), appId: 'tasks', input: { limit: 500 }, isOnline: () => false },
-    )) as { open: Array<{ task_id: string; title: string }>; vaultDenied?: unknown };
+      {
+        session: seededSession(),
+        appId: 'tasks',
+        input: { limit: 500 },
+        isOnline: () => false,
+      },
+    )) as {
+      open: Array<{ task_id: string; title: string }>;
+      vaultDenied?: unknown;
+    };
 
     expect(result.vaultDenied).toBeUndefined();
     expect(result.open).toHaveLength(2);
@@ -75,7 +96,7 @@ describe('inlineQueryCtx', () => {
     const ctx = buildInlineCtx(
       { session: seededSession(), appId: 'tasks', isOnline: () => false },
       guard,
-    ) as { vault: { resolve(): Promise<{ cards: unknown[] }> } };
+    ) as { vault: { resolve: () => Promise<{ cards: unknown[] }> } };
     await expect(ctx.vault.resolve()).resolves.toStrictEqual({ cards: [] });
     expect(guard.error).toBeNull();
   });

@@ -1,24 +1,30 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import crypto from 'node:crypto';
+import { promises as fs } from 'node:fs';
 // The blob routes (issue #296) over a real vault plane: stream bytes in,
 // claim them through a command, and serve them back with ETag/Range — the
 // full staged-upload loop an app performs.
-
-import { afterEach, describe, expect, test } from 'vitest';
-import { promises as fs } from 'node:fs';
 import http from 'node:http';
-import crypto from 'node:crypto';
 import { deflateSync } from 'node:zlib';
+
+import { forEachSequentially } from '@centraid/test-kit/sequential';
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import jpegJs from 'jpeg-js';
+import { afterEach, describe, expect, test } from 'vitest';
+
 import { createImagePreviewCodec } from '../preview/codec.js';
 import { openVaultPlane, type VaultPlane } from '../serve/vault-plane.js';
 import { MAX_OPEN_RANGE_BYTES, makeBlobRouteHandler, parseRange } from './blob-routes.js';
 
-const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
+const silentLogger = {
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+};
 
 const cleanups: Array<() => Promise<void> | void> = [];
 describe('blob-routes', () => {
   afterEach(async () => {
-    while (cleanups.length > 0) await cleanups.pop()?.();
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
   });
 
   const PNG_BYTES = Buffer.from(
@@ -111,7 +117,10 @@ describe('blob-routes', () => {
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     cleanups.push(() => new Promise<void>((resolve) => server.close(() => resolve())));
     const address = server.address() as { port: number };
-    return { base: `http://127.0.0.1:${address.port}/centraid/_vault/blobs`, plane };
+    return {
+      base: `http://127.0.0.1:${address.port}/centraid/_vault/blobs`,
+      plane,
+    };
   }
 
   function makeJpeg(width: number, height: number): Buffer {
@@ -167,13 +176,17 @@ describe('blob-routes', () => {
     expect(cached.status).toBe(304);
 
     // Range: the video-scrubbing contract.
-    const range = await fetch(`${base}/${contentId}`, { headers: { range: 'bytes=8-15' } });
+    const range = await fetch(`${base}/${contentId}`, {
+      headers: { range: 'bytes=8-15' },
+    });
     expect(range.status).toBe(206);
     expect(range.headers.get('content-range')).toBe(`bytes 8-15/${PNG_BYTES.length}`);
     expect(Buffer.from(await range.arrayBuffer()).equals(PNG_BYTES.subarray(8, 16))).toBe(true);
 
     // Unsatisfiable range is a 416, not a 200-with-everything.
-    const bad = await fetch(`${base}/${contentId}`, { headers: { range: 'bytes=9999-' } });
+    const bad = await fetch(`${base}/${contentId}`, {
+      headers: { range: 'bytes=9999-' },
+    });
     expect(bad.status).toBe(416);
 
     // Download disposition on demand.
@@ -226,8 +239,8 @@ describe('blob-routes', () => {
       expect.objectContaining({ variant: 'thumb', text_content: null }),
       { variant: 'thumbhash', sha256: null, text_content: expectedThumbhash },
     ]);
-    expect(derivatives[1]?.sha256).toMatch(/^[0-9a-f]{64}$/);
-    expect(derivatives[2]?.sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(derivatives[1]?.sha256).toMatch(/^[0-9a-f]{64}$/u);
+    expect(derivatives[2]?.sha256).toMatch(/^[0-9a-f]{64}$/u);
     expect({
       ...plane.db.vault
         .prepare('SELECT phash FROM media_asset_phash WHERE asset_id = ?')
@@ -244,7 +257,10 @@ describe('blob-routes', () => {
       body: new Uint8Array(pdf),
     });
     expect(response.status).toBe(200);
-    const staged = (await response.json()) as { sha256: string; mediaType: string };
+    const staged = (await response.json()) as {
+      sha256: string;
+      mediaType: string;
+    };
     expect(staged.mediaType).toBe('application/pdf');
 
     const outcome = plane.gateway.invoke(plane.ownerCredential, {
@@ -259,7 +275,11 @@ describe('blob-routes', () => {
         `SELECT media_type, byte_size, text_content FROM core_content_derivative
         WHERE content_id = ? AND variant = 'text'`,
       )
-      .get(ids.content_id) as { media_type: string; byte_size: number; text_content: string };
+      .get(ids.content_id) as {
+      media_type: string;
+      byte_size: number;
+      text_content: string;
+    };
     expect(derivative.media_type).toBe('text/plain');
     expect(derivative.byte_size).toBe(Buffer.byteLength(derivative.text_content));
     expect(derivative.text_content).toContain('midnight narwhal renewal clause');
@@ -280,7 +300,10 @@ describe('blob-routes', () => {
       await fetch(base, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ base64: PNG_BYTES.toString('base64'), filename: 'p.png' }),
+        body: JSON.stringify({
+          base64: PNG_BYTES.toString('base64'),
+          filename: 'p.png',
+        }),
       })
     ).json()) as { sha256: string };
     // A client-produced thumb rides beside its parent.
@@ -315,7 +338,10 @@ describe('blob-routes', () => {
       await fetch(base, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ base64: PNG_BYTES.toString('base64'), filename: 'typed.png' }),
+        body: JSON.stringify({
+          base64: PNG_BYTES.toString('base64'),
+          filename: 'typed.png',
+        }),
       })
     ).json()) as { sha256: string };
     const post = (variant: string, bytes: Buffer, mediaType: string) =>
@@ -328,9 +354,11 @@ describe('blob-routes', () => {
         },
       );
 
-    for (const variant of ['thumb', 'preview', 'poster']) {
-      expect((await post(variant, PNG_BYTES, 'image/png')).status, variant).toBe(200);
-    }
+    await Promise.all(
+      ['thumb', 'preview', 'poster'].map(async (variant) => {
+        expect((await post(variant, PNG_BYTES, 'image/png')).status, variant).toBe(200);
+      }),
+    );
     expect(
       (await post('text', Buffer.from('PDF.js found a quasar clause'), 'text/plain')).status,
     ).toBe(200);
@@ -406,7 +434,9 @@ describe('blob-routes', () => {
     const { base } = await fixture();
     const nope = await fetch(`${base}/does-not-exist`);
     expect(nope.status).toBe(404);
-    expect((await nope.json()) as Record<string, unknown>).toStrictEqual({ error: 'not-found' });
+    expect((await nope.json()) as Record<string, unknown>).toStrictEqual({
+      error: 'not-found',
+    });
     // Empty uploads are refused.
     const empty = await fetch(base, {
       method: 'POST',

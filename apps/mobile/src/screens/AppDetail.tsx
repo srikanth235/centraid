@@ -8,13 +8,14 @@ import type {
   WebViewMessageEvent,
   WebViewNavigation,
 } from 'react-native-webview/lib/WebViewTypes';
+
 import AppHeader from '../kit/components/AppHeader';
 import Button from '../kit/components/Button';
 import { spacing, t, useTheme, type ThemeColors } from '../kit/theme';
-import { appLiveUrl, resolveGatewayBase, resolveAppMeta } from '../lib/gateway';
 import { dispatch } from '../lib/bridge/dispatch';
 import { INJECTED_JS } from '../lib/bridge/injected';
 import { CENTRAID_HANDSHAKE, type BridgeRequest } from '../lib/bridge/protocol';
+import { appLiveUrl, resolveGatewayBase, resolveAppMeta } from '../lib/gateway';
 import type { AppDetailScreenProps } from '../navigation';
 
 type BaseResolveSetters = {

@@ -1,4 +1,5 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import { startFakeProviderServer } from '@centraid/backup/dist/testing/fake-provider-server.js';
+import { forEachSequentially } from '@centraid/test-kit/sequential';
 /*
  * Seal-key restore-verify (issue #439 R5) — the scheduled `runRestoreVerify`
  * now proves what FORMAT.md warns about: a restore whose sealed columns cannot
@@ -11,20 +12,24 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  *   - a vault whose stamped fingerprint no longer matches the restored key FAILS
  *     verify with the placebo problem (a real regression the check now catches).
  */
-
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterEach, describe, expect, test } from 'vitest';
-import { startFakeProviderServer } from '@centraid/backup/dist/testing/fake-provider-server.js';
-import { openVaultRegistry } from '../serve/vault-registry.js';
-import type { VaultPlane } from '../serve/vault-plane.js';
+
 import { HealthRegistry } from '../serve/health-registry.js';
+import type { VaultPlane } from '../serve/vault-plane.js';
+import { openVaultRegistry } from '../serve/vault-registry.js';
 import { BackupService } from './backup-service.js';
 
-const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
+const silentLogger = {
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+};
 
 const cleanups: Array<() => Promise<void> | void> = [];
 describe('restore-verify-sealkey', () => {
   afterEach(async () => {
-    while (cleanups.length > 0) await cleanups.pop()?.();
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
   });
   function invoke(plane: VaultPlane, command: string, input: Record<string, unknown>): void {
     const out = plane.gateway.invoke(plane.ownerCredential, { command, input });
@@ -56,7 +61,11 @@ describe('restore-verify-sealkey', () => {
     const service = new BackupService({
       config: {
         enabled: true,
-        provider: { kind: 'remote', endpoint: server.url, apiKey: server.apiKey },
+        provider: {
+          kind: 'remote',
+          endpoint: server.url,
+          apiKey: server.apiKey,
+        },
       },
       cacheDir: backupDir,
       vaults: registry,
@@ -104,6 +113,6 @@ describe('restore-verify-sealkey', () => {
       .run(JSON.stringify(settings));
 
     await m.service.runBackup(m.vaultId);
-    await expect(m.service.runRestoreVerify(m.vaultId)).rejects.toThrow(/placebo/);
+    await expect(m.service.runRestoreVerify(m.vaultId)).rejects.toThrow(/placebo/u);
   }, 45_000);
 });

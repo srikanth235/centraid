@@ -27,6 +27,7 @@
  */
 
 import type { TurnStreamEvent } from '@centraid/app-engine';
+
 import { isObject } from './content.js';
 
 /** Wire method for pinning a session config option (e.g. the model). */

@@ -1,7 +1,8 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import ResourceReceiptPanel from './ResourceReceiptPanel.js';
+
 import type { ResourceUsageDTO } from './resource-summary.js';
+import ResourceReceiptPanel from './ResourceReceiptPanel.js';
 
 const usage: ResourceUsageDTO = {
   sinceMs: Date.now() - 2 * 3_600_000,

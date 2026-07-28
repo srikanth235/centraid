@@ -1,3 +1,4 @@
+import { createHash, type Hash } from 'node:crypto';
 // governance: allow-repo-hygiene file-size-limit (#418) the ingress/direct/stream/outbox coordinator is one lifecycle boundary; splitting only its close fence would separate shutdown ordering from the runner it owns
 import {
   closeSync,
@@ -9,10 +10,10 @@ import {
   truncateSync,
   writeSync,
 } from 'node:fs';
-import { createHash, type Hash } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
+
 import type { BackupPolicy } from '../backup-policy.js';
 import {
   asVaultDiskFullError,
@@ -30,17 +31,16 @@ import {
   type DirectBlobInitInput,
   type DirectBlobInitResult,
 } from './direct-transfers.js';
-import { adoptAndStageFallbackIngress, stageCompletedIngress } from './fallback-finalize.js';
 import { enqueueExistingLocalBlobs } from './existing-local.js';
+import { adoptAndStageFallbackIngress, stageCompletedIngress } from './fallback-finalize.js';
 import { assertSpoolAdmission, requireRemote } from './ingress-admission.js';
 import type { LocalBlobStore } from './local.js';
 import { streamThroughOnce } from './one-shot-stream.js';
-import { streamThroughUnknownHash } from './unknown-hash-stream.js';
 import { BlobOutboxRunner } from './outbox-runner.js';
 import { preflightBlob, type BlobPreflightHint, type BlobPreflightResult } from './preflight.js';
-import type { MultipartPart } from './remote-transfer.js';
-import { auditRemoteBlob } from './remote-audit.js';
 import type { IngressPreviewInput } from './preview.js';
+import { auditRemoteBlob } from './remote-audit.js';
+import type { MultipartPart } from './remote-transfer.js';
 import { recordKnownStagedBlob } from './staging-record.js';
 import type { StagedBlob } from './staging.js';
 import { assertSha } from './store.js';
@@ -50,6 +50,7 @@ import {
   type StreamIngressStart,
 } from './stream-ingress.js';
 import { BlobTransferState, type IngressSessionRow } from './transfer-state.js';
+import { streamThroughUnknownHash } from './unknown-hash-stream.js';
 
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 export const INGRESS_FSYNC_BATCH_BYTES = 4 * 1024 * 1024;
@@ -79,7 +80,11 @@ export type BeginBlobIngressResult =
       chunkSize: number;
     }
   | StreamIngressStart
-  | { mode: 'one-shot-stream-through'; expectedSha256: string; expectedSize: number }
+  | {
+      mode: 'one-shot-stream-through';
+      expectedSha256: string;
+      expectedSize: number;
+    }
   | { mode: 'one-shot-hash-pending'; expectedSize: number }
   | { mode: 'existing'; staged: StagedBlob; custody: CustodyState };
 
@@ -306,7 +311,10 @@ export class BlobTransferCoordinator {
             };
           }
           if (!input.resumable && remote.transfer.getTemporary && remote.keyFor) {
-            return { mode: 'one-shot-hash-pending', expectedSize: input.expectedSize };
+            return {
+              mode: 'one-shot-hash-pending',
+              expectedSize: input.expectedSize,
+            };
           }
         }
         throw error;
@@ -529,7 +537,10 @@ export class BlobTransferCoordinator {
     return input.expectedSha256
       ? streamThroughOnce(
           deps,
-          input as BeginBlobIngressInput & { expectedSha256: string; expectedSize: number },
+          input as BeginBlobIngressInput & {
+            expectedSha256: string;
+            expectedSize: number;
+          },
           source,
         )
       : streamThroughUnknownHash(deps, input, source);
@@ -584,13 +595,13 @@ export class BlobTransferCoordinator {
   }
 
   private closeFallbackWrites(persist: boolean): void {
-    for (const [sessionId, write] of this.fallbackWrites) {
+    this.fallbackWrites.forEach((write, sessionId) => {
       try {
         if (persist) this.flushFallbackWrite(sessionId, write);
       } finally {
         closeSync(write.fd);
       }
-    }
+    });
     this.fallbackWrites.clear();
   }
 

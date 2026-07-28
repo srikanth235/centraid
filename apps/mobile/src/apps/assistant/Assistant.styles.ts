@@ -87,7 +87,12 @@ export const makeStyles = (colors: ThemeColors) =>
       borderRadius: 2,
       height: 4,
     },
-    emptyBody: { ...t('body'), color: colors.ink2, marginTop: spacing[2], textAlign: 'center' },
+    emptyBody: {
+      ...t('body'),
+      color: colors.ink2,
+      marginTop: spacing[2],
+      textAlign: 'center',
+    },
     emptyTitle: { ...t('title'), color: colors.ink, textAlign: 'center' },
     emptyWrap: {
       alignItems: 'center',

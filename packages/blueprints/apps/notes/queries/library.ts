@@ -232,11 +232,21 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
     // Keep the app's notebook row shape over collection rows: a collection
     // may also hold photos and documents; this surface renders its notes.
     const books = ((notebooks.rows ?? []) as unknown as CollectionRow[])
-      .map((c) => ({ notebook_id: c.collection_id, name: c.name, sort_order: c.sort_order }))
+      .map((c) => ({
+        notebook_id: c.collection_id,
+        name: c.name,
+        sort_order: c.sort_order,
+      }))
       .toSorted((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
     const windowed = [...byId.values()];
     if (windowed.length === 0) {
-      return { notes: [], notebooks: books, tags: [], truncated: false, window };
+      return {
+        notes: [],
+        notebooks: books,
+        tags: [],
+        truncated: false,
+        window,
+      };
     }
     const noteIds = windowed.map((n) => n.note_id);
 
@@ -322,7 +332,13 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
       linkRows.length > 0
         ? ctx.vault.read({
             entity: 'core.link_anchor',
-            where: [{ column: 'link_id', op: 'in', value: linkRows.map((l) => l.link_id) }],
+            where: [
+              {
+                column: 'link_id',
+                op: 'in',
+                value: linkRows.map((l) => l.link_id),
+              },
+            ],
             purpose,
           })
         : Promise.resolve({ rows: [] }),
@@ -412,6 +428,10 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
     return { notes: rows, notebooks: books, tags: allTags, truncated, window };
   } catch (err) {
     const e = err as { code?: string; message?: string };
-    return { notes: [], notebooks: [], vaultDenied: { code: e.code, message: e.message } };
+    return {
+      notes: [],
+      notebooks: [],
+      vaultDenied: { code: e.code, message: e.message },
+    };
   }
 }

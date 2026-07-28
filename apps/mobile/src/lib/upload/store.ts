@@ -21,8 +21,7 @@
 // are presigned URLs persisted — they expire, and `begin` re-mints them.
 
 import type { ReplicaSqliteDriver } from '@centraid/client/replica/native';
-import { migrateUploadSchema, SCHEMA_VERSION } from './store-migrations';
-import { toItem, toPart, type ItemRow, type PartRow } from './store-rows';
+
 import {
   stableFollowupIntentId,
   toUploadFollowup,
@@ -31,6 +30,8 @@ import {
   type UploadFollowup,
   type UploadFollowupFactory,
 } from './followup-record';
+import { migrateUploadSchema, SCHEMA_VERSION } from './store-migrations';
+import { toItem, toPart, type ItemRow, type PartRow } from './store-rows';
 
 export type { NewUploadFollowup, UploadFollowup, UploadFollowupFactory } from './followup-record';
 

@@ -3,8 +3,9 @@
 // light/dark toggle are static HTML wired once in chrome.ts (kit.ts owns
 // their behavior already — no per-render data to bind).
 import { I } from '../icons.ts';
-import { Icon } from './Shared.tsx';
 import type { ViewKind } from '../types.ts';
+import { Icon } from './Shared.tsx';
+
 import styles from './HeaderBar.module.css';
 
 const VIEWS: { key: ViewKind; label: string }[] = [

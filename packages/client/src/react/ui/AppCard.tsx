@@ -1,10 +1,12 @@
-import type { JSX } from 'react';
-import { cx } from './cx.js';
-import { tileVisual } from './tile-visual.js';
 import type { AppMetaResolved, TileVariant } from '@centraid/design-tokens';
+import type { JSX } from 'react';
+
+import { cx } from './cx.js';
 import Icon from './Icon.js';
 import KindBadge from './KindBadge.js';
 import StatusPill from './StatusPill.js';
+import { tileVisual } from './tile-visual.js';
+
 import styles from './AppCard.module.css';
 
 export type AppCardTone = 'new' | 'draft' | null;

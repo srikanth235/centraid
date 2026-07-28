@@ -9,8 +9,10 @@
 
 import { existsSync, readdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
+
 import type { RuntimeLogger } from '@centraid/app-engine';
 import type { KeyStore } from '@centraid/vault';
+
 import type { GatewayDatabase } from './gateway-db.js';
 import { PairingTicketStore } from './pairing-store.js';
 

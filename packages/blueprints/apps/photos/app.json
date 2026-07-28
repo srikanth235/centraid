@@ -51,10 +51,21 @@
         "properties": {
           "data_uri": { "type": "string", "minLength": 6 },
           "staged_sha": { "type": "string", "minLength": 64, "maxLength": 64 },
-          "kind": { "type": "string", "enum": ["photo", "video", "audio", "scan"] },
+          "kind": {
+            "type": "string",
+            "enum": ["photo", "video", "audio", "scan"]
+          },
           "captured_at": { "type": "string" },
-          "tz_offset_min": { "type": "integer", "minimum": -1080, "maximum": 1080 },
-          "capture_group_id": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "tz_offset_min": {
+            "type": "integer",
+            "minimum": -1080,
+            "maximum": 1080
+          },
+          "capture_group_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
           "title": { "type": "string" },
           "width": { "type": "integer", "minimum": 1 },
           "height": { "type": "integer", "minimum": 1 },

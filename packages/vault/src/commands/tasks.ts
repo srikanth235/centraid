@@ -223,7 +223,10 @@ function setTaskStatus(ctx: HandlerCtx): Record<string, unknown> {
     entityType: 'schedule.task',
     entityId: input.task_id,
   });
-  const output: Record<string, unknown> = { task_id: input.task_id, status: input.status };
+  const output: Record<string, unknown> = {
+    task_id: input.task_id,
+    status: input.status,
+  };
   // Completing a repeating task spawns its next occurrence in the same
   // motion — Things/Todoist behavior: the series never needs a second
   // "add" from the owner. A non-completion move (reopen, cancel) never

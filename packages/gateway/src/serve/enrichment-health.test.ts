@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { createEnrichmentHealthProbe, type EnrichmentAutomationRow } from './enrichment-health.js';
 
 function row(id: string, enabled: boolean): EnrichmentAutomationRow {
@@ -8,7 +9,13 @@ function row(id: string, enabled: boolean): EnrichmentAutomationRow {
 describe(createEnrichmentHealthProbe, () => {
   it('reports ok, zero enabled, when no enricher is installed', async () => {
     const probe = createEnrichmentHealthProbe({
-      vaults: () => [{ vaultId: 'v1', listAutomations: async () => [], recentRuns: () => [] }],
+      vaults: () => [
+        {
+          vaultId: 'v1',
+          listAutomations: async () => [],
+          recentRuns: () => [],
+        },
+      ],
     });
     const result = await probe();
     expect(result.status).toBe('ok');

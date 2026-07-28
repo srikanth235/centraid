@@ -13,8 +13,9 @@
 
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import type { PricingCatalog, PricingEntry } from './types.js';
+
 import { matchEntry } from './match.js';
+import type { PricingCatalog, PricingEntry } from './types.js';
 
 function loadSnapshot(): PricingCatalog {
   try {

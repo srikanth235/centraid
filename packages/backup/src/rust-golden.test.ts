@@ -1,5 +1,7 @@
 import { readFileSync } from 'node:fs';
+
 import { describe, expect, test } from 'vitest';
+
 import {
   deriveDataKey,
   openManifest,

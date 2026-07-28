@@ -1,16 +1,18 @@
 import { useCallback, useEffect, useState, type JSX } from 'react';
+
 import type {
   PhoneBridgeProps,
   PhoneDeviceDTO,
   PhonePairingDTO,
   PhoneStatusDTO,
 } from '../screen-contracts.js';
-import styles from './PhoneScreen.module.css';
-import buttonCss from '../ui/Button.module.css';
-import appSettingsCss from '../styles/appSettings.module.css';
-import linkBtnCss from '../styles/linkBtn.module.css';
-import drawerGroupCss from '../styles/drawerGroup.module.css';
 import { cx } from '../ui/cx.js';
+
+import appSettingsCss from '../styles/appSettings.module.css';
+import drawerGroupCss from '../styles/drawerGroup.module.css';
+import linkBtnCss from '../styles/linkBtn.module.css';
+import buttonCss from '../ui/Button.module.css';
+import styles from './PhoneScreen.module.css';
 
 function Note({ children }: { children: React.ReactNode }): JSX.Element {
   return <div className={appSettingsCss.appSettingsNote}>{children}</div>;
@@ -69,10 +71,9 @@ export default function PhoneScreen({
 
   const reload = useCallback(
     (): Promise<void> =>
-      loadStatus().then(
-        (s) => setStatus(s ?? 'error'),
-        () => setStatus('error'),
-      ),
+      loadStatus()
+        .then((s) => setStatus(s ?? 'error'))
+        .catch(() => setStatus('error')),
     [loadStatus],
   );
 

@@ -1,7 +1,7 @@
+import type { IconName } from '@centraid/design-tokens';
 // governance: allow-repo-hygiene file-size-limit (#363) single cohesive screen component for one automation run's detail view; splitting would fragment one visual unit
 import { useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react';
-import { Icon } from '../ui/index.js';
-import type { IconName } from '@centraid/design-tokens';
+
 import type {
   AuStatusKind,
   RunLogRowDTO,
@@ -9,9 +9,11 @@ import type {
   RunViewSnapshot,
 } from '../screen-contracts.js';
 import { cx } from '../ui/cx.js';
-import styles from './RunViewScreen.module.css';
-import au from '../styles/automation.module.css';
+import { Icon } from '../ui/index.js';
 import Message, { type MessageCallbacks } from './AssistantMessage.js';
+
+import au from '../styles/automation.module.css';
+import styles from './RunViewScreen.module.css';
 
 const STATUS_ICON: Record<AuStatusKind, IconName> = {
   active: 'Power',

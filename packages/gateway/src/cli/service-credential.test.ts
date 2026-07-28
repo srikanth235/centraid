@@ -1,16 +1,18 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { afterEach, describe, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { aesGcmKeyProtector, KeyStore } from '@centraid/vault';
-import { adoptKeyStoreCredential, type ServiceKeyCredential } from './service-credential.js';
+import { afterEach, describe, expect, test } from 'vitest';
+
 import { hostCredentialKey } from './key-store.js';
+import { adoptKeyStoreCredential, type ServiceKeyCredential } from './service-credential.js';
 
 const roots: string[] = [];
 
 describe('service-credential', () => {
   afterEach(async () => {
-    while (roots.length > 0) await fs.rm(roots.pop()!, { recursive: true, force: true });
+    await Promise.all(roots.splice(0).map((root) => fs.rm(root, { recursive: true, force: true })));
   });
 
   const failing = (): ((message: string, code?: number) => never) => {
@@ -54,7 +56,9 @@ describe('service-credential', () => {
     const root = await tempDir('adopt-wrong-credential-');
     roots.push(root);
     const keysDir = path.join(root, 'keys');
-    const store = new KeyStore(keysDir, { protector: aesGcmKeyProtector(Buffer.alloc(32, 0x11)) });
+    const store = new KeyStore(keysDir, {
+      protector: aesGcmKeyProtector(Buffer.alloc(32, 0x11)),
+    });
     store.create('endpoint-key.bin');
     const before = await fs.readFile(path.join(keysDir, 'endpoint-key.bin'), 'utf8');
 
@@ -66,7 +70,7 @@ describe('service-credential', () => {
         failing(),
         credentialFor(keysDir, Buffer.alloc(32, 0x22).toString('base64')),
       ),
-    ).rejects.toThrow(/authentication|decrypt|unsupported state/i);
+    ).rejects.toThrow(/authentication|decrypt|unsupported state/iu);
     await expect(fs.readFile(path.join(keysDir, 'endpoint-key.bin'), 'utf8')).resolves.toBe(before);
   });
 
@@ -80,7 +84,7 @@ describe('service-credential', () => {
         failing(),
         credentialFor(keysDir, Buffer.alloc(4).toString('base64')),
       ),
-    ).rejects.toThrow(/one base64-encoded 32-byte key/);
+    ).rejects.toThrow(/one base64-encoded 32-byte key/u);
   });
 
   test('adoption rewraps an unprotected envelope and skips partial temp files', async () => {

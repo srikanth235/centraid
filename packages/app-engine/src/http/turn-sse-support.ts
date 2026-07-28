@@ -1,8 +1,8 @@
+import { promises as fs, statSync } from 'node:fs';
+import path from 'node:path';
+
 import type { ConversationHistoryStore } from '../conversation/history.js';
 import type { ConversationWorkspaceKind } from '../conversation/schema.js';
-import { promises as fs } from 'node:fs';
-import { statSync } from 'node:fs';
-import path from 'node:path';
 
 /** A file uploaded to the blob CAS before the turn, referenced by its hash. */
 export interface TurnAttachmentRef {
@@ -40,16 +40,21 @@ export function parseTurnAttachmentRefs(raw: unknown): TurnAttachmentRef[] {
 export async function parseAdditionalDirectories(raw: unknown): Promise<string[]> {
   if (raw === undefined) return [];
   if (!Array.isArray(raw)) throw new Error('additionalDirectories must be an array.');
+  const resolvedDirectories = await Promise.all(
+    raw.map(async (value) => {
+      if (typeof value !== 'string' || !path.isAbsolute(value)) {
+        throw new Error('Each additional directory must be an absolute path.');
+      }
+      const resolved = await fs.realpath(value);
+      const stat = await fs.stat(resolved);
+      if (!stat.isDirectory() || resolved === path.parse(resolved).root) {
+        throw new Error('Each additional directory must name a non-root directory.');
+      }
+      return resolved;
+    }),
+  );
   const out: string[] = [];
-  for (const value of raw) {
-    if (typeof value !== 'string' || !path.isAbsolute(value)) {
-      throw new Error('Each additional directory must be an absolute path.');
-    }
-    const resolved = await fs.realpath(value);
-    const stat = await fs.stat(resolved);
-    if (!stat.isDirectory() || resolved === path.parse(resolved).root) {
-      throw new Error('Each additional directory must name a non-root directory.');
-    }
+  for (const resolved of resolvedDirectories) {
     if (!out.includes(resolved)) out.push(resolved);
     if (out.length > 8) throw new Error('At most eight additional directories may be shared.');
   }

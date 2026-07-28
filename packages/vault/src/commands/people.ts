@@ -283,7 +283,13 @@ const EDIT_PERSON: CommandDefinition = {
     properties: { party_id: { type: 'string' } },
   },
   preconditions: [
-    { name: 'person_exists', sql: PERSON_EXISTS_SQL, column: 'n', op: 'eq', value: 1 },
+    {
+      name: 'person_exists',
+      sql: PERSON_EXISTS_SQL,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
   ],
   postconditions: [
     {
@@ -358,7 +364,13 @@ const SET_CADENCE: CommandDefinition = {
     properties: { party_id: { type: 'string' } },
   },
   preconditions: [
-    { name: 'person_exists', sql: PERSON_EXISTS_SQL, column: 'n', op: 'eq', value: 1 },
+    {
+      name: 'person_exists',
+      sql: PERSON_EXISTS_SQL,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
   ],
   postconditions: [
     {
@@ -403,7 +415,13 @@ const LOG_INTERACTION: CommandDefinition = {
     properties: { interaction_id: { type: 'string' } },
   },
   preconditions: [
-    { name: 'person_exists', sql: PERSON_EXISTS_SQL, column: 'n', op: 'eq', value: 1 },
+    {
+      name: 'person_exists',
+      sql: PERSON_EXISTS_SQL,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
   ],
   postconditions: [
     {
@@ -478,7 +496,13 @@ const STAR_PERSON: CommandDefinition = {
     properties: { party_id: { type: 'string' } },
   },
   preconditions: [
-    { name: 'person_exists', sql: PERSON_EXISTS_SQL, column: 'n', op: 'eq', value: 1 },
+    {
+      name: 'person_exists',
+      sql: PERSON_EXISTS_SQL,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
   ],
   postconditions: [
     {
@@ -514,7 +538,13 @@ const UNSTAR_PERSON: CommandDefinition = {
     properties: { party_id: { type: 'string' } },
   },
   preconditions: [
-    { name: 'person_exists', sql: PERSON_EXISTS_SQL, column: 'n', op: 'eq', value: 1 },
+    {
+      name: 'person_exists',
+      sql: PERSON_EXISTS_SQL,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
   ],
   postconditions: [
     {
@@ -554,7 +584,13 @@ const MOVE_PERSON: CommandDefinition = {
     properties: { party_id: { type: 'string' } },
   },
   preconditions: [
-    { name: 'person_exists', sql: PERSON_EXISTS_SQL, column: 'n', op: 'eq', value: 1 },
+    {
+      name: 'person_exists',
+      sql: PERSON_EXISTS_SQL,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
     {
       name: 'list_exists_if_given',
       sql: `SELECT CASE WHEN :list_id IS NULL THEN 1 ELSE ${LIST_EXISTS_SQL} END AS n`,
@@ -618,7 +654,13 @@ const ADD_NOTE: CommandDefinition = {
     properties: { party_id: { type: 'string' } },
   },
   preconditions: [
-    { name: 'person_exists', sql: PERSON_EXISTS_SQL, column: 'n', op: 'eq', value: 1 },
+    {
+      name: 'person_exists',
+      sql: PERSON_EXISTS_SQL,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
   ],
   postconditions: [],
   idempotency: 'once',
@@ -650,7 +692,13 @@ const ADD_TASK: CommandDefinition = {
     properties: { task_id: { type: 'string' } },
   },
   preconditions: [
-    { name: 'person_exists', sql: PERSON_EXISTS_SQL, column: 'n', op: 'eq', value: 1 },
+    {
+      name: 'person_exists',
+      sql: PERSON_EXISTS_SQL,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
   ],
   postconditions: [
     {
@@ -752,7 +800,13 @@ const ADD_IMPORTANT_DATE: CommandDefinition = {
     properties: { date_id: { type: 'string' } },
   },
   preconditions: [
-    { name: 'person_exists', sql: PERSON_EXISTS_SQL, column: 'n', op: 'eq', value: 1 },
+    {
+      name: 'person_exists',
+      sql: PERSON_EXISTS_SQL,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
   ],
   postconditions: [
     {
@@ -893,7 +947,13 @@ const ADD_RELATIONSHIP: CommandDefinition = {
     properties: { relationship_id: { type: 'string' } },
   },
   preconditions: [
-    { name: 'person_exists', sql: PERSON_EXISTS_SQL, column: 'n', op: 'eq', value: 1 },
+    {
+      name: 'person_exists',
+      sql: PERSON_EXISTS_SQL,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
   ],
   postconditions: [
     {
@@ -984,7 +1044,13 @@ const ADD_GIFT: CommandDefinition = {
     properties: { gift_id: { type: 'string' } },
   },
   preconditions: [
-    { name: 'person_exists', sql: PERSON_EXISTS_SQL, column: 'n', op: 'eq', value: 1 },
+    {
+      name: 'person_exists',
+      sql: PERSON_EXISTS_SQL,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
   ],
   postconditions: [
     {
@@ -1092,7 +1158,13 @@ const ADD_DEBT: CommandDefinition = {
     properties: { debt_id: { type: 'string' } },
   },
   preconditions: [
-    { name: 'person_exists', sql: PERSON_EXISTS_SQL, column: 'n', op: 'eq', value: 1 },
+    {
+      name: 'person_exists',
+      sql: PERSON_EXISTS_SQL,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
   ],
   postconditions: [
     {
@@ -1388,7 +1460,11 @@ const ADD_JOURNAL_ENTRY: CommandDefinition = {
   idempotency: 'once',
   risk: 'low',
   handler: (ctx) => {
-    const input = ctx.input as { mood: string; text: string; entry_date?: string };
+    const input = ctx.input as {
+      mood: string;
+      text: string;
+      entry_date?: string;
+    };
     const entryId = ctx.newId();
     const entryDate = input.entry_date ?? ctx.now.slice(0, 10);
     const contentId = contentItemFor(ctx, input.text, 'plain');

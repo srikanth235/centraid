@@ -39,7 +39,10 @@ export function useAsyncData<T>(
         if (alive) {
           setSettled({
             deps,
-            state: { status: 'error', error: err instanceof Error ? err.message : String(err) },
+            state: {
+              status: 'error',
+              error: err instanceof Error ? err.message : String(err),
+            },
           });
         }
       });

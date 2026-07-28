@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+
 import { activeAttemptOf, hydrateMessages, msgToDTO, type AsstMsg } from './assistantTranscript.js';
 
 // The renderer pulls in the auth-aware resolver; stub it as assistantRich's own
@@ -11,7 +12,10 @@ describe(hydrateMessages, () => {
   it('carries createdAt + turn identity onto reconstructed answers', () => {
     const msgs = hydrateMessages([
       { payload: { kind: 'user', text: 'hi' }, createdAt: 100 },
-      { payload: { kind: 'ai', text: 'yo', turnId: 't1', feedback: 'up' }, createdAt: 200 },
+      {
+        payload: { kind: 'ai', text: 'yo', turnId: 't1', feedback: 'up' },
+        createdAt: 200,
+      },
     ]);
     expect(msgs[0]).toMatchObject({ kind: 'user', text: 'hi', createdAt: 100 });
     expect(msgs[1]).toMatchObject({
@@ -52,8 +56,14 @@ describe(hydrateMessages, () => {
 
   it('groups consecutive tool rows into one tools message', () => {
     const msgs = hydrateMessages([
-      { payload: { kind: 'tool', id: 'x', tool: 'vault_sql', state: 'ok' }, createdAt: 1 },
-      { payload: { kind: 'tool', id: 'y', tool: 'vault_sql', state: 'error' }, createdAt: 2 },
+      {
+        payload: { kind: 'tool', id: 'x', tool: 'vault_sql', state: 'ok' },
+        createdAt: 1,
+      },
+      {
+        payload: { kind: 'tool', id: 'y', tool: 'vault_sql', state: 'error' },
+        createdAt: 2,
+      },
     ]);
     expect(msgs).toHaveLength(1);
     expect(msgs[0]).toMatchObject({ kind: 'tools' });
@@ -62,15 +72,27 @@ describe(hydrateMessages, () => {
 
   it('prepends a from-the-archive notice and marks rehydrated answers (issue #438)', () => {
     const msgs = hydrateMessages(
-      [{ payload: { kind: 'ai', text: 'old', turnId: 't1', fromArchive: true }, createdAt: 1 }],
+      [
+        {
+          payload: { kind: 'ai', text: 'old', turnId: 't1', fromArchive: true },
+          createdAt: 1,
+        },
+      ],
       { hasArchivedHistory: true },
     );
     expect(msgs[0]).toMatchObject({ kind: 'notice', level: 'info' });
-    expect(msgs[1]).toMatchObject({ kind: 'ai', text: 'old', fromArchive: true });
+    expect(msgs[1]).toMatchObject({
+      kind: 'ai',
+      text: 'old',
+      fromArchive: true,
+    });
   });
 
   it('prepends a warn notice when archived history is unavailable (issue #438)', () => {
-    const msgs = hydrateMessages([], { hasArchivedHistory: true, archiveUnavailable: true });
+    const msgs = hydrateMessages([], {
+      hasArchivedHistory: true,
+      archiveUnavailable: true,
+    });
     expect(msgs[0]).toMatchObject({ kind: 'notice', level: 'warn' });
   });
 });
@@ -90,18 +112,24 @@ describe(msgToDTO, () => {
     };
     const dto = msgToDTO(msg, true);
     expect(dto).toMatchObject({ kind: 'ai', streaming: false });
-    if (dto.kind === 'ai' && dto.streaming === false) {
-      // activeAttempt 0 → attempt A shown, pager reads 1/2, feedback from A.
-      expect(dto.copyText).toBe('A');
-      expect(dto.turnId).toBe('t1');
-      expect(dto.feedback).toBe('down');
-      expect(dto.retry).toStrictEqual({ index: 1, count: 2 });
-      expect(dto.html).toContain('A');
+    if (dto.kind !== 'ai' || dto.streaming) {
+      throw new Error('expected a settled assistant transcript DTO');
     }
+    // activeAttempt 0 → attempt A shown, pager reads 1/2, feedback from A.
+    expect(dto.copyText).toBe('A');
+    expect(dto.turnId).toBe('t1');
+    expect(dto.feedback).toBe('down');
+    expect(dto.retry).toStrictEqual({ index: 1, count: 2 });
+    expect(dto.html).toContain('A');
   });
 
   it('flags canRegenerate only on the last answer that has a turn id', () => {
-    const answer: AsstMsg = { kind: 'ai', text: 'done', turnId: 't1', feedback: null };
+    const answer: AsstMsg = {
+      kind: 'ai',
+      text: 'done',
+      turnId: 't1',
+      feedback: null,
+    };
     const asLast = msgToDTO(answer, true);
     const notLast = msgToDTO(answer, false);
     expect(asLast.kind === 'ai' && asLast.streaming === false && asLast.canRegenerate).toBe(true);
@@ -111,7 +139,12 @@ describe(msgToDTO, () => {
   });
 
   it('flags canRetry on an error bubble that remembers its failed text', () => {
-    const errored: AsstMsg = { kind: 'ai', text: 'network down', error: true, failedText: 'q' };
+    const errored: AsstMsg = {
+      kind: 'ai',
+      text: 'network down',
+      error: true,
+      failedText: 'q',
+    };
     const dto = msgToDTO(errored, false);
     expect(dto.kind === 'ai' && dto.streaming === false && dto.error).toBe(true);
     expect(dto.kind === 'ai' && dto.streaming === false && dto.canRetry).toBe(true);
@@ -126,12 +159,13 @@ describe(msgToDTO, () => {
       fromArchive: true,
     };
     const dto = msgToDTO(archived, true);
-    if (dto.kind === 'ai' && dto.streaming === false) {
-      // No turnId ⇒ the surface renders no feedback/regenerate control the
-      // server would reject on a pruned (gone) turn.
-      expect(dto.turnId).toBeUndefined();
-      expect(dto.canRegenerate).toBeFalsy();
-      expect(dto.copyText).toBe('sealed');
+    if (dto.kind !== 'ai' || dto.streaming) {
+      throw new Error('expected a settled assistant transcript DTO');
     }
+    // No turnId ⇒ the surface renders no feedback/regenerate control the
+    // server would reject on a pruned (gone) turn.
+    expect(dto.turnId).toBeUndefined();
+    expect(dto.canRegenerate).toBeFalsy();
+    expect(dto.copyText).toBe('sealed');
   });
 });

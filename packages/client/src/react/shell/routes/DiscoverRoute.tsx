@@ -1,5 +1,5 @@
-import { Store } from '../store.js';
 import { useState, type JSX } from 'react';
+
 import type { AppearancePrefs, TemplateEntry } from '../../../app-shell-context.js';
 import type { DiscoverTemplate } from '../../screen-contracts.js';
 import DiscoverScreen from '../../screens/DiscoverScreen.js';
@@ -8,12 +8,12 @@ import { openAutomationTemplatePreview } from '../automationTemplatePreview.js';
 import { openMenu } from '../contextMenu.js';
 import PageScroll from '../PageScroll.js';
 import { PageEmpty, PageLoading } from '../status.js';
+import { Store } from '../store.js';
 import { openTemplatePreview } from '../templatePreview.js';
 import { useAsyncData } from '../useAsyncData.js';
 import { useMemberScopes } from '../useMemberScopes.js';
-import ScopePicker from './ScopePicker.js';
-import scopeBarCss from './ScopePicker.module.css';
 import { openWebhookReveal } from '../webhookReveal.js';
+import ScopePicker from './ScopePicker.js';
 import {
   cloneAutomationTemplate,
   installAppTemplate,
@@ -21,6 +21,8 @@ import {
   loadAutomationTemplates,
   surfaceMintedWebhook,
 } from './templatesData.js';
+
+import scopeBarCss from './ScopePicker.module.css';
 
 export interface DiscoverRouteProps {
   userApps: readonly UserAppMeta[];
@@ -85,10 +87,14 @@ export default function DiscoverRoute({
       .then(async ({ ref, webhooks }) => {
         // Show each minted secret once, in-app, before handing off to the
         // thread — the console line stays as a dev-only fallback.
-        for (const w of webhooks) {
-          surfaceMintedWebhook(w);
-          await openWebhookReveal(w);
-        }
+        const revealNext = async (index: number): Promise<void> => {
+          const webhook = webhooks[index];
+          if (!webhook) return;
+          surfaceMintedWebhook(webhook);
+          await openWebhookReveal(webhook);
+          return revealNext(index + 1);
+        };
+        await revealNext(0);
         // The thread route keys on the row's `ref`; if the fresh clone can't
         // be resolved, land on the fleet instead of a not-found thread.
         if (ref) navigate({ kind: 'automation-view', automationId: ref });
@@ -138,16 +144,28 @@ export default function DiscoverRoute({
               // clone-into-builder wording.
               const items = auto
                 ? [
-                    { id: 'use', label: 'Use this template', icon: 'Sparkle' as const },
+                    {
+                      id: 'use',
+                      label: 'Use this template',
+                      icon: 'Sparkle' as const,
+                    },
                     { id: 'preview', label: 'Preview', icon: 'Eye' as const },
                   ]
                 : t.installed
                   ? [
                       { id: 'open', label: 'Open', icon: 'Eye' as const },
-                      { id: 'preview', label: 'App details', icon: 'Eye' as const },
+                      {
+                        id: 'preview',
+                        label: 'App details',
+                        icon: 'Eye' as const,
+                      },
                     ]
                   : [
-                      { id: 'install', label: 'Install', icon: 'Plus' as const },
+                      {
+                        id: 'install',
+                        label: 'Install',
+                        icon: 'Plus' as const,
+                      },
                       { id: 'preview', label: 'Preview', icon: 'Eye' as const },
                     ];
               openMenu(items, anchor, (id) => {

@@ -6,8 +6,9 @@
  * Usage:  node scripts/fetch-connector-brand-icons.mjs
  */
 import fs from 'node:fs';
-import path from 'node:path';
 import https from 'node:https';
+import path from 'node:path';
+
 import { assertSafeConnectorSvg } from './lib/sanitize-connector-svg.mjs';
 
 const MAP = {
@@ -74,11 +75,16 @@ function normalizeSvg(svg, tone) {
 
 const out = {};
 const sources = {};
-for (const [tone, id] of Object.entries(MAP)) {
-  const [prefix, name] = id.split(':');
-  const raw = await fetchSvg(`https://api.iconify.design/${prefix}/${name}.svg`);
-  if (!raw.startsWith('<svg') || raw.length < 40) throw new Error(`Bad svg for ${id}`);
-  out[tone] = normalizeSvg(raw, tone);
+const icons = await Promise.all(
+  Object.entries(MAP).map(async ([tone, id]) => {
+    const [prefix, name] = id.split(':');
+    const raw = await fetchSvg(`https://api.iconify.design/${prefix}/${name}.svg`);
+    if (!raw.startsWith('<svg') || raw.length < 40) throw new Error(`Bad svg for ${id}`);
+    return { tone, id, svg: normalizeSvg(raw, tone) };
+  }),
+);
+for (const { tone, id, svg } of icons) {
+  out[tone] = svg;
   sources[tone] = id;
   console.log('OK', tone, '<-', id);
 }

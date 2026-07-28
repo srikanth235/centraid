@@ -11,8 +11,10 @@
 
 import { existsSync, readdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
-import type { KeyStore } from '@centraid/vault';
+
 import type { RuntimeLogger } from '@centraid/app-engine';
+import type { KeyStore } from '@centraid/vault';
+
 import type { GatewayDatabase } from './gateway-db.js';
 
 export interface PendingEraseRecoveryOptions {
@@ -36,8 +38,14 @@ export function recoverPendingVaultErases(options: PendingEraseRecoveryOptions):
     .all() as Array<{ vault_id: string }>;
   const completed: string[] = [];
   for (const { vault_id: vaultId } of rows) {
-    rmSync(path.join(options.vaultRoot, vaultId), { recursive: true, force: true });
-    rmSync(path.join(options.cacheRoot, vaultId), { recursive: true, force: true });
+    rmSync(path.join(options.vaultRoot, vaultId), {
+      recursive: true,
+      force: true,
+    });
+    rmSync(path.join(options.cacheRoot, vaultId), {
+      recursive: true,
+      force: true,
+    });
     options.keys.destroy(`${vaultId}.sealkey`);
     options.gatewayDatabase.transaction(() => {
       options.gatewayDatabase.db

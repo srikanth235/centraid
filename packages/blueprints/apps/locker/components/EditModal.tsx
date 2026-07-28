@@ -8,9 +8,11 @@
 // own `fields` state, the same bridge app.js's `genTarget` gave the
 // module-level `state.edit.fields`.
 import { useState } from 'react';
+
 import { CAT_ORDER, TYPE_LABEL } from '../format.ts';
 import type { EditSeed, SavePayload } from '../types.ts';
 import { Icon } from './Shared.tsx';
+
 import styles from './EditModal.module.css';
 import shared from './shared.module.css';
 
@@ -31,7 +33,12 @@ function editFieldsFor(type: string): FieldDef[] {
         { label: 'Username', key: 'username', ph: 'you@email.com' },
         { label: 'Password', key: 'password', mono: true, gen: true },
         { label: 'Website', key: 'url', ph: 'https://' },
-        { label: 'One-time secret', key: 'otp_seed', mono: true, ph: 'base32 seed (optional)' },
+        {
+          label: 'One-time secret',
+          key: 'otp_seed',
+          mono: true,
+          ph: 'base32 seed (optional)',
+        },
       ];
     case 'card':
       return [

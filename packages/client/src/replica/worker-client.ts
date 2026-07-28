@@ -10,12 +10,6 @@ import { replicaDatabaseName } from './key.js';
 import { guardReplicaRow } from './query.js';
 import type { ReplicaStore } from './store.js';
 import type {
-  ReplicaWorkerRequest,
-  ReplicaWorkerResponse,
-  ReplicaWorkerResults,
-  SerializedReplicaError,
-} from './worker-protocol.js';
-import type {
   ApplyChangesResult,
   OptimisticMutation,
   ReplicaBootstrapHeader,
@@ -33,6 +27,12 @@ import type {
   ReplicaStatus,
   ReplicaWorkerOpenOptions,
 } from './types.js';
+import type {
+  ReplicaWorkerRequest,
+  ReplicaWorkerResponse,
+  ReplicaWorkerResults,
+  SerializedReplicaError,
+} from './worker-protocol.js';
 
 /**
  * The two-signature overload for `add`/`removeEventListener`, spelled as an
@@ -211,7 +211,10 @@ export class ReplicaWorkerClient implements ReplicaStore {
       // The single id→`Op` erasure point (see `PendingRpc.resolve`). The worker
       // answers request `id` with `ReplicaWorkerResults[Op]`, but that is a
       // protocol guarantee rather than one TypeScript can carry through the map.
-      this.#pending.set(id, { resolve: resolve as (value: unknown) => void, reject });
+      this.#pending.set(id, {
+        resolve: resolve as (value: unknown) => void,
+        reject,
+      });
       // eslint-disable-next-line unicorn/require-post-message-target-origin -- (#406) Worker.postMessage has no targetOrigin overload; governance: allow-no-unjustified-suppressions Web Worker API false positive
       this.#worker.postMessage({ id, op, payload } as ReplicaWorkerRequest);
     });

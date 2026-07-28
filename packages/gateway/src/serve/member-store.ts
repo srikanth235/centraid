@@ -15,6 +15,7 @@
 
 import crypto from 'node:crypto';
 import path from 'node:path';
+
 import type { GrantableRole } from './enrollment-store.js';
 import { GatewayDatabase } from './gateway-db.js';
 
@@ -171,7 +172,10 @@ export class MemberStore {
    * both children, but the deletes are spelled out so the operation reads as
    * what it is and survives a future FK-pragma change.
    */
-  remove(memberId: string): { removedEndpointIds: string[]; removedVaultIds: string[] } {
+  remove(memberId: string): {
+    removedEndpointIds: string[];
+    removedVaultIds: string[];
+  } {
     return this.gatewayDatabase.transaction(() => {
       const endpointIds = (
         this.gatewayDatabase.db

@@ -3,10 +3,12 @@
 // no port outlives the turn. Core turn behaviour is in backend.test.ts;
 // shared fixtures in test-fixtures.ts.
 
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { describe, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { describe, expect, test } from 'vitest';
+
 import { notices, runFake, types, vaultToolContext } from './test-fixtures.js';
 
 interface VaultProbe {
@@ -58,9 +60,9 @@ describe('backend.vault-tools', () => {
     expect(advertised).toHaveLength(1);
     expect(advertised[0]?.type).toBe('http');
     expect(advertised[0]?.name).toBe('centraid');
-    expect(advertised[0]?.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/mcp$/);
+    expect(advertised[0]?.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/mcp$/u);
     expect(advertised[0]?.headers[0]?.name).toBe('Authorization');
-    expect(advertised[0]?.headers[0]?.value).toMatch(/^Bearer [0-9a-f]{64}$/);
+    expect(advertised[0]?.headers[0]?.value).toMatch(/^Bearer [0-9a-f]{64}$/u);
 
     const probe = JSON.parse(await fs.readFile(vaultMarker, 'utf8')) as VaultProbe;
     // An unauthenticated request is refused before any tool runs.

@@ -9,8 +9,7 @@
 // invariants of atlas-browse.ts apply here identically.
 
 import type { DatabaseSync } from 'node:sqlite';
-import { POLY_REF_REGISTRY } from './poly-refs.js';
-import { atlasTables } from './atlas.js';
+
 import {
   BROWSE_REF_SEARCH_LIMIT,
   displayFieldOf,
@@ -19,6 +18,8 @@ import {
   resolveBrowseTable,
   tableInfo,
 } from './atlas-browse.js';
+import { atlasTables } from './atlas.js';
+import { POLY_REF_REGISTRY } from './poly-refs.js';
 
 export interface BrowseRefHit {
   id: string;
@@ -60,7 +61,10 @@ export function browseRefSearch(
     sql = `SELECT ${idSelect} AS __id, "${display}" AS __disp FROM "${ref.physical}" WHERE "${display}" LIKE ? ESCAPE '\\' ORDER BY "${display}" LIMIT ${cap}`;
     bind = [`%${likeEscape(q)}%`];
   }
-  const rows = vault.prepare(sql).all(...bind) as { __id: unknown; __disp: unknown }[];
+  const rows = vault.prepare(sql).all(...bind) as {
+    __id: unknown;
+    __disp: unknown;
+  }[];
   return rows.map((r) => ({
     id: String(r.__id),
     display: r.__disp == null ? String(r.__id) : String(r.__disp),

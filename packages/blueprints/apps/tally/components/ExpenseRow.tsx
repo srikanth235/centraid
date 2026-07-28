@@ -4,6 +4,7 @@
 // like the prototype does.
 import { MS, cat, first, money, tint, todayKey } from '../format.ts';
 import type { LedgerRow } from '../types.ts';
+
 import styles from './ExpenseRow.module.css';
 import shared from './shared.module.css';
 

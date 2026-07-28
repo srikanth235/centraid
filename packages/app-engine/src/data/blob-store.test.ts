@@ -1,12 +1,14 @@
+import { mkdirSync, existsSync, readdirSync } from 'node:fs';
+import path from 'node:path';
+
 import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { describe, expect, it } from 'vitest';
-import { mkdirSync, existsSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+
 import { BlobStore, hashBytes, blobUrl } from './blob-store.js';
 
 function freshAppsDir(appId = 'app'): string {
   const dir = tempDirSync('centraid-blobs-');
-  mkdirSync(join(dir, appId), { recursive: true });
+  mkdirSync(path.join(dir, appId), { recursive: true });
   return dir;
 }
 
@@ -32,7 +34,7 @@ describe(BlobStore, () => {
 
   it('rejects a non-sha256 hash (path-traversal guard)', () => {
     const store = new BlobStore(freshAppsDir());
-    expect(() => store.pathFor('app', '../escape')).toThrow(/invalid hash/i);
+    expect(() => store.pathFor('app', '../escape')).toThrow(/invalid hash/iu);
   });
 
   it('gc removes blobs not in the referenced set, keeps referenced ones', async () => {
@@ -46,12 +48,14 @@ describe(BlobStore, () => {
     expect(removed).toBe(1);
     expect(existsSync(store.pathFor('app', keep.hash))).toBe(true);
     expect(existsSync(store.pathFor('app', drop.hash))).toBe(false);
-    expect(readdirSync(join(dir, 'app', 'blobs'))).toStrictEqual([keep.hash]);
+    expect(readdirSync(path.join(dir, 'app', 'blobs'))).toStrictEqual([keep.hash]);
   });
 
   it('gc on an app with no blobs dir is a no-op', async () => {
     const store = new BlobStore(freshAppsDir());
-    await expect(store.gc('app', new Set())).resolves.toStrictEqual({ removed: 0 });
+    await expect(store.gc('app', new Set())).resolves.toStrictEqual({
+      removed: 0,
+    });
   });
 
   it('blobUrl builds the chat-history download path', () => {
@@ -62,7 +66,7 @@ describe(BlobStore, () => {
 
   it('rejects a `_`-prefixed app id that is not the reserved assistant scope', () => {
     const store = new BlobStore(freshAppsDir());
-    expect(() => store.pathFor('_not-a-real-scope', 'a'.repeat(64))).toThrow(/invalid app id/i);
+    expect(() => store.pathFor('_not-a-real-scope', 'a'.repeat(64))).toThrow(/invalid app id/iu);
   });
 
   it('allows the reserved `_assistant` scope through the same app-id gate', async () => {

@@ -20,7 +20,7 @@ export const PART_BYTES = 16 * 1024 * 1024;
  * Re-frame a byte stream into exact `partBytes` slices (last part short).
  * An empty source yields no parts — a zero-byte file is an entry with an
  * empty part list, matching /1's chunker behavior.
- * @yields Owned `partBytes`-sized slices (final slice short), in order.
+ * @yields {Uint8Array} Owned `partBytes`-sized slices (final slice short), in order.
  */
 export async function* partStream(
   source: AsyncIterable<Uint8Array>,

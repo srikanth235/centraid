@@ -1,5 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
+
 import { describe, expect, test } from 'vitest';
+
 import { IncrementalSha256 } from './incremental-sha256.js';
 
 describe('incremental-sha256', () => {
@@ -8,13 +10,16 @@ describe('incremental-sha256', () => {
     const expected = createHash('sha256').update(bytes).digest('hex');
     let hash = await IncrementalSha256.create();
     let offset = 0;
-    for (const width of [1, 63, 64, 9_999, 17, 65_537, bytes.length]) {
+    const resumeWithWidth = async (index: number): Promise<void> => {
+      const width = [1, 63, 64, 9_999, 17, 65_537, bytes.length][index];
+      if (width === undefined || offset === bytes.length) return;
       const end = Math.min(bytes.length, offset + width);
       hash.update(bytes.subarray(offset, end));
       hash = await IncrementalSha256.create(structuredClone(hash.exportState()));
       offset = end;
-      if (offset === bytes.length) break;
-    }
+      return resumeWithWidth(index + 1);
+    };
+    await resumeWithWidth(0);
     if (offset < bytes.length) hash.update(bytes.subarray(offset));
     await expect(hash.digestHex()).resolves.toBe(expected);
     // digest is non-destructive: a resumed caller can still append.

@@ -1,5 +1,6 @@
-import { describe, expect, test } from 'vitest';
 import { fc } from '@centraid/test-kit/fast-check';
+import { describe, expect, test } from 'vitest';
+
 import {
   CBSF_VERSION,
   cbsfDirectoryAad,
@@ -24,7 +25,10 @@ describe('CBSF wire property', () => {
       fc.property(
         fc.integer({ min: 1, max: 1_048_576 }),
         fc.integer({ min: 0, max: Number.MAX_SAFE_INTEGER }),
-        fc.array(fc.integer({ min: 0, max: 0xffff_ffff }), { minLength: 0, maxLength: 32 }),
+        fc.array(fc.integer({ min: 0, max: 0xffff_ffff }), {
+          minLength: 0,
+          maxLength: 32,
+        }),
         (frameSize, totalSize, sealedLens) => {
           const bytes = encodeCbsfDirectory(frameSize, totalSize, sealedLens);
           const decoded = decodeCbsfDirectory(bytes, sealedLens.length);
@@ -42,7 +46,10 @@ describe('CBSF wire property', () => {
       fc.property(
         fc.integer({ min: 1, max: 1024 }),
         fc.integer({ min: 0, max: 1_000_000 }),
-        fc.array(fc.integer({ min: 0, max: 1000 }), { minLength: 1, maxLength: 8 }),
+        fc.array(fc.integer({ min: 0, max: 1000 }), {
+          minLength: 1,
+          maxLength: 8,
+        }),
         fc.integer({ min: 0, max: 20 }),
         (frameSize, totalSize, sealedLens, wrongOffset) => {
           const bytes = encodeCbsfDirectory(frameSize, totalSize, sealedLens);
@@ -94,7 +101,10 @@ describe('CBSF wire property', () => {
       fc.property(
         fc.integer({ min: 1, max: 4096 }),
         fc.integer({ min: 0, max: 1_000_000 }),
-        fc.array(fc.integer({ min: 0, max: 100 }), { minLength: 0, maxLength: 16 }),
+        fc.array(fc.integer({ min: 0, max: 100 }), {
+          minLength: 0,
+          maxLength: 16,
+        }),
         (frameSize, totalSize, sealedLens) => {
           const bytes = encodeCbsfDirectory(frameSize, totalSize, sealedLens);
           expect(bytes.byteLength).toBe(16 + sealedLens.length * 4);
@@ -114,6 +124,6 @@ describe('CBSF wire property', () => {
     // Instead: keep length for 3 frames, overwrite encodedCount to 2.
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     view.setUint32(12, 2, false);
-    expect(() => decodeCbsfDirectory(bytes, 3)).toThrow(/metadata mismatch/);
+    expect(() => decodeCbsfDirectory(bytes, 3)).toThrow(/metadata mismatch/u);
   });
 });

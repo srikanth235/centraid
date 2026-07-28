@@ -1,13 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
 import { handleCompanionRequest } from './companion-api.js';
+
+type JsonTestSeam = (path: string, init?: RequestInit) => Promise<unknown>;
+type AppReadTestSeam = (app: string, query: string, input?: unknown) => Promise<unknown>;
+type AppWriteTestSeam = (app: string, action: string, input: unknown) => Promise<unknown>;
 
 const state = vi.hoisted(() => ({ paired: true }));
 const transport = vi.hoisted(() => ({
   closeTransport: vi.fn<typeof import('./transport.js').closeTransport>(),
-  // `companionJson` is generic (`<T>(...) => Promise<T>`); a typed mock erases the
-  // type parameter, so `Mock<...>` stops being assignable to the export.
-  // Bare `vi.fn()` is the only form that satisfies a generic signature.
-  companionJson: vi.fn(),
+  companionJson: vi.fn<JsonTestSeam>(),
+  appRead: vi.fn<AppReadTestSeam>(),
+  appWrite: vi.fn<AppWriteTestSeam>(),
 }));
 const storage = vi.hoisted(() => ({
   purgeCompanionState: vi.fn<typeof import('./storage.js').purgeCompanionState>(),
@@ -15,14 +19,12 @@ const storage = vi.hoisted(() => ({
 
 vi.mock(import('./transport.js'), () => ({
   ...transport,
-  // `appRead` is generic (`<T>(...) => Promise<T>`); a typed mock erases the
-  // type parameter, so `Mock<...>` stops being assignable to the export.
-  // Bare `vi.fn()` is the only form that satisfies a generic signature.
-  appRead: vi.fn(),
-  // `appWrite` is generic (`<T>(...) => Promise<T>`); a typed mock erases the
-  // type parameter, so `Mock<...>` stops being assignable to the export.
-  // Bare `vi.fn()` is the only form that satisfies a generic signature.
-  appWrite: vi.fn(),
+  companionJson: <T>(...args: Parameters<typeof transport.companionJson>) =>
+    transport.companionJson(...args) as Promise<T>,
+  appRead: <T>(...args: Parameters<typeof transport.appRead>) =>
+    transport.appRead(...args) as Promise<T>,
+  appWrite: <T>(...args: Parameters<typeof transport.appWrite>) =>
+    transport.appWrite(...args) as Promise<T>,
   pairOverIroh: vi.fn<typeof import('./transport.js').pairOverIroh>(),
 }));
 vi.mock(import('./storage.js'), () => ({

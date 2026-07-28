@@ -1,12 +1,12 @@
+import { OnlineOnlyError } from '@centraid/client/replica/native';
+import { Feather } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
-import { OnlineOnlyError } from '@centraid/client/replica/native';
 
-import { family, useTheme } from '../../kit/theme';
-import { useReplica } from '../../kit/replica/ReplicaProvider';
 import { useReplicaQuery } from '../../kit/hooks/useReplicaQuery';
+import { useReplica } from '../../kit/replica/ReplicaProvider';
+import { family, useTheme } from '../../kit/theme';
 import type { PhotosScreenProps } from '../../navigation';
 import PhotoTimeline from './PhotoTimeline';
 import { sectionPhotoAssets } from './timeline-model';
@@ -60,7 +60,11 @@ export default function PhotosSearch({
         return;
       }
       void session
-        .search('photos', { entity: 'core.content_item', query: term.trim(), limit: 300 })
+        .search('photos', {
+          entity: 'core.content_item',
+          query: term.trim(),
+          limit: 300,
+        })
         .then((result) => {
           if (!cancelled) {
             setContentIds(new Set(result.rows.map((row) => String(row.values.content_id))));
@@ -69,12 +73,11 @@ export default function PhotosSearch({
         })
         .catch((error) => {
           if (!cancelled) {
+            setContentIds(new Set());
             if (error instanceof OnlineOnlyError) {
-              setContentIds(new Set());
               setOnlineOnly(true);
               setNotice(error.message);
             } else {
-              setContentIds(new Set());
               setOnlineOnly(false);
               setNotice(error instanceof Error ? error.message : String(error));
             }
@@ -325,14 +328,38 @@ const styles = StyleSheet.create({
     fontSize: 12,
     padding: 10,
   },
-  dateRow: { flexDirection: 'row', gap: 8, paddingBottom: 12, paddingHorizontal: 18 },
+  dateRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingBottom: 12,
+    paddingHorizontal: 18,
+  },
   empty: { alignItems: 'center', flex: 1, justifyContent: 'center' },
-  filters: { flexDirection: 'row', gap: 8, paddingBottom: 12, paddingHorizontal: 18 },
-  fallback: { borderRadius: 12, marginHorizontal: 18, marginBottom: 12, padding: 12 },
+  filters: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingBottom: 12,
+    paddingHorizontal: 18,
+  },
+  fallback: {
+    borderRadius: 12,
+    marginHorizontal: 18,
+    marginBottom: 12,
+    padding: 12,
+  },
   fallbackAction: { fontFamily: family.sansBold, fontSize: 12, marginTop: 5 },
-  fallbackText: { fontFamily: family.sansRegular, fontSize: 12, lineHeight: 17 },
+  fallbackText: {
+    fontFamily: family.sansRegular,
+    fontSize: 12,
+    lineHeight: 17,
+  },
   header: { alignItems: 'center', flexDirection: 'row', gap: 10, padding: 12 },
-  input: { flex: 1, fontFamily: family.sansRegular, fontSize: 14, paddingVertical: 9 },
+  input: {
+    flex: 1,
+    fontFamily: family.sansRegular,
+    fontSize: 14,
+    paddingVertical: 9,
+  },
   notice: {
     fontFamily: family.sansRegular,
     fontSize: 13,

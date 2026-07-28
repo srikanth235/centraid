@@ -6,12 +6,14 @@
  * rather than copied twice. Each test file owns its own `afterEach(cleanup)`.
  */
 
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { AUTHED_DEVICE_HEADER } from '@centraid/app-engine';
-import { vi } from 'vitest';
-import http from 'node:http';
 import { promises as fs } from 'node:fs';
+import http from 'node:http';
 import type { AddressInfo } from 'node:net';
+
+import { AUTHED_DEVICE_HEADER } from '@centraid/app-engine';
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { vi } from 'vitest';
+
 import { EnrollmentStore } from '../serve/enrollment-store.js';
 import { GatewayDatabase } from '../serve/gateway-db.js';
 import { PairingTicketStore } from '../serve/pairing-store.js';
@@ -25,7 +27,7 @@ const dirs: string[] = [];
 export async function cleanupHarnesses(): Promise<void> {
   for (const server of servers.splice(0)) server.close();
   for (const database of databases.splice(0)) database.close();
-  for (const dir of dirs.splice(0)) await fs.rm(dir, { recursive: true, force: true });
+  await Promise.all(dirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
 }
 
 export interface DevicesHarness {
@@ -61,9 +63,18 @@ export async function harness(
   servers.push(server);
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const { port } = server.address() as AddressInfo;
-  return { base: `http://127.0.0.1:${port}`, enrollments, tickets, sessions, onEndpointRevoked };
+  return {
+    base: `http://127.0.0.1:${port}`,
+    enrollments,
+    tickets,
+    sessions,
+    onEndpointRevoked,
+  };
 }
 
 export function deviceHeaders(endpointId: string): Record<string, string> {
-  return { [AUTHED_DEVICE_HEADER]: endpointId, 'content-type': 'application/json' };
+  return {
+    [AUTHED_DEVICE_HEADER]: endpointId,
+    'content-type': 'application/json',
+  };
 }

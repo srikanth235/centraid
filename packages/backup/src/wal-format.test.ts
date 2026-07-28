@@ -1,4 +1,4 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import fss from 'node:fs';
 // governance: allow-repo-hygiene file-size-limit (#408) the wal-format behavior suite — key codecs, sealing, frame math against real WALs, and the replay planner share one fixture vocabulary; sharding would duplicate it per file
 /*
  * WAL segment format tests (FORMAT.md § WAL segments, § Encryption — /1,
@@ -9,11 +9,12 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  * (the page-mixing defenses). The FORMAT.md info/AAD strings are pinned
  * verbatim: silent drift there would strand every already-shipped stream.
  */
-
-import fss from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterEach, describe, expect, test } from 'vitest';
+
 import { deriveNonce, encryptWithNonce } from './crypto.js';
 import {
   isWalGeneration,
@@ -52,7 +53,13 @@ import {
 const cleanups: Array<() => Promise<void>> = [];
 describe('wal-format', () => {
   afterEach(async () => {
-    while (cleanups.length > 0) await cleanups.pop()?.();
+    const closeNext = async (): Promise<void> => {
+      const cleanup = cleanups.pop();
+      if (!cleanup) return;
+      await cleanup();
+      return closeNext();
+    };
+    await closeNext();
   });
   const GEN = 'ab12'.repeat(8); // 32 hex chars
   const GEN2 = 'cd34'.repeat(8);
@@ -101,7 +108,11 @@ describe('wal-format', () => {
     });
 
     test('roundtrips zero offsets and large values', () => {
-      const addr = seg({ startOffset: 0, endOffset: 999999999999, tickMs: 1752451200000 });
+      const addr = seg({
+        startOffset: 0,
+        endOffset: 999999999999,
+        tickMs: 1752451200000,
+      });
       expect(parseWalSegmentKey(walSegmentKey(addr))).toStrictEqual(addr);
     });
 
@@ -145,12 +156,12 @@ describe('wal-format', () => {
     });
 
     test('walSegmentKey refuses invalid addresses instead of minting hostile keys', () => {
-      expect(() => walSegmentKey(seg({ generation: 'nothex' }))).toThrow(/generation/);
-      expect(() => walSegmentKey(seg({ group: -1 }))).toThrow(/group/);
-      expect(() => walSegmentKey(seg({ group: 1.5 }))).toThrow(/group/);
-      expect(() => walSegmentKey(seg({ startOffset: 100, endOffset: 100 }))).toThrow(/range/);
-      expect(() => walSegmentKey(seg({ startOffset: -1 }))).toThrow(/range/);
-      expect(() => walSegmentKey(seg({ tickMs: -1 }))).toThrow(/tick/);
+      expect(() => walSegmentKey(seg({ generation: 'nothex' }))).toThrow(/generation/u);
+      expect(() => walSegmentKey(seg({ group: -1 }))).toThrow(/group/u);
+      expect(() => walSegmentKey(seg({ group: 1.5 }))).toThrow(/group/u);
+      expect(() => walSegmentKey(seg({ startOffset: 100, endOffset: 100 }))).toThrow(/range/u);
+      expect(() => walSegmentKey(seg({ startOffset: -1 }))).toThrow(/range/u);
+      expect(() => walSegmentKey(seg({ tickMs: -1 }))).toThrow(/tick/u);
     });
 
     test('lexicographic key order equals replay order within a group', () => {
@@ -185,10 +196,10 @@ describe('wal-format', () => {
     });
 
     test('walGroupCloserKey refuses invalid closers', () => {
-      expect(() => walGroupCloserKey(closer({ generation: 'zz' }))).toThrow(/generation/);
-      expect(() => walGroupCloserKey(closer({ group: -1 }))).toThrow(/group/);
-      expect(() => walGroupCloserKey(closer({ endOffset: 0 }))).toThrow(/closer end/);
-      expect(() => walGroupCloserKey(closer({ endOffset: 1.5 }))).toThrow(/closer end/);
+      expect(() => walGroupCloserKey(closer({ generation: 'zz' }))).toThrow(/generation/u);
+      expect(() => walGroupCloserKey(closer({ group: -1 }))).toThrow(/group/u);
+      expect(() => walGroupCloserKey(closer({ endOffset: 0 }))).toThrow(/closer end/u);
+      expect(() => walGroupCloserKey(closer({ endOffset: 1.5 }))).toThrow(/closer end/u);
     });
 
     test('a closer key sorts after every segment key of its group (suffix listing order)', () => {
@@ -215,7 +226,7 @@ describe('wal-format', () => {
     });
 
     test('prefix refuses an invalid generation', () => {
-      expect(() => walSegmentPrefix('vault', 'not-a-generation')).toThrow(/generation/);
+      expect(() => walSegmentPrefix('vault', 'not-a-generation')).toThrow(/generation/u);
     });
 
     test('segment and closer keys fall under their generation prefix', () => {
@@ -251,7 +262,12 @@ describe('wal-format', () => {
       // The idempotent-PUT property: a retried upload re-seals the SAME local
       // segment file, whose name encodes the full address (tick included), so
       // it must reproduce the object byte for byte.
-      const addr = seg({ group: 2, startOffset: 100, endOffset: 200, tickMs: 1752451200000 });
+      const addr = seg({
+        group: 2,
+        startOffset: 100,
+        endOffset: 200,
+        tickMs: 1752451200000,
+      });
       const plain = new Uint8Array(100).fill(0x77);
       const a = sealWalSegment(DATA_KEY, VAULT_ID, addr, plain);
       const b = sealWalSegment(DATA_KEY, VAULT_ID, addr, plain);
@@ -265,16 +281,21 @@ describe('wal-format', () => {
       // two-db cut. If the seal did not cover it, a hostile provider could
       // copy this object to a key bearing an earlier tick and a "restore to T"
       // would apply bytes captured well after T.
-      const real = seg({ group: 1, startOffset: 0, endOffset: 100, tickMs: 1000 });
+      const real = seg({
+        group: 1,
+        startOffset: 0,
+        endOffset: 100,
+        tickMs: 1000,
+      });
       const sealed = sealWalSegment(DATA_KEY, VAULT_ID, real, plain100);
       const forged = { ...real, tickMs: 1 }; // same range, same group — only the tick moved
       expect(() => openWalSegment(DATA_KEY, VAULT_ID, forged, sealed)).toThrow(
-        /unsupported state or unable to authenticate data/i,
+        /unsupported state or unable to authenticate data/iu,
       );
       // ...and forward, too (relabelling an early segment as late).
       expect(() =>
         openWalSegment(DATA_KEY, VAULT_ID, { ...real, tickMs: 9_999_999 }, sealed),
-      ).toThrow(/unsupported state or unable to authenticate data/i);
+      ).toThrow(/unsupported state or unable to authenticate data/iu);
       // The genuine address still opens.
       expect([...openWalSegment(DATA_KEY, VAULT_ID, real, sealed)]).toStrictEqual([...plain100]);
     });
@@ -308,7 +329,12 @@ describe('wal-format', () => {
       // FORMAT.md § Encryption is normative; if this test breaks, already-
       // shipped segments become unreadable — that is a format break, not a
       // refactor.
-      const addr = seg({ group: 2, startOffset: 0, endOffset: 100, tickMs: 1000 });
+      const addr = seg({
+        group: 2,
+        startOffset: 0,
+        endOffset: 100,
+        tickMs: 1000,
+      });
       const nonce = deriveNonce(DATA_KEY, `centraid-backup:wal-nonce:vault:${GEN}:2:0:100:1000`);
       const aad = new TextEncoder().encode(`centraid-wal/1:${VAULT_ID}:vault:${GEN}:2:0:100:1000`);
       const expected = encryptWithNonce(DATA_KEY, nonce, plain100, aad);
@@ -317,7 +343,7 @@ describe('wal-format', () => {
 
     test('seal refuses bytes that do not match the claimed range length', () => {
       expect(() => sealWalSegment(DATA_KEY, VAULT_ID, seg({ endOffset: 101 }), plain100)).toThrow(
-        /100 bytes for range 0-101/,
+        /100 bytes for range 0-101/u,
       );
     });
 
@@ -330,7 +356,7 @@ describe('wal-format', () => {
       const aad = new TextEncoder().encode(`centraid-wal/1:${VAULT_ID}:vault:${GEN}:0:0:100:1000`);
       const forged = encryptWithNonce(DATA_KEY, nonce, new Uint8Array(60), aad);
       expect(() => openWalSegment(DATA_KEY, VAULT_ID, addr, forged)).toThrow(
-        /60 bytes for range 0-100/,
+        /60 bytes for range 0-100/u,
       );
     });
 
@@ -339,25 +365,25 @@ describe('wal-format', () => {
       const addrB = seg({ group: 1, startOffset: 0, endOffset: 100 });
       const sealed = sealWalSegment(DATA_KEY, VAULT_ID, addrA, plain100);
       expect(() => openWalSegment(DATA_KEY, VAULT_ID, addrB, sealed)).toThrow(
-        /unsupported state or unable to authenticate data/i,
+        /unsupported state or unable to authenticate data/iu,
       );
       // db swap
       const addrJournal = seg({ db: 'journal' });
       expect(() => openWalSegment(DATA_KEY, VAULT_ID, addrJournal, sealed)).toThrow(
-        /unsupported state or unable to authenticate data/i,
+        /unsupported state or unable to authenticate data/iu,
       );
       // generation swap
       expect(() => openWalSegment(DATA_KEY, VAULT_ID, seg({ generation: GEN2 }), sealed)).toThrow(
-        /unsupported state or unable to authenticate data/i,
+        /unsupported state or unable to authenticate data/iu,
       );
       // vault swap
       expect(() => openWalSegment(DATA_KEY, 'vault-2', addrA, sealed)).toThrow(
-        /unsupported state or unable to authenticate data/i,
+        /unsupported state or unable to authenticate data/iu,
       );
       // offset swap (same length, shifted range)
       const addrShifted = seg({ startOffset: 100, endOffset: 200 });
       expect(() => openWalSegment(DATA_KEY, VAULT_ID, addrShifted, sealed)).toThrow(
-        /unsupported state or unable to authenticate data/i,
+        /unsupported state or unable to authenticate data/iu,
       );
     });
 
@@ -367,7 +393,7 @@ describe('wal-format', () => {
       const tampered = new Uint8Array(sealed);
       tampered[12 + 50]! ^= 0x01; // one bit, mid-ciphertext
       expect(() => openWalSegment(DATA_KEY, VAULT_ID, addr, tampered)).toThrow(
-        /unsupported state or unable to authenticate data/i,
+        /unsupported state or unable to authenticate data/iu,
       );
     });
 
@@ -376,12 +402,12 @@ describe('wal-format', () => {
       const sealed = sealWalSegment(DATA_KEY, VAULT_ID, addr, plain100);
       expect(() =>
         openWalSegment(DATA_KEY, VAULT_ID, addr, sealed.subarray(0, sealed.length - 1)),
-      ).toThrow(/unsupported state or unable to authenticate data/i);
+      ).toThrow(/unsupported state or unable to authenticate data/iu);
       expect(() => openWalSegment(DATA_KEY, VAULT_ID, addr, sealed.subarray(0, 10))).toThrow(
-        /truncated/,
+        /truncated/u,
       );
       expect(() => openWalSegment(DATA_KEY, VAULT_ID, addr, new Uint8Array(0))).toThrow(
-        /truncated/,
+        /truncated/u,
       );
     });
 
@@ -390,7 +416,7 @@ describe('wal-format', () => {
       const otherKey = new Uint8Array(32).fill(0x5b);
       const sealed = sealWalSegment(otherKey, VAULT_ID, addr, plain100);
       expect(() => openWalSegment(DATA_KEY, VAULT_ID, addr, sealed)).toThrow(
-        /unsupported state or unable to authenticate data/i,
+        /unsupported state or unable to authenticate data/iu,
       );
     });
   });
@@ -424,7 +450,7 @@ describe('wal-format', () => {
       const tampered = new Uint8Array(sealed);
       tampered[tampered.length - 1]! ^= 0x01;
       expect(() => openWalCloser(DATA_KEY, VAULT_ID, c, tampered)).toThrow(
-        /unsupported state or unable to authenticate data/i,
+        /unsupported state or unable to authenticate data/iu,
       );
     });
 
@@ -434,23 +460,23 @@ describe('wal-format', () => {
       // group EARLIER than it really ended — would legitimize a truncated group.
       expect(() =>
         openWalCloser(DATA_KEY, VAULT_ID, closer({ group: 0, endOffset: 100 }), sealed),
-      ).toThrow(/unsupported state or unable to authenticate data/i);
+      ).toThrow(/unsupported state or unable to authenticate data/iu);
       expect(() =>
         openWalCloser(DATA_KEY, VAULT_ID, closer({ group: 1, endOffset: 200 }), sealed),
-      ).toThrow(/unsupported state or unable to authenticate data/i);
+      ).toThrow(/unsupported state or unable to authenticate data/iu);
       expect(() =>
         openWalCloser(DATA_KEY, VAULT_ID, closer({ db: 'journal', endOffset: 200 }), sealed),
-      ).toThrow(/unsupported state or unable to authenticate data/i);
+      ).toThrow(/unsupported state or unable to authenticate data/iu);
       expect(() =>
         openWalCloser(DATA_KEY, 'vault-2', closer({ group: 0, endOffset: 200 }), sealed),
-      ).toThrow(/unsupported state or unable to authenticate data/i);
+      ).toThrow(/unsupported state or unable to authenticate data/iu);
     });
 
     test('rejects a closer forged without the data key', () => {
       const c = closer();
       const forged = sealWalCloser(new Uint8Array(32).fill(0x99), VAULT_ID, c);
       expect(() => openWalCloser(DATA_KEY, VAULT_ID, c, forged)).toThrow(
-        /unsupported state or unable to authenticate data/i,
+        /unsupported state or unable to authenticate data/iu,
       );
     });
 
@@ -459,7 +485,7 @@ describe('wal-format', () => {
       const sealedSegment = sealWalSegment(DATA_KEY, VAULT_ID, addr, new Uint8Array(100));
       expect(() =>
         openWalCloser(DATA_KEY, VAULT_ID, closer({ group: 0, endOffset: 100 }), sealedSegment),
-      ).toThrow(/unsupported state or unable to authenticate data/i);
+      ).toThrow(/unsupported state or unable to authenticate data/iu);
     });
   });
 
@@ -492,9 +518,16 @@ describe('wal-format', () => {
     // the WAL file — the exact hazard lastCommitBoundary exists to fence off.
     conn.exec('PRAGMA cache_size=2');
     conn.exec('CREATE TABLE rows (id INTEGER PRIMARY KEY, val TEXT NOT NULL)');
-    const { page_size: pageSize } = conn.prepare('PRAGMA page_size').get() as { page_size: number };
+    const { page_size: pageSize } = conn.prepare('PRAGMA page_size').get() as {
+      page_size: number;
+    };
     const stmt = conn.prepare('INSERT INTO rows (val) VALUES (?)');
-    return { conn, walPath: `${dbPath}-wal`, pageSize, insert: (val) => void stmt.run(val) };
+    return {
+      conn,
+      walPath: `${dbPath}-wal`,
+      pageSize,
+      insert: (val) => void stmt.run(val),
+    };
   }
 
   function walBytes(rig: WalRig): Uint8Array {
@@ -517,7 +550,7 @@ describe('wal-format', () => {
       bytes[bytes.length - 1]! ^= 0xff;
       const scan = scanWalPrefix(bytes);
       expect(scan.validEndOffset).toBeLessThan(bytes.length);
-      expect(() => validateCommittedWal(bytes)).toThrow(/checksum|salt/);
+      expect(() => validateCommittedWal(bytes)).toThrow(/checksum|salt/u);
     });
     test('idle WAL: the last frame is a commit, so the boundary IS the file size', async () => {
       const rig = await walRig();
@@ -596,10 +629,10 @@ describe('wal-format', () => {
       for (let i = 0; i < 3; i++) rig.insert(`row-${i}`);
       const full = walBytes(rig);
       expect(() => lastCommitBoundary(full.subarray(33), 33, rig.pageSize)).toThrow(
-        /not frame-aligned/,
+        /not frame-aligned/u,
       );
       expect(() => lastCommitBoundary(full.subarray(16), 16, rig.pageSize)).toThrow(
-        /not frame-aligned/,
+        /not frame-aligned/u,
       );
     });
 
@@ -611,7 +644,9 @@ describe('wal-format', () => {
       const salts1 = walSalts(header1);
 
       // Shipper-style TRUNCATE checkpoint, then new writes → fresh WAL header.
-      const cp = rig.conn.prepare('PRAGMA wal_checkpoint(TRUNCATE)').get() as { busy: number };
+      const cp = rig.conn.prepare('PRAGMA wal_checkpoint(TRUNCATE)').get() as {
+        busy: number;
+      };
       expect(cp.busy).toBe(0);
       expect(fss.statSync(rig.walPath).size).toBe(0);
       rig.insert('row-b');
@@ -622,15 +657,15 @@ describe('wal-format', () => {
     });
 
     test('walPageSize / walSalts reject garbage and truncated headers', () => {
-      expect(() => walPageSize(new Uint8Array(31))).toThrow(/truncated/);
-      expect(() => walSalts(new Uint8Array(31))).toThrow(/truncated/);
+      expect(() => walPageSize(new Uint8Array(31))).toThrow(/truncated/u);
+      expect(() => walSalts(new Uint8Array(31))).toThrow(/truncated/u);
       const garbage = new Uint8Array(32).fill(0x41);
-      expect(() => walPageSize(garbage)).toThrow(/not a wal header/);
+      expect(() => walPageSize(garbage)).toThrow(/not a wal header/u);
       // Right magic, implausible page size.
       const badPage = new Uint8Array(32);
       new DataView(badPage.buffer).setUint32(0, 0x377f0682);
       new DataView(badPage.buffer).setUint32(8, 17);
-      expect(() => walPageSize(badPage)).toThrow(/implausible/);
+      expect(() => walPageSize(badPage)).toThrow(/implausible/u);
     });
   });
 
@@ -653,9 +688,24 @@ describe('wal-format', () => {
     const opts = { generation: GEN, db: 'vault' as WalDbName };
 
     test('plans a happy chain across two groups through the closer', () => {
-      const s1 = seg({ group: 0, startOffset: 0, endOffset: 100, tickMs: 1000 });
-      const s2 = seg({ group: 0, startOffset: 100, endOffset: 200, tickMs: 2000 });
-      const s3 = seg({ group: 1, startOffset: 0, endOffset: 150, tickMs: 3000 });
+      const s1 = seg({
+        group: 0,
+        startOffset: 0,
+        endOffset: 100,
+        tickMs: 1000,
+      });
+      const s2 = seg({
+        group: 0,
+        startOffset: 100,
+        endOffset: 200,
+        tickMs: 2000,
+      });
+      const s3 = seg({
+        group: 1,
+        startOffset: 0,
+        endOffset: 150,
+        tickMs: 3000,
+      });
       const plan = planWalReplay(
         listing([s3, s1, s2], [closer({ group: 0, endOffset: 200 })]),
         opts,
@@ -666,8 +716,18 @@ describe('wal-format', () => {
     });
 
     test('a missing middle segment truncates the plan at the hole', () => {
-      const s1 = seg({ group: 0, startOffset: 0, endOffset: 100, tickMs: 1000 });
-      const s3 = seg({ group: 0, startOffset: 200, endOffset: 300, tickMs: 3000 });
+      const s1 = seg({
+        group: 0,
+        startOffset: 0,
+        endOffset: 100,
+        tickMs: 1000,
+      });
+      const s3 = seg({
+        group: 0,
+        startOffset: 200,
+        endOffset: 300,
+        tickMs: 3000,
+      });
       const plan = planWalReplay(listing([s1, s3], [closer({ group: 0, endOffset: 300 })]), opts);
       expect(plan.segments).toStrictEqual([s1]);
       expect(plan.lastTickMs).toBe(1000);
@@ -675,7 +735,12 @@ describe('wal-format', () => {
     });
 
     test('group advance WITHOUT a closer stops the plan (page-mixing defense)', () => {
-      const s1 = seg({ group: 0, startOffset: 0, endOffset: 100, tickMs: 1000 });
+      const s1 = seg({
+        group: 0,
+        startOffset: 0,
+        endOffset: 100,
+        tickMs: 1000,
+      });
       const s2 = seg({ group: 1, startOffset: 0, endOffset: 50, tickMs: 2000 });
       const plan = planWalReplay(listing([s1, s2], []), opts);
       expect(plan.segments).toStrictEqual([s1]);
@@ -686,7 +751,12 @@ describe('wal-format', () => {
       // Group 0 really ended at 200 (says the authenticated closer) but only
       // [0,100) survived — advancing would layer group 1's page images over a
       // half-applied group 0.
-      const s1 = seg({ group: 0, startOffset: 0, endOffset: 100, tickMs: 1000 });
+      const s1 = seg({
+        group: 0,
+        startOffset: 0,
+        endOffset: 100,
+        tickMs: 1000,
+      });
       const s2 = seg({ group: 1, startOffset: 0, endOffset: 50, tickMs: 2000 });
       const plan = planWalReplay(listing([s1, s2], [closer({ group: 0, endOffset: 200 })]), opts);
       expect(plan.segments).toStrictEqual([s1]);
@@ -694,33 +764,78 @@ describe('wal-format', () => {
     });
 
     test('a segment chaining PAST its group closer end is a producer anomaly: stop', () => {
-      const s1 = seg({ group: 0, startOffset: 0, endOffset: 100, tickMs: 1000 });
-      const s2 = seg({ group: 0, startOffset: 100, endOffset: 250, tickMs: 2000 });
+      const s1 = seg({
+        group: 0,
+        startOffset: 0,
+        endOffset: 100,
+        tickMs: 1000,
+      });
+      const s2 = seg({
+        group: 0,
+        startOffset: 100,
+        endOffset: 250,
+        tickMs: 2000,
+      });
       const plan = planWalReplay(listing([s1, s2], [closer({ group: 0, endOffset: 100 })]), opts);
       expect(plan.segments).toStrictEqual([s1]);
       expect(plan.truncatedByHole).toBe(true);
     });
 
     test('a stale same-start SHORTER duplicate is skipped, not a hole', () => {
-      const s1 = seg({ group: 0, startOffset: 0, endOffset: 100, tickMs: 1000 });
-      const s2long = seg({ group: 0, startOffset: 100, endOffset: 200, tickMs: 2000 });
-      const s2short = seg({ group: 0, startOffset: 100, endOffset: 150, tickMs: 1500 });
+      const s1 = seg({
+        group: 0,
+        startOffset: 0,
+        endOffset: 100,
+        tickMs: 1000,
+      });
+      const s2long = seg({
+        group: 0,
+        startOffset: 100,
+        endOffset: 200,
+        tickMs: 2000,
+      });
+      const s2short = seg({
+        group: 0,
+        startOffset: 100,
+        endOffset: 150,
+        tickMs: 1500,
+      });
       const plan = planWalReplay(listing([s1, s2short, s2long]), opts);
       expect(plan.segments).toStrictEqual([s1, s2long]);
       expect(plan.truncatedByHole).toBe(false);
     });
 
     test('of two same-start duplicates the LONGER range wins (crash-retry re-read)', () => {
-      const shortSeg = seg({ group: 0, startOffset: 0, endOffset: 100, tickMs: 1000 });
-      const longSeg = seg({ group: 0, startOffset: 0, endOffset: 150, tickMs: 1100 });
-      const next = seg({ group: 0, startOffset: 150, endOffset: 220, tickMs: 2000 });
+      const shortSeg = seg({
+        group: 0,
+        startOffset: 0,
+        endOffset: 100,
+        tickMs: 1000,
+      });
+      const longSeg = seg({
+        group: 0,
+        startOffset: 0,
+        endOffset: 150,
+        tickMs: 1100,
+      });
+      const next = seg({
+        group: 0,
+        startOffset: 150,
+        endOffset: 220,
+        tickMs: 2000,
+      });
       const plan = planWalReplay(listing([shortSeg, longSeg, next]), opts);
       expect(plan.segments).toStrictEqual([longSeg, next]);
       expect(plan.truncatedByHole).toBe(false);
     });
 
     test('a missing FIRST segment (no offset-0 chain start) plans nothing', () => {
-      const s = seg({ group: 0, startOffset: 100, endOffset: 200, tickMs: 1000 });
+      const s = seg({
+        group: 0,
+        startOffset: 100,
+        endOffset: 200,
+        tickMs: 1000,
+      });
       const plan = planWalReplay(listing([s]), opts);
       expect(plan.segments).toStrictEqual([]);
       expect(plan.lastTickMs).toBe(-1);
@@ -728,7 +843,12 @@ describe('wal-format', () => {
     });
 
     test('a group skip (0 closed, 2 present, 1 missing) is a hole', () => {
-      const s1 = seg({ group: 0, startOffset: 0, endOffset: 100, tickMs: 1000 });
+      const s1 = seg({
+        group: 0,
+        startOffset: 0,
+        endOffset: 100,
+        tickMs: 1000,
+      });
       const s3 = seg({ group: 2, startOffset: 0, endOffset: 50, tickMs: 3000 });
       const plan = planWalReplay(
         listing(
@@ -742,7 +862,12 @@ describe('wal-format', () => {
     });
 
     test('segments of other generations and databases are ignored entirely', () => {
-      const mine = seg({ group: 0, startOffset: 0, endOffset: 100, tickMs: 1000 });
+      const mine = seg({
+        group: 0,
+        startOffset: 0,
+        endOffset: 100,
+        tickMs: 1000,
+      });
       const otherGen = seg({
         generation: GEN2,
         group: 0,
@@ -750,7 +875,13 @@ describe('wal-format', () => {
         endOffset: 999,
         tickMs: 500,
       });
-      const otherDb = seg({ db: 'journal', group: 0, startOffset: 0, endOffset: 999, tickMs: 500 });
+      const otherDb = seg({
+        db: 'journal',
+        group: 0,
+        startOffset: 0,
+        endOffset: 999,
+        tickMs: 500,
+      });
       const plan = planWalReplay(
         listing(
           [otherGen, otherDb, mine],
@@ -763,9 +894,24 @@ describe('wal-format', () => {
     });
 
     test('cutTickMs stops BEFORE the first later-tick segment; mid-group cuts are allowed', () => {
-      const s1 = seg({ group: 0, startOffset: 0, endOffset: 100, tickMs: 1000 });
-      const s2 = seg({ group: 0, startOffset: 100, endOffset: 200, tickMs: 2000 });
-      const s3 = seg({ group: 0, startOffset: 200, endOffset: 300, tickMs: 3000 });
+      const s1 = seg({
+        group: 0,
+        startOffset: 0,
+        endOffset: 100,
+        tickMs: 1000,
+      });
+      const s2 = seg({
+        group: 0,
+        startOffset: 100,
+        endOffset: 200,
+        tickMs: 2000,
+      });
+      const s3 = seg({
+        group: 0,
+        startOffset: 200,
+        endOffset: 300,
+        tickMs: 3000,
+      });
       const all = listing([s1, s2, s3], [closer({ group: 0, endOffset: 300 })]);
       const plan = planWalReplay(all, { ...opts, cutTickMs: 2000 }); // cut == tick is inclusive
       expect(plan.segments).toStrictEqual([s1, s2]);
@@ -778,7 +924,12 @@ describe('wal-format', () => {
     });
 
     test('cutting exactly at a group boundary keeps the closed group, drops the next', () => {
-      const s1 = seg({ group: 0, startOffset: 0, endOffset: 100, tickMs: 1000 });
+      const s1 = seg({
+        group: 0,
+        startOffset: 0,
+        endOffset: 100,
+        tickMs: 1000,
+      });
       const s2 = seg({ group: 1, startOffset: 0, endOffset: 50, tickMs: 2000 });
       const plan = planWalReplay(listing([s1, s2], [closer({ group: 0, endOffset: 100 })]), {
         ...opts,
@@ -790,7 +941,11 @@ describe('wal-format', () => {
 
     test('an empty listing plans nothing without claiming a hole', () => {
       const plan = planWalReplay(listing([]), opts);
-      expect(plan).toStrictEqual({ segments: [], lastTickMs: -1, truncatedByHole: false });
+      expect(plan).toStrictEqual({
+        segments: [],
+        lastTickMs: -1,
+        truncatedByHole: false,
+      });
     });
   });
 
@@ -883,7 +1038,7 @@ describe('wal-format', () => {
       // cut past segments the vault never actually shipped.
       expect(() =>
         openWalPairMarker(DATA_KEY, VAULT_ID, { ...addrOf(m), tickMs: 3000 }, sealed),
-      ).toThrow(/unsupported state or unable to authenticate data/i);
+      ).toThrow(/unsupported state or unable to authenticate data/iu);
     });
 
     test('SWAPPING two markers of different generations fails the tag', () => {
@@ -891,7 +1046,7 @@ describe('wal-format', () => {
       const other = marker({ vaultGeneration: GEN2 });
       const sealed = sealWalPairMarker(DATA_KEY, VAULT_ID, other);
       expect(() => openWalPairMarker(DATA_KEY, VAULT_ID, addrOf(mine), sealed)).toThrow(
-        /unsupported state or unable to authenticate data/i,
+        /unsupported state or unable to authenticate data/iu,
       );
     });
 
@@ -899,7 +1054,7 @@ describe('wal-format', () => {
       const m = marker();
       const sealed = sealWalPairMarker(DATA_KEY, 'other-vault', m);
       expect(() => openWalPairMarker(DATA_KEY, VAULT_ID, addrOf(m), sealed)).toThrow(
-        /unsupported state or unable to authenticate data/i,
+        /unsupported state or unable to authenticate data/iu,
       );
     });
 
@@ -977,9 +1132,27 @@ describe('wal-format', () => {
     /** vault: three chained segments, group 0, ending at 100/200/300. */
     function vaultListing(): WalStreamListing {
       return listing([
-        seg({ db: 'vault', group: 0, startOffset: 0, endOffset: 100, tickMs: 1000 }),
-        seg({ db: 'vault', group: 0, startOffset: 100, endOffset: 200, tickMs: 2000 }),
-        seg({ db: 'vault', group: 0, startOffset: 200, endOffset: 300, tickMs: 3000 }),
+        seg({
+          db: 'vault',
+          group: 0,
+          startOffset: 0,
+          endOffset: 100,
+          tickMs: 1000,
+        }),
+        seg({
+          db: 'vault',
+          group: 0,
+          startOffset: 100,
+          endOffset: 200,
+          tickMs: 2000,
+        }),
+        seg({
+          db: 'vault',
+          group: 0,
+          startOffset: 200,
+          endOffset: 300,
+          tickMs: 3000,
+        }),
       ]);
     }
 
@@ -1068,9 +1241,18 @@ describe('wal-format', () => {
       // reaches its own tip. This is the case a "min over reached ticks" rule
       // silently destroys.
       const vault = listing([
-        seg({ db: 'vault', group: 0, startOffset: 0, endOffset: 100, tickMs: 1000 }),
+        seg({
+          db: 'vault',
+          group: 0,
+          startOffset: 0,
+          endOffset: 100,
+          tickMs: 1000,
+        }),
       ]);
-      const idleMarkers = markers().map((m) => ({ ...m, vault: { group: 0, endOffset: 100 } }));
+      const idleMarkers = markers().map((m) => ({
+        ...m,
+        vault: { group: 0, endOffset: 100 },
+      }));
       const r = planCoordinatedReplay({
         listingByDb: { vault, journal: journalListing() },
         generationByDb,
@@ -1177,7 +1359,11 @@ describe('wal-format', () => {
         markers: markers(),
       });
       expect(r.coordinated).toBe(false);
-      expect(r.plans.vault).toStrictEqual({ segments: [], lastTickMs: -1, truncatedByHole: false });
+      expect(r.plans.vault).toStrictEqual({
+        segments: [],
+        lastTickMs: -1,
+        truncatedByHole: false,
+      });
       expect(r.plans.journal.lastTickMs).toBe(3000);
     });
   });

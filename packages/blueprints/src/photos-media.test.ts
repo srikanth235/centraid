@@ -49,8 +49,8 @@ describe('Photos next-screen media loading', () => {
   });
 
   class FakeIntersectionObserver {
-    readonly observe = vi.fn();
-    readonly unobserve = vi.fn();
+    readonly observe = vi.fn<IntersectionObserver['observe']>();
+    readonly unobserve = vi.fn<IntersectionObserver['unobserve']>();
 
     constructor(
       readonly callback: IntersectionObserverCallback,
@@ -79,7 +79,10 @@ describe('Photos next-screen media loading', () => {
     observeNextScreen(image, '/centraid/_vault/blobs/photo?variant=thumb');
 
     expect(observers).toHaveLength(1);
-    expect(observers[0]?.options).toMatchObject({ root: scrollPane, rootMargin: '100% 0px' });
+    expect(observers[0]?.options).toMatchObject({
+      root: scrollPane,
+      rootMargin: '100% 0px',
+    });
     expect(observers[0]?.observe).toHaveBeenCalledWith(image);
     expect(image.getAttribute('src')).toBeNull();
 
@@ -186,14 +189,21 @@ describe('Photos next-screen media loading', () => {
     // A placeholder tile (no renderable source) is stamped just the same — the
     // branch that paints no <img> must not be the one that forgets.
     const placeholder = document.createElement('div');
-    fillTileMedia(placeholder, { asset_id: 'a2', scope_id: 'family', kind: 'audio' });
+    fillTileMedia(placeholder, {
+      asset_id: 'a2',
+      scope_id: 'family',
+      kind: 'audio',
+    });
     expect(placeholder.dataset.scope).toBe('family');
 
     // A solo mount has no scope to name, and stamping an empty one would make
     // the authorizer address a scope called "" instead of the ambient one.
     const solo = document.createElement('div');
-    fillTileMedia(solo, { asset_id: 'a3', thumb_uri: '/centraid/_vault/blobs/def' });
-    expect(solo.hasAttribute('data-scope')).toBe(false);
+    fillTileMedia(solo, {
+      asset_id: 'a3',
+      thumb_uri: '/centraid/_vault/blobs/def',
+    });
+    expect(Object.hasOwn(solo.dataset, 'scope')).toBe(false);
   });
 
   // Asset ids are per-scope too, so the same id can arrive from two scopes.
@@ -202,8 +212,11 @@ describe('Photos next-screen media loading', () => {
     const { mountMedia } = await importFixture('../apps/photos/media.js');
     const tile = document.createElement('div');
 
-    mountMedia(tile, { asset_id: 'shared-id', thumb_uri: '/centraid/_vault/blobs/mine' });
-    expect(tile.hasAttribute('data-scope')).toBe(false);
+    mountMedia(tile, {
+      asset_id: 'shared-id',
+      thumb_uri: '/centraid/_vault/blobs/mine',
+    });
+    expect(Object.hasOwn(tile.dataset, 'scope')).toBe(false);
     expect(tile.querySelectorAll('img')).toHaveLength(1);
 
     mountMedia(tile, {

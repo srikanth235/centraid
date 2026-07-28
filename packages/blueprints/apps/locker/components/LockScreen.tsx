@@ -6,7 +6,9 @@
 // Unlock (or pressing Enter) always unlocks. Ported behavior, not a
 // redesign.
 import { useEffect, useRef, useState } from 'react';
+
 import { Icon } from './Shared.tsx';
+
 import styles from './LockScreen.module.css';
 
 export function LockScreen({ onUnlock }: { onUnlock: () => void }) {

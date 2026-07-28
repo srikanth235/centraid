@@ -12,8 +12,9 @@
  * "missed-window scan", not "fire".
  */
 import { recordQualityResult } from '@centraid/test-kit/quality-result';
-import { computeMissedWindows } from '../../packages/automation/src/fire/scheduler-ledger.js';
 import { describe, expect, test } from 'vitest';
+
+import { computeMissedWindows } from '../../packages/automation/src/fire/scheduler-ledger.js';
 
 const OWNER = 'tests/scale/automations-fire.scale.test.ts';
 const AUTOMATION_COUNT = 200;
@@ -63,7 +64,12 @@ describe('automations-fire.scale', () => {
       name: `Automations missed-window scan (${AUTOMATION_COUNT} autos, 6h gap, hourly cron)`,
       status: passed ? 'passed' : 'failed',
       measurements: [
-        { name: 'wall clock', value: durationMs, unit: 'ms', budget: BUDGET_MS },
+        {
+          name: 'wall clock',
+          value: durationMs,
+          unit: 'ms',
+          budget: BUDGET_MS,
+        },
         { name: 'missed entries', value: missed.length, unit: 'count' },
       ],
     });

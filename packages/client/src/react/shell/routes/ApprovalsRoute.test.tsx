@@ -1,6 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import type { ShellActions } from '../actions.js';
 
 type OutboxModule = typeof import('../../../gateway-client-outbox.js');
@@ -106,7 +107,11 @@ describe('ApprovalsRoute', () => {
             actorKind: 'ai_agent',
             verb: 'gmail.send',
             target: 'ravi@example.com',
-            artifact: { to: 'ravi@example.com', subject: 'Hi', body: 'See you at 6.' },
+            artifact: {
+              to: 'ravi@example.com',
+              subject: 'Hi',
+              body: 'See you at 6.',
+            },
             status: 'pending',
             grantId: null,
             stagedAt: new Date().toISOString(),
@@ -164,7 +169,11 @@ describe('ApprovalsRoute', () => {
             actorKind: 'ai_agent',
             verb: 'gmail.send',
             target: 'ravi@example.com',
-            artifact: { to: 'ravi@example.com', subject: 'Hi', body: 'See you at 6.' },
+            artifact: {
+              to: 'ravi@example.com',
+              subject: 'Hi',
+              body: 'See you at 6.',
+            },
             status: 'pending',
             grantId: null,
             stagedAt: new Date().toISOString(),
@@ -217,7 +226,11 @@ describe('ApprovalsRoute', () => {
         itemId: 'item1',
         decision: 'approve',
         alwaysAllow: false,
-        artifact: { to: 'ravi@example.com', subject: 'Edited subject', body: 'See you at 6.' },
+        artifact: {
+          to: 'ravi@example.com',
+          subject: 'Edited subject',
+          body: 'See you at 6.',
+        },
       });
       expect(getBlocking).toHaveBeenCalledTimes(2);
     });

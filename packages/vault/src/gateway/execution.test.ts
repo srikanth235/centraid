@@ -5,11 +5,13 @@
 // without going through the full Gateway facade for each path.
 
 import { afterEach, assert, beforeEach, describe, expect, test } from 'vitest';
+
 import { bootstrapVault, type BootstrapResult } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { uuidv7 } from '../ids.js';
 import { ONTOLOGY_VERSION } from '../schema/migrate.js';
 import { isSealedValue } from '../schema/sealed.js';
+import type { ConsentAllow } from './consent.js';
 import type { CommandRow } from './contract.js';
 import {
   assertInvocationIdentity,
@@ -23,7 +25,6 @@ import {
   validatePolymorphicWrites,
   type RegisteredCommand,
 } from './execution.js';
-import type { ConsentAllow } from './consent.js';
 import type { Identity } from './types.js';
 import { GatewayError } from './types.js';
 
@@ -43,7 +44,12 @@ describe('execution', () => {
       partyId: boot.ownerPartyId,
       mayAct: true,
     };
-    consent = { decision: 'allow', grantId: null, rowFilter: [], fieldMask: null };
+    consent = {
+      decision: 'allow',
+      grantId: null,
+      rowFilter: [],
+      fieldMask: null,
+    };
   });
 
   afterEach(() => {
@@ -98,7 +104,7 @@ describe('execution', () => {
       .run(deadId, conceptId, new Date().toISOString());
     expect(() =>
       validatePolymorphicWrites(db.vault, [{ entityType: 'core.tag', entityId: deadId }]),
-    ).toThrow(/does not resolve to a live row/);
+    ).toThrow(/does not resolve to a live row/u);
   });
 
   test('validatePolymorphicWrites rejects an unknown entity name in the type column', () => {
@@ -112,7 +118,7 @@ describe('execution', () => {
       .run(tagId, conceptId, new Date().toISOString());
     expect(() =>
       validatePolymorphicWrites(db.vault, [{ entityType: 'core.tag', entityId: tagId }]),
-    ).toThrow(/unknown entity/);
+    ).toThrow(/unknown entity/u);
   });
 
   test('sweepDanglingLinks end-dates live links when a hard-deleted entity is written', () => {
@@ -143,7 +149,10 @@ describe('execution', () => {
       valid_to: string | null;
     };
     expect(link.valid_to).toBe(now);
-    expect(writes).toContainEqual({ entityType: 'core.link', entityId: linkId });
+    expect(writes).toContainEqual({
+      entityType: 'core.link',
+      entityId: linkId,
+    });
   });
 
   test('insertInvocation / assertInvocationIdentity / setInvocationStatus journal the bracket', () => {
@@ -169,7 +178,11 @@ describe('execution', () => {
 
     const invocationId = insertInvocation(
       db,
-      { command: cmd.name, input: { note: 'hello' }, purpose: 'dpv:ServiceProvision' },
+      {
+        command: cmd.name,
+        input: { note: 'hello' },
+        purpose: 'dpv:ServiceProvision',
+      },
       cmd,
       identity,
       null,
@@ -220,7 +233,11 @@ describe('execution', () => {
       );
     const invocationId = insertInvocation(
       db,
-      { command: cmd.name, input: { note: 'x' }, purpose: 'dpv:ServiceProvision' },
+      {
+        command: cmd.name,
+        input: { note: 'x' },
+        purpose: 'dpv:ServiceProvision',
+      },
       cmd,
       identity,
       null,
@@ -230,7 +247,11 @@ describe('execution', () => {
       db,
       new Map(),
       identity,
-      { command: cmd.name, input: { note: 'x' }, purpose: 'dpv:ServiceProvision' },
+      {
+        command: cmd.name,
+        input: { note: 'x' },
+        purpose: 'dpv:ServiceProvision',
+      },
       cmd,
       consent,
       invocationId,
@@ -352,7 +373,11 @@ describe('execution', () => {
     ]);
     const invocationId = insertInvocation(
       db,
-      { command: cmd.name, input: { note: 'x' }, purpose: 'dpv:ServiceProvision' },
+      {
+        command: cmd.name,
+        input: { note: 'x' },
+        purpose: 'dpv:ServiceProvision',
+      },
       cmd,
       identity,
       null,
@@ -362,7 +387,11 @@ describe('execution', () => {
       db,
       registered,
       identity,
-      { command: cmd.name, input: { note: 'x' }, purpose: 'dpv:ServiceProvision' },
+      {
+        command: cmd.name,
+        input: { note: 'x' },
+        purpose: 'dpv:ServiceProvision',
+      },
       cmd,
       consent,
       invocationId,
@@ -435,7 +464,11 @@ describe('execution', () => {
     ]);
     const invocationId = insertInvocation(
       db,
-      { command: cmd.name, input: { note: 'x' }, purpose: 'dpv:ServiceProvision' },
+      {
+        command: cmd.name,
+        input: { note: 'x' },
+        purpose: 'dpv:ServiceProvision',
+      },
       cmd,
       identity,
       null,
@@ -445,7 +478,11 @@ describe('execution', () => {
       db,
       registered,
       identity,
-      { command: cmd.name, input: { note: 'x' }, purpose: 'dpv:ServiceProvision' },
+      {
+        command: cmd.name,
+        input: { note: 'x' },
+        purpose: 'dpv:ServiceProvision',
+      },
       cmd,
       consent,
       invocationId,
@@ -548,7 +585,10 @@ describe('execution', () => {
     expect(tag.target_id).toBe(boot.ownerPartyId);
 
     const replayed = replayInvocation(db, fixedId);
-    expect(replayed).toMatchObject({ status: 'replayed', invocationId: fixedId });
+    expect(replayed).toMatchObject({
+      status: 'replayed',
+      invocationId: fixedId,
+    });
     assert(replayed?.status === 'replayed');
     expect(replayed.output).toStrictEqual({ tag_id: tagId });
     expect(runs).toBe(1);

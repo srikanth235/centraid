@@ -1,9 +1,11 @@
+import crypto from 'node:crypto';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
+
 import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import crypto from 'node:crypto';
-import path from 'node:path';
-import { promises as fs } from 'node:fs';
-import { DatabaseSync } from 'node:sqlite';
+
 import {
   WebControlSessionStore,
   hashControlToken,
@@ -24,7 +26,9 @@ describe('web-session-store', () => {
   });
 
   function rows(): Array<Record<string, unknown>> {
-    const db = new DatabaseSync(path.join(dir, 'gateway.db'), { readOnly: true });
+    const db = new DatabaseSync(path.join(dir, 'gateway.db'), {
+      readOnly: true,
+    });
     const result = db
       .prepare(
         `SELECT token_hash AS tokenHash, expires_at AS expiresAt
@@ -38,7 +42,11 @@ describe('web-session-store', () => {
   test('a persisted control session is found by a fresh store on the same file (restart)', () => {
     const hash = hashControlToken('cookie-token');
     const first = WebControlSessionStore.open(file);
-    first.establish({ tokenHash: hash, vaultId: 'v1', shellOrigin: 'http://shell' });
+    first.establish({
+      tokenHash: hash,
+      vaultId: 'v1',
+      shellOrigin: 'http://shell',
+    });
 
     // Only the SHA-256 hash lands in gateway.db, never the raw token.
     expect(rows()[0]?.tokenHash).toBe(hash);
@@ -55,7 +63,11 @@ describe('web-session-store', () => {
     const clock = (): number => now;
     const hash = hashControlToken('t');
     const store = WebControlSessionStore.open(file, clock);
-    store.establish({ tokenHash: hash, vaultId: 'v1', shellOrigin: 'http://shell' });
+    store.establish({
+      tokenHash: hash,
+      vaultId: 'v1',
+      shellOrigin: 'http://shell',
+    });
 
     // Jump past the sliding idle wall.
     now += CONTROL_IDLE_TTL_MS + 1;
@@ -72,7 +84,11 @@ describe('web-session-store', () => {
     const clock = (): number => now;
     const hash = hashControlToken('t');
     const store = WebControlSessionStore.open(file, clock);
-    store.establish({ tokenHash: hash, vaultId: 'v1', shellOrigin: 'http://shell' });
+    store.establish({
+      tokenHash: hash,
+      vaultId: 'v1',
+      shellOrigin: 'http://shell',
+    });
     const firstExpiry = rows()[0]?.expiresAt as number;
 
     // A use 30 minutes later is under the hourly throttle → no disk rewrite.
@@ -91,12 +107,24 @@ describe('web-session-store', () => {
     const store = WebControlSessionStore.open(file);
     const a = hashControlToken('a');
     const b = hashControlToken('b');
-    store.establish({ tokenHash: a, vaultId: 'v1', shellOrigin: 'http://shell' });
-    store.establish({ tokenHash: b, vaultId: 'v1', shellOrigin: 'http://shell' });
+    store.establish({
+      tokenHash: a,
+      vaultId: 'v1',
+      shellOrigin: 'http://shell',
+    });
+    store.establish({
+      tokenHash: b,
+      vaultId: 'v1',
+      shellOrigin: 'http://shell',
+    });
     expect(store.list()).toHaveLength(2);
 
     // Re-establishing `a` (a re-pair from the same browser) does not evict `b`.
-    store.establish({ tokenHash: a, vaultId: 'v1', shellOrigin: 'http://shell2' });
+    store.establish({
+      tokenHash: a,
+      vaultId: 'v1',
+      shellOrigin: 'http://shell2',
+    });
     expect(store.list()).toHaveLength(2);
     expect(store.find(b)).toBeDefined();
     expect(store.find(a)?.shellOrigin).toBe('http://shell2');
@@ -105,7 +133,11 @@ describe('web-session-store', () => {
   test('remove deletes one session (logout / revocation) and persists', () => {
     const store = WebControlSessionStore.open(file);
     const hash = hashControlToken('t');
-    store.establish({ tokenHash: hash, vaultId: 'v1', shellOrigin: 'http://shell' });
+    store.establish({
+      tokenHash: hash,
+      vaultId: 'v1',
+      shellOrigin: 'http://shell',
+    });
     expect(store.remove(hash)).toBe(true);
     expect(store.find(hash)).toBeUndefined();
     expect(rows()).toHaveLength(0);
@@ -116,7 +148,11 @@ describe('web-session-store', () => {
   test('in-memory mode (no file) keeps sessions without touching disk', () => {
     const store = WebControlSessionStore.open();
     const hash = hashControlToken('t');
-    store.establish({ tokenHash: hash, vaultId: 'v1', shellOrigin: 'http://shell' });
+    store.establish({
+      tokenHash: hash,
+      vaultId: 'v1',
+      shellOrigin: 'http://shell',
+    });
     expect(store.find(hash)?.vaultId).toBe('v1');
     // Nothing was written under the temp dir.
     expect(store.list()).toHaveLength(1);

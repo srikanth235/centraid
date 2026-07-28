@@ -1,7 +1,9 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+
 import { tempDir } from '@centraid/test-kit/temp-dir';
+import { afterEach, describe, expect, it } from 'vitest';
+
 import { LocalUsageScanner, walkDirBytes, type LocalUsageOptions } from './local-usage.js';
 
 // The component walker (issue #544). What matters here is that the figures
@@ -13,7 +15,7 @@ const roots: string[] = [];
 
 describe('local-usage', () => {
   afterEach(async () => {
-    for (const root of roots.splice(0)) await fs.rm(root, { recursive: true, force: true });
+    await Promise.all(roots.splice(0).map((root) => fs.rm(root, { recursive: true, force: true })));
   });
 
   async function vaultFixture(): Promise<{ root: string; vaultDir: string }> {
@@ -104,7 +106,11 @@ describe('local-usage', () => {
       }).report();
 
       expect(report.components).toHaveLength(1);
-      expect(report.components[0]).toMatchObject({ component: 'logs', bytes: 700, files: 1 });
+      expect(report.components[0]).toMatchObject({
+        component: 'logs',
+        bytes: 700,
+        files: 1,
+      });
       expect(report.totalBytes).toBe(report.vaults[0]!.bytes + 700);
     });
 
@@ -173,7 +179,9 @@ describe('local-usage', () => {
 
     it('reports zero rather than throwing when statfs is unavailable', async () => {
       const { root, vaultDir } = await vaultFixture();
-      const report = await scannerFor(root, vaultDir, { statfs: () => null }).report();
+      const report = await scannerFor(root, vaultDir, {
+        statfs: () => null,
+      }).report();
       expect(report.disk).toBeNull();
       expect(report.totalBytes).toBeGreaterThan(0);
     });

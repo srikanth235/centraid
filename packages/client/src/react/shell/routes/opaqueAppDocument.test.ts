@@ -65,7 +65,11 @@ describe('opaqueAppDocument', () => {
           });
         }
         if (new URL(url).pathname.endsWith('/app.css')) {
-          return fakeResponse({ url, contentType: 'text/css', body: 'main{color:green}' });
+          return fakeResponse({
+            url,
+            contentType: 'text/css',
+            body: 'main{color:green}',
+          });
         }
         return fakeResponse({
           url,
@@ -166,7 +170,11 @@ describe('opaqueAppDocument', () => {
             body: '<!doctype html><html><head></head><body></body></html>',
           });
         }
-        return fakeResponse({ url, contentType: 'application/json', body: '{}' });
+        return fakeResponse({
+          url,
+          contentType: 'application/json',
+          body: '{}',
+        });
       });
       const prepared = await prepareOpaqueAppDocument({
         appId,

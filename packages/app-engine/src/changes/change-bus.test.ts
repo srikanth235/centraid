@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { ChangeBus, type AppChange } from './change-bus.js';
 
 describe(ChangeBus, () => {
@@ -99,7 +100,12 @@ describe(ChangeBus, () => {
     const bus = new ChangeBus();
     const captured: AppChange[] = [];
     bus.subscribe('app1', (c) => captured.push(c));
-    bus.emit({ appId: 'app1', tables: ['a', 'b'], ts: 12345, source: 'handler' });
+    bus.emit({
+      appId: 'app1',
+      tables: ['a', 'b'],
+      ts: 12345,
+      source: 'handler',
+    });
     expect(captured).toHaveLength(1);
     expect(captured[0]).toStrictEqual({
       appId: 'app1',

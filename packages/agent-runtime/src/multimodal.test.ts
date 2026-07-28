@@ -1,7 +1,9 @@
+import { writeFileSync } from 'node:fs';
+import path from 'node:path';
+
 import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { describe, expect, it } from 'vitest';
-import { writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+
 import {
   TEXT_ATTACHMENT_MAX_BYTES,
   acpAttachmentBlocks,
@@ -10,7 +12,11 @@ import {
 } from './multimodal.js';
 
 /** What both first-party ACP adapters actually advertise. */
-const FULL: PromptCapabilities = { image: true, audio: true, embeddedContext: true };
+const FULL: PromptCapabilities = {
+  image: true,
+  audio: true,
+  embeddedContext: true,
+};
 /** A baseline agent: text and resource links only. */
 const TEXT_ONLY: PromptCapabilities = {};
 
@@ -39,7 +45,11 @@ describe(acpBlockFor, () => {
     );
     expect(block).toStrictEqual({
       type: 'resource',
-      resource: { uri: 'file:///blobs/spec.pdf', mimeType: 'application/pdf', blob: 'JVBE' },
+      resource: {
+        uri: 'file:///blobs/spec.pdf',
+        mimeType: 'application/pdf',
+        blob: 'JVBE',
+      },
     });
   });
 
@@ -95,7 +105,11 @@ describe(acpBlockFor, () => {
     const binary = Buffer.from([0, 1, 2, 3, 0, 255, 0, 254, 0, 1]);
     expect(
       acpBlockFor(
-        { mime: 'text/plain', dataBase64: binary.toString('base64'), filename: 'not-text.txt' },
+        {
+          mime: 'text/plain',
+          dataBase64: binary.toString('base64'),
+          filename: 'not-text.txt',
+        },
         FULL,
       ),
     ).toBeUndefined();
@@ -115,18 +129,22 @@ describe(acpBlockFor, () => {
 describe(acpAttachmentBlocks, () => {
   it('reads + encodes attachments the agent can take', () => {
     const dir = tempDirSync('centraid-mm-');
-    const png = join(dir, 'p.png');
+    const png = path.join(dir, 'p.png');
     writeFileSync(png, Buffer.from('PNGDATA'));
     const { blocks, skipped } = acpAttachmentBlocks([{ path: png, mime: 'image/png' }], FULL);
     expect(skipped).toStrictEqual([]);
     expect(blocks).toStrictEqual([
-      { type: 'image', data: Buffer.from('PNGDATA').toString('base64'), mimeType: 'image/png' },
+      {
+        type: 'image',
+        data: Buffer.from('PNGDATA').toString('base64'),
+        mimeType: 'image/png',
+      },
     ]);
   });
 
   it('names what it skipped rather than dropping it silently', () => {
     const dir = tempDirSync('centraid-mm-');
-    const png = join(dir, 'shot.png');
+    const png = path.join(dir, 'shot.png');
     writeFileSync(png, Buffer.from('PNGDATA'));
     const { blocks, skipped } = acpAttachmentBlocks(
       [{ path: png, mime: 'image/png', filename: 'shot.png' }],
@@ -147,7 +165,7 @@ describe(acpAttachmentBlocks, () => {
 
   it('includes a .txt attachment as a text block so the model can read it', () => {
     const dir = tempDirSync('centraid-mm-');
-    const txt = join(dir, 'notes.txt');
+    const txt = path.join(dir, 'notes.txt');
     writeFileSync(txt, 'remember to buy milk');
     const { blocks } = acpAttachmentBlocks(
       [{ path: txt, mime: 'text/plain', filename: 'notes.txt' }],

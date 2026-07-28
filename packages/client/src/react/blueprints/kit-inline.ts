@@ -36,6 +36,7 @@ import {
   type Attachment,
   type VaultOutcome,
 } from '@centraid/blueprints/kit/kit.js';
+
 import { auth, authHeaders, doFetch } from '../../gateway-client-core.js';
 import { authorizeBlobUrl, blobAuthHeaders, BLOB_PREFIX } from './blob-auth.js';
 
@@ -236,7 +237,11 @@ export async function stageDerivative(
   mediaType = 'application/octet-stream',
 ): Promise<StagedBlob> {
   const { baseUrl, token } = await auth();
-  const q = new URLSearchParams({ variant, variant_of: parentSha, media_type: mediaType });
+  const q = new URLSearchParams({
+    variant,
+    variant_of: parentSha,
+    media_type: mediaType,
+  });
   const res = await doFetch(baseUrl, `${BLOB_PREFIX}?${q}`, {
     method: 'POST',
     headers: { ...authHeaders(token), 'content-type': mediaType },
@@ -274,28 +279,42 @@ export function wireAttachInput(
   inputEl.addEventListener('change', async () => {
     const subjectId = getSubjectId();
     if (!subjectId) return;
-    for (const file of inputEl.files ?? []) {
+    const files = Array.from(inputEl.files ?? []);
+    // Keep attachment requests and consent narration in the chosen-file
+    // order; a declined/failed outcome must stop the same batch as before.
+    const attachNext = async (index: number): Promise<void> => {
+      const file = files[index];
+      if (!file) return;
       let input: Record<string, unknown>;
       let custodyReceipt: StagedBlob | undefined;
       try {
         if (file.size > INLINE_ATTACH_BYTES) {
           const staged = await stageFileBytes(file);
           custodyReceipt = staged;
-          input = { subject_id: subjectId, staged_sha: staged.sha256, title: file.name };
+          input = {
+            subject_id: subjectId,
+            staged_sha: staged.sha256,
+            title: file.name,
+          };
         } else {
           const dataUri = await fileToDataUri(file);
-          input = { subject_id: subjectId, data_uri: dataUri, title: file.name };
+          input = {
+            subject_id: subjectId,
+            data_uri: dataUri,
+            title: file.name,
+          };
         }
       } catch {
         notice?.('Could not read that file.');
-        continue;
+        return attachNext(index + 1);
       }
       const outcome = await act('attach', input);
       if (outcome?.status === 'executed' && isPendingOffsite(custodyReceipt)) {
         notice?.('Attached locally · waiting for offsite custody.');
       }
-      if (!narrate(outcome)) break;
-    }
+      if (narrate(outcome)) return attachNext(index + 1);
+    };
+    await attachNext(0);
     inputEl.value = '';
     await refresh?.();
   });

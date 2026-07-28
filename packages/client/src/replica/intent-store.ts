@@ -33,7 +33,9 @@ export class IndexedDbIntentStore implements IntentRecordStore {
       }
       const intents = db.createObjectStore(INTENTS, { keyPath: 'intentId' });
       intents.createIndex('createdOrder', 'createdOrder', { unique: true });
-      intents.createIndex(STATE_CREATED_ORDER, ['state', 'createdOrder'], { unique: true });
+      intents.createIndex(STATE_CREATED_ORDER, ['state', 'createdOrder'], {
+        unique: true,
+      });
       db.createObjectStore(META, { keyPath: 'key' });
     });
     const db = await requestResult(request);
@@ -60,7 +62,10 @@ export class IndexedDbIntentStore implements IntentRecordStore {
     const createdOrder = meta?.value ?? 1;
     const record: ReplicaIntent = { ...clone(intent), createdOrder };
     intents.add(record);
-    metaStore.put({ key: 'nextOrder', value: createdOrder + 1 } satisfies IntentMeta);
+    metaStore.put({
+      key: 'nextOrder',
+      value: createdOrder + 1,
+    } satisfies IntentMeta);
     await transactionDone(tx);
     return clone(record);
   }
@@ -129,7 +134,12 @@ export class IndexedDbIntentStore implements IntentRecordStore {
       tx.abort();
       throw new ReplicaProtocolError(`Intent ${intentId} cannot transition from ${existing.state}`);
     }
-    const updated = { ...existing, ...clone(patch), intentId, createdOrder: existing.createdOrder };
+    const updated = {
+      ...existing,
+      ...clone(patch),
+      intentId,
+      createdOrder: existing.createdOrder,
+    };
     store.put(updated);
     await transactionDone(tx);
     return clone(updated);
@@ -151,7 +161,12 @@ export class IndexedDbIntentStore implements IntentRecordStore {
       tx.abort();
       throw new ReplicaProtocolError(`Intent ${intentId} cannot settle from ${existing.state}`);
     }
-    const settled = { ...existing, ...clone(patch), intentId, createdOrder: existing.createdOrder };
+    const settled = {
+      ...existing,
+      ...clone(patch),
+      intentId,
+      createdOrder: existing.createdOrder,
+    };
     store.delete(intentId);
     await transactionDone(tx);
     return clone(settled);

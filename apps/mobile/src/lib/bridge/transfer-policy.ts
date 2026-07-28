@@ -18,7 +18,9 @@ export async function assertGatewayMintedUploadUrl(
 ): Promise<URL> {
   const fetchImpl = scope.fetchImpl ?? fetch;
   const settingsUrl = new URL('/centraid/_vault/blob-store', scope.gatewayBaseUrl);
-  const response = await fetchImpl(settingsUrl, { headers: { accept: 'application/json' } });
+  const response = await fetchImpl(settingsUrl, {
+    headers: { accept: 'application/json' },
+  });
   if (!response.ok) throw new Error(`gateway transfer policy unavailable (${response.status})`);
   const payload = (await response.json()) as {
     blob_store?: {

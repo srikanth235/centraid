@@ -30,13 +30,22 @@ const MENTIONS_SCHEMA = {
         required: ['name', 'exact'],
         additionalProperties: false,
         properties: {
-          name: { type: 'string', description: "The person's name as the document uses it." },
+          name: {
+            type: 'string',
+            description: "The person's name as the document uses it.",
+          },
           exact: {
             type: 'string',
             description: 'The exact short passage (≤200 chars) containing the mention, verbatim.',
           },
-          prefix: { type: 'string', description: 'Up to 32 chars immediately before the passage.' },
-          suffix: { type: 'string', description: 'Up to 32 chars immediately after the passage.' },
+          prefix: {
+            type: 'string',
+            description: 'Up to 32 chars immediately before the passage.',
+          },
+          suffix: {
+            type: 'string',
+            description: 'Up to 32 chars immediately after the passage.',
+          },
         },
       },
     },

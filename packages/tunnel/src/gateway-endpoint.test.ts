@@ -16,7 +16,9 @@
 import crypto from 'node:crypto';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
+
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
 import { createTunnelClient, tunnelRequest } from './client.js';
 import type { TunnelClient } from './client.js';
 import { startGatewayEndpoint } from './gateway-endpoint.js';
@@ -120,10 +122,16 @@ describe('gateway endpoint', () => {
   it('refuses tunnel connections from unenrolled device keys', async () => {
     const connection = await device.connect(endpoint.ticket());
     await expect(async () => {
-      await tunnelRequest(connection, { method: 'GET', target: '/centraid/_apps' });
+      await tunnelRequest(connection, {
+        method: 'GET',
+        target: '/centraid/_apps',
+      });
       await connection.closed();
-      await tunnelRequest(connection, { method: 'GET', target: '/centraid/_apps' });
-    }).rejects.toThrow(/reason: b"unauthorized"/);
+      await tunnelRequest(connection, {
+        method: 'GET',
+        target: '/centraid/_apps',
+      });
+    }).rejects.toThrow(/reason: b"unauthorized"/u);
   });
 
   it('redeems a ticket exactly once and answers the handshake material', async () => {
@@ -207,15 +215,24 @@ describe('gateway endpoint', () => {
 
   it('revocation lands on live connections', async () => {
     const connection = await device.connect(endpoint.ticket());
-    const before = await tunnelRequest(connection, { method: 'GET', target: '/centraid/_apps' });
+    const before = await tunnelRequest(connection, {
+      method: 'GET',
+      target: '/centraid/_apps',
+    });
     expect(before.status).toBe(200);
 
     enrolled.delete(device.endpointId);
     await expect(async () => {
-      await tunnelRequest(connection, { method: 'GET', target: '/centraid/_apps' });
+      await tunnelRequest(connection, {
+        method: 'GET',
+        target: '/centraid/_apps',
+      });
       await connection.closed();
-      await tunnelRequest(connection, { method: 'GET', target: '/centraid/_apps' });
-    }).rejects.toThrow(/reason: b"revoked"/);
+      await tunnelRequest(connection, {
+        method: 'GET',
+        target: '/centraid/_apps',
+      });
+    }).rejects.toThrow(/reason: b"revoked"/u);
     enrolled.add(device.endpointId);
   });
 });

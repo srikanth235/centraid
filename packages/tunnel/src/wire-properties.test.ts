@@ -1,5 +1,6 @@
-import { describe, expect, test } from 'vitest';
 import { fc } from '@centraid/test-kit/fast-check';
+import { describe, expect, test } from 'vitest';
+
 import {
   encodeHeaderFrame,
   MAX_HEADER_FRAME_BYTES,
@@ -19,9 +20,9 @@ describe('tunnel wire property', () => {
       fc.property(
         fc.record({
           method: fc.constantFrom('GET', 'POST', 'PUT', 'DELETE'),
-          target: fc.stringMatching(/^\/[a-z0-9/_-]{0,40}$/),
+          target: fc.stringMatching(/^\/[a-z0-9/_-]{0,40}$/u),
           headers: fc.dictionary(
-            fc.stringMatching(/^[a-z-]{1,12}$/),
+            fc.stringMatching(/^[a-z-]{1,12}$/u),
             fc.string({ minLength: 0, maxLength: 24 }),
             { maxKeys: 6 },
           ),
@@ -53,7 +54,12 @@ describe('tunnel wire property', () => {
         fc.string({ minLength: 1, maxLength: 40 }),
         fc.string({ minLength: 1, maxLength: 16 }),
         (ticket, code) => {
-          const raw = JSON.stringify({ v: 1, kind: 'centraid-pair', ticket, code });
+          const raw = JSON.stringify({
+            v: 1,
+            kind: 'centraid-pair',
+            ticket,
+            code,
+          });
           expect(parsePairQrPayload(raw)).toStrictEqual({
             v: 1,
             kind: 'centraid-pair',
@@ -72,9 +78,23 @@ describe('tunnel wire property', () => {
         fc.oneof(
           fc.string({ minLength: 0, maxLength: 40 }),
           fc.jsonValue().map((v) => JSON.stringify(v)),
-          fc.constant(JSON.stringify({ v: 2, kind: 'centraid-pair', ticket: 't', code: 'c' })),
+          fc.constant(
+            JSON.stringify({
+              v: 2,
+              kind: 'centraid-pair',
+              ticket: 't',
+              code: 'c',
+            }),
+          ),
           fc.constant(JSON.stringify({ v: 1, kind: 'other', ticket: 't', code: 'c' })),
-          fc.constant(JSON.stringify({ v: 1, kind: 'centraid-pair', ticket: 1, code: 'c' })),
+          fc.constant(
+            JSON.stringify({
+              v: 1,
+              kind: 'centraid-pair',
+              ticket: 1,
+              code: 'c',
+            }),
+          ),
         ),
         (raw) => {
           let shouldAccept = false;
@@ -89,11 +109,7 @@ describe('tunnel wire property', () => {
             shouldAccept = false;
           }
           const parsed = parsePairQrPayload(raw);
-          if (shouldAccept) {
-            expect(parsed).toBeDefined();
-          } else {
-            expect(parsed).toBeUndefined();
-          }
+          expect(parsed === undefined).toBe(!shouldAccept);
         },
       ),
       { numRuns: 48, seed: 53282 },
@@ -135,9 +151,10 @@ describe('tunnel wire property', () => {
               'upgrade',
             ]).not.toContain(key);
           }
-          if ('Content-Type' in headers || 'content-type' in headers) {
-            expect(out['content-type']).toBeDefined();
-          }
+          expect(
+            !('Content-Type' in headers || 'content-type' in headers) ||
+              out['content-type'] !== undefined,
+          ).toBe(true);
         },
       ),
       { numRuns: 32, seed: 53283 },

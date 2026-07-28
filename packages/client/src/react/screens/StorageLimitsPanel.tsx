@@ -1,16 +1,18 @@
 import { useState, type JSX } from 'react';
-import Icon from '../ui/Icon.js';
-import { cx } from '../ui/cx.js';
-import buttonCss from '../ui/Button.module.css';
-import controlsCss from '../styles/controls.module.css';
-import gwStyles from './GatewayScreen.module.css';
-import styles from './StorageLimitsPanel.module.css';
+
 import type {
   LocalUsageReportDTO,
   StorageLimitsDTO,
   StorageLimitsPatchDTO,
 } from '../../gateway-client-local-storage.js';
+import { cx } from '../ui/cx.js';
+import Icon from '../ui/Icon.js';
 import { formatBytes, parseBytes } from './localUsageView.js';
+
+import controlsCss from '../styles/controls.module.css';
+import buttonCss from '../ui/Button.module.css';
+import gwStyles from './GatewayScreen.module.css';
+import styles from './StorageLimitsPanel.module.css';
 
 // Storage → Limits (issue #544). Two controls that do DIFFERENT things, and
 // the copy says which is which up front — a limits screen where one number

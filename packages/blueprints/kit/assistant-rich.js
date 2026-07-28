@@ -38,8 +38,8 @@
 //      visible (escaped) code block, never silent loss and never eval.
 // Adversarial coverage lives in packages/blueprints/src/assistant-sanitize.test.ts.
 
-import { cx, el, blockNodes } from './gfm.js';
 import { highlightCode } from './code-highlight.js';
+import { cx, el, blockNodes } from './gfm.js';
 
 /** The literal class names the kit's kit.css styles. Callers may override any. */
 export const DEFAULT_CLASSES = {
@@ -77,10 +77,10 @@ export const DEFAULT_CLASSES = {
  * language the `<pre>` gets escape-by-default syntax highlighting (hl… spans);
  * otherwise it stays a plain escaped text node. `wireCodeCopy` reads the
  * `<pre>`'s textContent (unchanged by the spans) on click, so copy still works.
- * @param {string} code
- * @param {string} lang
- * @param {typeof DEFAULT_CLASSES} C
- * @returns {HTMLElement}
+ * @param {string} code The source text to display.
+ * @param {string} lang The optional fenced-code language.
+ * @param {typeof DEFAULT_CLASSES} C The resolved CSS class map.
+ * @returns {HTMLElement} The wrapped code block element.
  */
 function codeBlock(code, lang, C) {
   const btn = el('button', { class: C.asstCopyBtn }, 'Copy');
@@ -206,9 +206,9 @@ function chartBlock(spec, C) {
 /**
  * Full answer → GFM prose + typed blocks + highlighted code fences, as an HTML
  * string. Untrusted input — see the SECURITY CONTRACT above.
- * @param {string} text
- * @param {Partial<typeof DEFAULT_CLASSES>} [classes]
- * @returns {string}
+ * @param {string} text The untrusted assistant response text.
+ * @param {Partial<typeof DEFAULT_CLASSES>} [classes] Optional CSS class overrides.
+ * @returns {string} The sanitized rich-answer HTML.
  */
 export function richAnswerHtml(text, classes) {
   // Override only with truthy values so an override map with `undefined` slots
@@ -259,8 +259,8 @@ export function richAnswerHtml(text, classes) {
  * `/centraid/_vault/assistant/resolve`, reachable from an app iframe (same
  * origin as the other `/centraid/_vault/*` calls the Ask panel already makes).
  * Returns the resolved cards array, or [] on any failure.
- * @param {Array<{type: string, id: string}>} refs
- * @returns {Promise<Array<{status?: string, title?: string|null, subtitle?: string|null}>>}
+ * @param {Array<{type: string, id: string}>} refs The referenced vault entities.
+ * @returns {Promise<Array<{status?: string, title?: string|null, subtitle?: string|null}>>} The resolved cards.
  */
 export async function defaultResolveRefs(refs) {
   if (refs.length === 0) return [];
@@ -284,19 +284,22 @@ export async function defaultResolveRefs(refs) {
  * defaults to `defaultResolveRefs`) and `refClass` (the `asstRef` class name the
  * chips carry).
  *
- * @param {HTMLElement} host
+ * @param {HTMLElement} host The rendered answer element containing ref chips.
  * @param {{
  *   resolveRefs?: (refs: Array<{type: string, id: string}>) => Promise<Array<{status?: string, title?: string|null, subtitle?: string|null}>>,
  *   refClass?: string,
- * }} [options]
- * @returns {void}
+ * }} [options] Optional resolver and class-name overrides.
+ * @returns {void} Nothing; cards are hydrated asynchronously.
  */
 export function hydrateRefs(host, options = {}) {
   const resolveRefs = options.resolveRefs ?? defaultResolveRefs;
   const refClass = options.refClass ?? DEFAULT_CLASSES.asstRef;
   const chips = [...host.querySelectorAll(`.${refClass}:not([data-resolved])`)];
   if (chips.length === 0) return;
-  const refs = chips.map((c) => ({ type: c.dataset.refType ?? '', id: c.dataset.refId ?? '' }));
+  const refs = chips.map((c) => ({
+    type: c.dataset.refType ?? '',
+    id: c.dataset.refId ?? '',
+  }));
   void resolveRefs(refs)
     .then((cards) => {
       chips.forEach((chip, i) => {
@@ -322,9 +325,9 @@ export function hydrateRefs(host, options = {}) {
  * Idempotent: a `data-copy-wired` flag guards against double-binding when a
  * node is re-hydrated.
  *
- * @param {HTMLElement} host
- * @param {{ copyClass?: string }} [options]
- * @returns {void}
+ * @param {HTMLElement} host The rendered answer element containing code blocks.
+ * @param {{ copyClass?: string }} [options] Optional copy-button class override.
+ * @returns {void} Nothing; the delegated handler is installed once.
  */
 export function wireCodeCopy(host, options = {}) {
   if (!host || host.dataset.copyWired === 'true') return;
@@ -338,16 +341,20 @@ export function wireCodeCopy(host, options = {}) {
     const pre = btn.parentElement?.querySelector('pre');
     const text = pre?.textContent ?? '';
     if (!text) return;
-    const done = () => {
-      btn.dataset.copied = 'true';
-      btn.textContent = 'Copied';
-      setTimeout(() => {
-        delete btn.dataset.copied;
-        btn.textContent = 'Copy';
-      }, 1400);
-    };
     try {
-      void navigator.clipboard.writeText(text).then(done, () => undefined);
+      void (async () => {
+        try {
+          await navigator.clipboard.writeText(text);
+          btn.dataset.copied = 'true';
+          btn.textContent = 'Copied';
+          setTimeout(() => {
+            delete btn.dataset.copied;
+            btn.textContent = 'Copy';
+          }, 1400);
+        } catch {
+          /* clipboard write failed — leave the button as-is */
+        }
+      })();
     } catch {
       /* clipboard unavailable — leave the button as-is */
     }

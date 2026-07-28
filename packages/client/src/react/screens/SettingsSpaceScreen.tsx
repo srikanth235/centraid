@@ -1,17 +1,19 @@
-import { type CSSProperties, type JSX, useState } from 'react';
 import type { IconName } from '@centraid/design-tokens';
-import { Icon } from '../ui/index.js';
+import { type CSSProperties, type JSX, useState } from 'react';
+
+import type { ActiveSpaceData } from '../shell/routes/settingsAccountData.js';
+import { PROFILE_COLORS, PROFILE_ICONS } from '../shell/routes/SpaceModal.js';
 import { cx } from '../ui/cx.js';
-import controlsCss from '../styles/controls.module.css';
-import drawerGroupCss from '../styles/drawerGroup.module.css';
+import { Icon } from '../ui/index.js';
+
 // Reuses SpaceModal's field vocabulary (`.prof*`) directly — same precedent
 // GatewayModal.tsx / ConnectFlowModal.tsx / RenameGatewayModal.tsx set for
 // the shared dialog chrome, extended here to a plain (non-modal) form
 // section so name/icon/color/blurb edits look identical everywhere they
 // appear (issue #382).
 import spaceModalStyles from '../shell/routes/SpaceModal.module.css';
-import { PROFILE_COLORS, PROFILE_ICONS } from '../shell/routes/SpaceModal.js';
-import type { ActiveSpaceData } from '../shell/routes/settingsAccountData.js';
+import controlsCss from '../styles/controls.module.css';
+import drawerGroupCss from '../styles/drawerGroup.module.css';
 
 export interface SettingsSpaceScreenProps {
   space: ActiveSpaceData;
@@ -179,7 +181,8 @@ export default function SettingsSpaceScreen({
 
         <label className={spaceModalStyles.profField}>
           <span className={spaceModalStyles.profFieldLabel}>
-            Description<span className={spaceModalStyles.profFieldOptional}>optional</span>
+            Description
+            <span className={spaceModalStyles.profFieldOptional}>optional</span>
           </span>
           <input
             className={spaceModalStyles.profFieldInput}

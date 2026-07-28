@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import {
   fmtRetention,
   getVaultBlock,
@@ -78,7 +79,10 @@ describe(manifestHasVault, () => {
   });
 
   it('is true when the manifest carries a vault block (untyped in the ambient global)', () => {
-    const withVault = { ...base, vault: { purpose: 'dpv:ServiceProvision', scopes: [] } };
+    const withVault = {
+      ...base,
+      vault: { purpose: 'dpv:ServiceProvision', scopes: [] },
+    };
     expect(manifestHasVault(withVault as CentraidAutomationManifest)).toBe(true);
   });
 });

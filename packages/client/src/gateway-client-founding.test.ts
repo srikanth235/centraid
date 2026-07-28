@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import { resetGatewayAuthCache } from './gateway-client-core.js';
 import {
   getGatewayFoundingStatus,
@@ -79,7 +80,10 @@ describe('gateway-client-founding', () => {
     });
 
     it('mints a host-only ticket before local initialization', async () => {
-      await initializeGatewayVault({ name: 'Personal', password: 'correct horse' });
+      await initializeGatewayVault({
+        name: 'Personal',
+        password: 'correct horse',
+      });
       expect(requests()).toStrictEqual([
         {
           path: '/centraid/_gateway/founding/ticket',
@@ -89,7 +93,11 @@ describe('gateway-client-founding', () => {
         {
           path: '/centraid/_vault/vaults:initialize',
           method: 'POST',
-          body: { name: 'Personal', password: 'correct horse', ticket: 'local-ticket' },
+          body: {
+            name: 'Personal',
+            password: 'correct horse',
+            ticket: 'local-ticket',
+          },
         },
       ]);
     });

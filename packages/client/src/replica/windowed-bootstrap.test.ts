@@ -1,5 +1,6 @@
 import { describe, expect, test, vi } from 'vitest';
 
+import type { GatewayAuth } from '../gateway-auth.js';
 import { ReplicaProtocolError, ReplicaRebootstrapRequiredError } from './errors.js';
 import type { ReplicaFetcher } from './shell-transport.js';
 import type {
@@ -14,8 +15,6 @@ import {
   type RunWindowedBootstrapOptions,
   type WindowedBootstrapTarget,
 } from './windowed-bootstrap.js';
-
-import type { GatewayAuth } from '../gateway-auth.js';
 
 const gatewayAuth: GatewayAuth = {
   baseUrl: 'http://127.0.0.1:18789',
@@ -152,7 +151,13 @@ describe(runWindowedBootstrap, () => {
       emptyBatch(cursor),
     );
 
-    await runWindowedBootstrap({ gatewayAuth, target, fetcher, window: 1, pullChanges });
+    await runWindowedBootstrap({
+      gatewayAuth,
+      target,
+      fetcher,
+      window: 1,
+      pullChanges,
+    });
 
     expect(target.rows.map((item) => item.rowId)).toStrictEqual(['photo-1', 'photo-2', 'photo-3']);
     expect(target.header?.shapes).toStrictEqual(shapes);
@@ -220,7 +225,10 @@ describe(runWindowedBootstrap, () => {
       { epoch: 'replica-1', seq: 10 },
       expect.any(AbortSignal),
     );
-    expect(pullChanges.mock.calls[0]?.[0]).toStrictEqual({ epoch: 'replica-1', seq: 10 });
+    expect(pullChanges.mock.calls[0]?.[0]).toStrictEqual({
+      epoch: 'replica-1',
+      seq: 10,
+    });
     // The deletion that slipped between per-page snapshots is repaired.
     expect(target.rows.map((item) => item.rowId)).toStrictEqual(['photo-1', 'photo-3']);
     expect(cursor).toStrictEqual({ epoch: 'replica-1', seq: 12 });
@@ -251,7 +259,10 @@ describe(runWindowedBootstrap, () => {
       pullChanges: async (cursor) => emptyBatch(cursor),
     });
 
-    expect(reconcileOutcomes.mock.calls[0]?.[0]).toStrictEqual({ epoch: 'replica-1', seq: 10 });
+    expect(reconcileOutcomes.mock.calls[0]?.[0]).toStrictEqual({
+      epoch: 'replica-1',
+      seq: 10,
+    });
     expect(target.committedOutcomes).toStrictEqual([{ intentId: 'intent-1', status: 'executed' }]);
   });
 
@@ -269,7 +280,10 @@ describe(runWindowedBootstrap, () => {
           complete: false,
           next: 'token-2',
         },
-        'token-2': { error: 'replica_rebootstrap_required', reason: 'schema-changed' },
+        'token-2': {
+          error: 'replica_rebootstrap_required',
+          reason: 'schema-changed',
+        },
       },
       { 'token-2': 409 },
     );
@@ -312,7 +326,10 @@ describe(runWindowedBootstrap, () => {
         fetcher,
         pullChanges: async (cursor) => emptyBatch(cursor),
       }),
-    ).rejects.toMatchObject({ code: 'invalid_replica_bootstrap_token', status: 400 });
+    ).rejects.toMatchObject({
+      code: 'invalid_replica_bootstrap_token',
+      status: 400,
+    });
     expect(target.committedAt).toBeUndefined();
   });
 

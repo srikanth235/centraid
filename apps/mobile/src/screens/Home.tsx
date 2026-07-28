@@ -12,13 +12,13 @@
 // gateway, the grid still renders — the eight apps show, gateway-hosted ones
 // dimmed — so the launcher always advertises the full surface.
 
+import type { AppMetaResolved } from '@centraid/design-tokens';
+import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS, useSharedValue, type SharedValue } from 'react-native-reanimated';
-import { useFocusEffect } from '@react-navigation/native';
-import type { AppMetaResolved } from '@centraid/design-tokens';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { family, useTheme, type ThemeColors } from '../kit/theme';
 import {
@@ -32,14 +32,14 @@ import {
 import { getProfileColor, getProfileName } from '../lib/profile';
 import { subscribeSpaces } from '../lib/spaces';
 import type { HomeScreenProps } from '../navigation';
-import GreetingHeader from './home/GreetingHeader';
 import AttentionLine, { type ConnectionState } from './home/AttentionLine';
-import LauncherGrid from './home/LauncherGrid';
+import { NATIVE_APP_IDS, buildLauncherItems, type LauncherItem } from './home/catalog';
 import GlassDock from './home/GlassDock';
+import GreetingHeader from './home/GreetingHeader';
+import LauncherGrid from './home/LauncherGrid';
 import SearchOverlay from './home/SearchOverlay';
 import SpaceDrawer from './home/SpaceDrawer';
 import SpacesSwitcher from './home/SpacesSwitcher';
-import { NATIVE_APP_IDS, buildLauncherItems, type LauncherItem } from './home/catalog';
 
 const H_PADDING = 20;
 
@@ -281,7 +281,11 @@ export default function HomeScreen({ navigation }: HomeScreenProps): React.JSX.E
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     // Bottom padding clears the floating dock so the last app row stays tappable.
-    content: { paddingBottom: 140, paddingHorizontal: H_PADDING, paddingTop: 6 },
+    content: {
+      paddingBottom: 140,
+      paddingHorizontal: H_PADDING,
+      paddingTop: 6,
+    },
     railLabel: {
       color: colors.ink3,
       fontFamily: family.monoMedium,

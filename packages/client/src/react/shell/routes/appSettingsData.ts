@@ -139,12 +139,16 @@ export function reloadAppFrame(): void {
 /** Poll a just-started automation run to completion (6-minute ceiling). */
 export async function waitForAutomationRun(runId: string): Promise<CentraidAutomationTurnRecord> {
   const deadline = Date.now() + 6 * 60 * 1000;
-  while (Date.now() < deadline) {
+  // This is one run's settlement timeline; start the next observation only
+  // after the previous status and retry interval have completed.
+  const poll = async (): Promise<CentraidAutomationTurnRecord> => {
+    if (Date.now() >= deadline) throw new Error('run did not finish within 6 minutes');
     const rec = await readAutomationTurn({ turnId: runId });
     if (rec && rec.endedAt !== undefined) return rec;
     await new Promise((resolve) => setTimeout(resolve, 1500));
-  }
-  throw new Error('run did not finish within 6 minutes');
+    return poll();
+  };
+  return poll();
 }
 
 /** Build the VaultScreen props for one app's consent pane (all gateway I/O). */
@@ -164,9 +168,11 @@ export function buildVaultProps(
     demoLoad: () => vaultDemoLoad(appId).then(() => undefined),
     demoPurge: () => vaultDemoPurge(appId).then(() => undefined),
     grant: () =>
-      approveVaultGrant({ appId, purpose: block.purpose, scopes: block.scopes }).then(
-        () => undefined,
-      ),
+      approveVaultGrant({
+        appId,
+        purpose: block.purpose,
+        scopes: block.scopes,
+      }).then(() => undefined),
     loadData: async () => {
       const s = await vaultStatus().catch(() => undefined);
       if (!s) return null;

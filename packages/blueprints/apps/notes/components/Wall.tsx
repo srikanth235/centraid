@@ -1,15 +1,16 @@
+import { I } from '../icons.ts';
+import type { Note, PendingCreate } from '../types.ts';
+import { Card } from './Card.tsx';
 // The scrolling wall: the quick-add card, a "pending approval" strip for
 // parked creates (no note_id exists yet, so these render as ghost cards),
 // the pinned/others card groups (CSS-columns masonry, or a single narrow
 // column in list view), the empty state and the bounded-window "Show more"
 // footer. Mirrors tasks/components/Board.jsx's shape.
 import { QuickAdd, type QuickAddProps } from './QuickAdd.tsx';
-import { Card } from './Card.tsx';
-import { I } from '../icons.ts';
 import { Icon } from './Shared.tsx';
-import type { Note, PendingCreate } from '../types.ts';
-import styles from './Wall.module.css';
+
 import cardStyles from './Card.module.css';
+import styles from './Wall.module.css';
 
 function PendingCreateCard({ item }: { item: PendingCreate }) {
   return (

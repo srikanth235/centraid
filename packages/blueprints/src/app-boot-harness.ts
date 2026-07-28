@@ -3,6 +3,24 @@
    no DOM lib (this "src" is node-side); this harness drives the browser apps
    under jsdom, so DOM globals are runtime-real but invisible to tsc. */
 // @ts-nocheck
+import { execFileSync } from 'node:child_process';
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+import { createElement } from 'react';
+import { createRoot, type Root as ReactRoot } from 'react-dom/client';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
 // Boots a blueprint app the way the v0 client does: its query-free `Root`,
 // the real kit, the workspace React runtime, and a mocked `window.centraid`
 // vault. The retired served adapter and its vendored React copy are not part
@@ -34,22 +52,6 @@
 // derivation, so the harness cannot invent a terminal browser signal that the
 // real coordinator would never publish.
 import { replicaIntentInvalidations } from '../kit/intent-invalidations.js';
-import { execFileSync } from 'node:child_process';
-import {
-  cpSync,
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from 'node:fs';
-import path from 'node:path';
-import { pathToFileURL } from 'node:url';
-import { createElement } from 'react';
-import { createRoot, type Root as ReactRoot } from 'react-dom/client';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 // Resolved from this module's own path, not process.cwd(): cwd differs
 // between a root-run vitest (repo root) and a package-run vitest (this
@@ -179,7 +181,13 @@ function replicaFixture(app: string): unknown {
           attachments: [],
         },
       ],
-      calendars: [{ calendar_id: 'calendar-local', name: 'Local calendar', color: '#6f5bf6' }],
+      calendars: [
+        {
+          calendar_id: 'calendar-local',
+          name: 'Local calendar',
+          color: '#6f5bf6',
+        },
+      ],
     };
   }
   if (app === 'photos') {
@@ -293,11 +301,14 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 80));
  */
 async function waitFor(predicate: () => boolean, what: string, timeoutMs = 4_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
-  while (!predicate()) {
+  const waitNext = async (): Promise<void> => {
+    if (predicate()) return;
     if (Date.now() > deadline)
       throw new Error(`timed out after ${timeoutMs}ms waiting for ${what}`);
     await new Promise((resolve) => setTimeout(resolve, 5));
-  }
+    return waitNext();
+  };
+  return waitNext();
 }
 
 // The single boot journey runs the app's real esbuild transform + jsdom render
@@ -410,7 +421,11 @@ export function describeAppBoot(
       };
 
       // jsdom implements neither; apps read both at boot (theme, layout).
-      window.matchMedia ??= () => ({ matches: false, addEventListener() {}, addListener() {} });
+      window.matchMedia ??= () => ({
+        matches: false,
+        addEventListener() {},
+        addListener() {},
+      });
       window.scrollTo ??= () => {};
       window.addEventListener('error', (e) => push(e.error ?? e.message));
     });
@@ -442,7 +457,10 @@ export function describeAppBoot(
         const writeCalls: unknown[] = [];
         const live = new Set<(value: unknown) => void>();
         const changes = new Set<(detail: unknown) => void>();
-        Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: false });
+        Object.defineProperty(window.navigator, 'onLine', {
+          configurable: true,
+          value: false,
+        });
         globalThis.fetch = async (...args: unknown[]) => {
           networkCalls.push(args[0]);
           throw new Error('synthetic airplane mode');
@@ -577,7 +595,10 @@ export function describeAppBoot(
 
             // Reconnect admission parks the exact queued intent: the event stays
             // canonical and the chip remains until a terminal owner decision.
-            Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });
+            Object.defineProperty(window.navigator, 'onLine', {
+              configurable: true,
+              value: true,
+            });
             emitAgendaIntentState('parked');
             await new Promise((resolve) => setTimeout(resolve, 250));
             expect(document.querySelector('.kit-pending-chip')?.textContent).toBe('cancel asked');

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import {
   applyIncomingFrameRelaxation,
   applyOutgoingAuthHeaders,
@@ -124,7 +125,9 @@ describe(applyIncomingFrameRelaxation, () => {
     });
     // A CSP that is only frame-ancestors collapses to an empty list.
     expect(
-      relaxFrameAncestors({ 'Content-Security-Policy': "frame-ancestors 'self'" }),
+      relaxFrameAncestors({
+        'Content-Security-Policy': "frame-ancestors 'self'",
+      }),
     ).toStrictEqual({
       'Content-Security-Policy': [],
     });

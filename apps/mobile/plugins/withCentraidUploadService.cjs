@@ -12,7 +12,7 @@ module.exports = function withCentraidUploadService(config) {
     nextConfig = AndroidConfig.Permissions.withPermissions(nextConfig, [permission]);
   return withAndroidManifest(nextConfig, (result) => {
     const application = AndroidConfig.Manifest.getMainApplicationOrThrow(result.modResults);
-    application.service = application.service ?? [];
+    application.service ??= [];
     const name = '.upload.UploadForegroundService';
     const existing = application.service.find((service) => service.$?.['android:name'] === name);
     if (!existing) {

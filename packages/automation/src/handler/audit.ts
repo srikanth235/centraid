@@ -8,6 +8,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
+
 import type {
   ConversationStore,
   ItemKind,
@@ -17,6 +18,7 @@ import type {
   AutomationTurnStreamEvent,
 } from '@centraid/app-engine';
 import { resolveItemCost } from '@centraid/app-engine';
+
 import type { HistoryConfig } from '../manifest/manifest.js';
 
 /**
@@ -45,7 +47,11 @@ export function truncateForAudit(value: unknown): string | undefined {
     return JSON.stringify({ _truncated: true, reason: 'unserializable' });
   }
   if (json.length <= AUDIT_FIELD_BYTE_CAP) return json;
-  return JSON.stringify({ _truncated: true, bytes: json.length, head: json.slice(0, 256) });
+  return JSON.stringify({
+    _truncated: true,
+    bytes: json.length,
+    head: json.slice(0, 256),
+  });
 }
 
 export interface RunRef {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import {
   ManifestError,
   isDeniedTriggerCursorEntity,
@@ -85,13 +86,13 @@ describe(validateManifest, () => {
     const raw = baseManifest();
     raw.triggers = [{ kind: 'cron', expr: '0 9 * * *', tz: 'Not/A_Real_Zone' }];
     expect(() => validateManifest(raw)).toThrow(ManifestError);
-    expect(() => validateManifest(raw)).toThrow(/not a known IANA timezone/);
+    expect(() => validateManifest(raw)).toThrow(/not a known IANA timezone/u);
   });
 
   it('rejects an empty tz string', () => {
     const raw = baseManifest();
     raw.triggers = [{ kind: 'cron', expr: '0 9 * * *', tz: '   ' }];
-    expect(() => validateManifest(raw)).toThrow(/non-empty IANA timezone/);
+    expect(() => validateManifest(raw)).toThrow(/non-empty IANA timezone/u);
   });
 
   it('accepts a webhook trigger with an id + secret hash', () => {
@@ -192,10 +193,10 @@ describe(validateManifest, () => {
         .runner,
     ).toBe('future-registry-runner');
     expect(() => validateManifest(baseManifest({ requires: { runner: '' } }))).toThrow(
-      /requires\.runner must be a non-empty string/,
+      /requires\.runner must be a non-empty string/u,
     );
     expect(() => validateManifest(baseManifest({ requires: { runner: 42 } }))).toThrow(
-      /requires\.runner must be a non-empty string/,
+      /requires\.runner must be a non-empty string/u,
     );
   });
 
@@ -205,7 +206,7 @@ describe(validateManifest, () => {
         .thoughtLevel,
     ).toBe('vendor-ultra');
     expect(() => validateManifest(baseManifest({ requires: { thoughtLevel: '' } }))).toThrow(
-      /requires\.thoughtLevel must be a non-empty string/,
+      /requires\.thoughtLevel must be a non-empty string/u,
     );
   });
 
@@ -274,13 +275,16 @@ describe('condition triggers', () => {
         generated: { by: 't', at: 'now' },
         triggers: [{ kind: 'condition', entity: 'business.invoice' }],
       }),
-    ).toThrow(/vault block/);
+    ).toThrow(/vault block/u);
   });
 
   it('rejects malformed entities, ops and gates', () => {
     expect(() =>
-      validateManifest({ ...base, triggers: [{ kind: 'condition', entity: 'invoice' }] }),
-    ).toThrow(/schema.*table|entity/);
+      validateManifest({
+        ...base,
+        triggers: [{ kind: 'condition', entity: 'invoice' }],
+      }),
+    ).toThrow(/schema.*table|entity/u);
     expect(() =>
       validateManifest({
         ...base,
@@ -292,13 +296,13 @@ describe('condition triggers', () => {
           },
         ],
       }),
-    ).toThrow(/op/);
+    ).toThrow(/op/u);
     expect(() =>
       validateManifest({
         ...base,
         triggers: [{ kind: 'condition', entity: 'business.invoice', every: 'often' }],
       }),
-    ).toThrow(/cron/);
+    ).toThrow(/cron/u);
   });
 });
 
@@ -333,25 +337,31 @@ describe('data triggers', () => {
         generated: { by: 't', at: 'now' },
         triggers: [{ kind: 'data', entities: ['core.transaction'] }],
       }),
-    ).toThrow(/vault block/);
+    ).toThrow(/vault block/u);
     expect(() => validateManifest({ ...base, triggers: [{ kind: 'data', entities: [] }] })).toThrow(
-      /entities/,
+      /entities/u,
     );
     expect(() =>
-      validateManifest({ ...base, triggers: [{ kind: 'data', entities: ['transactions'] }] }),
-    ).toThrow(/entity name/);
+      validateManifest({
+        ...base,
+        triggers: [{ kind: 'data', entities: ['transactions'] }],
+      }),
+    ).toThrow(/entity name/u);
   });
 
   it('refuses outbox entities — a drain receipt must not re-fire the stager (issue #308 A8)', () => {
     expect(() =>
-      validateManifest({ ...base, triggers: [{ kind: 'data', entities: ['outbox.item'] }] }),
-    ).toThrow(/outbox/);
+      validateManifest({
+        ...base,
+        triggers: [{ kind: 'data', entities: ['outbox.item'] }],
+      }),
+    ).toThrow(/outbox/u);
     expect(() =>
       validateManifest({
         ...base,
         triggers: [{ kind: 'data', entities: ['core.transaction', 'outbox.grant'] }],
       }),
-    ).toThrow(/outbox/);
+    ).toThrow(/outbox/u);
   });
 });
 
@@ -394,13 +404,13 @@ describe('provider event triggers and cursor loop guard', () => {
         connections: [],
         triggers: [{ kind: 'event', connectorKind: 'pull.gmail', event: 'new-message' }],
       }),
-    ).toThrow(/bound.*pull\.gmail/i);
+    ).toThrow(/bound.*pull\.gmail/iu);
     expect(() =>
       validateManifest({
         ...base,
         triggers: [{ kind: 'event', connectorKind: 'pull.gmail', event: 'mail-deleted' }],
       }),
-    ).toThrow(/unsupported provider event/);
+    ).toThrow(/unsupported provider event/u);
   });
 
   it.each([
@@ -436,7 +446,7 @@ describe('provider event triggers and cursor loop guard', () => {
           vault,
           triggers: [{ kind: 'condition', entity }],
         }),
-      ).toThrow(/prevent trigger loops/);
+      ).toThrow(/prevent trigger loops/u);
       expect(() =>
         validateManifest({
           name: 'Loop',
@@ -445,7 +455,7 @@ describe('provider event triggers and cursor loop guard', () => {
           vault,
           triggers: [{ kind: 'data', entities: [entity] }],
         }),
-      ).toThrow(/prevent trigger loops/);
+      ).toThrow(/prevent trigger loops/u);
     },
   );
 

@@ -10,14 +10,15 @@
 // bar gave; the Assistant spine — the primary action — fires a heavier `Medium`
 // impact so it reads as the more consequential tap.
 
+import type { IconName } from '@centraid/design-tokens';
+import * as Haptics from 'expo-haptics';
 import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as Haptics from 'expo-haptics';
-import Icon from '../../kit/components/Icon';
+
 import GlassBar from '../../kit/components/GlassBar';
+import Icon from '../../kit/components/Icon';
 import { family, useTheme, type ThemeColors } from '../../kit/theme';
-import type { IconName } from '@centraid/design-tokens';
 
 export interface GlassDockProps {
   onSearch: () => void;
@@ -150,8 +151,17 @@ const makeStyles = (colors: ThemeColors) =>
       // Raise the spine so it straddles the pill's top edge.
       top: -22,
     },
-    slot: { alignItems: 'center', gap: 3, paddingHorizontal: 18, paddingVertical: 4 },
-    slotLabel: { color: colors.ink2, fontFamily: family.sansMedium, fontSize: 10 },
+    slot: {
+      alignItems: 'center',
+      gap: 3,
+      paddingHorizontal: 18,
+      paddingVertical: 4,
+    },
+    slotLabel: {
+      color: colors.ink2,
+      fontFamily: family.sansMedium,
+      fontSize: 10,
+    },
     slots: {
       alignItems: 'center',
       flexDirection: 'row',

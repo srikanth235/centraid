@@ -1,3 +1,4 @@
+import { CAT_ORDER, byTitle, catOf } from './format.ts';
 // Non-visual business logic: vault IO (write/act), item CRUD, nav/search,
 // the clipboard-clear timer and the pure list/sidebar derivations.
 // `createLogic` closes over app.tsx's own `state`/`data` (mutated in place,
@@ -6,7 +7,6 @@
 // derivations (`currentPool`/`sidebarCounts`/`catCounts`/`sidebarTags`) need
 // no closure and are exported standalone so components can call them too.
 import { debounce, outcomeMessage, toast } from './kit.ts';
-import { CAT_ORDER, byTitle, catOf } from './format.ts';
 import { genPassword } from './totp.ts';
 import type { AppData, AppState, LockerDetail, LockerRow, Nav, SavePayload } from './types.ts';
 
@@ -71,7 +71,9 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   // ---------- Item writes ----------
 
   async function toggleFav(sel: LockerDetail) {
-    const outcome = await act(sel.favorite ? 'unstar-item' : 'star-item', { item_id: sel.item_id });
+    const outcome = await act(sel.favorite ? 'unstar-item' : 'star-item', {
+      item_id: sel.item_id,
+    });
     if (!narrate(outcome)) return;
     toast(sel.favorite ? 'Star removed · receipted.' : 'Starred · receipted.');
     if (state.detail && state.detail.item_id === sel.item_id) {
@@ -136,7 +138,10 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     // Only the fields belonging to the chosen type (the backend drops the
     // rest too, but keep the payload clean).
     const allowed = new Set(allowedKeys);
-    const input: Record<string, unknown> = { title: title.trim(), tags: tagList };
+    const input: Record<string, unknown> = {
+      title: title.trim(),
+      tags: tagList,
+    };
     if (type === 'login') input.url_match_policy = urlMatchPolicy;
     for (const [k, v] of Object.entries(fields)) {
       if (allowed.has(k) && v != null && v !== '') input[k] = v;
@@ -177,7 +182,10 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     render();
     let res: { item?: LockerDetail | null; vaultDenied?: DeniedInfo } | null;
     try {
-      res = await window.centraid.read<{ item?: LockerDetail | null; vaultDenied?: DeniedInfo }>({
+      res = await window.centraid.read<{
+        item?: LockerDetail | null;
+        vaultDenied?: DeniedInfo;
+      }>({
         query: 'item',
         input: { item_id: id },
       });
@@ -226,7 +234,11 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   // ---------- Generator ----------
 
   function regen() {
-    state.genValue = genPassword({ len: state.genLen, num: state.genNum, sym: state.genSym });
+    state.genValue = genPassword({
+      len: state.genLen,
+      num: state.genNum,
+      sym: state.genSym,
+    });
     render();
   }
 
@@ -260,7 +272,10 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     }
     let rows: LockerRow[] = [];
     try {
-      const res = await window.centraid.read<{ items?: LockerRow[]; vaultDenied?: DeniedInfo }>({
+      const res = await window.centraid.read<{
+        items?: LockerRow[];
+        vaultDenied?: DeniedInfo;
+      }>({
         query: 'search',
         input: { term: q },
       });
@@ -322,12 +337,16 @@ function scheduleClipboardClear(secret: string) {
   if (!navigator.clipboard || !navigator.clipboard.writeText) return;
   clipClearTimer = setTimeout(() => {
     clipClearTimer = null;
-    const done = () => {};
     try {
       if (navigator.clipboard.readText) {
-        navigator.clipboard.readText().then((cur) => {
-          if (cur === secret) navigator.clipboard.writeText('').catch(done);
-        }, done);
+        void (async () => {
+          try {
+            const current = await navigator.clipboard.readText();
+            if (current === secret) await navigator.clipboard.writeText('');
+          } catch {
+            /* clipboard permissions changed — leave its current value alone */
+          }
+        })();
       }
       // No read permission → leave the clipboard alone rather than risk
       // wiping something the user copied since.
@@ -350,13 +369,13 @@ export function copy(text: string, label?: string, secret?: boolean) {
     toast('Copy is unavailable here.');
     return;
   }
-  navigator.clipboard.writeText(text).then(
-    () => {
+  navigator.clipboard
+    .writeText(text)
+    .then(() => {
       if (secret) scheduleClipboardClear(text);
       okToast();
-    },
-    () => toast('Copy is unavailable here.'),
-  );
+    })
+    .catch(() => toast('Copy is unavailable here.'));
 }
 
 // ---------- Pure derivations (no closure — components may call directly) ----------

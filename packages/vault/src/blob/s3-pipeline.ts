@@ -1,6 +1,6 @@
+import type { S3BlobStoreOptions } from './s3.js';
 /* eslint-disable max-classes-per-file -- token bucket is an implementation detail of the shared S3 pipeline (#418) */
 import { signS3Request } from './sigv4.js';
-import type { S3BlobStoreOptions } from './s3.js';
 
 export interface S3RequestInput {
   body?: Buffer;
@@ -36,7 +36,7 @@ class TokenBucket {
 
   async consume(bytes: number): Promise<void> {
     if (this.ratePerSec <= 0 || bytes <= 0) return;
-    for (;;) {
+    const waitForTokens = async (): Promise<void> => {
       const now = Date.now();
       const elapsedSec = (now - this.lastRefillMs) / 1000;
       this.lastRefillMs = now;
@@ -46,7 +46,9 @@ class TokenBucket {
         return;
       }
       await delay(Math.min(Math.max(((bytes - this.tokens) / this.ratePerSec) * 1000, 10), 1000));
-    }
+      return waitForTokens();
+    };
+    return waitForTokens();
   }
 }
 
@@ -90,8 +92,7 @@ export class S3RequestPipeline {
   }
 
   async send(method: string, key: string, input: S3RequestInput = {}): Promise<Response> {
-    let failure: unknown;
-    for (let attempt = 1; attempt <= this.tries; attempt += 1) {
+    const sendAttempt = async (attempt: number): Promise<Response> => {
       try {
         const response = await this.request(method, key, input);
         if (attempt === this.tries || (response.status !== 429 && response.status < 500)) {
@@ -99,13 +100,13 @@ export class S3RequestPipeline {
         }
         await response.text().catch(() => undefined);
       } catch (error) {
-        failure = error;
         if (attempt === this.tries) throw error;
       }
       const ceiling = Math.min(2_000, 200 * 2 ** (attempt - 1));
       await this.sleep(Math.random() * ceiling);
-    }
-    throw failure ?? new Error(`S3 ${method} retries exhausted`);
+      return sendAttempt(attempt + 1);
+    };
+    return sendAttempt(1);
   }
 
   async beginMultipart(key: string, headers?: Record<string, string>): Promise<string> {
@@ -148,7 +149,10 @@ export class S3RequestPipeline {
         )
         .join('')}</CompleteMultipartUpload>`,
     );
-    const response = await this.send('POST', key, { body, query: { uploadId } });
+    const response = await this.send('POST', key, {
+      body,
+      query: { uploadId },
+    });
     if (!response.ok) throw new Error(`s3 complete multipart upload: ${response.status}`);
   }
 

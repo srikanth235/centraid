@@ -1,3 +1,10 @@
+import type { InlineAppModule } from '@centraid/blueprints/apps/inline-types';
+import { toBlueprintCss } from '@centraid/design-tokens';
+
+// The kit's :global(.kit-*) vocabulary (buttons, segmented chips, search,
+// banners, ask panel) that blueprint component modules reference. Loaded once,
+// globally, by the route host — same as the served path's <link rel=kit.css>.
+import '@centraid/blueprints/kit/kit.css';
 import {
   type JSX,
   type ReactNode,
@@ -9,22 +16,16 @@ import {
   useRef,
   useState,
 } from 'react';
-import { toBlueprintCss } from '@centraid/design-tokens';
-// The kit's :global(.kit-*) vocabulary (buttons, segmented chips, search,
-// banners, ask panel) that blueprint component modules reference. Loaded once,
-// globally, by the route host — same as the served path's <link rel=kit.css>.
-import '@centraid/blueprints/kit/kit.css';
+
 import type { AppearancePrefs } from '../../../app-shell-context.js';
 import { deleteApp, updateAppMeta } from '../../../gateway-client.js';
-import type { InlineAppModule } from '@centraid/blueprints/apps/inline-types';
 import {
   acquireReplicaShellSession,
   type ReplicaScopeLease,
 } from '../../../replica/shell-session.js';
 import { addInlineScope, installInlineCentraid } from '../../blueprints/centraid-inline.js';
-import { scopeSetKey, useAppScopes, type ResolvedAppScope } from './useAppScopes.js';
-import { installInlineAsk } from '../../blueprints/kit-ask-inline.js';
 import { installInlineBlobImages } from '../../blueprints/inline-blob-images.js';
+import { installInlineAsk } from '../../blueprints/kit-ask-inline.js';
 import { useShellActions } from '../actions.js';
 import ErrorBoundary from '../ErrorBoundary.js';
 import { iconSvg } from '../iconSvg.js';
@@ -35,8 +36,10 @@ import { useAsyncData } from '../useAsyncData.js';
 import AppSettingsController from './AppSettingsController.js';
 import { fetchAppKnobValues, pushKnobToInlineRoot } from './appSettingsData.js';
 import { loadAppTemplates } from './templatesData.js';
-import styles from './InlineAppRoute.module.css';
+import { scopeSetKey, useAppScopes, type ResolvedAppScope } from './useAppScopes.js';
+
 import chrome from '../chrome.module.css';
+import styles from './InlineAppRoute.module.css';
 
 export interface InlineAppRouteProps {
   app: AppMetaResolvedType;
@@ -85,7 +88,6 @@ function loadDescriptor(
   }
   return promise;
 }
-
 interface InlineAppMountProps {
   appId: string;
   cacheKey: string;
@@ -98,7 +100,7 @@ interface InlineAppMountProps {
 
 function InlineAppMount({
   appId,
-  cacheKey,
+  cacheKey: _cacheKey,
   descriptorPromise,
   scopes,
   onDescriptor,
@@ -116,14 +118,11 @@ function InlineAppMount({
   const descriptor = use(descriptorPromise).default;
   const lease = use(primaryLease);
 
-  // Install window.centraid BEFORE the app's Root renders/effects run (its first
-  // refresh() reads window.centraid). The lazy state initialiser is the
-  // createRoot-style resource pattern: it runs once per mount — which the
-  // parent's key makes "once per (appId, cacheKey, scope set)" — and the effect
-  // below tears it down when that mount goes away.
-  const [installation] = useState(() => {
-    // Capture what actually got published so the hydration effect below extends
-    // THAT client, not whatever a later mount replaced it with.
+  // The bridge must exist before the Root mounts: its first effect reads it.
+  // This initializer runs once for the parent's keyed resource mount.
+  const [installation, setInstallation] = useState(() => {
+    // Capture what actually got published so secondary hydration extends THAT
+    // client, not whatever a later mount replaced it with.
     let client: unknown;
     const teardown = installInlineCentraid({
       appId,
@@ -135,6 +134,7 @@ function InlineAppMount({
     });
     return { client, teardown };
   });
+  void setInstallation;
   const installed = installation.client;
 
   useEffect(() => {
@@ -159,7 +159,10 @@ function InlineAppMount({
             return;
           }
           leases.push(secondary);
-          addInlineScope(installed, { scope: entry.scope, session: secondary.session });
+          addInlineScope(installed, {
+            scope: entry.scope,
+            session: secondary.session,
+          });
         })
         .catch(() => {
           // An audience that cannot be opened is simply not offered. The app
@@ -171,7 +174,6 @@ function InlineAppMount({
       for (const held of leases) held.release();
     };
   }, []);
-
   const Root = descriptor.Root;
   return <Root rootRef={(el: HTMLElement | null) => onRootReady(el, descriptor)} />;
 }
@@ -188,7 +190,9 @@ export default function InlineAppRoute({
   const { confirm, enterBuilder, openNewAppSheet, showToast, builderEnabled } = useShellActions();
   // Opening the settings panel snapshots the mounted inline root at click
   // time — an event handler may read the ref, render may not.
-  const [settings, setSettings] = useState<{ inlineRoot: HTMLElement | null } | null>(null);
+  const [settings, setSettings] = useState<{
+    inlineRoot: HTMLElement | null;
+  } | null>(null);
   const settingsOpen = settings !== null;
   const [attempt, setAttempt] = useState(0);
   const appRootRef = useRef<HTMLElement | null>(null);
@@ -237,7 +241,11 @@ export default function InlineAppRoute({
       // only; gateway calls happen on user interaction).
       if (descriptor.kitAsk) {
         try {
-          askTeardown.current = installInlineAsk({ appRoot: el, appId, config: descriptor.kitAsk });
+          askTeardown.current = installInlineAsk({
+            appRoot: el,
+            appId,
+            config: descriptor.kitAsk,
+          });
         } catch {
           /* ask is non-essential — never block the app on it */
         }

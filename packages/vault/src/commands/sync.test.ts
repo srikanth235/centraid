@@ -4,7 +4,7 @@
 // ceiling and parks for the owner — the pause between draft and send.
 
 import { beforeEach, describe, expect, test } from 'vitest';
-import { uuidv7 } from '../ids.js';
+
 import {
   bootstrapVault,
   createGrant,
@@ -14,8 +14,9 @@ import {
 } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { createGateway, Gateway } from '../gateway/gateway.js';
-import { registerSyncCommands } from './sync.js';
 import type { Credential } from '../gateway/types.js';
+import { uuidv7 } from '../ids.js';
+import { registerSyncCommands } from './sync.js';
 
 let db: VaultDb;
 let gw: Gateway;
@@ -29,8 +30,15 @@ describe('sync', () => {
     boot = bootstrapVault(db, { ownerName: 'Priya' });
     gw = createGateway(db);
     registerSyncCommands(gw);
-    owner = { kind: 'device', deviceId: boot.deviceId, deviceKey: boot.deviceKey };
-    const enrolled = enrollAgent(db, { name: 'gmail-pull', modelRef: 'model-x' });
+    owner = {
+      kind: 'device',
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+    };
+    const enrolled = enrollAgent(db, {
+      name: 'gmail-pull',
+      modelRef: 'model-x',
+    });
     const device = enrollDevice(db, boot.ownerPartyId, 'agent-host');
     createGrant(db, {
       granteePartyId: enrolled.partyId,
@@ -66,7 +74,11 @@ describe('sync', () => {
   test('agent stages freely; publish parks; owner approval lands the rows', () => {
     const staged = gw.invoke(agent, {
       command: 'sync.stage_rows',
-      input: { kind: 'pull.gcal', label: 'srikanth@crowdshakti.com', rows: ROWS },
+      input: {
+        kind: 'pull.gcal',
+        label: 'srikanth@crowdshakti.com',
+        rows: ROWS,
+      },
       purpose: 'dpv:ServiceProvision',
     });
     expect(staged.status).toBe('executed');
@@ -74,7 +86,11 @@ describe('sync', () => {
 
     // Nothing landed — staging is reviewable state.
     expect(
-      (db.vault.prepare('SELECT count(*) AS n FROM core_event').get() as { n: number }).n,
+      (
+        db.vault.prepare('SELECT count(*) AS n FROM core_event').get() as {
+          n: number;
+        }
+      ).n,
     ).toBe(0);
 
     const publish = gw.invoke(agent, {
@@ -94,7 +110,11 @@ describe('sync', () => {
     // The map recorded the pull's identity — a re-stage skips.
     const again = gw.invoke(agent, {
       command: 'sync.stage_rows',
-      input: { kind: 'pull.gcal', label: 'srikanth@crowdshakti.com', rows: ROWS },
+      input: {
+        kind: 'pull.gcal',
+        label: 'srikanth@crowdshakti.com',
+        rows: ROWS,
+      },
       purpose: 'dpv:ServiceProvision',
     });
     expect((again as { output: { staged: { skip: number } } }).output.staged.skip).toBe(1);
@@ -115,7 +135,11 @@ describe('sync', () => {
     const denied = gw.confirm(owner, (publish as { invocationId: string }).invocationId, false);
     expect(denied.status).toBe('denied');
     expect(
-      (db.vault.prepare('SELECT count(*) AS n FROM core_event').get() as { n: number }).n,
+      (
+        db.vault.prepare('SELECT count(*) AS n FROM core_event').get() as {
+          n: number;
+        }
+      ).n,
     ).toBe(0);
     const batch = db.vault
       .prepare('SELECT status FROM sync_import_batch WHERE batch_id = ?')
@@ -134,7 +158,7 @@ describe('sync', () => {
       purpose: 'dpv:ServiceProvision',
     });
     expect(outcome.status).toBe('failed');
-    expect((outcome as { reason: string }).reason).toMatch(/no publisher/);
+    expect((outcome as { reason: string }).reason).toMatch(/no publisher/u);
   });
 
   test('remote files publish as content items rather than fabricated messages', () => {
@@ -179,7 +203,11 @@ describe('sync', () => {
       content_uri: 'https://drive.google.com/file/d/file-1/view',
     });
     expect(
-      (db.vault.prepare('SELECT count(*) AS n FROM social_message').get() as { n: number }).n,
+      (
+        db.vault.prepare('SELECT count(*) AS n FROM social_message').get() as {
+          n: number;
+        }
+      ).n,
     ).toBe(0);
   });
 
@@ -189,12 +217,18 @@ describe('sync', () => {
       input: {
         kind: 'pull.x',
         label: 'x',
-        rows: [{ entity_type: 'locker.item', external_id: 'e1', payload: { title: 'x' } }],
+        rows: [
+          {
+            entity_type: 'locker.item',
+            external_id: 'e1',
+            payload: { title: 'x' },
+          },
+        ],
       },
       purpose: 'dpv:ServiceProvision',
     });
     expect(outcome.status).toBe('failed');
-    expect((outcome as { reason: string }).reason).toMatch(/sealed/);
+    expect((outcome as { reason: string }).reason).toMatch(/sealed/u);
   });
 
   test('the owner publishes directly — no parking above their ceiling', () => {
@@ -216,7 +250,11 @@ describe('sync', () => {
     function beginRun(principal?: string) {
       return gw.invoke(agent, {
         command: 'sync.begin_run',
-        input: { kind: 'mcp.gmail', label: 'personal', ...(principal ? { principal } : {}) },
+        input: {
+          kind: 'mcp.gmail',
+          label: 'personal',
+          ...(principal ? { principal } : {}),
+        },
         purpose: 'dpv:ServiceProvision',
       });
     }
@@ -275,7 +313,10 @@ describe('sync', () => {
         .get() as { status: string; principal: string };
       // node:sqlite hands back null-prototype rows; spreading compares the column
       // data (which is the contract) without asserting the driver's prototype.
-      expect({ ...conn }).toStrictEqual({ status: 'needs-auth', principal: 'me@example.com' });
+      expect({ ...conn }).toStrictEqual({
+        status: 'needs-auth',
+        principal: 'me@example.com',
+      });
 
       // A matching re-auth restores the connection to active.
       const recovered = beginRun('me@example.com');
@@ -302,7 +343,10 @@ describe('sync', () => {
       const run = db.vault
         .prepare('SELECT status, error FROM sync_connection_run WHERE run_id = ?')
         .get(runId) as { status: string; error: string };
-      expect({ ...run }).toStrictEqual({ status: 'failed', error: 'rate limited' });
+      expect({ ...run }).toStrictEqual({
+        status: 'failed',
+        error: 'rate limited',
+      });
     });
 
     test('paused means paused — begin_run refuses until the owner resumes', () => {
@@ -330,7 +374,11 @@ describe('sync', () => {
       const connectionId = (first as { output: { connection_id: string } }).output.connection_id;
       const set = gw.invoke(agent, {
         command: 'sync.set_cursor',
-        input: { connection_id: connectionId, key: 'history_id', value: { id: 42017 } },
+        input: {
+          connection_id: connectionId,
+          key: 'history_id',
+          value: { id: 42017 },
+        },
         purpose: 'dpv:ServiceProvision',
       });
       expect(set.status).toBe('executed');
@@ -368,10 +416,14 @@ describe('sync', () => {
 
       const cred = db.vault
         .prepare('SELECT cred_kind, client_secret, allowed_hosts FROM sync_connection_credential')
-        .get() as { cred_kind: string; client_secret: string; allowed_hosts: string };
+        .get() as {
+        cred_kind: string;
+        client_secret: string;
+        allowed_hosts: string;
+      };
       expect(cred.cred_kind).toBe('oauth2');
       // Sealed at rest — never the plaintext.
-      expect(cred.client_secret).toMatch(/^sealed:v1:/);
+      expect(cred.client_secret).toMatch(/^sealed:v1:/u);
       expect(cred.client_secret).not.toContain('GOCSPX');
       expect(JSON.parse(cred.allowed_hosts)).toStrictEqual([
         'gmail.googleapis.com',
@@ -384,7 +436,7 @@ describe('sync', () => {
       const health = db.vault.prepare('SELECT auth_note FROM sync_connection_health').get() as {
         auth_note: string;
       };
-      expect(health.auth_note).toMatch(/authorization pending/);
+      expect(health.auth_note).toMatch(/authorization pending/u);
     });
 
     test('Assist records its mode without accepting or storing a shared client secret', () => {
@@ -407,7 +459,11 @@ describe('sync', () => {
       expect(outcome.status).toBe('executed');
       const row = db.vault
         .prepare('SELECT oauth_mode, client_id, client_secret FROM sync_connection_credential')
-        .get() as { oauth_mode: string; client_id: string; client_secret: string | null };
+        .get() as {
+        oauth_mode: string;
+        client_id: string;
+        client_secret: string | null;
+      };
       // node:sqlite hands back null-prototype rows; spreading compares the column
       // data (which is the contract) without asserting the driver's prototype.
       expect({ ...row }).toStrictEqual({
@@ -433,7 +489,7 @@ describe('sync', () => {
         purpose: 'dpv:ServiceProvision',
       });
       expect(refused.status).toBe('failed');
-      expect((refused as { reason: string }).reason).toMatch(/must not send or store/);
+      expect((refused as { reason: string }).reason).toMatch(/must not send or store/u);
       expect(
         JSON.stringify(db.vault.prepare('SELECT * FROM sync_connection_credential').all()),
       ).not.toContain('must-never-land');
@@ -451,7 +507,7 @@ describe('sync', () => {
         purpose: 'dpv:ServiceProvision',
       });
       expect(outcome.status).toBe('failed');
-      expect((outcome as { reason: string }).reason).toMatch(/allowed_hosts/);
+      expect((outcome as { reason: string }).reason).toMatch(/allowed_hosts/u);
     });
 
     test('api_key configure seals the key and the connection is live immediately', () => {
@@ -471,7 +527,7 @@ describe('sync', () => {
       const cred = db.vault.prepare('SELECT api_key FROM sync_connection_credential').get() as {
         api_key: string;
       };
-      expect(cred.api_key).toMatch(/^sealed:v1:/);
+      expect(cred.api_key).toMatch(/^sealed:v1:/u);
       const conn = db.vault.prepare('SELECT status FROM sync_connection').get() as {
         status: string;
       };
@@ -512,10 +568,14 @@ describe('sync', () => {
       let row = db.vault
         .prepare('SELECT access_token, refresh_token FROM sync_connection_credential')
         .get() as { access_token: string; refresh_token: string };
-      expect(row.access_token).toMatch(/^sealed:v1:/);
-      expect(row.refresh_token).toMatch(/^sealed:v1:/);
+      expect(row.access_token).toMatch(/^sealed:v1:/u);
+      expect(row.refresh_token).toMatch(/^sealed:v1:/u);
       expect(
-        (db.vault.prepare('SELECT status FROM sync_connection').get() as { status: string }).status,
+        (
+          db.vault.prepare('SELECT status FROM sync_connection').get() as {
+            status: string;
+          }
+        ).status,
       ).toBe('active');
       // A revived connection carries no stale complaint.
       expect(
@@ -538,7 +598,7 @@ describe('sync', () => {
         .prepare('SELECT access_token, refresh_token FROM sync_connection_credential')
         .get() as { access_token: string; refresh_token: string };
       expect(row.refresh_token).toBe(originalRefreshCipher);
-      expect(row.access_token).toMatch(/^sealed:v1:/);
+      expect(row.access_token).toMatch(/^sealed:v1:/u);
     });
 
     test('store_tokens refuses a connection that is not oauth2-kind', () => {
@@ -650,7 +710,9 @@ describe('sync', () => {
         purpose: 'dpv:ServiceProvision',
       });
       let status = (
-        db.vault.prepare('SELECT status FROM sync_connection').get() as { status: string }
+        db.vault.prepare('SELECT status FROM sync_connection').get() as {
+          status: string;
+        }
       ).status;
       expect(status).toBe('needs-auth');
       expect(
@@ -659,14 +721,17 @@ describe('sync', () => {
             auth_note: string;
           }
         ).auth_note,
-      ).toMatch(/invalid_grant/);
+      ).toMatch(/invalid_grant/u);
       gw.invoke(owner, {
         command: 'sync.set_connection_status',
         input: { connection_id: connectionId, status: 'active' },
         purpose: 'dpv:ServiceProvision',
       });
-      status = (db.vault.prepare('SELECT status FROM sync_connection').get() as { status: string })
-        .status;
+      status = (
+        db.vault.prepare('SELECT status FROM sync_connection').get() as {
+          status: string;
+        }
+      ).status;
       expect(status).toBe('active');
       expect(
         db.vault.prepare('SELECT auth_note FROM sync_connection_health').get(),
@@ -765,7 +830,11 @@ describe('sync', () => {
       ).connection_id;
       const flipped = gw.invoke(agent, {
         command: 'sync.set_connection_status',
-        input: { connection_id: connectionId, status: 'needs-auth', note: 'secret item trashed' },
+        input: {
+          connection_id: connectionId,
+          status: 'needs-auth',
+          note: 'secret item trashed',
+        },
         purpose: 'dpv:ServiceProvision',
       });
       expect(flipped.status).toBe('executed');
@@ -832,7 +901,7 @@ describe('sync', () => {
       });
 
       expect(outcome.status).toBe('failed');
-      expect((outcome as { reason: string }).reason).toMatch(/awaiting a decision/);
+      expect((outcome as { reason: string }).reason).toMatch(/awaiting a decision/u);
       // Nothing moved — the connection survives a refused removal.
       expect({
         ...db.vault.prepare('SELECT count(*) AS n FROM sync_connection').get(),
@@ -867,14 +936,16 @@ describe('sync', () => {
       });
 
       expect(outcome.status).toBe('failed');
-      expect((outcome as { reason: string }).reason).toMatch(/sync history/);
+      expect((outcome as { reason: string }).reason).toMatch(/sync history/u);
       expect({
         ...db.vault.prepare('SELECT count(*) AS n FROM sync_connection').get(),
       }).toStrictEqual({
         n: 1,
       });
       // The receipted outbox row is untouched — history is never shredded.
-      expect({ ...db.vault.prepare('SELECT count(*) AS n FROM outbox_item').get() }).toStrictEqual({
+      expect({
+        ...db.vault.prepare('SELECT count(*) AS n FROM outbox_item').get(),
+      }).toStrictEqual({
         n: 1,
       });
     });
@@ -895,7 +966,7 @@ describe('sync', () => {
       });
 
       expect(outcome.status).toBe('failed');
-      expect((outcome as { reason: string }).reason).toMatch(/sync_import_batch/);
+      expect((outcome as { reason: string }).reason).toMatch(/sync_import_batch/u);
       expect({
         ...db.vault.prepare('SELECT count(*) AS n FROM sync_connection').get(),
       }).toStrictEqual({

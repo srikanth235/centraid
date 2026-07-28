@@ -13,6 +13,7 @@
  * routes 404, which `listGatewayDevices` reports as an empty roster.
  */
 
+import { readDirectBlob, type DirectBlobDownloadPlan } from './device-blob-source.js';
 import {
   auth,
   authHeaders,
@@ -22,7 +23,6 @@ import {
   GatewayClientError,
   VAULT_HEADER,
 } from './gateway-client-core.js';
-import { readDirectBlob, type DirectBlobDownloadPlan } from './device-blob-source.js';
 
 export interface DeviceComputeCapabilities {
   previews: boolean;

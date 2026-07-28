@@ -9,8 +9,8 @@
 // Both phases no-op on a fresh vault (nothing is 90d idle), so a gateway that
 // never served conversations is unaffected.
 
-import { archiveRange } from './segment.js';
 import { pruneCustodyProven, reclaimJournalPages } from './prune.js';
+import { archiveRange } from './segment.js';
 import { selectEligibleRanges } from './selector.js';
 import {
   DEFAULT_CONVERSATION_ARCHIVE_WINDOW_DAYS,
@@ -30,7 +30,7 @@ export function runConversationArchival(
 ): ConversationArchivalResult {
   const { journal, blobSink, custodyProven } = deps;
   const windowDays = options.windowDays ?? DEFAULT_CONVERSATION_ARCHIVE_WINDOW_DAYS;
-  if (!(windowDays > 0))
+  if (windowDays <= 0)
     throw new Error('conversation archival window must be a positive number of days');
   const nowMs = options.nowMs ?? Date.now();
   const cutoffMs = windowCutoffMs(nowMs, windowDays);

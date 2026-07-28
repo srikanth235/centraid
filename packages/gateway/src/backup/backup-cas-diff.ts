@@ -8,6 +8,7 @@
  */
 
 import type { ProviderInventoryObject } from '@centraid/backup';
+
 import type { CollectedInventory } from './backup-provider-observability.js';
 import type {
   InventoryAttestationDrift,
@@ -36,7 +37,13 @@ function inventoryNumbers(objects: readonly ProviderInventoryObject[]): {
     }
     liveObjectCount += 1;
   }
-  return { objectCount, bytes, liveObjectCount, softDeletedCount, softDeletedBytes };
+  return {
+    objectCount,
+    bytes,
+    liveObjectCount,
+    softDeletedCount,
+    softDeletedBytes,
+  };
 }
 
 function attestationDrift(collection: CollectedInventory): InventoryAttestationDrift | undefined {

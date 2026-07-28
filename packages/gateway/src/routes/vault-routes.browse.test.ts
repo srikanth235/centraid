@@ -1,22 +1,28 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import http from 'node:http';
+
+import { forEachSequentially } from '@centraid/test-kit/sequential';
 // The Vault Atlas Browse routes (issue #441 Part B, B3): the owner-gated
 // table editor over HTTP. The read/write policy is proven in packages/vault;
 // here we prove the route surface — the picker, keyset rows, column metadata,
 // a journalled insert that comes back on a read, and the dependent-blocked
 // delete returning a 409 with the polymorphic + engine payload.
-
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterEach, describe, expect, test } from 'vitest';
-import http from 'node:http';
-import { openVaultRegistry } from '../serve/vault-registry.js';
+
 import type { VaultPlane } from '../serve/vault-plane.js';
+import { openVaultRegistry } from '../serve/vault-registry.js';
 import { makeVaultRouteHandler } from './vault-routes.js';
 
-const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
+const silentLogger = {
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+};
 
 const cleanups: Array<() => Promise<void> | void> = [];
 describe('vault-routes.browse', () => {
   afterEach(async () => {
-    while (cleanups.length > 0) await cleanups.pop()?.();
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
   });
   async function startHandlerServer(
     handler: (req: http.IncomingMessage, res: http.ServerResponse) => Promise<boolean>,
@@ -37,7 +43,11 @@ describe('vault-routes.browse', () => {
 
   async function setup(): Promise<{ base: string; plane: VaultPlane }> {
     const dir = await tempDir();
-    const registry = openVaultRegistry({ rootDir: dir, logger: silentLogger, ownerName: 'Priya' });
+    const registry = openVaultRegistry({
+      rootDir: dir,
+      logger: silentLogger,
+      ownerName: 'Priya',
+    });
     registry.create('Personal');
     cleanups.push(() => registry.stop());
     const plane = registry.current();
@@ -83,7 +93,12 @@ describe('vault-routes.browse', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         table: 'core.concept_scheme',
-        values: { scheme_id: 'S9', uri: 'urn:x:s9', title: 'Browse Scheme', version: '1' },
+        values: {
+          scheme_id: 'S9',
+          uri: 'urn:x:s9',
+          title: 'Browse Scheme',
+          version: '1',
+        },
       }),
     });
     expect(insert.status).toBe(200);
@@ -156,6 +171,6 @@ describe('vault-routes.browse', () => {
       body: JSON.stringify({ table: 'blob.custody_state', id: 'nope' }),
     });
     expect(res.status).toBe(400);
-    expect(((await res.json()) as { error: string }).error).toMatch(/machinery/);
+    expect(((await res.json()) as { error: string }).error).toMatch(/machinery/u);
   });
 });

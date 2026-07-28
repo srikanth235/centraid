@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 const packageDir = path.resolve(import.meta.dirname, '..');
@@ -11,7 +12,7 @@ describe('shared blueprint CSS', () => {
     for (const app of systemApps) {
       const css = readFileSync(path.join(appDir, app, 'Chrome.module.css'), 'utf8');
       expect(css, `${app}/Chrome.module.css`).toMatch(
-        /composes: kit-app-shell(?: [^;]+)? from global;/,
+        /composes: kit-app-shell(?: [^;]+)? from global;/u,
       );
     }
   });
@@ -44,7 +45,7 @@ describe('shared blueprint CSS', () => {
     for (const app of systemApps) {
       expect(existsSync(path.join(appDir, app, 'app.tsx')), `${app}/app.tsx`).toBe(false);
       const html = readFileSync(path.join(appDir, app, 'index.html'), 'utf8');
-      expect(html, `${app}/index.html`).not.toMatch(/<script|<link rel="stylesheet"/);
+      expect(html, `${app}/index.html`).not.toMatch(/<script|<link rel="stylesheet"/u);
     }
   });
 });

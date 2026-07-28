@@ -2,10 +2,11 @@
  * Direct unit tests for startTurnVaultTools (issue #545 B11).
  */
 
-import { afterEach, describe, expect, test, vi } from 'vitest';
 import type { TurnStreamEvent } from '@centraid/app-engine';
-import { startVaultMcpServer, VAULT_MCP_SERVER_NAME } from './vault-mcp-server.ts';
+import { afterEach, describe, expect, test, vi } from 'vitest';
+
 import { startTurnVaultTools } from './turn-vault-tools.ts';
+import { startVaultMcpServer, VAULT_MCP_SERVER_NAME } from './vault-mcp-server.ts';
 
 // vitest hoists vi.mock above imports at run time.
 vi.mock(import('./vault-mcp-server.ts'), async (importOriginal) => {
@@ -20,10 +21,13 @@ const handles: Array<{ close: () => Promise<void> }> = [];
 
 describe('turn-vault-tools', () => {
   afterEach(async () => {
-    while (handles.length) {
+    const closeNext = async (): Promise<void> => {
       const h = handles.pop();
-      await h?.close().catch(() => undefined);
-    }
+      if (!h) return;
+      await h.close().catch(() => undefined);
+      return closeNext();
+    };
+    await closeNext();
     vi.mocked(startVaultMcpServer).mockImplementation(
       (...args) =>
         (
@@ -69,7 +73,7 @@ describe('turn-vault-tools', () => {
     expect(out.transport).toBe('http');
     expect(out.mcpServers).toHaveLength(1);
     expect(out.mcpServers[0]).toMatchObject({ name: VAULT_MCP_SERVER_NAME });
-    expect(out.handle?.server.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+/);
+    expect(out.handle?.server.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+/u);
   });
 
   test('httpMcp=false bridges over stdio MCP and emits a notice', async () => {
@@ -90,7 +94,7 @@ describe('turn-vault-tools', () => {
     };
     expect(stdio.name).toBe(VAULT_MCP_SERVER_NAME);
     expect(stdio.command).toBe(process.execPath);
-    expect(stdio.args[0]).toMatch(/vault-mcp-stdio-proxy\.mjs$/);
+    expect(stdio.args[0]).toMatch(/vault-mcp-stdio-proxy\.mjs$/u);
     expect(stdio.env.some((e) => e.name === 'CENTRAID_VAULT_MCP_URL')).toBe(true);
     expect(stdio.env.some((e) => e.name === 'CENTRAID_VAULT_MCP_TOKEN')).toBe(true);
     expect(events.some((e) => e.type === 'notice' && e.code === 'vault_tools_stdio')).toBe(true);
@@ -111,7 +115,7 @@ describe('turn-vault-tools', () => {
         type: 'notice',
         level: 'warn',
         code: 'vault_tools_unavailable',
-        message: expect.stringMatching(/bind failed/),
+        message: expect.stringMatching(/bind failed/u),
       }),
     ]);
   });

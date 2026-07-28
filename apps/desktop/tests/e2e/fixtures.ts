@@ -1,12 +1,13 @@
+import crypto from 'node:crypto';
+import { promises as fs } from 'node:fs';
+import http from 'node:http';
+import os from 'node:os';
+import path from 'node:path';
+
 // governance: allow-repo-hygiene file-size-limit — one cohesive e2e harness (mock
 // gateway + record builders + DOM helpers) shared by every spec; splitting it would
 // scatter the single source of fixture truth. See receipts/issue-225-desktop-e2e-suite.md.
 import { _electron, test, type ElectronApplication, type Page } from '@playwright/test';
-import { promises as fs } from 'node:fs';
-import http from 'node:http';
-import path from 'node:path';
-import os from 'node:os';
-import crypto from 'node:crypto';
 
 const __filename = import.meta.filename;
 const __dirname = import.meta.dirname;
@@ -118,7 +119,13 @@ export interface MockGateway {
   token: string;
   state: MockState;
   /** Calls observed, in arrival order (excludes OPTIONS preflight). */
-  calls: Array<{ method: string; pathname: string; search: string; auth?: string; body?: string }>;
+  calls: Array<{
+    method: string;
+    pathname: string;
+    search: string;
+    auth?: string;
+    body?: string;
+  }>;
   /** Convenience: number of calls matching a method + path predicate. */
   countCalls: (method: string, pathTest: (p: string) => boolean) => number;
   close: () => Promise<void>;
@@ -142,7 +149,12 @@ function defaultState(): MockState {
     filesById: {},
     prefs: {},
     insights: {},
-    runnerStatus: { ok: true, kind: 'local', version: 'test', models: ['tier-fast', 'tier-deep'] },
+    runnerStatus: {
+      ok: true,
+      kind: 'local',
+      version: 'test',
+      models: ['tier-fast', 'tier-deep'],
+    },
     agentsStatus: { agents: [], models: [] },
     conversations: [],
     conversationMessages: [],
@@ -176,10 +188,15 @@ async function writeSse(res: http.ServerResponse, frames: SseFrame[]): Promise<v
     connection: 'keep-alive',
     ...CORS,
   });
-  for (const f of frames) {
+  // SSE is an ordered protocol; preserve the fixture's frame timing exactly.
+  const writeNext = async (index: number): Promise<void> => {
+    const f = frames[index];
+    if (!f) return;
     if (f.delayMs) await new Promise((resolve) => setTimeout(resolve, f.delayMs));
     res.write(`data: ${JSON.stringify(f.data)}\n\n`);
-  }
+    return writeNext(index + 1);
+  };
+  await writeNext(0);
   res.write('event: end\ndata: {}\n\n');
   res.end();
 }
@@ -342,11 +359,16 @@ async function route(
         if (s.deleteStatus === 200 || s.deleteStatus === 404) {
           s.apps = s.apps.filter((a) => a.id !== id);
           if (options.appsDir) {
-            await fs.rm(path.join(options.appsDir, id), { recursive: true, force: true });
+            await fs.rm(path.join(options.appsDir, id), {
+              recursive: true,
+              force: true,
+            });
           }
         }
         if (s.deleteStatus === 200) return json(res, 200, { id });
-        return json(res, s.deleteStatus, { error: s.deleteStatus === 404 ? 'not_found' : 'error' });
+        return json(res, s.deleteStatus, {
+          error: s.deleteStatus === 404 ? 'not_found' : 'error',
+        });
       }
     }
     if (sub === 'logs' && method === 'GET')
@@ -354,7 +376,10 @@ async function route(
     if (sub === 'files') {
       if (method === 'GET') return json(res, 200, { files: s.filesById[id] ?? [] });
       if (method === 'PUT')
-        return json(res, 200, { path: decodeURIComponent(seg[4] ?? ''), size: body.length });
+        return json(res, 200, {
+          path: decodeURIComponent(seg[4] ?? ''),
+          size: body.length,
+        });
     }
     if (sub === 'meta' && method === 'POST') return json(res, 200, { ok: true });
     if (sub === 'publish' && method === 'POST') {
@@ -484,7 +509,12 @@ async function route(
   // ---- vault consent context used by the current automation fleet/thread ----
   if (p === '/centraid/_vault/agents' && method === 'GET') return json(res, 200, { agents: [] });
   if (p === '/centraid/_vault/blocking' && method === 'GET')
-    return json(res, 200, { outbox: [], needsAuth: [], parked: [], scopeRequests: [] });
+    return json(res, 200, {
+      outbox: [],
+      needsAuth: [],
+      parked: [],
+      scopeRequests: [],
+    });
   if (p === '/centraid/_vault/outbox-grants' && method === 'GET')
     return json(res, 200, { grants: [] });
 
@@ -545,27 +575,42 @@ async function writeMockApp(
   );
 }
 
-async function readMockApps(
-  appsDir: string,
-): Promise<{ apps: AppMetaEntry[]; automations: Array<Record<string, unknown>> }> {
+async function readMockApps(appsDir: string): Promise<{
+  apps: AppMetaEntry[];
+  automations: Array<Record<string, unknown>>;
+}> {
   const entries = await fs.readdir(appsDir, { withFileTypes: true }).catch(() => []);
   const apps: AppMetaEntry[] = [];
   const automations: Array<Record<string, unknown>> = [];
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    try {
-      const manifest = JSON.parse(
-        await fs.readFile(path.join(appsDir, entry.name, 'app.json'), 'utf8'),
-      ) as Partial<AppMetaEntry>;
-      const id = manifest.id ?? entry.name;
-      if (manifest.kind === 'automation') {
-        automations.push(automationRow({ id, name: manifest.name }));
-      } else {
-        apps.push(appEntry({ ...manifest, id, hasIndex: manifest.hasIndex ?? true }));
-      }
-    } catch {
-      // A half-written directory is intentionally absent from the mock's
-      // restart inventory, matching the gateway's manifest boundary.
+  const manifests = await Promise.all(
+    entries
+      .filter((entry) => entry.isDirectory())
+      .map(async (entry) => {
+        try {
+          const manifest = JSON.parse(
+            await fs.readFile(path.join(appsDir, entry.name, 'app.json'), 'utf8'),
+          ) as Partial<AppMetaEntry>;
+          const id = manifest.id ?? entry.name;
+          return { id, manifest };
+        } catch {
+          // A half-written directory is intentionally absent from the mock's
+          // restart inventory, matching the gateway's manifest boundary.
+          return undefined;
+        }
+      }),
+  );
+  for (const entry of manifests) {
+    if (!entry) continue;
+    if (entry.manifest.kind === 'automation') {
+      automations.push(automationRow({ id: entry.id, name: entry.manifest.name }));
+    } else {
+      apps.push(
+        appEntry({
+          ...entry.manifest,
+          id: entry.id,
+          hasIndex: entry.manifest.hasIndex ?? true,
+        }),
+      );
     }
   }
   return { apps, automations };
@@ -682,7 +727,9 @@ export async function markOnboardingPending(env: TestEnv): Promise<void> {
   const file = path.join(env.userData, 'centraid-settings.json');
   const settings = JSON.parse(await fs.readFile(file, 'utf8')) as Record<string, unknown>;
   delete settings.onboardingCompletedAt;
-  await fs.writeFile(file, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600 });
+  await fs.writeFile(file, `${JSON.stringify(settings, null, 2)}\n`, {
+    mode: 0o600,
+  });
 }
 
 /** Seed an additional paired remote profile without changing the active gateway. */
@@ -706,7 +753,9 @@ export async function seedRemoteGatewayProfile(
     rememberDevice: false,
     createdAt: '2024-01-01T00:00:00.000Z',
   });
-  await fs.writeFile(file, `${JSON.stringify(profiles, null, 2)}\n`, { mode: 0o600 });
+  await fs.writeFile(file, `${JSON.stringify(profiles, null, 2)}\n`, {
+    mode: 0o600,
+  });
   env.gatewayProxies[id] = gateway.url;
   return id;
 }

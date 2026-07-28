@@ -16,9 +16,10 @@
  * it after a delete-conversation cascade (which drops the `attachments` rows).
  */
 
-import { promises as fs } from 'node:fs';
 import { createHash } from 'node:crypto';
+import { promises as fs } from 'node:fs';
 import path from 'node:path';
+
 import { isValidAppOrAssistantId } from '../registry/app-paths.js';
 
 /** A sha256 hex digest — the CAS key + blob filename. */
@@ -116,17 +117,19 @@ export class BlobStore {
     } catch {
       return { removed: 0 };
     }
-    let removed = 0;
-    for (const name of entries) {
-      const stale = name.includes('.tmp-') || (HASH_RE.test(name) && !referenced.has(name));
-      if (!stale) continue;
-      try {
-        await fs.unlink(path.join(this.blobDir(appId), name));
-        removed++;
-      } catch {
-        /* best-effort */
-      }
-    }
+    const removals = await Promise.all(
+      entries
+        .filter((name) => name.includes('.tmp-') || (HASH_RE.test(name) && !referenced.has(name)))
+        .map(async (name) => {
+          try {
+            await fs.unlink(path.join(this.blobDir(appId), name));
+            return 1;
+          } catch {
+            return 0; // best-effort
+          }
+        }),
+    );
+    const removed = removals.filter(Boolean).length;
     return { removed };
   }
 }

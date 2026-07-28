@@ -1,7 +1,7 @@
+import { spawnSync } from 'node:child_process';
 import { copyFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
-import { spawnSync } from 'node:child_process';
 
 const root = path.resolve(import.meta.dirname, '..');
 

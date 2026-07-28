@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import { GatewayError, resolveGatewayBase } from '../../lib/gateway';
 import { listAutomations, setAutomationEnabled, type AutomationRow } from '../../lib/automations';
+import { GatewayError, resolveGatewayBase } from '../../lib/gateway';
 
 // The screen's load lifecycle, modeled explicitly (no try/catch soup): a
 // no-gateway degrade is a first-class calm state, distinct from a transport

@@ -3,6 +3,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
+
 import { handleRunsMessage, handleStateMessage, nextOrdinal, type AuditState } from './ctx.js';
 
 function audit(over: Partial<AuditState> = {}): AuditState {
@@ -62,7 +63,9 @@ describe(handleStateMessage, () => {
     });
     expect(handleStateMessage(a, 'get', 'raw', undefined).result).toBe('not-json');
 
-    expect(handleStateMessage(a, 'set', 'cursor', { n: 2 })).toStrictEqual({ ok: true });
+    expect(handleStateMessage(a, 'set', 'cursor', { n: 2 })).toStrictEqual({
+      ok: true,
+    });
     expect(store.stateSet).toHaveBeenCalledWith(
       'app/digest',
       'cursor',
@@ -70,12 +73,14 @@ describe(handleStateMessage, () => {
       expect.any(Number),
     );
 
-    expect(handleStateMessage(a, 'delete', 'cursor', undefined)).toStrictEqual({ ok: true });
+    expect(handleStateMessage(a, 'delete', 'cursor', undefined)).toStrictEqual({
+      ok: true,
+    });
     expect(store.stateDelete).toHaveBeenCalledWith('app/digest', 'cursor');
 
     expect(handleStateMessage(a, 'nope' as 'get', 'k', undefined)).toMatchObject({
       ok: false,
-      error: expect.stringMatching(/unknown state method/),
+      error: expect.stringMatching(/unknown state method/u),
     });
   });
 
@@ -137,7 +142,9 @@ describe(handleRunsMessage, () => {
     const list = handleRunsMessage(a, 'list', { limit: 10 });
     expect(list.ok).toBe(true);
     expect((list.result as { runId: string }[]).map((r) => r.runId)).toStrictEqual(['t1', 't0']);
-    expect((list.result as { input?: unknown }[])[0]?.input).toStrictEqual({ x: 1 });
+    expect((list.result as { input?: unknown }[])[0]?.input).toStrictEqual({
+      x: 1,
+    });
 
     const last = handleRunsMessage(a, 'last', {});
     expect(last.ok).toBe(true);

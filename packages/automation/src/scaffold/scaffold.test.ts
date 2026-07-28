@@ -1,10 +1,12 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+
+import { AppScaffoldError } from '@centraid/blueprints';
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
 import { parseManifest } from '../manifest/manifest.js';
 import { scaffoldApp, validateId, validateAppId } from './scaffold.js';
-import { AppScaffoldError } from '@centraid/blueprints';
 
 describe(scaffoldApp, () => {
   let dir: string;
@@ -42,7 +44,7 @@ describe(scaffoldApp, () => {
     expect(manifest.enabled).toBe(true);
 
     const handler = await fs.readFile(path.join(autoDir, 'handler.js'), 'utf8');
-    expect(handler).toMatch(/export default async/);
+    expect(handler).toMatch(/export default async/u);
   });
 
   it('derives the automation id from the app id, defaults a daily schedule', async () => {

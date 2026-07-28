@@ -1,8 +1,10 @@
-import type { JSX } from 'react';
 import { tileFinish } from '@centraid/design-tokens';
 import type { IconName } from '@centraid/design-tokens';
+import type { JSX } from 'react';
+
 import Icon from '../ui/Icon.js';
 import { DEFAULT_SPACE_ICON, PROFILE_COLORS } from './routes/SpaceModal.js';
+
 import styles from './IdentityHead.module.css';
 
 // The sidebar's identity row (issue #599, Decision 14). It stands where the
@@ -64,7 +66,7 @@ export default function IdentityHead({
         className={styles.head}
         aria-label={`${name}. Open Household.`}
         disabled={!space}
-        onClick={onOpenHousehold}
+        onClick={() => onOpenHousehold()}
       >
         <Avatar
           icon={(space?.icon as IconName) || DEFAULT_SPACE_ICON}

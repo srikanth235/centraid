@@ -1,6 +1,7 @@
 import { recordQualityResult } from '@centraid/test-kit/quality-result';
 import { generateVolumeFixture } from '@centraid/test-kit/volume-fixture';
 import { describe, expect, test } from 'vitest';
+
 import { exerciseWindowedBootstrap } from '../quality/replica-bootstrap-fixture.js';
 
 const OWNER = 'tests/scale/replica-bootstrap.scale.test.ts';
@@ -28,7 +29,12 @@ describe('replica-bootstrap.scale', () => {
       name: 'Replica convergence at 50k rows',
       status: passed ? 'passed' : 'failed',
       measurements: [
-        { name: 'wall clock', value: result.durationMs, unit: 'ms', budget: 20_000 },
+        {
+          name: 'wall clock',
+          value: result.durationMs,
+          unit: 'ms',
+          budget: 20_000,
+        },
         { name: 'converged rows', value: result.rows, unit: 'rows' },
       ],
     });

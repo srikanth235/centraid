@@ -1,13 +1,13 @@
+import { $ } from './dom.ts';
 // Upload pipeline: perceptual hash + client thumb staging, then the typed
 // `upload` command per file. `runUpload` takes `refresh` and `setUploading`
 // from app.tsx (the only two things here that touch app-level state) — the
 // button/input DOM nodes it mutates for progress text are looked up locally
 // via `$`, exactly like the pre-split code did.
 import { isPendingOffsite, stageDerivative, stageFileBytes, toast } from './kit.ts';
-import { captureVideoFrames, VIDEO_POSTER_EDGE, VIDEO_THUMB_EDGE } from './video-frame.js';
 import { act, narrate, writeTarget } from './outcomes.ts';
 import { thumbHashFromImage } from './thumbhash.ts';
-import { $ } from './dom.ts';
+import { captureVideoFrames, VIDEO_POSTER_EDGE, VIDEO_THUMB_EDGE } from './video-frame.js';
 
 const CLIENT_TINY_EDGE = VIDEO_THUMB_EDGE;
 const CLIENT_MEDIUM_EDGE = VIDEO_POSTER_EDGE;
@@ -78,7 +78,9 @@ async function stageRung(
   canvas.width = Math.max(1, Math.round(bitmap.width * scale));
   canvas.height = Math.max(1, Math.round(bitmap.height * scale));
   canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, 'image/jpeg', 0.82));
+  const blob = await new Promise<Blob | null>((resolve) =>
+    canvas.toBlob(resolve, 'image/jpeg', 0.82),
+  );
   if (!blob) return;
   await stageDerivative(parentSha, variant, blob, 'image/jpeg');
 }
@@ -158,7 +160,7 @@ export async function stageVideoPoster(file: File, parentSha: string): Promise<M
     return {
       width,
       height,
-      ...(duration !== null ? { duration_s: duration } : {}),
+      ...(duration === null ? {} : { duration_s: duration }),
     };
   } catch {
     return null;
@@ -246,9 +248,12 @@ export async function runUpload(
   let unreadable = 0;
   let retryable = 0;
   let lastBad: VaultOutcome | undefined = undefined;
-  for (let i = 0; i < accepted.length; i += 1) {
+  // Progress text, receipts, and outcome narration are ordered by the user's
+  // selection. Keep that contract explicit instead of weakening the loop rule.
+  const uploadNext = async (i: number): Promise<void> => {
+    const file = accepted[i];
+    if (file === undefined) return;
     btn.textContent = `Uploading ${i + 1} of ${accepted.length}…`;
-    const file = accepted[i]!;
     // Stage the bytes (issue #296), grow a client thumb beside them, then
     // claim the sha through the typed command — which is where the receipt
     // mints and the library learns about the asset.
@@ -259,12 +264,15 @@ export async function runUpload(
       // audience would claim a sha that scope has never seen. (The preview
       // rungs below still ride the unscoped derivative door — see the note on
       // stageClientPreviews.)
-      staged = await stageFileBytes(file, '', { hash: true, ...(scope ? { scope } : {}) });
+      staged = await stageFileBytes(file, '', {
+        hash: true,
+        ...(scope ? { scope } : {}),
+      });
     } catch (error) {
       const e = error as { resumable?: boolean };
       if (e?.resumable) retryable += 1;
       else unreadable += 1;
-      continue;
+      return uploadNext(i + 1);
     }
     const effectiveType = String(file.type || staged.mediaType || '').toLowerCase();
     const kind = effectiveType.startsWith('video/')
@@ -286,7 +294,7 @@ export async function runUpload(
         captured_at: new Date(file.lastModified || Date.now()).toISOString(),
         ...(file.name ? { title: file.name } : {}),
         ...(mediaMeta?.width ? { width: mediaMeta.width, height: mediaMeta.height } : {}),
-        ...(mediaMeta?.duration_s != null ? { duration_s: mediaMeta.duration_s } : {}),
+        ...(mediaMeta?.duration_s == null ? {} : { duration_s: mediaMeta.duration_s }),
         ...(mediaMeta?.phash ? { phash: mediaMeta.phash } : {}),
         ...(mediaMeta?.thumbhash ? { thumbhash: mediaMeta.thumbhash } : {}),
       },
@@ -305,7 +313,9 @@ export async function runUpload(
       failed += 1;
       lastBad = outcome;
     }
-  }
+    return uploadNext(i + 1);
+  };
+  await uploadNext(0);
 
   setUploading(false);
   btn.textContent = '＋ Add media';

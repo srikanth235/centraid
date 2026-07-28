@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { palette } from '@centraid/design-tokens';
 import type { IconName } from '@centraid/design-tokens';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+
 import Button from '../../kit/components/Button';
 import Icon from '../../kit/components/Icon';
 import { radii, t, useTheme, type ThemeColors } from '../../kit/theme';
@@ -163,7 +164,12 @@ export default function SpaceSection(): React.JSX.Element {
   const save = (): void => {
     setSaving(true);
     setSaveError(undefined);
-    updateVault(vault.vaultId, { blurb: blurb.trim(), color, icon, name: trimmedName })
+    updateVault(vault.vaultId, {
+      blurb: blurb.trim(),
+      color,
+      icon,
+      name: trimmedName,
+    })
       .then((updated) => {
         seedForm(setters, updated);
         setState({ kind: 'ready', vault: updated });
@@ -269,7 +275,10 @@ const makeStyles = (colors: ThemeColors) =>
       justifyContent: 'center',
       width: 40,
     },
-    iconTileActive: { backgroundColor: colors.accent, borderColor: colors.accent },
+    iconTileActive: {
+      backgroundColor: colors.accent,
+      borderColor: colors.accent,
+    },
     input: {
       ...t('body'),
       backgroundColor: colors.bg,

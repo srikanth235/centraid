@@ -14,6 +14,26 @@ import {
   type KeyboardEvent,
   type ReactElement,
 } from 'react';
+
+import type { InlineAppProps } from '../inline-types.ts';
+import { Chrome } from './Chrome.tsx';
+import { CreateModal } from './components/CreateModal.tsx';
+import { EventDrawer } from './components/EventDrawer.tsx';
+import { HeaderBar } from './components/HeaderBar.tsx';
+import { MonthView } from './components/MonthView.tsx';
+import { ScheduleView } from './components/ScheduleView.tsx';
+import { CalendarList, MiniMonth } from './components/Sidebar.tsx';
+import { WeekView } from './components/WeekView.tsx';
+import {
+  bucketByDay,
+  fmtDay,
+  monthGridRange,
+  nextRoundHourOn,
+  scheduleFrom,
+  segTimeText,
+  startOfWeek,
+  weekRange,
+} from './format.ts';
 import {
   closePopover,
   h,
@@ -28,24 +48,6 @@ import {
 } from './kit.ts';
 import type { ReadSubscription } from './kit.ts';
 import { createLogic } from './logic.ts';
-import {
-  bucketByDay,
-  fmtDay,
-  monthGridRange,
-  nextRoundHourOn,
-  scheduleFrom,
-  segTimeText,
-  startOfWeek,
-  weekRange,
-} from './format.ts';
-import { CalendarList, MiniMonth } from './components/Sidebar.tsx';
-import { HeaderBar } from './components/HeaderBar.tsx';
-import { MonthView } from './components/MonthView.tsx';
-import { WeekView } from './components/WeekView.tsx';
-import { ScheduleView } from './components/ScheduleView.tsx';
-import { EventDrawer } from './components/EventDrawer.tsx';
-import { CreateModal } from './components/CreateModal.tsx';
-import { Chrome } from './Chrome.tsx';
 import type {
   AgEvent,
   AppData,
@@ -55,7 +57,7 @@ import type {
   Prefill,
   ViewKind,
 } from './types.ts';
-import type { InlineAppProps } from '../inline-types.ts';
+
 import styles from './Chrome.module.css';
 
 // Vault entities this app's queries read — the doorbell filter re-derives only
@@ -213,7 +215,10 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         ]);
         [canvasData, miniData] = await Promise.all([canvasRead, miniRead]);
       } else {
-        const read = window.centraid.read<UpcomingData>({ query: 'upcoming', input: canvasRange });
+        const read = window.centraid.read<UpcomingData>({
+          query: 'upcoming',
+          input: canvasRange,
+        });
         replaceLiveReads([
           subscribeReadUpdates<UpcomingData>(read, (value) => {
             canvasData = value;
@@ -491,7 +496,10 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
           const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6);
           return `${start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${end.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`;
         })()
-      : state.cursor.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+      : state.cursor.toLocaleDateString(undefined, {
+          month: 'long',
+          year: 'numeric',
+        });
 
   const events = visibleEvents(data.events);
   let canvasNode: ReactElement;

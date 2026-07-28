@@ -1,4 +1,4 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import { promises as fs } from 'node:fs';
 /*
  * ctx.vault in automation handlers (duaility §12): the fire spine plumbs a
  * host-injected VaultBridge factory (keyed by app id) down to the worker's
@@ -12,13 +12,14 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  *   - without a bridge every call fails closed with VAULT_UNAVAILABLE;
  *   - bridge errors surface to the handler with their machine code.
  */
-
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { promises as fs } from 'node:fs';
 import path from 'node:path';
+
 import type { VaultBridge, VaultCall } from '@centraid/app-engine';
-import { runFire, type DispatchSurface } from './fire.js';
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
 import type { Manifest } from '../manifest/manifest.js';
+import { runFire, type DispatchSurface } from './fire.js';
 
 function manifest(over: Partial<Manifest> = {}): Manifest {
   return {
@@ -84,7 +85,11 @@ describe('runFire + ctx.vault', () => {
       if (call.op === 'read') return { ok: true, result: { rows: [], receiptId: 'r1' } };
       return {
         ok: true,
-        result: { status: 'executed', invocationId: call.payload.invocationId, output: {} },
+        result: {
+          status: 'executed',
+          invocationId: call.payload.invocationId,
+          output: {},
+        },
       };
     };
 
@@ -109,8 +114,8 @@ describe('runFire + ctx.vault', () => {
     expect(bridgeApps).toStrictEqual(['notes']);
     expect(calls.map((c) => c.op)).toStrictEqual(['read', 'invoke', 'invoke']);
     const ids = calls.filter((c) => c.op === 'invoke').map((c) => c.payload.invocationId);
-    expect(ids[0]).toMatch(/^run-fixed:v\d+$/);
-    expect(ids[1]).toMatch(/^run-fixed:v\d+$/);
+    expect(ids[0]).toMatch(/^run-fixed:v\d+$/u);
+    expect(ids[1]).toMatch(/^run-fixed:v\d+$/u);
     expect(ids[0]).not.toBe(ids[1]);
 
     // Re-firing the same runId (fresh ledger, as a crash-replay would see)

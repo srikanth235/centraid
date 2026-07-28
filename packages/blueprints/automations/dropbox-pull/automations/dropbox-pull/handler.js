@@ -55,7 +55,10 @@ function toRow(entry, owner) {
 export default {
   protocol: 'centraid.pull/v1',
   async principal({ ctx }) {
-    const account = await api(ctx, '/users/get_current_account', { method: 'POST', body: 'null' });
+    const account = await api(ctx, '/users/get_current_account', {
+      method: 'POST',
+      body: 'null',
+    });
     return (account.email || account.account_id || 'dropbox').toLowerCase();
   },
   async pull({ ctx, cursor }) {

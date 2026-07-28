@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+
 import { mergePersistedSettings } from './settings-merge.ts';
 
 describe('settings-merge', () => {
@@ -30,10 +31,16 @@ describe('settings-merge', () => {
 
   test('activeVaultByGateway is carried through an unrelated save (issue #289)', () => {
     const next = mergePersistedSettings(
-      { activeGatewayId: 'local', activeVaultByGateway: { local: 'v-1', 'gw-2': 'v-9' } },
+      {
+        activeGatewayId: 'local',
+        activeVaultByGateway: { local: 'v-1', 'gw-2': 'v-9' },
+      },
       { remoteTemplatesUrl: 'https://example.test/feed.json' },
     );
-    expect(next.activeVaultByGateway).toStrictEqual({ local: 'v-1', 'gw-2': 'v-9' });
+    expect(next.activeVaultByGateway).toStrictEqual({
+      local: 'v-1',
+      'gw-2': 'v-9',
+    });
   });
 
   test('activeVaultByGateway is replaced wholesale when the patch sets it', () => {
@@ -41,7 +48,10 @@ describe('settings-merge', () => {
       { activeGatewayId: 'local', activeVaultByGateway: { local: 'v-1' } },
       { activeVaultByGateway: { local: 'v-2', 'gw-2': 'v-9' } },
     );
-    expect(next.activeVaultByGateway).toStrictEqual({ local: 'v-2', 'gw-2': 'v-9' });
+    expect(next.activeVaultByGateway).toStrictEqual({
+      local: 'v-2',
+      'gw-2': 'v-9',
+    });
   });
 
   test('an emptied vault map is dropped, not persisted empty', () => {
@@ -55,7 +65,11 @@ describe('settings-merge', () => {
   test('gateway alert fields preserve-or-set, clamping the threshold on write', () => {
     // Unrelated save carries both fields through.
     const carried = mergePersistedSettings(
-      { activeGatewayId: 'local', gatewayAlertSeconds: 300, gatewayAlertsEnabled: false },
+      {
+        activeGatewayId: 'local',
+        gatewayAlertSeconds: 300,
+        gatewayAlertsEnabled: false,
+      },
       { remoteTemplatesUrl: 'https://example.test/feed.json' },
     );
     expect(carried.gatewayAlertSeconds).toBe(300);

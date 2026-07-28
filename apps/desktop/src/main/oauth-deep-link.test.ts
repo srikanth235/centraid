@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+
 import { createDeepLinkBuffer, isOAuthFinishDeepLink } from './oauth-deep-link.js';
 
 const state = `d.${'A'.repeat(43)}`;
@@ -50,16 +51,15 @@ describe('oauth-deep-link', () => {
   test('buffers warm handoffs until the renderer subscribes, then stays in-memory live', () => {
     const buffer = createDeepLinkBuffer(2);
     const received: string[] = [];
-    buffer.push('first');
-    buffer.push('second');
-    buffer.push('bounded-away');
+    buffer.enqueue('first', 'second');
+    buffer.enqueue('bounded-away');
     const unsubscribe = buffer.subscribe((url) => received.push(url));
     expect(received).toStrictEqual(['first', 'second']);
 
-    buffer.push('live');
+    buffer.enqueue('live');
     expect(received).toStrictEqual(['first', 'second', 'live']);
     unsubscribe();
-    buffer.push('after-unsubscribe');
+    buffer.enqueue('after-unsubscribe');
 
     const replacement: string[] = [];
     buffer.subscribe((url) => replacement.push(url));

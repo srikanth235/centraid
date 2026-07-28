@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+
 import { describe, expect, it } from 'vitest';
 
-const here = path.dirname(fileURLToPath(import.meta.url));
+const here = import.meta.dirname;
 
 /**
  * I4 — the live update path must call admitUpdate (pure rollout), not only
@@ -23,8 +23,10 @@ describe('update-watcher rollout wiring (I4)', () => {
     // CJS-safe deferred load only on packaged path — static named ESM import of
     // autoUpdater crashes Electron ("Named export 'autoUpdater' not found").
     expect(src).toContain('createRequire');
-    expect(src).toMatch(/req\(['"]electron-updater['"]\)/);
-    expect(src).not.toMatch(/import\s*\{[^}]*autoUpdater[^}]*\}\s*from\s*['"]electron-updater['"]/);
+    expect(src).toMatch(/req\(['"]electron-updater['"]\)/u);
+    expect(src).not.toMatch(
+      /import\s*\{[^}]*autoUpdater[^}]*\}\s*from\s*['"]electron-updater['"]/u,
+    );
     expect(src).toContain('export async function checkForUpdatesManual');
     // Dev mtime path still exists but must announce via admit gate.
     expect(src).toContain(

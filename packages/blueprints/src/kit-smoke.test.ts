@@ -12,6 +12,7 @@
 // it anymore), so this file only exercises the vanilla surface.
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+
 import { describe, expect, it, vi } from 'vitest';
 
 // Resolved from this module's own path, not process.cwd(): cwd differs
@@ -64,7 +65,11 @@ describe('kit smoke', () => {
   });
 
   it('letterAvatar honours color/initials and scales type', () => {
-    const av = letterAvatar('Grace Hopper', { size: '34px', color: '#0FA678', initials: 'You' });
+    const av = letterAvatar('Grace Hopper', {
+      size: '34px',
+      color: '#0FA678',
+      initials: 'You',
+    });
     // Vanilla custom elements render synchronously on connect — no update
     // microtask to await (elements.js has no Lit, no scheduler underneath).
     document.body.appendChild(av);
@@ -79,7 +84,7 @@ describe('kit smoke', () => {
     const av = letterAvatar('Ada Lovelace');
     document.body.appendChild(av);
     const span = av.querySelector('.kit-avatar');
-    expect(span.getAttribute('style')).toMatch(/background:hsl\(/);
+    expect(span.getAttribute('style')).toMatch(/background:hsl\(/u);
     expect(span.textContent.trim()).toBe('AL');
   });
 
@@ -92,8 +97,18 @@ describe('kit smoke', () => {
   it('renderAttachments renders tiles; onRemove:null omits the control', () => {
     const strip = document.createElement('div');
     const list = [
-      { attachment_id: 'a1', media_type: 'image/png', content_uri: 'x.png', byte_size: 2048 },
-      { attachment_id: 'a2', media_type: 'application/pdf', content_uri: 'x.pdf', title: 'Doc' },
+      {
+        attachment_id: 'a1',
+        media_type: 'image/png',
+        content_uri: 'x.png',
+        byte_size: 2048,
+      },
+      {
+        attachment_id: 'a2',
+        media_type: 'application/pdf',
+        content_uri: 'x.pdf',
+        title: 'Doc',
+      },
     ];
     renderAttachments(strip, list, null);
     expect(strip.querySelectorAll('.kit-attach-tile')).toHaveLength(2);
@@ -135,7 +150,11 @@ describe('kit smoke', () => {
     expect(box.getAttribute('role')).toBe('dialog');
     expect(document.activeElement).toBe(box.querySelector('input'));
     box.dispatchEvent(
-      new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+      new window.KeyboardEvent('keydown', {
+        key: 'Escape',
+        bubbles: true,
+        cancelable: true,
+      }),
     );
     expect(isPopoverOpen()).toBe(false);
   });
@@ -143,7 +162,11 @@ describe('kit smoke', () => {
   it('emptyState fills + unhides the container', () => {
     const box = document.createElement('div');
     box.hidden = true;
-    emptyState(box, { icon: '<svg></svg>', title: 'Nothing here', sub: 'Add one.' });
+    emptyState(box, {
+      icon: '<svg></svg>',
+      title: 'Nothing here',
+      sub: 'Add one.',
+    });
     expect(box.hidden).toBe(false);
     expect(box.querySelector('.kit-empty-title').textContent).toBe('Nothing here');
     expect(box.querySelector('.kit-empty-icon')).toBeTruthy();
@@ -258,7 +281,7 @@ describe('kit smoke', () => {
 
   it('KitElement subclasses render light DOM and stamp data-kit-host', () => {
     class SmokeCard extends KitElement {
-      static properties = { label: { type: String } };
+      static readonly properties = { label: { type: String } };
       render() {
         const span = document.createElement('span');
         span.className = 'smoke-label';

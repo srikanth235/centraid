@@ -3,6 +3,7 @@
 import { MS, cat, first, money, todayKey } from '../format.ts';
 import type { ActivityRow, ViewData } from '../types.ts';
 import { KitSkeleton } from './Shared.tsx';
+
 import styles from './Activity.module.css';
 import shared from './shared.module.css';
 

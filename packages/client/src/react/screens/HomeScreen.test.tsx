@@ -1,6 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
 import type { HomeAppItemDTO, HomeAutoItemDTO, HomeBridgeProps } from '../screen-contracts.js';
 import HomeScreen from './HomeScreen.js';
 
@@ -135,10 +136,18 @@ describe('screens/HomeScreen', () => {
       expect(props.onEnterDraft).toHaveBeenCalledWith('draft1');
       void act(() =>
         cards[0]?.dispatchEvent(
-          new MouseEvent('contextmenu', { bubbles: true, clientX: 5, clientY: 6 }),
+          new MouseEvent('contextmenu', {
+            bubbles: true,
+            clientX: 5,
+            clientY: 6,
+          }),
         ),
       );
-      expect(props.onAppContext).toHaveBeenCalledWith('todos', { kind: 'point', x: 5, y: 6 });
+      expect(props.onAppContext).toHaveBeenCalledWith('todos', {
+        kind: 'point',
+        x: 5,
+        y: 6,
+      });
     });
 
     it('filters to automations and toggles the layout', () => {

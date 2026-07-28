@@ -125,21 +125,35 @@ export function responseFor(rawUrl: string, init?: RequestInit): Response {
   if (path === '/centraid/_automations' && method === 'POST')
     return json({
       row: row(),
-      webhook: { id: 'hook-1', secret: 'secret-1', url: 'https://gateway.test/hook-1' },
+      webhook: {
+        id: 'hook-1',
+        secret: 'secret-1',
+        url: 'https://gateway.test/hook-1',
+      },
     });
   if (path.startsWith('/centraid/_automations/read')) return json({ row: row() });
   if (path.startsWith('/centraid/_automations/update'))
     return json({
       row: row(),
-      webhook: { id: 'hook-1', secret: 'secret-2', url: 'https://gateway.test/hook-1' },
+      webhook: {
+        id: 'hook-1',
+        secret: 'secret-2',
+        url: 'https://gateway.test/hook-1',
+      },
     });
   if (path.startsWith('/centraid/_automations/rotate-webhook'))
     return json({
-      webhook: { id: 'hook-1', secret: 'secret-3', url: 'https://gateway.test/hook-1' },
+      webhook: {
+        id: 'hook-1',
+        secret: 'secret-3',
+        url: 'https://gateway.test/hook-1',
+      },
     });
   if (path.startsWith('/centraid/_automations/turn-now')) return json({ turnId: 'turn-1' });
   if (path.startsWith('/centraid/_automations/turns'))
-    return json({ turns: [{ turnId: 'turn-1', startedAt: 1, endedAt: 2, ok: true }] });
+    return json({
+      turns: [{ turnId: 'turn-1', startedAt: 1, endedAt: 2, ok: true }],
+    });
   if (path.startsWith('/centraid/_automations/turn/items')) return json({ items: [item()] });
   if (path.startsWith('/centraid/_automations/turn/events'))
     return stream(
@@ -174,13 +188,24 @@ export function responseFor(rawUrl: string, init?: RequestInit): Response {
   if (path === '/centraid/_vault/status')
     return state.forceVault404
       ? new Response(null, { status: 404 })
-      : json({ vaultId: 'vault-1', name: 'Home', ownerPartyId: 'party-1', fresh: false });
+      : json({
+          vaultId: 'vault-1',
+          name: 'Home',
+          ownerPartyId: 'party-1',
+          fresh: false,
+        });
   if (path === '/centraid/_vault/vaults')
     return state.forceVault404
       ? new Response(null, { status: 404 })
-      : json({ vaults: [{ vaultId: 'vault-1', name: 'Home', ownerPartyId: 'party-1' }] });
+      : json({
+          vaults: [{ vaultId: 'vault-1', name: 'Home', ownerPartyId: 'party-1' }],
+        });
   if (path.startsWith('/centraid/_vault/vaults/'))
-    return json({ vaultId: 'vault-1', name: 'Renamed', ownerPartyId: 'party-1' });
+    return json({
+      vaultId: 'vault-1',
+      name: 'Renamed',
+      ownerPartyId: 'party-1',
+    });
   if (path === '/centraid/_vault/agents') return json({ agents: [] });
   if (path === '/centraid/_vault/entities') return json({ entities: ['business.invoice'] });
   if (path.startsWith('/centraid/_vault/picker')) return json({ cards: [] });
@@ -227,7 +252,9 @@ export function responseFor(rawUrl: string, init?: RequestInit): Response {
       'data: nope\n\ndata: {"seq":"bad","message":"skip"}\n\ndata: {"seq":2,"ts":1,"level":"info","message":"ready"}\n\n',
     );
   if (path.startsWith('/centraid/_logs'))
-    return json({ entries: [{ seq: 1, ts: 1, level: 'info', message: 'booted' }] });
+    return json({
+      entries: [{ seq: 1, ts: 1, level: 'info', message: 'booted' }],
+    });
   if (path.startsWith('/centraid/_apps/') && method === 'DELETE') return json({ id: 'daily' });
 
   // Fail closed. A blanket `{ ok: true }` made this a contract test that

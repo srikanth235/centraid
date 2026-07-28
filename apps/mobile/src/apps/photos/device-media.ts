@@ -12,8 +12,8 @@
 // "this photo did not back up" into "this photo is still in iCloud", which is
 // the sentence the user can act on.
 
-import { Platform } from 'react-native';
 import * as MediaLibrary from 'expo-media-library';
+import { Platform } from 'react-native';
 
 /** One phrasing, shared by every flow that meets an undownloaded original. */
 export const IN_CLOUD_MESSAGE = 'in iCloud — not downloaded on this device';

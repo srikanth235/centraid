@@ -104,7 +104,12 @@ function stageItem(ctx: HandlerCtx): Record<string, unknown> {
     verb: string;
     target: string;
     artifact: Record<string, unknown>;
-    request: { method: string; url: string; headers?: Record<string, string>; body?: string };
+    request: {
+      method: string;
+      url: string;
+      headers?: Record<string, string>;
+      body?: string;
+    };
     subject_type?: string;
     subject_id?: string;
     recipient_party_id?: string;
@@ -192,7 +197,11 @@ function stageItem(ctx: HandlerCtx): Record<string, unknown> {
     entityType: 'outbox.item',
     entityId: itemId,
   });
-  return { item_id: itemId, status, ...(grant ? { grant_id: grant.grant_id } : {}) };
+  return {
+    item_id: itemId,
+    status,
+    ...(grant ? { grant_id: grant.grant_id } : {}),
+  };
 }
 
 const DECIDE: CommandDefinition = {
@@ -319,7 +328,11 @@ function decideItem(ctx: HandlerCtx): Record<string, unknown> {
     entityType: 'outbox.item',
     entityId: input.item_id,
   });
-  return { item_id: input.item_id, status, ...(grantId ? { grant_id: grantId } : {}) };
+  return {
+    item_id: input.item_id,
+    status,
+    ...(grantId ? { grant_id: grantId } : {}),
+  };
 }
 
 const RECORD_RESULT: CommandDefinition = {

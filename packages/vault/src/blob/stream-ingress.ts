@@ -11,6 +11,7 @@ import {
 import os from 'node:os';
 import path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
+
 import type { BackupPolicy } from '../backup-policy.js';
 import { VaultBlobHashMismatchError, VaultBlobSessionError } from '../errors.js';
 import { uuidv7 } from '../ids.js';
@@ -32,8 +33,8 @@ import {
 } from './seal-frames.js';
 import { recordKnownStagedBlob } from './staging-record.js';
 import { mediaLocationPolicyForVault } from './staging.js';
-import type { CommittedBlob } from './transfers.js';
 import type { BlobTransferState, IngressSessionRow } from './transfer-state.js';
+import type { CommittedBlob } from './transfers.js';
 
 export const STREAM_INGRESS_CHUNK_BYTES = 16 * 1024 * 1024;
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
@@ -148,7 +149,13 @@ export class RemoteStreamIngress {
       meta: { frameSize, sealedLens: [], sealedBytes: 0 },
     });
     await this.ensureUpload(row);
-    return { mode: 'stream-through', sessionId, offset: 0, expiresAt, chunkSize: this.chunkBytes };
+    return {
+      mode: 'stream-through',
+      sessionId,
+      offset: 0,
+      expiresAt,
+      chunkSize: this.chunkBytes,
+    };
   }
 
   async resume(row: IngressSessionRow): Promise<StreamIngressStart> {
@@ -342,7 +349,11 @@ export class RemoteStreamIngress {
     });
     this.contributePreview(row, sha, mediaType);
     this.deps.emit();
-    return { ...staged, casAck: this.deps.policy().casAck, custody: 'remote-only' };
+    return {
+      ...staged,
+      casAck: this.deps.policy().casAck,
+      custody: 'remote-only',
+    };
   }
 
   private async appendEmpty(row: IngressSessionRow): Promise<void> {

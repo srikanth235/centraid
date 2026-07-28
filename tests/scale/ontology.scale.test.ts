@@ -1,7 +1,8 @@
-import { createTestVault } from '../helpers/factories.js';
 import { recordQualityResult } from '@centraid/test-kit/quality-result';
-import { browseRows } from '../../packages/vault/src/schema/atlas-browse.js';
 import { describe, expect, test } from 'vitest';
+
+import { browseRows } from '../../packages/vault/src/schema/atlas-browse.js';
+import { createTestVault } from '../helpers/factories.js';
 
 const OWNER = 'tests/scale/ontology.scale.test.ts';
 

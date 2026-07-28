@@ -64,7 +64,10 @@ export async function deleteAlbumConfirmed(
   {
     refresh,
     setSelectedAlbum,
-  }: { refresh: () => Promise<void>; setSelectedAlbum: (id: string | null) => void },
+  }: {
+    refresh: () => Promise<void>;
+    setSelectedAlbum: (id: string | null) => void;
+  },
 ): Promise<void> {
   const outcome = await act('delete-album', { album_id: album.album_id }, ownScope());
   if (narrate(outcome)) {

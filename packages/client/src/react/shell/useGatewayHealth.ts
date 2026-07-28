@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+
 import { getGatewayHealth } from '../../gateway-client.js';
 import type { GatewayHealthDTO } from '../screens/SettingsDiagnosticsScreen.js';
 
@@ -12,7 +13,10 @@ const POLL_MS = 15_000;
  * `SettingsDiagnosticsScreen`'s own `loadHealth` prop, which is fine — this
  * hook only needs the cheap summary, not to be the one true fetch.
  */
-export function useGatewayHealth(): { health: GatewayHealthDTO | null; refresh: () => void } {
+export function useGatewayHealth(): {
+  health: GatewayHealthDTO | null;
+  refresh: () => void;
+} {
   const [health, setHealth] = useState<GatewayHealthDTO | null>(null);
   const load = useCallback(() => {
     void getGatewayHealth()

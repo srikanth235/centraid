@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
+
 import {
   escapeHtml,
   tokenize,
@@ -94,11 +95,11 @@ describe(slugify, () => {
 
 describe(generateAppId, () => {
   it('combines the slugified seed with a six-char base36 suffix', () => {
-    expect(generateAppId('My App')).toMatch(/^my-app-[0-9a-z]{6}$/);
+    expect(generateAppId('My App')).toMatch(/^my-app-[0-9a-z]{6}$/u);
   });
 
   it('falls back to "app" when the seed slugifies to empty', () => {
-    expect(generateAppId('!!!')).toMatch(/^app-[0-9a-z]{6}$/);
+    expect(generateAppId('!!!')).toMatch(/^app-[0-9a-z]{6}$/u);
   });
 
   it('is unlikely to collide across calls (random suffix)', () => {
@@ -127,7 +128,10 @@ describe(formatBytes, () => {
 describe(shortVersionTitle, () => {
   it('prefers an explicit declared version', () => {
     expect(
-      shortVersionTitle({ versionId: 'v_2026-05-08T14-30-00-000Z_a1', declaredVersion: '1.2.0' }),
+      shortVersionTitle({
+        versionId: 'v_2026-05-08T14-30-00-000Z_a1',
+        declaredVersion: '1.2.0',
+      }),
     ).toBe('1.2.0');
   });
 
@@ -177,7 +181,7 @@ describe(relativeWhen, () => {
   it('falls back to a locale date beyond 30 days', () => {
     pin('2026-08-01T12:00:00Z');
     // 30+ days out → not a relative string.
-    expect(relativeWhen('2026-06-05T12:00:00Z')).not.toMatch(/ago|Just now/);
+    expect(relativeWhen('2026-06-05T12:00:00Z')).not.toMatch(/ago|Just now/u);
   });
 
   it('renders an unparseable date as the platform "Invalid Date" string', () => {

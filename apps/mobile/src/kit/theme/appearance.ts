@@ -9,6 +9,7 @@
 // `resolveScheme` here so the whole app agrees on one scheme.
 
 import { useSyncExternalStore } from 'react';
+
 import { Store } from '../../storage';
 import type { Scheme } from './resolve';
 

@@ -20,23 +20,25 @@
  */
 
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { createRequire } from 'node:module';
 import crypto from 'node:crypto';
+import { createRequire } from 'node:module';
 import path from 'node:path';
-import { endpointIdForSecret } from '@centraid/tunnel';
+
 import { landlordBearerForDataDir } from '@centraid/gateway';
+import { endpointIdForSecret } from '@centraid/tunnel';
+
 import {
   buildDetachedSpawnOptions,
   decideControl,
-  resolveListenPort,
-  type ControlDecision,
+  resolveListenPort as resolveConfiguredListenPort,
 } from './detached-gateway-core.js';
+import type { ControlDecision } from './detached-gateway-core.js';
+import { LOCAL_GATEWAY_ID } from './gateway-paths.js';
 import {
   getOrCreateGatewayWrappingKey,
   readLocalLoopbackToken,
   storeLocalLoopbackToken,
 } from './gateway-secrets.js';
-import { LOCAL_GATEWAY_ID } from './gateway-paths.js';
 import { ensureIrohDeviceKey } from './iroh-dialer.js';
 
 const require = createRequire(import.meta.url);
@@ -66,7 +68,10 @@ export interface DetachedGatewayHandle {
   health: {
     registerProbe: (
       name: string,
-      probe: () => Promise<{ status: 'ok' | 'degraded' | 'error'; detail?: string }>,
+      probe: () => Promise<{
+        status: 'ok' | 'degraded' | 'error';
+        detail?: string;
+      }>,
     ) => void;
   };
   /**
@@ -155,12 +160,13 @@ async function probeGatewayAuthenticated(
 async function firstWorkingToken(
   url: string,
   candidates: ReadonlyArray<string | undefined>,
+  index = 0,
 ): Promise<string | undefined> {
-  for (const candidate of candidates) {
-    if (!candidate) continue;
-    if (await probeGatewayAuthenticated(url, candidate)) return candidate;
-  }
-  return undefined;
+  const candidate = candidates[index];
+  if (candidate === undefined) return undefined;
+  if (!candidate) return firstWorkingToken(url, candidates, index + 1);
+  if (await probeGatewayAuthenticated(url, candidate)) return candidate;
+  return firstWorkingToken(url, candidates, index + 1);
 }
 
 export interface EnsureDetachedOptions {
@@ -233,15 +239,21 @@ async function terminateDetachedGateway(pid: number, timeoutMs = STOP_TIMEOUT_MS
   if (!processExists(pid)) return;
   signalGatewayGroup(pid, 'SIGTERM');
   const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline && processExists(pid)) {
+  const waitForExit = async (): Promise<void> => {
+    if (Date.now() >= deadline || !processExists(pid)) return;
     await sleep(STOP_POLL_MS);
-  }
+    return waitForExit();
+  };
+  await waitForExit();
   if (processExists(pid)) {
     signalGatewayGroup(pid, 'SIGKILL');
     const hardDeadline = Date.now() + 1_000;
-    while (Date.now() < hardDeadline && processExists(pid)) {
+    const waitForHardExit = async (): Promise<void> => {
+      if (Date.now() >= hardDeadline || !processExists(pid)) return;
       await sleep(STOP_POLL_MS);
-    }
+      return waitForHardExit();
+    };
+    await waitForHardExit();
   }
 }
 
@@ -338,12 +350,18 @@ async function waitUntilReady(input: {
 }): Promise<{ url: string; token: string }> {
   const url = `http://${input.host}:${input.port}`;
   const deadline = Date.now() + input.timeoutMs;
-  while (Date.now() < deadline) {
+  const pollUntilReady = async (): Promise<{ url: string; token: string }> => {
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `detached gateway at ${url} did not become ready within ${input.timeoutMs}ms`,
+      );
+    }
     const ok = await probeGatewayAuthenticated(url, input.token);
     if (ok) return { url, token: input.token };
     await sleep(READY_POLL_MS);
-  }
-  throw new Error(`detached gateway at ${url} did not become ready within ${input.timeoutMs}ms`);
+    return pollUntilReady();
+  };
+  return pollUntilReady();
 }
 
 interface LockSnapshot {
@@ -396,7 +414,7 @@ export async function ensureDetachedGateway(
 ): Promise<DetachedGatewayHandle> {
   const dataDir = options.dataDir;
   const host = options.host ?? DEFAULT_HOST;
-  const port = resolveListenPort(options.port);
+  const port = resolveConfiguredListenPort(options.port);
   const cliPath = options.cliPath ?? resolveGatewayCliPath();
   const nodeBin = options.nodeBin ?? resolveNodeBin();
   const readyTimeoutMs = options.readyTimeoutMs ?? READY_TIMEOUT_MS;
@@ -536,7 +554,7 @@ export async function installGatewayOsService(
   try {
     const cliPath = resolveGatewayCliPath();
     const nodeBin = process.execPath;
-    const port = resolveListenPort();
+    const port = resolveConfiguredListenPort();
     const ownerId = await getOrCreateDesktopOwnerId();
     const gatewayWrappingKey = getOrCreateGatewayWrappingKey(LOCAL_GATEWAY_ID);
     const result = spawnSync(
@@ -570,8 +588,11 @@ export async function installGatewayOsService(
     const err = (result.stderr || result.stdout || `exit ${result.status}`).trim();
     return { ok: false, error: err || 'service install failed' };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 
-export { resolveListenPort };
+export { resolveListenPort } from './detached-gateway-core.js';

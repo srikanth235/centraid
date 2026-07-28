@@ -1,16 +1,18 @@
 import { useEffect, useRef, useState, type CSSProperties, type JSX } from 'react';
-import { Icon, IconButton } from '../ui/index.js';
+
 import type {
   AppKnobDTO,
   AppSettingsBridgeProps,
   AppSettingsSnapshot,
 } from '../screen-contracts.js';
-import styles from './AppSettingsPanel.module.css';
 import { cx } from '../ui/cx.js';
+import { Icon, IconButton } from '../ui/index.js';
+
 import a11y from '../styles/a11y.module.css';
-import segCss from '../styles/seg.module.css';
 import appSettingsCss from '../styles/appSettings.module.css';
+import segCss from '../styles/seg.module.css';
 import swatchCss from '../styles/swatch.module.css';
+import styles from './AppSettingsPanel.module.css';
 
 type Tab = 'appearance' | 'automations' | 'vault' | 'manage';
 

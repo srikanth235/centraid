@@ -1,24 +1,30 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import http from 'node:http';
+
+import { forEachSequentially } from '@centraid/test-kit/sequential';
 // The outbox edit-before-send route slice (issue #308 A5 UI slice):
 // approve-with-edit rebuilds the gmail.send wire request server-side from
 // the edited artifact, an unsupported verb 4xx's instead of silently
 // dropping the edit, shape-drifted artifacts are refused, and a
 // client-supplied raw "request" is refused outright (the owner surface
 // never handles the wire request — see `outbox-edit.ts`).
-
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterEach, describe, expect, test } from 'vitest';
-import http from 'node:http';
-import { openVaultRegistry } from '../serve/vault-registry.js';
-import type { VaultPlane } from '../serve/vault-plane.js';
-import { makeVaultRouteHandler } from './vault-routes.js';
-import { GatewayDatabase } from '../serve/gateway-db.js';
 
-const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
+import { GatewayDatabase } from '../serve/gateway-db.js';
+import type { VaultPlane } from '../serve/vault-plane.js';
+import { openVaultRegistry } from '../serve/vault-registry.js';
+import { makeVaultRouteHandler } from './vault-routes.js';
+
+const silentLogger = {
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+};
 
 const cleanups: Array<() => Promise<void> | void> = [];
 describe('vault-routes', () => {
   afterEach(async () => {
-    while (cleanups.length > 0) await cleanups.pop()?.();
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
   });
   async function startHandlerServer(
     handler: (req: http.IncomingMessage, res: http.ServerResponse) => Promise<boolean>,
@@ -106,7 +112,11 @@ describe('vault-routes', () => {
 
   async function setup(): Promise<{ base: string; plane: VaultPlane }> {
     const dir = await tempDir();
-    const registry = openVaultRegistry({ rootDir: dir, logger: silentLogger, ownerName: 'Priya' });
+    const registry = openVaultRegistry({
+      rootDir: dir,
+      logger: silentLogger,
+      ownerName: 'Priya',
+    });
     registry.create('Personal');
     cleanups.push(() => registry.stop());
     const plane = registry.current();
@@ -174,7 +184,7 @@ describe('vault-routes', () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
-      warning: expect.stringMatching(/offsite bytes.*recovery kit cannot restore/i),
+      warning: expect.stringMatching(/offsite bytes.*recovery kit cannot restore/iu),
     });
   });
 
@@ -256,7 +266,7 @@ describe('vault-routes', () => {
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string; message: string };
     expect(body.error).toBe('edit_unsupported');
-    expect(body.message).toMatch(/editing isn't supported for gcal\.create_event/);
+    expect(body.message).toMatch(/editing isn't supported for gcal\.create_event/u);
 
     // Nothing changed — the item is still pending, request untouched.
     const { status } = rawOf(plane, itemId);
@@ -282,7 +292,7 @@ describe('vault-routes', () => {
     });
     expect(added.status).toBe(400);
     expect(((await added.json()) as { message: string }).message).toMatch(
-      /exactly the staged fields/,
+      /exactly the staged fields/u,
     );
 
     const removedFieldItem = stageGmailSend(plane);
@@ -295,7 +305,7 @@ describe('vault-routes', () => {
     });
     expect(removed.status).toBe(400);
     expect(((await removed.json()) as { message: string }).message).toMatch(
-      /exactly the staged fields/,
+      /exactly the staged fields/u,
     );
 
     const typeChangedItem = stageGmailSend(plane);
@@ -303,12 +313,17 @@ describe('vault-routes', () => {
       method: 'POST',
       body: JSON.stringify({
         decision: 'approve',
-        artifact: { to: ['ravi@example.com'], subject: 42, body: 'x', message_id: 'msg-1' },
+        artifact: {
+          to: ['ravi@example.com'],
+          subject: 42,
+          body: 'x',
+          message_id: 'msg-1',
+        },
       }),
     });
     expect(typeChanged.status).toBe(400);
     expect(((await typeChanged.json()) as { message: string }).message).toMatch(
-      /must stay a string/,
+      /must stay a string/u,
     );
 
     // None of the refused edits touched the staged rows.
@@ -330,7 +345,7 @@ describe('vault-routes', () => {
     });
     expect(res.status).toBe(400);
     const body = (await res.json()) as { message: string };
-    expect(body.message).toMatch(/never accepts a raw "request"/);
+    expect(body.message).toMatch(/never accepts a raw "request"/u);
 
     // The staged request is untouched — no path let a raw request through.
     const { requestBody, status } = rawOf(plane, itemId);
@@ -346,12 +361,17 @@ describe('vault-routes', () => {
       method: 'POST',
       body: JSON.stringify({
         decision: 'discard',
-        artifact: { to: ['ravi@example.com'], subject: 'Hi', body: 'x', message_id: 'msg-1' },
+        artifact: {
+          to: ['ravi@example.com'],
+          subject: 'Hi',
+          body: 'x',
+          message_id: 'msg-1',
+        },
       }),
     });
     expect(res.status).toBe(400);
     expect(((await res.json()) as { message: string }).message).toMatch(
-      /only applies to "approve"/,
+      /only applies to "approve"/u,
     );
     expect(rawOf(plane, itemId).status).toBe('pending');
   });

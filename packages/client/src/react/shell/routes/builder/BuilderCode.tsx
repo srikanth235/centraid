@@ -1,6 +1,7 @@
 // governance: allow-repo-hygiene file-size-limit (#363) single cohesive builder-tab panel (code editor surface); splitting would fragment one visual unit
 import { type JSX, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { readAppFiles, writeAppFile } from '../../../../gateway-client.js';
+
+import { lineDiff } from '../../../../diff.js';
 import {
   type CodeLang,
   LANG_DISPLAY,
@@ -9,12 +10,13 @@ import {
   languageHint,
   tokenize,
 } from '../../../../format.js';
-import { lineDiff } from '../../../../diff.js';
+import { readAppFiles, writeAppFile } from '../../../../gateway-client.js';
+import { cx } from '../../../ui/cx.js';
 import { iconSvg } from '../../iconSvg.js';
 import { showToast } from '../../toast.js';
-import { cx } from '../../../ui/cx.js';
-import buttonCss from '../../../ui/Button.module.css';
+
 import atomsCss from '../../../styles/atoms.module.css';
+import buttonCss from '../../../ui/Button.module.css';
 import styles from './BuilderCode.module.css';
 
 // File-tree glyphs copied verbatim from the vanilla builder (builder.ts
@@ -34,6 +36,17 @@ const TOKEN_CLASSES: TokenClasses = {
   str: styles.tokStr ?? '',
   tag: styles.tokTag ?? '',
 };
+
+async function savePathsInOrder(
+  paths: readonly string[],
+  saveFile: (path: string) => Promise<void>,
+  index = 0,
+): Promise<void> {
+  const path = paths[index];
+  if (!path) return;
+  await saveFile(path);
+  return savePathsInOrder(paths, saveFile, index + 1);
+}
 
 export interface BuilderCodeProps {
   appId: string;
@@ -70,7 +83,12 @@ function buildTree(files: AppFile[]): TreeNode[] {
       const isFile = i === parts.length - 1;
       let node = level.find((n) => n.name === part);
       if (!node) {
-        node = { name: part, path: acc, kind: isFile ? 'file' : 'folder', children: [] };
+        node = {
+          name: part,
+          path: acc,
+          kind: isFile ? 'file' : 'folder',
+          children: [],
+        };
         level.push(node);
       }
       level = node.children;
@@ -118,7 +136,10 @@ const NO_FILES: AppFile[] = [];
 export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): JSX.Element {
   // The settled read of the app's files. `appId === ''` ("no app yet") is a
   // render-time case, not something the fetch effect has to reset state for.
-  const [fetched, setFetched] = useState<{ files: AppFile[]; error: string | null } | null>(null);
+  const [fetched, setFetched] = useState<{
+    files: AppFile[];
+    error: string | null;
+  } | null>(null);
   const files = appId && fetched ? fetched.files : NO_FILES;
   const loaded = !appId || fetched !== null;
   const loadError = appId && fetched ? fetched.error : null;
@@ -128,7 +149,10 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
   const [diffMode, setDiffMode] = useState(false);
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [caret, setCaret] = useState<{ line: number; col: number }>({ line: 1, col: 1 });
+  const [caret, setCaret] = useState<{ line: number; col: number }>({
+    line: 1,
+    col: 1,
+  });
   const [menuOpen, setMenuOpen] = useState(false);
 
   // Refs mirror the latest state for use inside async/imperative callbacks
@@ -163,7 +187,11 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
       if (!f) return prev;
       return {
         ...prev,
-        [p]: { original: f.content, current: f.content, language: languageHint(p) },
+        [p]: {
+          original: f.content,
+          current: f.content,
+          language: languageHint(p),
+        },
       };
     });
     setOpenTabs((prev) => (prev.includes(p) ? prev : [...prev, p]));
@@ -228,7 +256,10 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
         reconcileToFiles(fs);
       } catch (err) {
         if (cancelled) return;
-        setFetched((prev) => ({ files: prev?.files ?? NO_FILES, error: String(err) }));
+        setFetched((prev) => ({
+          files: prev?.files ?? NO_FILES,
+          error: String(err),
+        }));
       }
     })();
     return () => {
@@ -282,11 +313,10 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
   );
 
   const saveAll = useCallback(async (): Promise<void> => {
-    for (const p of Object.entries(buffersRef.current)
+    const changedPaths = Object.entries(buffersRef.current)
       .filter(([, b]) => b.current !== b.original)
-      .map(([p]) => p)) {
-      await saveFile(p);
-    }
+      .map(([p]) => p);
+    await savePathsInOrder(changedPaths, saveFile);
   }, [saveFile]);
 
   const revertActive = (): void => {
@@ -319,7 +349,10 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
   const refreshCaret = (ta: HTMLTextAreaElement): void => {
     const upto = ta.value.slice(0, ta.selectionStart);
     const nl = upto.lastIndexOf('\n');
-    setCaret({ line: upto.split('\n').length, col: ta.selectionStart - (nl + 1) + 1 });
+    setCaret({
+      line: upto.split('\n').length,
+      col: ta.selectionStart - (nl + 1) + 1,
+    });
   };
 
   const onEditorChange = (e: React.ChangeEvent<HTMLTextAreaElement>): void => {

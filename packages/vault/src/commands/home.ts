@@ -109,7 +109,10 @@ function addItem(ctx: HandlerCtx): Record<string, unknown> {
   const transaction = input.acquired_txn_id
     ? (ctx.db
         .prepare('SELECT amount_minor, currency FROM core_transaction WHERE txn_id = ?')
-        .get(input.acquired_txn_id) as { amount_minor: number; currency: string })
+        .get(input.acquired_txn_id) as {
+        amount_minor: number;
+        currency: string;
+      })
     : undefined;
   const itemId = ctx.newId();
   ctx.db
@@ -299,7 +302,10 @@ const DISPOSE_ITEM: CommandDefinition = {
   outputSchema: {
     type: 'object',
     required: ['item_id', 'disposed_on'],
-    properties: { item_id: { type: 'string' }, disposed_on: { type: 'string' } },
+    properties: {
+      item_id: { type: 'string' },
+      disposed_on: { type: 'string' },
+    },
   },
   preconditions: [
     {

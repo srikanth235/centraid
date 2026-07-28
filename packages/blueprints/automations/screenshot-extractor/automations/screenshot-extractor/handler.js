@@ -31,17 +31,29 @@ const EXTRACT_SCHEMA = {
       additionalProperties: false,
       properties: {
         merchant: { type: 'string' },
-        amount_minor: { type: 'integer', description: 'Total in minor units (cents/paise).' },
+        amount_minor: {
+          type: 'integer',
+          description: 'Total in minor units (cents/paise).',
+        },
         currency: { type: 'string', description: 'ISO 4217, e.g. INR, USD.' },
-        posted_at: { type: 'string', description: 'ISO date of the purchase, if visible.' },
+        posted_at: {
+          type: 'string',
+          description: 'ISO date of the purchase, if visible.',
+        },
       },
     },
     booking: {
       type: 'object',
       additionalProperties: false,
       properties: {
-        summary: { type: 'string', description: 'What is booked, e.g. "Flight BLR → GOI".' },
-        dtstart: { type: 'string', description: 'ISO start datetime, if visible.' },
+        summary: {
+          type: 'string',
+          description: 'What is booked, e.g. "Flight BLR → GOI".',
+        },
+        dtstart: {
+          type: 'string',
+          description: 'ISO start datetime, if visible.',
+        },
         dtend: { type: 'string', description: 'ISO end datetime, if visible.' },
       },
     },

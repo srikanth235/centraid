@@ -40,7 +40,12 @@ function toRow(c) {
       });
   }
   for (const p of c.mobilePhone ? [c.mobilePhone] : []) {
-    if (p) identifiers.push({ scheme: 'tel', value: String(p).trim(), label: 'mobile' });
+    if (p)
+      identifiers.push({
+        scheme: 'tel',
+        value: String(p).trim(),
+        label: 'mobile',
+      });
   }
   const fn = c.displayName || (identifiers[0] && identifiers[0].value);
   if (!fn) return null;

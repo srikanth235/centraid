@@ -1,3 +1,8 @@
+import assert from 'node:assert/strict';
+import { existsSync, mkdtempSync, readlinkSync, realpathSync, rmSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 /**
  * Tests for lean runtime assemble + symlink rewrite (issue #504).
  * Run: node --test scripts/gateway-package/assemble-runtime.test.mjs
@@ -6,19 +11,14 @@
  * One assemble per file — full node_modules copy is expensive.
  */
 import { test } from 'node:test';
-import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readlinkSync, realpathSync, rmSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+
 import {
   assembleRuntime,
   GATEWAY_WORKSPACE_PACKAGES,
   rewriteRuntimeSymlinks,
 } from './assemble-runtime.mjs';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const root = path.resolve(import.meta.dirname, '../..');
 
 function canAssemble() {
   return GATEWAY_WORKSPACE_PACKAGES.every((p) => existsSync(path.join(root, p, 'dist')));
@@ -41,7 +41,7 @@ test('assembleRuntime rewrites @centraid links and resolves under out only', (t)
     const scope = path.join(out, 'node_modules', '@centraid');
 
     for (const pkg of GATEWAY_WORKSPACE_PACKAGES) {
-      const name = pkg.replace(/^packages\//, '');
+      const name = pkg.replace(/^packages\//u, '');
       const link = path.join(scope, name);
       assert.ok(existsSync(link), `missing link ${name}`);
       const target = readlinkSync(link);

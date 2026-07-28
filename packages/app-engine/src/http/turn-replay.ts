@@ -13,8 +13,8 @@
  * Pure + tiny so it is unit-testable without a live stream.
  */
 
-import type { TurnStreamEvent } from '../conversation/runner.js';
 import type { RecordedTurnReplay } from '../conversation/history.js';
+import type { TurnStreamEvent } from '../conversation/runner.js';
 
 /**
  * The ordered `TurnStreamEvent`s that replay a recorded turn. Both chat
@@ -32,14 +32,14 @@ export function buildReplayEvents(recorded: RecordedTurnReplay): TurnStreamEvent
   if (recorded.usage) {
     events.push({
       type: 'usage',
-      ...(recorded.usage.model !== undefined ? { model: recorded.usage.model } : {}),
-      ...(recorded.usage.effort !== undefined ? { effort: recorded.usage.effort } : {}),
-      ...(recorded.usage.inputTokens !== undefined
-        ? { inputTokens: recorded.usage.inputTokens }
-        : {}),
-      ...(recorded.usage.outputTokens !== undefined
-        ? { outputTokens: recorded.usage.outputTokens }
-        : {}),
+      ...(recorded.usage.model === undefined ? {} : { model: recorded.usage.model }),
+      ...(recorded.usage.effort === undefined ? {} : { effort: recorded.usage.effort }),
+      ...(recorded.usage.inputTokens === undefined
+        ? {}
+        : { inputTokens: recorded.usage.inputTokens }),
+      ...(recorded.usage.outputTokens === undefined
+        ? {}
+        : { outputTokens: recorded.usage.outputTokens }),
     });
   }
   events.push({ type: 'final', text });

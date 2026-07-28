@@ -3,8 +3,15 @@
   "name": "Centraid Companion",
   "description": "Pair this browser with Centraid for explicit Locker autofill and web capture.",
   "version": "0.1.0",
-  "action": { "default_popup": "popup.html", "default_title": "Centraid Companion" },
-  "background": { "scripts": ["worker.js"], "service_worker": "worker.js", "type": "module" },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Centraid Companion"
+  },
+  "background": {
+    "scripts": ["worker.js"],
+    "service_worker": "worker.js",
+    "type": "module"
+  },
   "content_scripts": [
     {
       "matches": ["http://*/*", "https://*/*"],
@@ -21,5 +28,10 @@
   "browser_specific_settings": {
     "gecko": { "id": "companion@centraid.dev", "strict_min_version": "121.0" }
   },
-  "icons": { "16": "icon-16.png", "32": "icon-32.png", "48": "icon-48.png", "128": "icon-128.png" }
+  "icons": {
+    "16": "icon-16.png",
+    "32": "icon-32.png",
+    "48": "icon-48.png",
+    "128": "icon-128.png"
+  }
 }

@@ -1,8 +1,10 @@
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import path from 'node:path';
+
+import { costForUsage, setPricingCatalog } from '@centraid/app-engine';
 import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { afterEach, describe, expect, it } from 'vitest';
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
-import { costForUsage, setPricingCatalog } from '@centraid/app-engine';
+
 import { PricingWarmer } from './pricing-warmer.js';
 
 // A minimal raw-LiteLLM shape the shared filter accepts. `claude-probe` is a
@@ -19,11 +21,14 @@ function rawCatalog(inputRate: number): Record<string, unknown> {
 }
 
 function okResponse(body: string): Response {
-  return new Response(body, { status: 200, headers: { 'content-length': String(body.length) } });
+  return new Response(body, {
+    status: 200,
+    headers: { 'content-length': String(body.length) },
+  });
 }
 
 function freshCacheFile(): string {
-  return join(tempDirSync('centraid-pricing-'), 'model-pricing.json');
+  return path.join(tempDirSync('centraid-pricing-'), 'model-pricing.json');
 }
 
 describe('pricing-warmer', () => {
@@ -57,7 +62,12 @@ describe('pricing-warmer', () => {
         cacheFile,
         JSON.stringify({
           fetchedAt: new Date().toISOString(),
-          models: { 'claude-probe': { input_cost_per_token: 2e-6, output_cost_per_token: 2e-6 } },
+          models: {
+            'claude-probe': {
+              input_cost_per_token: 2e-6,
+              output_cost_per_token: 2e-6,
+            },
+          },
         }),
       );
       let fetched = false;

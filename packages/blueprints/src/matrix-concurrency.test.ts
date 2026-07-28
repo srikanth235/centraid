@@ -3,6 +3,7 @@
  * Scaffold builders are pure — concurrent builds must not share arrays/maps.
  */
 import { describe, expect, it } from 'vitest';
+
 import { scaffoldAppFiles } from './scaffold-files.js';
 
 describe('blueprint scaffold concurrency', () => {

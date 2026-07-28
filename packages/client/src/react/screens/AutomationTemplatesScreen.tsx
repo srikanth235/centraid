@@ -1,11 +1,13 @@
-import { useMemo, useState, type CSSProperties, type JSX } from 'react';
 import type { IconName } from '@centraid/design-tokens';
-import { Icon } from '../ui/index.js';
-import type { AutomationTemplatesBridgeProps, DiscoverTemplate } from '../screen-contracts.js';
+import { useMemo, useState, type CSSProperties, type JSX } from 'react';
+
 import { INTEGRATION_HUES } from '../format.js';
-import styles from './AutomationTemplatesScreen.module.css';
-import au from '../styles/automation.module.css';
+import type { AutomationTemplatesBridgeProps, DiscoverTemplate } from '../screen-contracts.js';
 import { cx } from '../ui/cx.js';
+import { Icon } from '../ui/index.js';
+
+import au from '../styles/automation.module.css';
+import styles from './AutomationTemplatesScreen.module.css';
 
 type Trig = 'all' | 'cron' | 'webhook' | 'data' | 'condition';
 
@@ -35,7 +37,9 @@ function IntegrationChips({ integrations }: { integrations: readonly string[] })
           <i
             className={au.auChipDot}
             aria-hidden="true"
-            style={{ background: `var(--c-${INTEGRATION_HUES[name] ?? 'slate'})` }}
+            style={{
+              background: `var(--c-${INTEGRATION_HUES[name] ?? 'slate'})`,
+            }}
           />
           {name}
         </span>
@@ -209,7 +213,9 @@ export default function AutomationTemplatesScreen({
                 <i
                   className={au.auChipDot}
                   aria-hidden="true"
-                  style={{ background: `var(--c-${INTEGRATION_HUES[name] ?? 'slate'})` }}
+                  style={{
+                    background: `var(--c-${INTEGRATION_HUES[name] ?? 'slate'})`,
+                  }}
                 />
                 {name}
               </button>

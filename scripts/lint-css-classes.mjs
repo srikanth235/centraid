@@ -23,9 +23,9 @@
 // if this ever scans zero files or resolves zero modules, the check is broken,
 // not clean.
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
-import { dirname, resolve, relative, basename } from 'node:path';
+import path from 'node:path';
 
-const ROOT = resolve(import.meta.dirname, '..');
+const ROOT = path.resolve(import.meta.dirname, '..');
 // Every *.module.css in the repo lives under here. If that changes, add the
 // root — an unlisted directory is unchecked, exactly like lint-types.sh's
 // TARGETS list.
@@ -36,7 +36,7 @@ const SKIP_DIRS = new Set(['node_modules', 'dist', 'build', '.turbo']);
 function walk(dir, out = []) {
   for (const entry of readdirSync(dir)) {
     if (SKIP_DIRS.has(entry)) continue;
-    const p = resolve(dir, entry);
+    const p = path.resolve(dir, entry);
     if (statSync(p).isDirectory()) walk(p, out);
     else if (/\.tsx?$/u.test(p)) out.push(p);
   }
@@ -71,7 +71,7 @@ let filesScanned = 0;
 let modulesResolved = 0;
 
 for (const target of TARGETS) {
-  const dir = resolve(ROOT, target);
+  const dir = path.resolve(ROOT, target);
   if (!existsSync(dir)) {
     console.error(`FAIL — target does not exist: ${target}`);
     process.exit(1);
@@ -84,12 +84,12 @@ for (const target of TARGETS) {
     ];
     if (imports.length === 0) continue;
     const body = scannableBody(src);
-    const rel = relative(ROOT, file);
+    const rel = path.relative(ROOT, file);
 
     for (const imported of imports) {
       const alias = imported.groups?.alias ?? '';
       const spec = imported.groups?.spec ?? '';
-      const cssPath = resolve(dirname(file), spec);
+      const cssPath = path.resolve(path.dirname(file), spec);
       if (!existsSync(cssPath)) {
         findings.push(`${rel} — import '${spec}' does not resolve`);
         continue;
@@ -105,7 +105,7 @@ for (const target of TARGETS) {
 
       for (const [, name] of body.matchAll(new RegExp(`\\b${alias}\\.([a-zA-Z][\\w]*)`, 'gu'))) {
         if (!defined.has(name)) {
-          findings.push(`${rel}:${alias}.${name} — no .${name} rule in ${basename(cssPath)}`);
+          findings.push(`${rel}:${alias}.${name} — no .${name} rule in ${path.basename(cssPath)}`);
         }
       }
     }

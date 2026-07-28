@@ -1,7 +1,9 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+
 import { tempDir } from '@centraid/test-kit/temp-dir';
 import { describe, expect, it } from 'vitest';
+
 import { parseAdditionalDirectories, parseWorkspaceKind } from './turn-sse-support.js';
 
 describe('conversation workspace parsing', () => {
@@ -19,7 +21,7 @@ describe('conversation workspace parsing', () => {
     await fs.mkdir(target);
     await fs.symlink(target, alias);
 
-    await expect(parseAdditionalDirectories([target, alias])).resolves.toEqual([
+    await expect(parseAdditionalDirectories([target, alias])).resolves.toStrictEqual([
       await fs.realpath(target),
     ]);
   });
@@ -28,10 +30,10 @@ describe('conversation workspace parsing', () => {
     const dir = await tempDir('centraid-invalid-additional-dir-');
     const file = path.join(dir, 'file.txt');
     await fs.writeFile(file, 'x');
-    await expect(parseAdditionalDirectories(['relative'])).rejects.toThrow(/absolute/);
-    await expect(parseAdditionalDirectories([file])).rejects.toThrow(/non-root directory/);
+    await expect(parseAdditionalDirectories(['relative'])).rejects.toThrow(/absolute/u);
+    await expect(parseAdditionalDirectories([file])).rejects.toThrow(/non-root directory/u);
     await expect(parseAdditionalDirectories([path.parse(dir).root])).rejects.toThrow(
-      /non-root directory/,
+      /non-root directory/u,
     );
   });
 });

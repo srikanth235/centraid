@@ -1,9 +1,12 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { afterEach, describe, expect, test } from 'vitest';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+
+import { forEachSequentially } from '@centraid/test-kit/sequential';
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { afterEach, describe, expect, test } from 'vitest';
+
 import { commandLockStatus } from '../cli/lock-admin.js';
 import { GatewayDatabase, GatewayLockError } from './gateway-db.js';
 
@@ -12,10 +15,12 @@ const children: ChildProcess[] = [];
 
 describe('gateway-db-lock', () => {
   afterEach(async () => {
-    for (const child of children.splice(0)) {
+    await forEachSequentially(children.splice(0), (child) => {
       if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
-    }
-    while (roots.length > 0) await fs.rm(roots.pop()!, { recursive: true, force: true });
+    });
+    await forEachSequentially(roots.splice(0), (root) =>
+      fs.rm(root, { recursive: true, force: true }),
+    );
   });
 
   async function waitForReady(child: ChildProcess): Promise<void> {
@@ -100,7 +105,7 @@ describe('gateway-db-lock', () => {
       answering: false,
       holderPid: child.pid,
     });
-    expect(wedged.detail).toMatch(/held but the daemon is not answering.*OS holder pid/i);
+    expect(wedged.detail).toMatch(/held but the daemon is not answering.*OS holder pid/iu);
 
     child.kill('SIGKILL');
     await once(child, 'exit');

@@ -1,6 +1,9 @@
 import crypto from 'node:crypto';
 import http from 'node:http';
 import path from 'node:path';
+
+import { recordQualityResult } from '@centraid/test-kit/quality-result';
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import {
   createTunnelClient,
   DeviceStore,
@@ -8,8 +11,6 @@ import {
   startDesktopTunnel,
   startLocalProxy,
 } from '@centraid/tunnel';
-import { recordQualityResult } from '@centraid/test-kit/quality-result';
-import { tempDir } from '@centraid/test-kit/temp-dir';
 import { describe, expect, onTestFinished, test } from 'vitest';
 
 const OWNER = 'tests/perf/tunnel-throughput.perf.test.ts';
@@ -63,11 +64,13 @@ describe('tunnel-throughput.perf', () => {
     const response = await fetch(`http://127.0.0.1:${proxy.port}/payload.bin`);
     const reader = response.body!.getReader();
     let received = 0;
-    for (;;) {
+    const readNext = async (): Promise<void> => {
       const chunk = await reader.read();
-      if (chunk.done) break;
+      if (chunk.done) return;
       received += chunk.value.byteLength;
-    }
+      return readNext();
+    };
+    await readNext();
     const durationMs = performance.now() - started;
     const mibPerSecond = received / (1024 * 1024) / (durationMs / 1_000);
     // Measured baseline (2026-07-19, darwin arm64 loopback, 16 MiB payload):
@@ -88,8 +91,18 @@ describe('tunnel-throughput.perf', () => {
       name: 'Tunnel payload throughput',
       status: passed ? 'passed' : 'failed',
       measurements: [
-        { name: 'throughput', value: mibPerSecond, unit: 'MiB/s', budget: throughputFloor },
-        { name: 'payload', value: received, unit: 'bytes', budget: payload.length },
+        {
+          name: 'throughput',
+          value: mibPerSecond,
+          unit: 'MiB/s',
+          budget: throughputFloor,
+        },
+        {
+          name: 'payload',
+          value: received,
+          unit: 'bytes',
+          budget: payload.length,
+        },
         { name: 'wall clock', value: durationMs, unit: 'ms' },
       ],
     });

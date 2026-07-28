@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, test } from 'vitest';
+
 import { bootstrapVault, type BootstrapResult } from '../bootstrap.js';
 import { registerDocumentCommands } from '../commands/documents.js';
 import { registerEnrichCommands } from '../commands/enrich.js';
 import { registerMediaCommands } from '../commands/media.js';
 import { openVaultDb, type VaultDb } from '../db.js';
+import { scanEmbeddings } from '../enrich/similarity.js';
 import { createGateway, type Gateway } from '../gateway/gateway.js';
 import type { Credential } from '../gateway/types.js';
-import { scanEmbeddings } from '../enrich/similarity.js';
 import {
   DERIVATIVE_REGISTRY,
   DERIVATIVE_VARIANTS,
@@ -31,11 +32,19 @@ describe('derivatives', () => {
     registerDocumentCommands(gw);
     registerMediaCommands(gw);
     registerEnrichCommands(gw);
-    owner = { kind: 'device', deviceId: boot.deviceId, deviceKey: boot.deviceKey };
+    owner = {
+      kind: 'device',
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+    };
   });
 
   function invoke(command: string, input: Record<string, unknown>) {
-    return gw.invoke(owner, { command, input, purpose: 'dpv:ServiceProvision' });
+    return gw.invoke(owner, {
+      command,
+      input,
+      purpose: 'dpv:ServiceProvision',
+    });
   }
 
   function output<T>(result: unknown): T {
@@ -55,9 +64,14 @@ describe('derivatives', () => {
         'phash',
         'thumbhash',
       ]);
-      expect(DERIVATIVE_REGISTRY.poster).toMatchObject({ storage: 'cas', backstop: 'none' });
+      expect(DERIVATIVE_REGISTRY.poster).toMatchObject({
+        storage: 'cas',
+        backstop: 'none',
+      });
       expect(DERIVATIVE_REGISTRY.text).toMatchObject({ storage: 'inline' });
-      expect(DERIVATIVE_REGISTRY.embedding).toMatchObject({ backstop: 'optional-model' });
+      expect(DERIVATIVE_REGISTRY.embedding).toMatchObject({
+        backstop: 'optional-model',
+      });
       expect(DERIVATIVE_REGISTRY.thumbhash).toMatchObject({
         storage: 'inline',
         mediaType: 'application/x-thumbhash',
@@ -67,7 +81,11 @@ describe('derivatives', () => {
 
     test('accepts bounded canonical payloads and rejects malformed contributions', () => {
       expect(
-        validateDerivativeContribution({ variant: 'poster', bytes: PNG, mediaType: 'image/png' }),
+        validateDerivativeContribution({
+          variant: 'poster',
+          bytes: PNG,
+          mediaType: 'image/png',
+        }),
       ).toMatchObject({ storage: 'cas', width: 1, height: 1 });
       expect(
         validateDerivativeContribution({
@@ -81,32 +99,41 @@ describe('derivatives', () => {
           bytes: Buffer.from('not an image'),
           mediaType: 'image/jpeg',
         }),
-      ).toThrow(/plausible decodable dimensions/);
+      ).toThrow(/plausible decodable dimensions/u);
       expect(() =>
-        validateDerivativeContribution({ variant: 'phash', bytes: Buffer.from('ABCDEF') }),
-      ).toThrow(/lowercase hexadecimal/);
+        validateDerivativeContribution({
+          variant: 'phash',
+          bytes: Buffer.from('ABCDEF'),
+        }),
+      ).toThrow(/lowercase hexadecimal/u);
       // ThumbHash: canonical unpadded base64 of 5..64 bytes round-trips exactly.
       expect(
         validateDerivativeContribution({
           variant: 'thumbhash',
           bytes: Buffer.from('1QcSHQRnh493V4dIh4eXh1h4kJUI'),
         }),
-      ).toMatchObject({ storage: 'inline', textContent: '1QcSHQRnh493V4dIh4eXh1h4kJUI' });
+      ).toMatchObject({
+        storage: 'inline',
+        textContent: '1QcSHQRnh493V4dIh4eXh1h4kJUI',
+      });
       expect(() =>
-        validateDerivativeContribution({ variant: 'thumbhash', bytes: Buffer.from('abc') }),
-      ).toThrow(/5\.\.64 bytes/);
+        validateDerivativeContribution({
+          variant: 'thumbhash',
+          bytes: Buffer.from('abc'),
+        }),
+      ).toThrow(/5\.\.64 bytes/u);
       expect(() =>
         validateDerivativeContribution({
           variant: 'thumbhash',
           bytes: Buffer.from('1QcSHQRnh493V4dIh4eXh1h4kJUI=='),
         }),
-      ).toThrow(/unpadded standard base64|not canonical/);
+      ).toThrow(/unpadded standard base64|not canonical/u);
       expect(() =>
         validateDerivativeContribution({
           variant: 'embedding',
           bytes: Buffer.from('{"model":"m","vector":[null]}'),
         }),
-      ).toThrow(/finite numbers/);
+      ).toThrow(/finite numbers/u);
     });
   });
 
@@ -122,7 +149,10 @@ describe('derivatives', () => {
       variantOf: original.sha256,
     });
     const doc = output<{ content_id: string; document_id: string }>(
-      invoke('core.add_document', { staged_sha: original.sha256, title: 'Talk' }),
+      invoke('core.add_document', {
+        staged_sha: original.sha256,
+        title: 'Talk',
+      }),
     );
     const text = db.vault
       .prepare(
@@ -216,7 +246,9 @@ describe('derivatives', () => {
       entityId: asset.content_id,
     });
     expect(semantic[0]?.score).toBeCloseTo(1);
-    const served = gw.resolveBlob(owner, asset.content_id, { variant: 'poster' });
+    const served = gw.resolveBlob(owner, asset.content_id, {
+      variant: 'poster',
+    });
     expect(served.status).toBe('ok');
     const phash = db.vault
       .prepare('SELECT phash FROM media_asset_phash WHERE asset_id = ?')
@@ -305,7 +337,7 @@ describe('derivatives', () => {
         variantOf: original.sha256,
         validateDerivative: true,
       }),
-    ).toThrow(/injected association failure/);
+    ).toThrow(/injected association failure/u);
     expect({
       ...db.vault
         .prepare('SELECT count(*) AS n FROM blob_staging WHERE variant_of = ?')

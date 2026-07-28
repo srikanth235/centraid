@@ -148,7 +148,13 @@ export default async ({ ctx, log }) => {
     if (hasText) {
       const prior = await ctx.vault.read({
         entity: 'sync.external_entity',
-        where: [{ column: 'external_id', op: 'eq', value: `${item.content_id}:summary` }],
+        where: [
+          {
+            column: 'external_id',
+            op: 'eq',
+            value: `${item.content_id}:summary`,
+          },
+        ],
         limit: 1,
         purpose: PURPOSE,
       });
@@ -189,7 +195,10 @@ export default async ({ ctx, log }) => {
   for (const row of late) {
     if (deviceOwned.has(row.content_id)) break;
     if (!processed.has(row.content_id)) {
-      await processItem({ content_id: row.content_id, media_type: 'application/octet-stream' });
+      await processItem({
+        content_id: row.content_id,
+        media_type: 'application/octet-stream',
+      });
       processed.add(row.content_id);
     }
     lastDerivative = row.derivative_id;

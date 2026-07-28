@@ -5,6 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+
 import type { Manifest } from '../manifest/manifest.js';
 import type { Row } from '../scaffold/app.js';
 import {
@@ -43,7 +44,12 @@ describe(readPendingBatch, () => {
     const pending = {
       targetPositionJson: '"p3"',
       elements: [
-        { position: 'p2', occurredAt: 2, payload: { a: 1 }, positionJson: '"p2"' },
+        {
+          position: 'p2',
+          occurredAt: 2,
+          payload: { a: 1 },
+          positionJson: '"p2"',
+        },
         { position: 'p3', occurredAt: 3 },
       ],
       acknowledged: ['p2'],
@@ -108,7 +114,11 @@ describe(registrationsFor, () => {
     );
 
     expect(registrations).toStrictEqual([
-      { ref: 'a/multi', triggerIndex: 0, trigger: { kind: 'data', entities: ['core.party'] } },
+      {
+        ref: 'a/multi',
+        triggerIndex: 0,
+        trigger: { kind: 'data', entities: ['core.party'] },
+      },
       {
         ref: 'a/multi',
         triggerIndex: 1,
@@ -122,13 +132,16 @@ describe(registrationsFor, () => {
   it('rejects a loop-sensitive entity before anything registers', () => {
     expect(() =>
       registrationsFor(row('bad/loop', [{ kind: 'condition', entity: 'turns' }])),
-    ).toThrow(/loop-sensitive runtime table/);
+    ).toThrow(/loop-sensitive runtime table/u);
   });
 });
 
 describe(retentionKeysFor, () => {
   it('names every declared trigger slot, disabled rows included', () => {
-    const disabled = { ...row('b/off', [{ kind: 'cron', expr: '0 8 * * *' }]), enabled: false };
+    const disabled = {
+      ...row('b/off', [{ kind: 'cron', expr: '0 8 * * *' }]),
+      enabled: false,
+    };
 
     expect(
       retentionKeysFor([
@@ -152,9 +165,13 @@ describe('scheduleExpr and cursorIdentity', () => {
     expect(scheduleExpr({ kind: 'cron', expr: '0 8 * * *' })).toBe('0 8 * * *');
     expect(scheduleExpr({ kind: 'condition', entity: 'business.invoice' })).toBe('*/5 * * * *');
     expect(scheduleExpr({ kind: 'data', entities: ['core.party'] })).toBe('* * * * *');
-    expect(scheduleExpr({ kind: 'event', connectorKind: 'pull.gmail', event: 'new-message' })).toBe(
-      '*/5 * * * *',
-    );
+    expect(
+      scheduleExpr({
+        kind: 'event',
+        connectorKind: 'pull.gmail',
+        event: 'new-message',
+      }),
+    ).toBe('*/5 * * * *');
     // A webhook has no cadence — it is doorbell-driven only.
     expect(scheduleExpr({ kind: 'webhook', id: 'h', secretHash: 'a'.repeat(64) })).toBeUndefined();
 

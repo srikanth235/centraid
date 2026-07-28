@@ -20,9 +20,9 @@
 
 import crypto from 'node:crypto';
 import { promises as fs } from 'node:fs';
-import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { APP_AUTOMATIONS_SUBDIR, list, readAppAt, writeManifestAt } from './app.js';
+import path from 'node:path';
+
 import {
   isPendingWebhookTrigger,
   MANIFEST_FILE,
@@ -32,6 +32,7 @@ import {
   type Trigger,
   type WebhookTrigger,
 } from '../manifest/manifest.js';
+import { APP_AUTOMATIONS_SUBDIR, list, readAppAt, writeManifestAt } from './app.js';
 
 /** URL prefix the gateway mounts the webhook route under. */
 export const WEBHOOK_ROUTE_PREFIX = '/_centraid-hook';
@@ -134,14 +135,15 @@ export async function provisionAppPendingWebhooks(appDir: string): Promise<Provi
     throw err;
   }
   const appId = path.basename(appDir);
-  const out: ProvisionedWebhook[] = [];
-  for (const e of entries) {
-    if (!e.isDirectory()) continue;
-    if (e.name.startsWith('.') || e.name.startsWith('_')) continue;
-    const minted = await provisionPendingWebhookAt(path.join(autoRoot, e.name), appId);
-    if (minted) out.push(minted);
-  }
-  return out;
+  const minted = await Promise.all(
+    entries
+      .filter(
+        (entry) =>
+          entry.isDirectory() && !entry.name.startsWith('.') && !entry.name.startsWith('_'),
+      )
+      .map((entry) => provisionPendingWebhookAt(path.join(autoRoot, entry.name), appId)),
+  );
+  return minted.filter((webhook): webhook is ProvisionedWebhook => webhook !== undefined);
 }
 
 /** A single draft file in a git-store file map (issue #141). */
@@ -209,7 +211,10 @@ export function provisionPendingWebhooksInFiles(
     const triggers: Trigger[] = manifest.triggers.map((t) =>
       isPendingWebhookTrigger(t) ? provisioned : t,
     );
-    out.push({ path: f.path, content: JSON.stringify({ ...manifest, triggers }, null, 2) + '\n' });
+    out.push({
+      path: f.path,
+      content: JSON.stringify({ ...manifest, triggers }, null, 2) + '\n',
+    });
     minted.push({ path: f.path, automationId, ownerApp, webhookId, secret });
   }
   return { files: out, minted };
@@ -422,7 +427,9 @@ export function makeWebhookRouteHandler(opts: WebhookRouteOptions) {
 
       const body = await readBodyCapped(req);
       if (!body.ok) {
-        sendJson(res, 413, { error: `request body exceeds ${MAX_BODY_BYTES} bytes` });
+        sendJson(res, 413, {
+          error: `request body exceeds ${MAX_BODY_BYTES} bytes`,
+        });
         return true;
       }
 
@@ -437,7 +444,9 @@ export function makeWebhookRouteHandler(opts: WebhookRouteOptions) {
       sendJson(res, result.accepted ? 202 : 500, { ...result, deliveryId: id });
       return true;
     } catch (err) {
-      sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+      sendJson(res, 500, {
+        error: err instanceof Error ? err.message : String(err),
+      });
       return true;
     }
   };

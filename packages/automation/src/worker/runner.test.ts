@@ -4,11 +4,12 @@
  * The entry throws without a worker_thread parentPort, so we drive it as a Worker.
  */
 
-import { tempDir } from '@centraid/test-kit/temp-dir';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Worker } from 'node:worker_threads';
+
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterEach, describe, expect, test } from 'vitest';
 
 const RUNNER = fileURLToPath(new URL('runner.ts', import.meta.url));
@@ -96,7 +97,7 @@ describe('runner', () => {
   test('importing runner as a non-worker throws the parentPort guard', async () => {
     // The module evaluates parentPort at load and refuses to run on the main thread.
     await expect(import(/* @vite-ignore */ `${RUNNER}?guard=${Date.now()}`)).rejects.toThrow(
-      /must be run as a worker_thread/,
+      /must be run as a worker_thread/u,
     );
   });
 });

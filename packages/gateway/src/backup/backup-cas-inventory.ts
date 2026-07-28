@@ -10,6 +10,7 @@ import {
   type ReplicaStore,
   type VaultDb,
 } from '@centraid/vault';
+
 import { collectInventory, type CollectedInventory } from './backup-provider-observability.js';
 import type { StorageConnectionStore } from './storage-connections.js';
 
@@ -40,15 +41,20 @@ async function authenticatedFailures(
   const failures: string[] = [];
   // Scope the AEAD re-audit to THIS store's rows (issue #425 Wave 2): a cas
   // listing must never disprove derived evidence, and vice-versa.
-  for (const sha of index.all(store)) {
-    if (!remote.has(sha)) continue;
-    try {
-      await db.blobTransfers.auditRemoteReplica(sha);
-    } catch {
-      index.unmark(sha);
-      failures.push(sha);
-    }
-  }
+  const audits = await Promise.all(
+    [...index.all(store)]
+      .filter((sha) => remote.has(sha))
+      .map(async (sha) => {
+        try {
+          await db.blobTransfers.auditRemoteReplica(sha);
+          return undefined;
+        } catch {
+          index.unmark(sha);
+          return sha;
+        }
+      }),
+  );
+  failures.push(...audits.filter((sha): sha is string => sha !== undefined));
   return failures.sort();
 }
 
@@ -96,7 +102,10 @@ export async function collectCasInventory(opts: {
       throw new Error(`provider CAS connection "${settings.connectionId}" has no target`);
     }
     const apiKey = await opts.storageConnections.resolveProviderApiKey(settings.connectionId);
-    const provider = openRemoteBackupProvider({ baseUrl: connection.baseUrl, apiKey });
+    const provider = openRemoteBackupProvider({
+      baseUrl: connection.baseUrl,
+      apiKey,
+    });
     return verifiedResult(
       opts.db,
       await collectInventory({

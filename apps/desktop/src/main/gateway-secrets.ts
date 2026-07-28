@@ -10,9 +10,11 @@
 import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { safeStorage } from 'electron';
+
 import type { EndpointSecretPersistence } from '@centraid/tunnel';
 import { aesGcmKeyProtector, KeyStore } from '@centraid/vault';
+import { safeStorage } from 'electron';
+
 import { connectionSecretsFile } from './gateway-paths.js';
 
 interface DeviceSecrets {
@@ -26,7 +28,12 @@ const FILE_FALLBACK_MAGIC = 'CENTRAID-DEVICE-SECRETS-V1\n';
 let warnedFileFallback = false;
 
 function emptySecrets(): DeviceSecrets {
-  return { version: 1, irohKeys: {}, loopbackTokens: {}, gatewayWrappingKeys: {} };
+  return {
+    version: 1,
+    irohKeys: {},
+    loopbackTokens: {},
+    gatewayWrappingKeys: {},
+  };
 }
 
 function shouldUseFileFallback(): boolean {

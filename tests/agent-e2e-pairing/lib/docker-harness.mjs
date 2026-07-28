@@ -88,11 +88,12 @@
 //      through to the DROPs they exist to exercise.
 
 import { spawn } from 'node:child_process';
+import crypto from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
-import { ensureBuilt, parseTicket } from './harness.mjs';
+
 import { defaultRunId, writeFlowVerdict } from '../../agent-e2e-shared/harness.mjs';
+import { ensureBuilt, parseTicket } from './harness.mjs';
 
 const __dirname = import.meta.dirname;
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
@@ -134,7 +135,10 @@ const PROBE_UDP_PORT = 9999;
 
 function run(cmd, args, opts = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'], ...opts });
+    const child = spawn(cmd, args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      ...opts,
+    });
     let stdout = '';
     let stderr = '';
     child.stdout?.on('data', (c) => (stdout += c));
@@ -159,6 +163,15 @@ async function shQuiet(cmd, args, opts = {}) {
   } catch (e) {
     console.error(`  [teardown warning] ${cmd} ${args.join(' ')}: ${e.message}`);
   }
+}
+
+/** Firewall rules and teardown steps must settle in the exact supplied order. */
+function applyInOrder(values, apply) {
+  let index = 0;
+  return Array.from(values).reduce(
+    (sequence, value) => sequence.then(() => apply(value, index++)),
+    Promise.resolve(),
+  );
 }
 
 /**
@@ -282,7 +295,15 @@ async function dockerNetworkCreate(name) {
 async function waitForGatewayReady(containerName, logFile, { timeoutMs = 90000 } = {}) {
   const wanted = { url: undefined, endpointId: undefined };
   const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
+  const waitForNextReadinessCheck = async () => {
+    if (Date.now() - start >= timeoutMs) {
+      const logs = await sh('docker', ['logs', containerName]).catch(() => '(logs unavailable)');
+      await fs.writeFile(logFile, logs);
+      throw new Error(
+        `gateway container ${containerName} not ready in ${timeoutMs}ms (url=${wanted.url} ` +
+          `endpoint=${wanted.endpointId}) — see ${logFile}`,
+      );
+    }
     const { code: inspectCode, stdout: statusOut } = await run('docker', [
       'inspect',
       containerName,
@@ -301,13 +322,9 @@ async function waitForGatewayReady(containerName, logFile, { timeoutMs = 90000 }
       throw new Error(`gateway container ${containerName} exited before ready — see ${logFile}`);
     }
     await new Promise((resolve) => setTimeout(resolve, 300));
-  }
-  const logs = await sh('docker', ['logs', containerName]).catch(() => '(logs unavailable)');
-  await fs.writeFile(logFile, logs);
-  throw new Error(
-    `gateway container ${containerName} not ready in ${timeoutMs}ms (url=${wanted.url} ` +
-      `endpoint=${wanted.endpointId}) — see ${logFile}`,
-  );
+    return waitForNextReadinessCheck();
+  };
+  return waitForNextReadinessCheck();
 }
 
 /**
@@ -503,12 +520,20 @@ async function verifyNetworksIsolated(netA, netB, hostAddrs, fwName) {
     ).trim();
     const targets = [
       { label: `docker-internal ${ip}:8080`, host: ip, port: 8080 },
-      ...hostAddrs.map((h) => ({ label: `host-routed ${h}:${hostPort}`, host: h, port: hostPort })),
+      ...hostAddrs.map((h) => ({
+        label: `host-routed ${h}:${hostPort}`,
+        host: h,
+        port: hostPort,
+      })),
     ];
     // The UDP targets mirror the TCP ones one-for-one: same two classes, same
     // server, so a leak on either transport is reported in the same shape.
     const udpTargets = [
-      { label: `udp docker-internal ${ip}:${PROBE_UDP_PORT}`, host: ip, port: PROBE_UDP_PORT },
+      {
+        label: `udp docker-internal ${ip}:${PROBE_UDP_PORT}`,
+        host: ip,
+        port: PROBE_UDP_PORT,
+      },
       ...hostAddrs.map((h) => ({
         label: `udp host-routed ${h}:${udpHostPort}`,
         host: h,
@@ -586,14 +611,16 @@ async function verifyNetworksIsolated(netA, netB, hostAddrs, fwName) {
  */
 async function verifyProbeExceptionsRemoved(fwName, subnets) {
   const survivors = [];
-  for (const chain of ['DOCKER-USER', 'INPUT']) {
-    const dump = await sh('docker', ['exec', fwName, 'iptables', '-S', chain]);
-    for (const line of dump.split('\n')) {
-      if (!line.includes(`--sport ${PROBE_UDP_PORT}`)) continue;
-      if (!subnets.some((s) => line.includes(s))) continue;
-      survivors.push(`${chain}: ${line.trim()}`);
-    }
-  }
+  await Promise.all(
+    ['DOCKER-USER', 'INPUT'].map(async (chain) => {
+      const dump = await sh('docker', ['exec', fwName, 'iptables', '-S', chain]);
+      for (const line of dump.split('\n')) {
+        if (!line.includes(`--sport ${PROBE_UDP_PORT}`)) continue;
+        if (!subnets.some((s) => line.includes(s))) continue;
+        survivors.push(`${chain}: ${line.trim()}`);
+      }
+    }),
+  );
   if (survivors.length > 0) {
     throw new Error(
       `the isolation probe's UDP ACCEPT exception outlived the probe — still present as ` +
@@ -737,14 +764,14 @@ export async function runFlow(slug, fn) {
     // well, so it is inserted after (c). See the block below (c) for why.
     //
     // Both chains, for the same two-fates reason spelled out at (c).
-    for (const chain of ['DOCKER-USER', 'INPUT']) {
-      for (const subnet of [state.subnetA, state.subnetB]) {
+    await applyInOrder(['DOCKER-USER', 'INPUT'], async (chain) => {
+      await applyInOrder([state.subnetA, state.subnetB], async (subnet) => {
         await insertRule(chain, ['-s', subnet, '-p', 'udp'], 'DROP');
-        for (const port of ALLOWED_UDP_DPORTS) {
+        await applyInOrder(ALLOWED_UDP_DPORTS, async (port) => {
           await insertRule(chain, ['-s', subnet, '-p', 'udp', '--dport', String(port)], 'ACCEPT');
-        }
-      }
-    }
+        });
+      });
+    });
     console.log(
       `  udpclass: DROP all UDP from both test subnets except dport ` +
         `${ALLOWED_UDP_DPORTS.join('/')} (relay is TCP 443, so it is unaffected)`,
@@ -784,12 +811,12 @@ export async function runFlow(slug, fn) {
           'the subnet rules (see flows/cross-network-relay.md)',
       );
     }
-    for (const hostAddr of hostAddrs) {
-      for (const subnet of [state.subnetA, state.subnetB]) {
+    await applyInOrder(hostAddrs, async (hostAddr) => {
+      await applyInOrder([state.subnetA, state.subnetB], async (subnet) => {
         await insertRule('DOCKER-USER', ['-s', subnet, '-d', hostAddr], 'DROP');
         await insertRule('INPUT', ['-s', subnet, '-d', hostAddr], 'DROP');
-      }
-    }
+      });
+    });
     console.log(`  hostaddr: DROP ${hostAddrs.join(', ')} from both test subnets`);
 
     // (d) The probe's ONE exception, inserted LAST so it evaluates FIRST —
@@ -836,8 +863,8 @@ export async function runFlow(slug, fn) {
     // These stay in firewallRulesInserted until they are actually removed, so
     // the failure path needs no second teardown.
     const probeExceptionRules = [];
-    for (const chain of ['DOCKER-USER', 'INPUT']) {
-      for (const subnet of [state.subnetA, state.subnetB]) {
+    await applyInOrder(['DOCKER-USER', 'INPUT'], async (chain) => {
+      await applyInOrder([state.subnetA, state.subnetB], async (subnet) => {
         probeExceptionRules.push(
           await insertRule(
             chain,
@@ -845,8 +872,8 @@ export async function runFlow(slug, fn) {
             'ACCEPT',
           ),
         );
-      }
-    }
+      });
+    });
 
     const isolationVerdict = await verifyNetworksIsolated(netA, netB, hostAddrs, fwName);
     notes.push(`network isolation verified before ceremony: ${isolationVerdict}`);
@@ -857,11 +884,11 @@ export async function runFlow(slug, fn) {
     // spliced out of firewallRulesInserted only AFTER its `-D` actually
     // succeeded, so a failure here leaves the entry queued and the `finally`
     // retries it — and a success can't produce a double `-D`.
-    for (const deleteArgs of probeExceptionRules) {
+    await applyInOrder(probeExceptionRules, async (deleteArgs) => {
       await sh('docker', deleteArgs);
       const queued = firewallRulesInserted.indexOf(deleteArgs);
       if (queued >= 0) firewallRulesInserted.splice(queued, 1);
-    }
+    });
     // Asserted, not assumed — and asserted the only way that's actually
     // falsifiable. A post-removal UDP re-probe would be worthless here: taking
     // the --sport ACCEPT away also removes the echo server's ability to reply
@@ -1000,21 +1027,20 @@ export async function runFlow(slug, fn) {
       '--format',
       '{{.Names}}',
     ]);
-    for (const name of strayList
-      .split('\n')
-      .map((s) => s.trim())
-      .filter(Boolean)) {
-      await shQuiet('docker', ['rm', '-f', name]);
-    }
+    await applyInOrder(
+      strayList
+        .split('\n')
+        .map((s) => s.trim())
+        .filter(Boolean),
+      async (name) => shQuiet('docker', ['rm', '-f', name]),
+    );
     // Remove exactly whatever was actually inserted, regardless of where in
     // setup a failure happened — each entry is independent and carries its
     // own chain, so a crash partway through the (a)/(b)/(c) rule sets above
     // still tears down every rule that landed. These live in the HOST's real
     // netfilter tables; leaking one would silently affect later jobs on the
     // same runner.
-    for (const deleteArgs of firewallRulesInserted) {
-      await shQuiet('docker', deleteArgs);
-    }
+    await applyInOrder(firewallRulesInserted, async (deleteArgs) => shQuiet('docker', deleteArgs));
     await shQuiet('docker', ['rm', '-f', fwName]);
     await shQuiet('docker', ['network', 'rm', netA]);
     await shQuiet('docker', ['network', 'rm', netB]);

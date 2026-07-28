@@ -29,7 +29,10 @@ export default async function autofillItem({
   const itemId = String(input?.item_id ?? '');
   const origin = pageOrigin(input?.page_origin);
   if (!itemId || !origin)
-    return { fill: null, reason: 'A login id and normalized page origin are required.' };
+    return {
+      fill: null,
+      reason: 'A login id and normalized page origin are required.',
+    };
   try {
     const response = await ctx.vault.read({
       entity: 'locker.item',
@@ -44,7 +47,10 @@ export default async function autofillItem({
     const row = ((response.rows ?? []) as unknown as LoginRow[])[0];
     if (!row) return { fill: null };
     if (typeof row.url !== 'string' || !row.url) {
-      return { fill: null, reason: 'This login has no stored origin to match against.' };
+      return {
+        fill: null,
+        reason: 'This login has no stored origin to match against.',
+      };
     }
     const policy = row.url_match_policy === 'exact-host' ? 'exact-host' : 'registrable-domain';
     if (!matchesOrigin({ url: row.url, url_match_policy: policy }, origin)) {
@@ -79,6 +85,9 @@ export default async function autofillItem({
     };
   } catch (err) {
     const error = err as { code?: string; message?: string };
-    return { fill: null, vaultDenied: { code: error.code, message: error.message } };
+    return {
+      fill: null,
+      vaultDenied: { code: error.code, message: error.message },
+    };
   }
 }

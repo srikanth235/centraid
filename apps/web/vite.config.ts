@@ -1,7 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
+
 import { inlineBlueprintAliases } from '../../packages/client/src/react/blueprints/inline-vite-aliases.ts';
 
 const fromHere = (path: string): string => fileURLToPath(new URL(path, import.meta.url));
@@ -14,7 +16,10 @@ export default defineConfig({
     // the package aliases (issue #505).
     alias: [
       ...inlineBlueprintAliases(),
-      { find: '@centraid/client', replacement: fromHere('../../packages/client/src') },
+      {
+        find: '@centraid/client',
+        replacement: fromHere('../../packages/client/src'),
+      },
       {
         find: '@centraid/design-tokens',
         replacement: fromHere('../../packages/design-tokens/src/index.ts'),

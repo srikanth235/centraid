@@ -81,7 +81,11 @@
   // ---------------------------------------------------------------------
   var listeners = new Set();
   function fireChange(tables) {
-    var detail = { tables: tables || [], ts: Date.now(), source: 'visual-harness-mock' };
+    var detail = {
+      tables: tables || [],
+      ts: Date.now(),
+      source: 'visual-harness-mock',
+    };
     listeners.forEach(function (cb) {
       try {
         cb(detail);
@@ -114,7 +118,11 @@
       { folder_id: 'folder-leases', name: 'Leases', parent_id: null },
       { folder_id: 'folder-warranties', name: 'Warranties', parent_id: null },
       // Nested: Receipts lives inside Taxes.
-      { folder_id: 'folder-receipts', name: 'Receipts', parent_id: 'folder-taxes' },
+      {
+        folder_id: 'folder-receipts',
+        name: 'Receipts',
+        parent_id: 'folder-taxes',
+      },
     ];
 
     function doc(id, title, mediaType, folderId, days, bytes, extra) {
@@ -192,7 +200,9 @@
       doc('doc-1', 'Lease Agreement 2024.pdf', 'application/pdf', 'folder-leases', 20, 2_458_000, {
         starred: true,
       }),
-      doc('doc-2', 'Passport scan.jpg', 'image/jpeg', null, 45, 1_150_000, { starred: true }),
+      doc('doc-2', 'Passport scan.jpg', 'image/jpeg', null, 45, 1_150_000, {
+        starred: true,
+      }),
       doc('doc-3', 'W2-2023.pdf', 'application/pdf', 'folder-taxes', 200, 340_000),
       doc('doc-4', '1099-INT.pdf', 'application/pdf', 'folder-receipts', 190, 120_000),
       doc('doc-5', 'Budget 2025.xlsx', 'application/vnd.ms-excel', null, 5, 88_000, {
@@ -316,7 +326,11 @@
       });
       if (!ad) return { events: [] };
       var events = [
-        { activity: 'command.core.add_document', agent_kind: 'owner', occurred_at: ad.created_at },
+        {
+          activity: 'command.core.add_document',
+          agent_kind: 'owner',
+          occurred_at: ad.created_at,
+        },
       ];
       if (ad.folder_id) {
         events.push({
@@ -531,7 +545,10 @@
           content_uri: restored9.content_uri,
           asserted_at: new Date().toISOString(),
         });
-        return ok({ document_id: d9.document_id, content_id: restored9.content_id });
+        return ok({
+          document_id: d9.document_id,
+          content_id: restored9.content_id,
+        });
       }
       case 'tag': {
         var dTag = findDoc(input.document_id);
@@ -568,7 +585,11 @@
           return f.parent_id === parentId && f.name === name;
         });
         if (dup) return refuse('name_unused_among_siblings');
-        var newFolder = { folder_id: uid('folder'), name: name, parent_id: parentId };
+        var newFolder = {
+          folder_id: uid('folder'),
+          name: name,
+          parent_id: parentId,
+        };
         folders.push(newFolder);
         return ok({ folder_id: newFolder.folder_id });
       }
@@ -632,7 +653,11 @@
     var albums = [
       { album_id: 'album-trip', title: 'Summer Trip', cover_content_id: null },
       { album_id: 'album-family', title: 'Family', cover_content_id: null },
-      { album_id: 'album-studio', title: 'Studio work', cover_content_id: null },
+      {
+        album_id: 'album-studio',
+        title: 'Studio work',
+        cover_content_id: null,
+      },
     ];
     var tripMembers = [
       'asset-2',
@@ -1021,7 +1046,11 @@
         return ok({ asset_id: back.asset_id });
       }
       case 'create-album': {
-        var album = { album_id: uid('album'), title: String(input.title), cover_content_id: null };
+        var album = {
+          album_id: uid('album'),
+          title: String(input.title),
+          cover_content_id: null,
+        };
         albums.push(album);
         return ok({ album_id: album.album_id });
       }
@@ -1109,7 +1138,10 @@
         } else {
           a4.place = null;
         }
-        return ok({ asset_id: a4.asset_id, place_id: a4.place ? a4.place.place_id : null });
+        return ok({
+          asset_id: a4.asset_id,
+          place_id: a4.place ? a4.place.place_id : null,
+        });
       }
       case 'tag-asset': {
         var a5 = findAsset(input.asset_id);
@@ -1185,7 +1217,10 @@
     }
 
     var tasks = [
-      task('task-overdue-1', 'Reply to the studio contract email', { due: -2, priority: 1 }),
+      task('task-overdue-1', 'Reply to the studio contract email', {
+        due: -2,
+        priority: 1,
+      }),
       task('task-overdue-2', 'Book the dentist', { due: -1 }),
       task('task-today-1', 'Finish Tasks reinvention writeup', {
         due: 0,
@@ -1206,8 +1241,15 @@
           },
         ],
       }),
-      task('task-today-2', 'Water the plants', { due: 0, effort_min: 5, rrule: 'FREQ=DAILY' }),
-      task('task-week-1', 'Sign the lease renewal (park)', { due: 1, priority: 1 }),
+      task('task-today-2', 'Water the plants', {
+        due: 0,
+        effort_min: 5,
+        rrule: 'FREQ=DAILY',
+      }),
+      task('task-week-1', 'Sign the lease renewal (park)', {
+        due: 1,
+        priority: 1,
+      }),
       task('task-week-2', 'Review Q3 budget', {
         due: 3,
         priority: 4,
@@ -1231,15 +1273,23 @@
         priority: 8,
         description: 'Chapter on stocks and flows.',
       }),
-      task('task-anytime-2', 'Clean up the downloads folder', { effort_min: 20 }),
+      task('task-anytime-2', 'Clean up the downloads folder', {
+        effort_min: 20,
+      }),
       task('task-anytime-3', 'Sketch the Vitals dashboard', { priority: 5 }),
       task('task-done-1', 'Ship Tasks reinvention', {
         priority: 1,
         status: 'completed',
         completedAt: 0,
       }),
-      task('task-done-2', 'Send the weekly review', { status: 'completed', completedAt: -2 }),
-      task('task-cancel-1', 'Cancel the old newsletter', { status: 'cancelled', completedAt: -3 }),
+      task('task-done-2', 'Send the weekly review', {
+        status: 'completed',
+        completedAt: -2,
+      }),
+      task('task-cancel-1', 'Cancel the old newsletter', {
+        status: 'cancelled',
+        completedAt: -3,
+      }),
     ];
     return { tasks: tasks };
   }
@@ -1251,7 +1301,10 @@
       var limit = Math.min(Math.max(Number(input.limit) || 500, 20), 2000);
       var OPEN = { 'needs-action': true, 'in-process': true };
       function withAttachments(t) {
-        return Object.assign({}, t, { attachments: t.attachments || [], references: [] });
+        return Object.assign({}, t, {
+          attachments: t.attachments || [],
+          references: [],
+        });
       }
       function withChildren(t) {
         var children = tasksStore.tasks
@@ -1299,7 +1352,10 @@
             t.description && t.description.toLowerCase().indexOf(term) !== -1
               ? '…⟦' + t.description + '⟧…'
               : '';
-          return Object.assign({}, t, { attachments: t.attachments || [], snippet: snippet });
+          return Object.assign({}, t, {
+            attachments: t.attachments || [],
+            snippet: snippet,
+          });
         }),
       };
     }
@@ -1589,7 +1645,10 @@
         notes: hits.map(function (n) {
           var snippet =
             n.body.toLowerCase().indexOf(term) !== -1 ? '…⟦' + n.body.slice(0, 80) + '⟧…' : '';
-          return Object.assign({}, n, { notebook_names: notebookNamesFor(n), snippet: snippet });
+          return Object.assign({}, n, {
+            notebook_names: notebookNamesFor(n),
+            snippet: snippet,
+          });
         }),
       };
     }
@@ -1793,7 +1852,12 @@
       d.setDate(d.getDate() + offsetDays);
       return d.toISOString();
     }
-    var you = { party_id: 'party-you', name: 'You', partstat: 'accepted', is_you: true };
+    var you = {
+      party_id: 'party-you',
+      name: 'You',
+      partstat: 'accepted',
+      is_you: true,
+    };
     function guest(id, name, partstat) {
       return { party_id: id, name: name, partstat: partstat, is_you: false };
     }
@@ -2296,11 +2360,26 @@
           { kind: 'email', value: 'dadu.letters@gmail.com' },
         ],
         relationships: [
-          { relationship_id: 'rel-dadu-1', name: 'Nani', kind: 'Spouse', pet: null },
-          { relationship_id: 'rel-dadu-2', name: 'Laddu', kind: 'Pet', pet: 'dog' },
+          {
+            relationship_id: 'rel-dadu-1',
+            name: 'Nani',
+            kind: 'Spouse',
+            pet: null,
+          },
+          {
+            relationship_id: 'rel-dadu-2',
+            name: 'Laddu',
+            kind: 'Pet',
+            pet: 'dog',
+          },
         ],
         dates: [
-          { date_id: 'date-dadu-bday', label: 'Birthday', month_day: '08-14', reminder_on: true },
+          {
+            date_id: 'date-dadu-bday',
+            label: 'Birthday',
+            month_day: '08-14',
+            reminder_on: true,
+          },
           {
             date_id: 'date-dadu-anniv',
             label: 'Anniversary',
@@ -2321,12 +2400,24 @@
           },
         ],
         tasks: [
-          { task_id: 'task-dadu-1', text: 'Fix the font size on his tablet', done: false },
+          {
+            task_id: 'task-dadu-1',
+            text: 'Fix the font size on his tablet',
+            done: false,
+          },
           { task_id: 'task-dadu-2', text: 'Send the Ooty photos', done: true },
         ],
         gifts: [
-          { gift_id: 'gift-dadu-1', text: 'Large-print edition of Malgudi Days', state: 'idea' },
-          { gift_id: 'gift-dadu-2', text: 'Wool shawl from the hill market', state: 'given' },
+          {
+            gift_id: 'gift-dadu-1',
+            text: 'Large-print edition of Malgudi Days',
+            state: 'idea',
+          },
+          {
+            gift_id: 'gift-dadu-2',
+            text: 'Wool shawl from the hill market',
+            state: 'given',
+          },
         ],
         interactions: [
           {
@@ -2351,7 +2442,12 @@
         createdDays: 300,
         circle_id: 'circle-college',
         dates: [
-          { date_id: 'date-meera-bday', label: 'Birthday', month_day: '11-02', reminder_on: true },
+          {
+            date_id: 'date-meera-bday',
+            label: 'Birthday',
+            month_day: '11-02',
+            reminder_on: true,
+          },
         ],
         interactions: [
           {
@@ -2397,7 +2493,13 @@
         createdDays: 500,
         circle_id: 'circle-work',
         starred: true,
-        gifts: [{ gift_id: 'gift-sana-1', text: 'Fountain pen ink sampler', state: 'idea' }],
+        gifts: [
+          {
+            gift_id: 'gift-sana-1',
+            text: 'Fountain pen ink sampler',
+            state: 'idea',
+          },
+        ],
         interactions: [
           {
             interaction_id: 'int-sana-1',
@@ -2486,7 +2588,12 @@
     };
   }
   function peopleCard(p) {
-    return { party_id: p.party_id, name: p.name, avatar_color: p.avatar_color, role: p.role };
+    return {
+      party_id: p.party_id,
+      name: p.name,
+      avatar_color: p.avatar_color,
+      role: p.role,
+    };
   }
 
   function peopleRead(query, input) {
@@ -2781,7 +2888,11 @@
         var p7 = findPerson(input.party_id);
         if (!p7) return refuse('not_found');
         if (personParked(p7) || isParkTrigger(input.text)) return parked();
-        var ptask = { task_id: uid('ptask'), text: String(input.text), done: false };
+        var ptask = {
+          task_id: uid('ptask'),
+          text: String(input.text),
+          done: false,
+        };
         p7.tasks.unshift(ptask);
         return ok({ task_id: ptask.task_id });
       }
@@ -2847,7 +2958,11 @@
         var p10 = findPerson(input.party_id);
         if (!p10) return refuse('not_found');
         if (personParked(p10) || isParkTrigger(input.text)) return parked();
-        var gift = { gift_id: uid('gift'), text: String(input.text), state: 'idea' };
+        var gift = {
+          gift_id: uid('gift'),
+          text: String(input.text),
+          state: 'idea',
+        };
         p10.gifts.unshift(gift);
         return ok({ gift_id: gift.gift_id });
       }
@@ -3114,13 +3229,25 @@
   }
   function tallyPerson(pid) {
     if (pid === tallyStore.me) {
-      return { party_id: pid, name: 'You', color: '#0FA678', initials: 'You', is_me: true };
+      return {
+        party_id: pid,
+        name: 'You',
+        color: '#0FA678',
+        initials: 'You',
+        is_me: true,
+      };
     }
     var f = tallyStore.friends.find(function (x) {
       return x.party_id === pid;
     });
     if (!f)
-      return { party_id: pid, name: 'Someone', color: '#5C677D', initials: '?', is_me: false };
+      return {
+        party_id: pid,
+        name: 'Someone',
+        color: '#5C677D',
+        initials: '?',
+        is_me: false,
+      };
     return {
       party_id: pid,
       name: f.name,
@@ -3286,7 +3413,12 @@
       return {
         me: tallyStore.me,
         currency: tallyStore.currency,
-        group: { group_id: g.group_id, name: g.name, icon: g.icon, color: g.color },
+        group: {
+          group_id: g.group_id,
+          name: g.name,
+          icon: g.icon,
+          color: g.color,
+        },
         members: g.members.map(function (pid) {
           var p = tallyPerson(pid);
           return {
@@ -3311,7 +3443,12 @@
         return f.party_id === pid;
       });
       if (!isFriend || pid === tallyStore.me) {
-        return { me: tallyStore.me, currency: tallyStore.currency, friend: null, ledger: [] };
+        return {
+          me: tallyStore.me,
+          currency: tallyStore.currency,
+          friend: null,
+          ledger: [],
+        };
       }
       var p = tallyPerson(pid);
       var netF = tallyPairwise()[pid] || 0;
@@ -3394,9 +3531,15 @@
           );
         })
         .map(function (e) {
-          return Object.assign(tallyLedgerRow(e), { group_name: tallyGroupName(e.group_id) });
+          return Object.assign(tallyLedgerRow(e), {
+            group_name: tallyGroupName(e.group_id),
+          });
         });
-      return { me: tallyStore.me, currency: tallyStore.currency, results: results };
+      return {
+        me: tallyStore.me,
+        currency: tallyStore.currency,
+        results: results,
+      };
     }
     console.warn('[mock-centraid] tally: unmapped query', query);
     return {};
@@ -3739,7 +3882,11 @@
       var rows = live().map(function (it) {
         return lockerRow(it, false);
       });
-      return { items: rows.slice(0, limit), truncated: rows.length > limit, window: limit };
+      return {
+        items: rows.slice(0, limit),
+        truncated: rows.length > limit,
+        window: limit,
+      };
     }
     if (query === 'item') {
       var it = lockerStore.items.find(function (x) {

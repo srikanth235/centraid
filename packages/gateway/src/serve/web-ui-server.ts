@@ -1,8 +1,9 @@
-import http from 'node:http';
 import crypto from 'node:crypto';
 import { promises as fs } from 'node:fs';
-import path from 'node:path';
+import http from 'node:http';
 import { AddressInfo } from 'node:net';
+import path from 'node:path';
+
 import { GATEWAY_SHUTDOWN_GRACE_MS, tuneGatewayHttpServer } from '@centraid/app-engine';
 
 const TYPES: Record<string, string> = {
@@ -75,14 +76,11 @@ function stampShellNonce(bytes: Buffer, nonce: string): Buffer {
     });
   const marker = `<meta name="centraid-csp-nonce" content="${nonce}">`;
   const head = /<head\b[^>]*>/iu.exec(html);
-  if (head) {
-    const at = head.index + head[0].length;
-    html = html.slice(0, at) + marker + html.slice(at);
-  } else {
-    const doctype = /<!doctype\s+html\s*>/iu.exec(html);
-    const at = doctype ? doctype.index + doctype[0].length : 0;
-    html = html.slice(0, at) + marker + html.slice(at);
-  }
+  const doctype = head ? undefined : /<!doctype\s+html\s*>/iu.exec(html);
+  const at = head
+    ? head.index + head[0].length
+    : (doctype?.index ?? 0) + (doctype?.[0].length ?? 0);
+  html = html.slice(0, at) + marker + html.slice(at);
   return Buffer.from(html, 'utf8');
 }
 

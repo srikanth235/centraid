@@ -101,7 +101,10 @@ export function foldIrohPairResponse(response: {
 }): FoldedPairing {
   if (!response.ok) {
     if (response.error === 'ticket_expired') {
-      return { error: 'ticket_expired', message: 'This pairing code has expired.' };
+      return {
+        error: 'ticket_expired',
+        message: 'This pairing code has expired.',
+      };
     }
     return {
       error: 'invalid_ticket',
@@ -109,10 +112,16 @@ export function foldIrohPairResponse(response: {
     };
   }
   if (!response.vaultId) {
-    return { error: 'bad_response', message: 'Gateway did not return a vault id.' };
+    return {
+      error: 'bad_response',
+      message: 'Gateway did not return a vault id.',
+    };
   }
   if (!response.gatewayId) {
-    return { error: 'bad_response', message: 'Gateway did not return its EndpointId.' };
+    return {
+      error: 'bad_response',
+      message: 'Gateway did not return its EndpointId.',
+    };
   }
   return {
     gatewayId: response.gatewayId,

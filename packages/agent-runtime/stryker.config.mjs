@@ -8,7 +8,9 @@ export default {
   // Pure OS priority wrapper — not the full agent-runtime surface.
   mutate: ['src/low-priority.ts'],
   reporters: ['clear-text', 'json'],
-  jsonReporter: { fileName: '../../artifacts/mutation/agent-runtime-report.json' },
+  jsonReporter: {
+    fileName: '../../artifacts/mutation/agent-runtime-report.json',
+  },
   thresholds: { high: 80, low: 50, break: null },
   timeoutMS: 60_000,
   concurrency: 2,

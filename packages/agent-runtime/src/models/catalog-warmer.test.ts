@@ -1,9 +1,11 @@
+import path from 'node:path';
+
+import type { RunnerModel } from '@centraid/app-engine';
 import { tempDir } from '@centraid/test-kit/temp-dir';
 import { describe, expect, test } from 'vitest';
-import path from 'node:path';
-import type { RunnerModel } from '@centraid/app-engine';
-import { readCatalog } from './catalog.ts';
+
 import { CatalogWarmer, deriveStatus } from './catalog-warmer.ts';
+import { readCatalog } from './catalog.ts';
 
 let counter = 0;
 async function tmpCatalogPath(): Promise<string> {

@@ -1,8 +1,11 @@
-import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { createHash } from 'node:crypto';
 import { existsSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+
+import { forEachSequentially } from '@centraid/test-kit/sequential';
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { afterEach, describe, expect, test } from 'vitest';
+
 import { readBackupPolicy } from '../backup-policy.js';
 import { bootstrapVault } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
@@ -18,7 +21,7 @@ import { BlobTransferCoordinator, INGRESS_FSYNC_BATCH_BYTES } from './transfers.
 const cleanups: (() => void | Promise<void>)[] = [];
 describe('transfers', () => {
   afterEach(async () => {
-    while (cleanups.length > 0) await cleanups.pop()?.();
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
   });
 
   interface FallbackRun {
@@ -29,7 +32,7 @@ describe('transfers', () => {
   }
 
   function fallbackRestartHarness(prefix: string): {
-    restart(): Promise<FallbackRun>;
+    restart: () => Promise<FallbackRun>;
   } {
     const dir = tempDirSync(prefix);
     let current: FallbackRun | null = null;
@@ -127,7 +130,10 @@ describe('transfers', () => {
     const second = await h.restart();
     const committed = await second.coordinator.commitIngress(begin.sessionId);
     const expectedSha = createHash('sha256').update(durable).digest('hex');
-    expect(committed).toMatchObject({ sha256: expectedSha, byteSize: durable.length });
+    expect(committed).toMatchObject({
+      sha256: expectedSha,
+      byteSize: durable.length,
+    });
     expect(second.local.getSync(expectedSha)).toStrictEqual(durable);
   });
 
@@ -170,7 +176,11 @@ describe('transfers', () => {
         return bytes ? { size: bytes.length } : null;
       },
     };
-    const remote: RemoteTier = { store, keyFor: (sha) => keys.getOrCreate(sha), frameSize: 32 };
+    const remote: RemoteTier = {
+      store,
+      keyFor: (sha) => keys.getOrCreate(sha),
+      frameSize: 32,
+    };
     const coordinator = new BlobTransferCoordinator({
       vault: db.vault,
       dir,
@@ -188,12 +198,17 @@ describe('transfers', () => {
       statuses.push(`${status.pendingCount}:${status.lastError ?? ''}`),
     );
     const plain = Buffer.from('strict is an event gate, not a blocking socket');
-    const begin = await coordinator.beginIngress({ expectedSize: plain.length });
+    const begin = await coordinator.beginIngress({
+      expectedSize: plain.length,
+    });
     expect(begin.mode).toBe('spool');
     if (begin.mode !== 'spool') throw new Error('expected spool ingress');
     coordinator.appendIngress(begin.sessionId, 0, plain);
     const committed = await coordinator.commitIngress(begin.sessionId);
-    expect(committed).toMatchObject({ casAck: 'replicated', custody: 'pending-offsite' });
+    expect(committed).toMatchObject({
+      casAck: 'replicated',
+      custody: 'pending-offsite',
+    });
     expect(local.hasSync(committed.sha256)).toBe(true);
     expect(coordinator.state.outbox(committed.sha256)).not.toBeNull();
 
@@ -246,7 +261,10 @@ describe('transfers', () => {
       offset: plain.length,
     });
     const committed = await second.coordinator.commitIngress(begin.sessionId);
-    expect(committed).toMatchObject({ sha256: sha, custody: 'pending-offsite' });
+    expect(committed).toMatchObject({
+      sha256: sha,
+      custody: 'pending-offsite',
+    });
     expect(second.local.getSync(sha)).toStrictEqual(plain);
     expect(second.coordinator.state.session(begin.sessionId)).toMatchObject({
       state: 'complete',
@@ -258,7 +276,10 @@ describe('transfers', () => {
     // A lost response is another replay, not another claim or custody row. The
     // sniffed type must also survive the completed-response reconstruction.
     const replay = await second.coordinator.commitIngress(begin.sessionId);
-    expect(replay).toMatchObject({ sha256: sha, mediaType: committed.mediaType });
+    expect(replay).toMatchObject({
+      sha256: sha,
+      mediaType: committed.mediaType,
+    });
     expect(stagingCount(second.db, sha)).toBe(1);
     // node:sqlite hands back null-prototype rows; spreading compares the column
     // data (which is the contract) without asserting the driver's prototype.
@@ -274,7 +295,9 @@ describe('transfers', () => {
     const plain = Buffer.from('unknown hash is recovered entirely from the persisted digest state');
     const sha = createHash('sha256').update(plain).digest('hex');
     const firstRun = await h.restart();
-    const begin = await firstRun.coordinator.beginIngress({ expectedSize: plain.length });
+    const begin = await firstRun.coordinator.beginIngress({
+      expectedSize: plain.length,
+    });
     expect(begin.mode).toBe('spool');
     if (begin.mode !== 'spool') throw new Error('expected spool ingress');
     await firstRun.coordinator.appendIngress(begin.sessionId, 0, plain);
@@ -286,7 +309,10 @@ describe('transfers', () => {
 
     const second = await h.restart();
     const committed = await second.coordinator.commitIngress(begin.sessionId);
-    expect(committed).toMatchObject({ sha256: sha, custody: 'pending-offsite' });
+    expect(committed).toMatchObject({
+      sha256: sha,
+      custody: 'pending-offsite',
+    });
     expect(second.local.getSync(sha)).toStrictEqual(plain);
     expect(second.coordinator.state.session(begin.sessionId)?.state).toBe('complete');
     expect(second.coordinator.state.outbox(sha)).not.toBeNull();
@@ -309,13 +335,21 @@ describe('transfers', () => {
     const row = firstRun.coordinator.state.beginFallbackCommit(begin.sessionId, sha);
     expect(firstRun.local.adoptTempSync?.(sha, row.temp_path!)).toBe(true);
     firstRun.cache.onPut(plain.length);
-    stageFallbackIngress({ vault: firstRun.db.vault, local: firstRun.local, row, sha256: sha });
+    stageFallbackIngress({
+      vault: firstRun.db.vault,
+      local: firstRun.local,
+      row,
+      sha256: sha,
+    });
     firstRun.coordinator.state.enqueue(sha, plain.length);
     expect(firstRun.coordinator.state.session(begin.sessionId)?.state).toBe('committing');
 
     const second = await h.restart();
     const committed = await second.coordinator.commitIngress(begin.sessionId);
-    expect(committed).toMatchObject({ sha256: sha, custody: 'pending-offsite' });
+    expect(committed).toMatchObject({
+      sha256: sha,
+      custody: 'pending-offsite',
+    });
     expect(second.coordinator.state.session(begin.sessionId)?.state).toBe('complete');
     expect(stagingCount(second.db, sha)).toBe(1);
     // node:sqlite hands back null-prototype rows; spreading compares the column
@@ -345,7 +379,12 @@ describe('transfers', () => {
     const row = firstRun.coordinator.state.beginFallbackCommit(begin.sessionId, sha);
     expect(firstRun.local.adoptTempSync?.(sha, row.temp_path!)).toBe(true);
     firstRun.cache.onPut(plain.length);
-    stageFallbackIngress({ vault: firstRun.db.vault, local: firstRun.local, row, sha256: sha });
+    stageFallbackIngress({
+      vault: firstRun.db.vault,
+      local: firstRun.local,
+      row,
+      sha256: sha,
+    });
     // This is the exact ordering used before the fix: complete was durable, but
     // the process died before recordLocalReceipt could create the outbox row.
     firstRun.coordinator.state.completeSession(begin.sessionId, sha);

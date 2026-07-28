@@ -1,20 +1,25 @@
 // Scope-set resolution for an inline app mount (issue #599).
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
 import type { AppScopeEntry } from '../../../gateway-client-vault.js';
 
-const listAppScopes = vi.fn();
-vi.mock('../../../gateway-client-vault.js', () => ({
-  listAppScopes: (...args: unknown[]) => listAppScopes(...args),
+const { listAppScopes } = vi.hoisted(() => ({
+  listAppScopes: vi.fn<typeof import('../../../gateway-client-vault.js').listAppScopes>(),
 }));
-vi.mock('../../../gateway-client-core.js', () => ({
-  auth: vi.fn(async () => ({
+vi.mock(import('../../../gateway-client-vault.js') as Promise<unknown>, () => ({
+  listAppScopes,
+}));
+vi.mock(import('../../../gateway-client-core.js') as Promise<unknown>, () => ({
+  auth: vi.fn<typeof import('../../../gateway-client-core.js').auth>(async () => ({
     baseUrl: 'https://gw.test',
     token: 'tok',
     gatewayId: 'profile-home',
   })),
 }));
-vi.mock('../../../replica/shell-session.js', () => ({
-  addressedGatewayAuth: vi.fn(async () => ({
+vi.mock(import('../../../replica/shell-session.js') as Promise<unknown>, () => ({
+  addressedGatewayAuth: vi.fn<
+    typeof import('../../../replica/shell-session.js').addressedGatewayAuth
+  >(async () => ({
     baseUrl: 'https://gw.test',
     token: 'tok',
     gatewayId: 'profile-home',
@@ -46,12 +51,15 @@ describe('resolveAppScopes', () => {
       entry('vault-grandma', 'Grandma', 'read'),
     ]);
     const scopes = await resolveAppScopes('photos');
-    expect(scopes.map((s) => [s.scope.id, s.scope.canWrite])).toEqual([
+    expect(scopes.map((s) => [s.scope.id, s.scope.canWrite])).toStrictEqual([
       ['vault-own', true],
       ['vault-family', true],
       ['vault-grandma', false],
     ]);
-    expect(scopes[0]!.identity).toEqual({ gatewayId: 'profile-home', vaultId: 'vault-own' });
+    expect(scopes[0]!.identity).toStrictEqual({
+      gatewayId: 'profile-home',
+      vaultId: 'vault-own',
+    });
   });
 
   it('drops a scope the app is not installed in — it would have no shapes to read', async () => {
@@ -60,7 +68,7 @@ describe('resolveAppScopes', () => {
       { ...entry('vault-family', 'Family', 'write'), installed: false },
     ]);
     const scopes = await resolveAppScopes('photos');
-    expect(scopes.map((s) => s.scope.id)).toEqual(['vault-own']);
+    expect(scopes.map((s) => s.scope.id)).toStrictEqual(['vault-own']);
   });
 
   it('caps how many scopes are hydrated at once', async () => {

@@ -1,23 +1,29 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import crypto from 'node:crypto';
+import { promises as fs } from 'node:fs';
 // FORMAT.md restore rule 4 ("side-effect quarantine"): a vault dir adopted
 // from a backup restore carries `RESTORE_QUARANTINE.json`. Mounting it
 // parks the outbox (a plain SQL update, contained) and flags — but does
 // NOT auto-resolve — the automations gap (needs the code store + a git
 // publish, not a SQL update; see `vault-quarantine.ts`'s header).
-
-import { afterEach, describe, expect, test } from 'vitest';
-import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
+
+import { forEachSequentially } from '@centraid/test-kit/sequential';
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { afterEach, describe, expect, test } from 'vitest';
+
 import { openVaultPlane, type VaultPlane } from './vault-plane.js';
 import { QUARANTINE_MARKER_FILE } from './vault-quarantine.js';
 
-const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
+const silentLogger = {
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+};
 
 const cleanups: Array<() => Promise<void> | void> = [];
 describe('vault-quarantine', () => {
   afterEach(async () => {
-    while (cleanups.length > 0) await cleanups.pop()?.();
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
   });
   function openPlane(dir: string): VaultPlane {
     const plane = openVaultPlane({
@@ -31,7 +37,10 @@ describe('vault-quarantine', () => {
   }
 
   /** Stage one outbox item + a standing grant, both live (not yet approved/drained). */
-  function seedApprovedOutboxItem(plane: VaultPlane): { itemId: string; grantId: string } {
+  function seedApprovedOutboxItem(plane: VaultPlane): {
+    itemId: string;
+    grantId: string;
+  } {
     const outcome = plane.gateway.invoke(plane.ownerCredential, {
       command: 'sync.configure_credential',
       input: {
@@ -109,7 +118,11 @@ describe('vault-quarantine', () => {
 
     const item = second.db.vault
       .prepare('SELECT status, grant_id, decided_at FROM outbox_item WHERE item_id = ?')
-      .get(itemId) as { status: string; grant_id: string | null; decided_at: string | null };
+      .get(itemId) as {
+      status: string;
+      grant_id: string | null;
+      decided_at: string | null;
+    };
     expect(item.status).toBe('pending');
     expect(item.grant_id).toBeNull();
     expect(item.decided_at).toBeNull();

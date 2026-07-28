@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+
 import { FsObjectStore } from './object-store.js';
 import {
   BackupProviderError,
@@ -39,7 +40,11 @@ export function validateProviderPolicy(input: unknown): ProviderPolicyDeclaratio
     throw BackupProviderError.of(
       'policy_unmet',
       `rpoSeconds cannot be lower than ${MIN_POLICY_RPO_SECONDS}`,
-      { field: 'rpoSeconds', minimum: MIN_POLICY_RPO_SECONDS, requested: rpoSeconds },
+      {
+        field: 'rpoSeconds',
+        minimum: MIN_POLICY_RPO_SECONDS,
+        requested: rpoSeconds,
+      },
     );
   }
   const casAck = value.casAck;
@@ -150,10 +155,21 @@ export async function inventoryFromFilesystem(
     });
   }
   const page = paginateInventory(rows, query);
-  for (const object of page.objects) {
+  const hashNextObject = async (index: number): Promise<void> => {
+    const object = page.objects[index];
+    if (!object) return;
     const hash = createHash('sha256');
-    for await (const chunk of store.getStream(object.key)) hash.update(chunk);
+    const iterator = store.getStream(object.key)[Symbol.asyncIterator]();
+    const hashNextChunk = async (): Promise<void> => {
+      const chunk = await iterator.next();
+      if (chunk.done) return;
+      hash.update(chunk.value);
+      return hashNextChunk();
+    };
+    await hashNextChunk();
     object.etagOrHash = hash.digest('hex');
-  }
+    return hashNextObject(index + 1);
+  };
+  await hashNextObject(0);
   return page;
 }

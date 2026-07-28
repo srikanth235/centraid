@@ -1,3 +1,4 @@
+import { catOf, fmtDate, monoOf, subOf } from '../format.ts';
 // Field descriptors + rows for the detail pane's read view, keyed by the
 // vault's field names — the per-type shape app.js's `fieldDescriptors()` /
 // `fieldRowTpl()` rendered. `secret` fields hide behind a reveal toggle and
@@ -5,17 +6,23 @@
 // row runs the real client-side TOTP tick via totp.ts's `useTotp` hook.
 import { armConfirm } from '../kit.ts';
 import { copy } from '../logic.ts';
-import { catOf, fmtDate, monoOf, subOf } from '../format.ts';
 import { strength, useTotp } from '../totp.ts';
 import type { LockerDetail } from '../types.ts';
 import { Icon, KitMeter } from './Shared.tsx';
+
 import styles from './ItemFields.module.css';
 import shared from './shared.module.css';
 
 type FieldDesc =
   | { kind: 'plain'; k: string; val: string; mono: boolean; canCopy: boolean }
   | { kind: 'link'; k: string; val: string }
-  | { kind: 'secret'; fid: string; k: string; val: string | null | undefined; strength: boolean }
+  | {
+      kind: 'secret';
+      fid: string;
+      k: string;
+      val: string | null | undefined;
+      strength: boolean;
+    }
   | { kind: 'otp'; seed: string };
 
 // Field descriptors for the read view, keyed by the vault's field names.
@@ -32,7 +39,11 @@ function fieldDescriptors(sel: LockerDetail): FieldDesc[] {
     mono: !!opts.mono,
     canCopy: !!val,
   });
-  const link = (k: string, val: string): FieldDesc => ({ kind: 'link', k, val });
+  const link = (k: string, val: string): FieldDesc => ({
+    kind: 'link',
+    k,
+    val,
+  });
   const secret = (
     fid: string,
     k: string,
@@ -58,15 +69,17 @@ function fieldDescriptors(sel: LockerDetail): FieldDesc[] {
     fields.push(
       secret('num-' + sel.item_id, 'Card number', sel.card_number),
       plain('Cardholder', sel.cardholder),
-    );
-    fields.push(
       plain('Expiry', sel.expiry, { mono: true }),
       secret('cvv-' + sel.item_id, 'CVV', sel.cvv),
     );
     if (sel.brand) fields.push(plain('Brand', sel.brand));
   } else if (sel.type === 'identity') {
-    fields.push(plain('Full name', sel.fullname), plain('Email', sel.email));
-    fields.push(plain('Phone', sel.phone, { mono: true }), plain('Address', sel.address));
+    fields.push(
+      plain('Full name', sel.fullname),
+      plain('Email', sel.email),
+      plain('Phone', sel.phone, { mono: true }),
+      plain('Address', sel.address),
+    );
   } else if (sel.type === 'wifi') {
     fields.push(
       plain('Network', sel.network),
@@ -192,7 +205,13 @@ function FieldRow({
         {st ? (
           <div className={shared.strength}>
             <KitMeter ratio={st.ratio} tone={st.tone} />
-            <span style={{ font: 'var(--t-mono)', fontSize: '10px', color: st.color }}>
+            <span
+              style={{
+                font: 'var(--t-mono)',
+                fontSize: '10px',
+                color: st.color,
+              }}
+            >
               {st.label}
             </span>
           </div>
@@ -339,7 +358,12 @@ export function ItemPane({
               className={`kit-btn danger ${styles.del}`}
               style={{ marginRight: 0 }}
               onClick={(e) => {
-                if (!armConfirm(e.currentTarget, { armedLabel: 'Delete forever — sure?' })) return;
+                if (
+                  !armConfirm(e.currentTarget, {
+                    armedLabel: 'Delete forever — sure?',
+                  })
+                )
+                  return;
                 onPurge(sel);
               }}
             >

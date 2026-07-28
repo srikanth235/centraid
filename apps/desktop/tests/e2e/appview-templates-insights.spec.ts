@@ -1,6 +1,8 @@
-import { test, expect } from '@playwright/test';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+
+import { test, expect } from '@playwright/test';
+
 import {
   appEntry,
   closeApp,
@@ -104,7 +106,10 @@ test.skip('7.3 — a chat turn streams an assistant reply and a SQL tool result'
   gateway.state.apps = [appEntry({ id: 'notes', name: 'Notes' })];
   gateway.state.turnFrames = [
     { data: { type: 'assistant.start' }, delayMs: 20 },
-    { data: { type: 'assistant.delta', delta: 'Let me check your notes.' }, delayMs: 20 },
+    {
+      data: { type: 'assistant.delta', delta: 'Let me check your notes.' },
+      delayMs: 20,
+    },
     {
       data: {
         type: 'tool.start',
@@ -124,7 +129,10 @@ test.skip('7.3 — a chat turn streams an assistant reply and a SQL tool result'
       },
       delayMs: 20,
     },
-    { data: { type: 'assistant.delta', delta: ' You have 3 notes.' }, delayMs: 20 },
+    {
+      data: { type: 'assistant.delta', delta: ' You have 3 notes.' },
+      delayMs: 20,
+    },
     { data: { type: 'final', text: 'You have 3 notes.' }, delayMs: 20 },
   ];
   const { app, page } = await launchApp(env);
@@ -145,7 +153,7 @@ test.skip('7.3 — a chat turn streams an assistant reply and a SQL tool result'
       page.locator('.app-chat-scroll .tool-group, .app-chat-scroll [class*="tool"]').first(),
     ).toBeVisible({ timeout: 10_000 });
     expect(
-      gateway.calls.some((c) => c.method === 'POST' && /\/centraid\/.*\/_turn$/.test(c.pathname)),
+      gateway.calls.some((c) => c.method === 'POST' && /\/centraid\/.*\/_turn$/u.test(c.pathname)),
     ).toBe(true);
   } finally {
     await closeApp(app);
@@ -191,7 +199,9 @@ test.skip('7.4 — the copilot past-chats history lists prior sessions and filte
     await page.locator('.app-chat-overflow-item', { hasText: 'Chat history' }).click();
 
     // Both sessions render in the history list.
-    await expect(page.locator('.app-chat-history-row')).toHaveCount(2, { timeout: 10_000 });
+    await expect(page.locator('.app-chat-history-row')).toHaveCount(2, {
+      timeout: 10_000,
+    });
     await expect(
       page.locator('.app-chat-history-title', { hasText: 'Grocery list' }),
     ).toBeVisible();
@@ -238,8 +248,8 @@ test('10.1 — Discover renders template cards', async () => {
   try {
     await waitForHome(page);
     await gotoNav(page, 'Discover');
-    await expect(page.getByRole('button', { name: /Habit Tracker/ })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Journal/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Habit Tracker/u })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Journal/u })).toBeVisible();
   } finally {
     await closeApp(app);
   }
@@ -274,10 +284,10 @@ test('10.2 — an automation template clone survives a fresh gateway instance an
   try {
     await waitForHome(launched.page);
     await gotoNav(launched.page, 'Discover');
-    await launched.page.getByRole('button', { name: /Daily Digest/ }).click();
+    await launched.page.getByRole('button', { name: /Daily Digest/u }).click();
     await launched.page
       .getByRole('dialog', { name: 'Daily Digest template' })
-      .getByRole('button', { name: /Use template/ })
+      .getByRole('button', { name: /Use template/u })
       .click();
     await expect
       .poll(
@@ -294,14 +304,17 @@ test('10.2 — an automation template clone survives a fresh gateway instance an
     // to remain available until publish"). Adopt navigates to the new thread,
     // so return to Discover and assert the Daily Digest card is still listed.
     await gotoNav(launched.page, 'Discover');
-    await expect(launched.page.getByRole('button', { name: /Daily Digest/ })).toBeVisible();
+    await expect(launched.page.getByRole('button', { name: /Daily Digest/u })).toBeVisible();
 
     const manifestPath = path.join(env.appsDir, 'digest-clone', 'app.json');
     const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8')) as {
       id: string;
       name: string;
     };
-    expect(manifest).toMatchObject({ id: 'digest-clone', name: 'Daily Digest' });
+    expect(manifest).toMatchObject({
+      id: 'digest-clone',
+      name: 'Daily Digest',
+    });
 
     await closeApp(launched.app);
     launched = undefined;
@@ -312,7 +325,7 @@ test('10.2 — an automation template clone survives a fresh gateway instance an
     launched = await launchApp(env);
     await waitForHome(launched.page);
     await gotoNav(launched.page, 'Automations');
-    await expect(launched.page.getByRole('button', { name: /Daily Digest/ })).toBeVisible();
+    await expect(launched.page.getByRole('button', { name: /Daily Digest/u })).toBeVisible();
     await expect(fs.access(manifestPath)).resolves.toBeUndefined();
   } finally {
     if (launched) await closeApp(launched.app);
@@ -323,35 +336,45 @@ test('10.3 — independent builder drafts coexist on disk and survive a full Ele
   const prompts = ['Track hydration', 'Plan daily todos', 'Keep a private journal'];
   let launched = await launchApp(env);
   try {
-    for (const [index, prompt] of prompts.entries()) {
+    // Each draft must survive a complete app restart before the next one is
+    // created, so the state transition is intentionally serial.
+    const createNextDraft = async (index: number): Promise<void> => {
+      const prompt = prompts[index];
+      if (prompt === undefined) return;
       await waitForHome(launched.page);
-      const composer = launched.page.getByPlaceholder(/Describe an app you want/i);
+      const composer = launched.page.getByPlaceholder(/Describe an app you want/iu);
       await composer.fill(prompt);
       await composer.press('Control+Enter');
       await expect.poll(() => gateway.state.apps.length, { timeout: 10_000 }).toBe(index + 1);
       await closeApp(launched.app);
       launched = await launchApp(env);
-    }
+      return createNextDraft(index + 1);
+    };
+    await createNextDraft(0);
     await waitForHome(launched.page);
     const draftIds = gateway.state.apps.map((entry) => entry.id).sort();
     const appDirectories = (await fs.readdir(env.appsDir)).sort();
     expect(appDirectories).toEqual(draftIds);
-    for (const id of draftIds) {
-      const manifest = JSON.parse(
-        await fs.readFile(path.join(env.appsDir, id, 'app.json'), 'utf8'),
-      ) as { id: string; name: string };
-      expect(manifest.id).toBe(id);
-      expect(manifest.name.length).toBeGreaterThan(0);
-    }
+    await Promise.all(
+      draftIds.map(async (id) => {
+        const manifest = JSON.parse(
+          await fs.readFile(path.join(env.appsDir, id, 'app.json'), 'utf8'),
+        ) as { id: string; name: string };
+        expect(manifest.id).toBe(id);
+        expect(manifest.name.length).toBeGreaterThan(0);
+      }),
+    );
     await closeApp(launched.app);
 
     const restarted = await launchApp(env);
     try {
       await waitForHome(restarted.page);
-      for (const id of draftIds) {
-        await expect(restarted.page.locator(`[data-app-id="${id}"]`)).toBeVisible();
-        await expect(fs.access(path.join(env.appsDir, id, 'app.json'))).resolves.toBeUndefined();
-      }
+      await Promise.all(
+        draftIds.map(async (id) => {
+          await expect(restarted.page.locator(`[data-app-id="${id}"]`)).toBeVisible();
+          await expect(fs.access(path.join(env.appsDir, id, 'app.json'))).resolves.toBeUndefined();
+        }),
+      );
     } finally {
       await closeApp(restarted.app);
     }

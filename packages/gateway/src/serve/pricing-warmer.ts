@@ -13,9 +13,10 @@
  * last-good disk table, or the bundled snapshot — a price is never invented.
  */
 
-import { filterLiteLLM, setPricingCatalog, type PricingCatalog } from '@centraid/app-engine';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+
+import { filterLiteLLM, setPricingCatalog, type PricingCatalog } from '@centraid/app-engine';
 
 const LITELLM_URL =
   'https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json';
@@ -93,7 +94,10 @@ export class PricingWarmer {
       if (count === 0) throw new Error('filter produced zero entries');
       setPricingCatalog(models);
       this.lastFetchedMs = this.now();
-      await this.writeDisk({ fetchedAt: new Date(this.lastFetchedMs).toISOString(), models });
+      await this.writeDisk({
+        fetchedAt: new Date(this.lastFetchedMs).toISOString(),
+        models,
+      });
       this.logger?.info(`pricing catalog refreshed: ${count} models`);
     } catch (err) {
       // Keep last-good (disk table) or the bundled snapshot — never a guess.

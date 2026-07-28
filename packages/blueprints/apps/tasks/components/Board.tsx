@@ -1,13 +1,14 @@
+import { fmtDay } from '../format.ts';
+import { I } from '../icons.ts';
+import type { BoardSection, PendingAdd, Task, View } from '../types.ts';
 // The scrolling board column: the capture bar, a "pending approval" strip
 // for parked adds (no task_id exists yet, so these are rendered as ghost
 // rows rather than real Row components), the bucketed/logbook sections, the
 // empty state and the bounded-window "Show more" footer.
 import { Capture, type CaptureProps } from './Capture.tsx';
 import { Row } from './Row.tsx';
-import { I } from '../icons.ts';
 import { Icon } from './Shared.tsx';
-import { fmtDay } from '../format.ts';
-import type { BoardSection, PendingAdd, Task, View } from '../types.ts';
+
 import styles from './Board.module.css';
 import shared from './shared.module.css';
 

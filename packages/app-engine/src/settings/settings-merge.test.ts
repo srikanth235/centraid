@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { buildSettingsInject } from './settings-merge.js';
 
 describe(buildSettingsInject, () => {
@@ -24,8 +25,12 @@ describe(buildSettingsInject, () => {
   });
 
   it('coerces numeric bgL into a percentage string', () => {
-    expect(buildSettingsInject([{ bgL: 12 }]).cssVars).toStrictEqual({ 'bg-l': '12%' });
-    expect(buildSettingsInject([{ bgL: '7' }]).cssVars).toStrictEqual({ 'bg-l': '7%' });
+    expect(buildSettingsInject([{ bgL: 12 }]).cssVars).toStrictEqual({
+      'bg-l': '12%',
+    });
+    expect(buildSettingsInject([{ bgL: '7' }]).cssVars).toStrictEqual({
+      'bg-l': '7%',
+    });
   });
 
   it('drops invalid bgL values', () => {
@@ -76,7 +81,10 @@ describe(buildSettingsInject, () => {
 
   it('routes Color/Accent-suffixed app keys to CSS vars', () => {
     const out = buildSettingsInject([{ appColor: '#5847e0', appAccent: '#2EA098' }]);
-    expect(out.cssVars).toStrictEqual({ 'app-color': '#5847e0', 'app-accent': '#2EA098' });
+    expect(out.cssVars).toStrictEqual({
+      'app-color': '#5847e0',
+      'app-accent': '#2EA098',
+    });
     expect(out.dataAttrs).toStrictEqual({});
   });
 

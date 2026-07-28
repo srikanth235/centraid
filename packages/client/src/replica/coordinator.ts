@@ -293,42 +293,48 @@ export class ReplicaCoordinator {
 
   private async syncFromFeed(): Promise<boolean> {
     if (!this.#pullChanges || this.#closed) return true;
+    const pullChanges = this.#pullChanges;
     const generation = this.#feedGeneration;
     const abort = new AbortController();
     this.#feedAbort = abort;
-    try {
-      while (this.#feedTarget && !abort.signal.aborted) {
-        const target = this.#feedTarget;
-        const status = await this.worker.status();
-        if (!status.cursor) return false;
-        if (!cursorAfter(target, status.cursor)) {
-          this.clearReachedFeedTarget(status.cursor);
-          continue;
-        }
-        let batch: ReplicaChangeBatch | undefined;
-        try {
-          batch = await this.#pullChanges(status.cursor, abort.signal);
-        } catch (error) {
-          if (error instanceof ReplicaRebootstrapRequiredError) {
-            await this.requireRebootstrap(error);
-            return true;
-          }
-          throw error;
-        }
-        if (!batch) return false;
-        if (abort.signal.aborted || generation !== this.#feedGeneration) return true;
-        const cursor = await this.applyChanges(batch);
-        if (!cursorAfter(cursor, status.cursor)) {
-          if (this.recordFeedFailure('non-progress')) {
-            await this.requireRebootstrap({ reason: 'replica feed made no cursor progress' });
-            return true;
-          }
-          return false;
-        }
-        this.clearFeedFailures();
-        this.clearReachedFeedTarget(cursor);
+    const syncNextFeedTarget = async (): Promise<boolean> => {
+      if (!this.#feedTarget || abort.signal.aborted)
+        return abort.signal.aborted || !this.#feedTarget;
+      const target = this.#feedTarget;
+      const status = await this.worker.status();
+      if (!status.cursor) return false;
+      if (!cursorAfter(target, status.cursor)) {
+        this.clearReachedFeedTarget(status.cursor);
+        return syncNextFeedTarget();
       }
-      return abort.signal.aborted || !this.#feedTarget;
+      let batch: ReplicaChangeBatch | undefined;
+      try {
+        batch = await pullChanges(status.cursor, abort.signal);
+      } catch (error) {
+        if (error instanceof ReplicaRebootstrapRequiredError) {
+          await this.requireRebootstrap(error);
+          return true;
+        }
+        throw error;
+      }
+      if (!batch) return false;
+      if (abort.signal.aborted || generation !== this.#feedGeneration) return true;
+      const cursor = await this.applyChanges(batch);
+      if (!cursorAfter(cursor, status.cursor)) {
+        if (this.recordFeedFailure('non-progress')) {
+          await this.requireRebootstrap({
+            reason: 'replica feed made no cursor progress',
+          });
+          return true;
+        }
+        return false;
+      }
+      this.clearFeedFailures();
+      this.clearReachedFeedTarget(cursor);
+      return syncNextFeedTarget();
+    };
+    try {
+      return await syncNextFeedTarget();
     } catch (error) {
       if (
         error instanceof ReplicaProtocolError &&

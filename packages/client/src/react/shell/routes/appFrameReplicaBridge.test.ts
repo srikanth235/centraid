@@ -56,7 +56,12 @@ describe('appFrameReplicaBridge', () => {
           return unsubscribe;
         },
       );
-      const session = { read, search, write, subscribe } as unknown as ReplicaShellSession;
+      const session = {
+        read,
+        search,
+        write,
+        subscribe,
+      } as unknown as ReplicaShellSession;
       const fetchResource = vi
         .fn<NonNullable<AppFrameReplicaBridgeOptions['fetchResource']>>()
         .mockResolvedValue({
@@ -153,10 +158,17 @@ describe('appFrameReplicaBridge', () => {
         expect(subscribe).toHaveBeenCalledWith('todos', undefined, expect.any(Function)),
       );
       await vi.waitFor(() =>
-        expect(childMessages).toContainEqual({ type: 'centraid:changes-parent' }),
+        expect(childMessages).toContainEqual({
+          type: 'centraid:changes-parent',
+        }),
       );
       legacyInvalidate?.([
-        { shapeId: 'shape-todos', entity: 'core.task', rowId: 'task-1', source: 'canonical' },
+        {
+          shapeId: 'shape-todos',
+          entity: 'core.task',
+          rowId: 'task-1',
+          source: 'canonical',
+        },
         { shapeId: '*', entity: '*', source: 'purge' },
       ]);
       await vi.waitFor(() =>
@@ -199,7 +211,11 @@ describe('appFrameReplicaBridge', () => {
       await vi.waitFor(() => expect(read).toHaveBeenCalledWith('todos', { entity: 'core.task' }));
       await vi.waitFor(() =>
         expect(childMessages).toContainEqual(
-          expect.objectContaining({ type: 'centraid:replica-result', id: 'read-1', ok: true }),
+          expect.objectContaining({
+            type: 'centraid:replica-result',
+            id: 'read-1',
+            ok: true,
+          }),
         ),
       );
 
@@ -220,7 +236,11 @@ describe('appFrameReplicaBridge', () => {
       );
       await vi.waitFor(() =>
         expect(childMessages).toContainEqual(
-          expect.objectContaining({ type: 'centraid:replica-result', id: 'search-1', ok: true }),
+          expect.objectContaining({
+            type: 'centraid:replica-result',
+            id: 'search-1',
+            ok: true,
+          }),
         ),
       );
 
@@ -285,7 +305,12 @@ describe('appFrameReplicaBridge', () => {
       );
       await vi.waitFor(() => expect(subscribe).toHaveBeenCalledTimes(2));
       invalidate?.([
-        { shapeId: 'shape-todos', entity: 'core.task', rowId: 'task-1', source: 'canonical' },
+        {
+          shapeId: 'shape-todos',
+          entity: 'core.task',
+          rowId: 'task-1',
+          source: 'canonical',
+        },
       ]);
       await vi.waitFor(() =>
         expect(childMessages).toContainEqual({

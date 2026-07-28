@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+
 import { SEALED_SENTINEL, isSealedValue } from './atlasBrowseData.js';
 
 // Sample-row plumbing for the Relations orrery's "A few of yours" panel section
@@ -37,11 +38,9 @@ export function useSampleRows(
   logical: string | undefined,
   fetcher: SampleRowsFetcher | undefined,
 ): SampleResult | undefined {
-  // Per-mount cache. Held in state's lazy initialiser (not a ref) because the
-  // cache identity must be stable across renders AND be readable during render —
-  // only the resolved entry drives a re-render, via `tick`.
-  const [cache] = useState<Map<string, SampleResult>>(() => new Map());
-  const [, setTick] = useState(0);
+  // Per-mount cache is state because resolved entries drive rendering. Each
+  // settlement replaces the Map, so the reader sees a stable snapshot.
+  const [cache, setCache] = useState<Map<string, SampleResult>>(() => new Map());
   const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
@@ -57,15 +56,18 @@ export function useSampleRows(
     void fetcher(logical)
       .then((rows) => {
         if (cancelled || !mountedRef.current) return;
-        cache.set(logical, { status: 'ready', rows: rows.slice(0, SAMPLE_LIMIT) });
-        setTick((n) => n + 1);
+        setCache((current) =>
+          new Map(current).set(logical, {
+            status: 'ready',
+            rows: rows.slice(0, SAMPLE_LIMIT),
+          }),
+        );
       })
       .catch(() => {
         if (cancelled || !mountedRef.current) return;
         // Honest failure: record the error so we neither refetch nor pretend the
         // table is empty (which would misread as "Nothing here yet").
-        cache.set(logical, { status: 'error' });
-        setTick((n) => n + 1);
+        setCache((current) => new Map(current).set(logical, { status: 'error' }));
       });
     return () => {
       cancelled = true;

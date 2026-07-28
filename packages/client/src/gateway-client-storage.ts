@@ -19,6 +19,8 @@
 
 /* eslint-disable max-classes-per-file -- the two typed gate errors (recovery-kit + home-profile) are one storage-connection boundary (#436) */
 
+import { consumeSseFrames, frameData } from '@centraid/blueprints/kit/turn-stream.js';
+
 import { auth, authHeaders, doFetch, enc, readJson } from './gateway-client-core.js';
 
 /** One kind only (#436 §2): every connection is a managed provider home bundle. */
@@ -115,7 +117,10 @@ export async function createStorageConnection(
     );
   }
   if (res.status === 400) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+    const body = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      message?: string;
+    };
     if (body.error === 'provider_not_home_profile') {
       throw new ProviderNotHomeProfileError(
         body.message ?? 'this provider does not advertise the home profile',
@@ -245,31 +250,22 @@ export async function streamStorageCustody(
       signal,
     });
     if (!res.ok || !res.body) throw new Error(`storage custody stream failed (HTTP ${res.status})`);
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      let boundary: number;
-      while ((boundary = buffer.indexOf('\n\n')) >= 0) {
-        const frame = buffer.slice(0, boundary);
-        buffer = buffer.slice(boundary + 2);
-        const data = frame
-          .split('\n')
-          .filter((line) => line.startsWith('data:'))
-          .map((line) => line.slice(5).trimStart())
-          .join('\n');
-        if (!data) continue;
+    await consumeSseFrames(
+      res.body,
+      (frame) => {
+        const data = frameData(frame);
+        if (!data) return;
         try {
-          const parsed = JSON.parse(data) as { vaults?: StorageVaultStatusDTO[] };
+          const parsed = JSON.parse(data) as {
+            vaults?: StorageVaultStatusDTO[];
+          };
           if (Array.isArray(parsed.vaults)) onStatus(parsed.vaults);
         } catch {
           // A malformed frame is isolated; the next custody event remains useful.
         }
-      }
-    }
+      },
+      { signal },
+    );
   } catch (error) {
     if (!signal.aborted) throw error;
   }

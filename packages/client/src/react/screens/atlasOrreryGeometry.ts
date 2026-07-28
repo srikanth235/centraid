@@ -369,7 +369,10 @@ export function ringRadius(hop: number | null): number {
 /** Cartesian point for a bearing (deg) + radius, about the canvas centre. */
 export function polar(bearingDeg: number, radius: number): { x: number; y: number } {
   const a = (bearingDeg * Math.PI) / 180;
-  return { x: ORRERY.cx + Math.cos(a) * radius, y: ORRERY.cy + Math.sin(a) * radius };
+  return {
+    x: ORRERY.cx + Math.cos(a) * radius,
+    y: ORRERY.cy + Math.sin(a) * radius,
+  };
 }
 
 /**

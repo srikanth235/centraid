@@ -1,9 +1,11 @@
 // governance: allow-repo-hygiene file-size-limit (#363) single cohesive screen component (list + detail + action rows for one surface); splitting would fragment one visual unit
 import { type JSX, useMemo, useState } from 'react';
-import Icon from '../ui/Icon.js';
+
 import Button from '../ui/Button.js';
-import KindBadge from '../ui/KindBadge.js';
 import { cx } from '../ui/cx.js';
+import Icon from '../ui/Icon.js';
+import KindBadge from '../ui/KindBadge.js';
+
 import emptyCss from '../styles/pageEmpty.module.css';
 import styles from './ApprovalsScreen.module.css';
 
@@ -292,7 +294,10 @@ function OutboxRow({
                         aria-label={f.label}
                         value={editText[f.key] ?? ''}
                         onChange={(e) =>
-                          setEditText((prev) => ({ ...prev, [f.key]: e.target.value }))
+                          setEditText((prev) => ({
+                            ...prev,
+                            [f.key]: e.target.value,
+                          }))
                         }
                       />
                     ) : (
@@ -301,7 +306,10 @@ function OutboxRow({
                         aria-label={f.label}
                         value={editText[f.key] ?? ''}
                         onChange={(e) =>
-                          setEditText((prev) => ({ ...prev, [f.key]: e.target.value }))
+                          setEditText((prev) => ({
+                            ...prev,
+                            [f.key]: e.target.value,
+                          }))
                         }
                       />
                     )

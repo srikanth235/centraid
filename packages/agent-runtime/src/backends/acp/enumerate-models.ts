@@ -28,7 +28,9 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { Readable, Writable } from 'node:stream';
+
 import type { RunnerModel } from '@centraid/app-engine';
+
 import { lowPriorityCommand } from '../../low-priority.js';
 import { ACP_PROTOCOL_VERSION, createAcpConnection } from './json-rpc.js';
 import { planLaunch } from './launch.js';
@@ -133,8 +135,15 @@ async function probe(
 ): Promise<RunnerModel[]> {
   await conn.request<InitializeResult>('initialize', {
     protocolVersion: ACP_PROTOCOL_VERSION,
-    clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
-    clientInfo: { name: 'centraid-local-runner', title: 'Centraid', version: '0.1.0' },
+    clientCapabilities: {
+      fs: { readTextFile: false, writeTextFile: false },
+      terminal: false,
+    },
+    clientInfo: {
+      name: 'centraid-local-runner',
+      title: 'Centraid',
+      version: '0.1.0',
+    },
   });
 
   // No vault MCP servers: enumeration reads the agent's own catalog, not the

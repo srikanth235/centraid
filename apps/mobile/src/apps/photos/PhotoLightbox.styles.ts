@@ -1,13 +1,29 @@
 import { StyleSheet } from 'react-native';
+
 import { family } from '../../kit/theme';
 
 export const styles = StyleSheet.create({
-  counter: { color: '#fff', fontFamily: family.sansMedium, fontSize: 13, maxWidth: 240 },
-  exif: { fontFamily: family.monoRegular, fontSize: 11, lineHeight: 17, marginTop: 8 },
+  counter: {
+    color: '#fff',
+    fontFamily: family.sansMedium,
+    fontSize: 13,
+    maxWidth: 240,
+  },
+  exif: {
+    fontFamily: family.monoRegular,
+    fontSize: 11,
+    lineHeight: 17,
+    marginTop: 8,
+  },
   fill: { flex: 1 },
   infoLabel: { flex: 1, fontFamily: family.sansRegular, fontSize: 13 },
   infoRow: { flexDirection: 'row', gap: 16, paddingVertical: 8 },
-  infoValue: { flex: 2, fontFamily: family.monoRegular, fontSize: 12, textAlign: 'right' },
+  infoValue: {
+    flex: 2,
+    fontFamily: family.monoRegular,
+    fontSize: 12,
+    textAlign: 'right',
+  },
   liveButton: {
     alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,.58)',
@@ -20,7 +36,12 @@ export const styles = StyleSheet.create({
     position: 'absolute',
     top: 18,
   },
-  liveText: { color: '#fff', fontFamily: family.monoBold, fontSize: 10, letterSpacing: 1 },
+  liveText: {
+    color: '#fff',
+    fontFamily: family.monoBold,
+    fontSize: 10,
+    letterSpacing: 1,
+  },
   mediaCenter: { alignItems: 'center', justifyContent: 'center' },
   modalBackdrop: { backgroundColor: 'rgba(0,0,0,.35)', flex: 1 },
   originalButton: {
@@ -35,7 +56,12 @@ export const styles = StyleSheet.create({
     right: 18,
     top: 18,
   },
-  placeActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginTop: 14 },
+  placeActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 7,
+    marginTop: 14,
+  },
   placeChip: { borderRadius: 16, paddingHorizontal: 11, paddingVertical: 7 },
   placeText: { fontFamily: family.sansMedium, fontSize: 11 },
   sheet: {
@@ -47,8 +73,18 @@ export const styles = StyleSheet.create({
     position: 'absolute',
     width: '100%',
   },
-  sheetHandle: { alignSelf: 'center', borderRadius: 3, height: 4, marginBottom: 18, width: 42 },
-  sheetTitle: { fontFamily: family.displayBold, fontSize: 19, marginBottom: 10 },
+  sheetHandle: {
+    alignSelf: 'center',
+    borderRadius: 3,
+    height: 4,
+    marginBottom: 18,
+    width: 42,
+  },
+  sheetTitle: {
+    fontFamily: family.displayBold,
+    fontSize: 19,
+    marginBottom: 10,
+  },
   toolbar: {
     alignItems: 'center',
     flexDirection: 'row',

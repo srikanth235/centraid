@@ -1,22 +1,23 @@
-import { tempDirSync } from '@centraid/test-kit/temp-dir';
+import { createHash } from 'node:crypto';
 // Lazy read-only rehydration of archived conversations (issue #438 wave 3).
 // Real journal.db on a temp file + an in-memory content-addressed blob sink
 // standing in for the vault CAS door, shared by the archival engine (writer)
 // and the history store's `archiveBlobReader` (reader). No SQL is mocked.
-
-import { createHash } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
-import { join } from 'node:path';
-import type { DatabaseSync } from 'node:sqlite';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import path from 'node:path';
+import type { DatabaseSync } from 'node:sqlite';
+
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { ConversationHistoryStore } from './history.js';
+
 import { makeConversationRouteHandler } from '../http/conversation-routes.js';
-import { runConversationArchival } from './archive/index.js';
-import type { BlobSink } from './archive/types.js';
-import type { ArchiveBlobReader } from './rehydrate.js';
 import { makeJournalDbProvider, type DatabaseProvider } from '../stores/gateway-db.js';
 import type { WorkspaceProvider } from '../stores/vault-workspace.js';
+import { runConversationArchival } from './archive/index.js';
+import type { BlobSink } from './archive/types.js';
+import { ConversationHistoryStore } from './history.js';
+import type { ArchiveBlobReader } from './rehydrate.js';
 
 const USER = 'owner-party-0000';
 const APP = 'assistant';
@@ -41,7 +42,7 @@ class MemoryBlobSink implements BlobSink {
 
 function freshVaultDir(): string {
   const dir = tempDirSync('centraid-rehydrate-');
-  mkdirSync(join(dir, 'apps', APP), { recursive: true });
+  mkdirSync(path.join(dir, 'apps', APP), { recursive: true });
   return dir;
 }
 
@@ -49,10 +50,10 @@ function workspaceFor(provider: DatabaseProvider, dir: string): WorkspaceProvide
   return () => ({
     vaultId: 'vault-test',
     ownerPartyId: USER,
-    appsDir: join(dir, 'apps'),
+    appsDir: path.join(dir, 'apps'),
     journal: provider,
-    journalDbFile: join(dir, 'journal.db'),
-    runnerSessionDir: join(dir, 'runner-sessions'),
+    journalDbFile: path.join(dir, 'journal.db'),
+    runnerSessionDir: path.join(dir, 'runner-sessions'),
   });
 }
 
@@ -121,7 +122,7 @@ interface Fixture {
 
 function fixture(): Fixture {
   const dir = freshVaultDir();
-  const provider = makeJournalDbProvider(join(dir, 'journal.db'));
+  const provider = makeJournalDbProvider(path.join(dir, 'journal.db'));
   const sink = new MemoryBlobSink();
   const reads: string[] = [];
   const reader: ArchiveBlobReader = async (sha) => {
@@ -134,7 +135,9 @@ function fixture(): Fixture {
     reads,
     reader,
     store: (r = reader) =>
-      new ConversationHistoryStore(workspaceFor(provider, dir), { archiveBlobReader: r }),
+      new ConversationHistoryStore(workspaceFor(provider, dir), {
+        archiveBlobReader: r,
+      }),
   };
 }
 

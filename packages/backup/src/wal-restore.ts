@@ -23,8 +23,10 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import type { ObjectStore } from './object-store.js';
+
 import type { EngineLogger } from './engine-log.js';
+import type { ObjectStore } from './object-store.js';
+import { applyAvailableInOrder, applyInOrder } from './ordered-work.js';
 import {
   openWalCloser,
   openWalPairMarker,
@@ -130,14 +132,14 @@ async function listStream(
 ): Promise<WalStreamListing> {
   const segments: WalSegmentAddress[] = [];
   const closers: WalGroupCloser[] = [];
-  for await (const obj of store.list(walSegmentPrefix(db, generation))) {
+  await applyAvailableInOrder(store.list(walSegmentPrefix(db, generation)), async (obj) => {
     const addr = parseWalSegmentKey(obj.key);
     if (addr) {
       segments.push(addr);
-      continue;
+      return;
     }
     const closer = parseWalCloserKey(obj.key);
-    if (!closer) continue;
+    if (!closer) return;
     try {
       openWalCloser(dataKey, vaultId, closer, await store.get(walGroupCloserKey(closer)));
       closers.push(closer);
@@ -146,7 +148,7 @@ async function listStream(
         `restore: wal closer ${obj.key} failed authentication (${(err as Error).message}) — treating group as unclosed`,
       );
     }
-  }
+  });
   return { segments, closers };
 }
 
@@ -168,17 +170,20 @@ async function listPairMarkers(
   log: Required<EngineLogger>,
 ): Promise<WalPairMarker[]> {
   const markers: WalPairMarker[] = [];
-  for await (const obj of store.list(walPairMarkerPrefix(generations.vault, generations.journal))) {
-    const addr = parseWalPairMarkerKey(obj.key);
-    if (!addr) continue;
-    try {
-      markers.push(openWalPairMarker(dataKey, vaultId, addr, await store.get(obj.key)));
-    } catch (err) {
-      log.warn(
-        `restore: wal pair marker ${obj.key} failed authentication (${(err as Error).message}) — ignoring it`,
-      );
-    }
-  }
+  await applyAvailableInOrder(
+    store.list(walPairMarkerPrefix(generations.vault, generations.journal)),
+    async (obj) => {
+      const addr = parseWalPairMarkerKey(obj.key);
+      if (!addr) return;
+      try {
+        markers.push(openWalPairMarker(dataKey, vaultId, addr, await store.get(obj.key)));
+      } catch (err) {
+        log.warn(
+          `restore: wal pair marker ${obj.key} failed authentication (${(err as Error).message}) — ignoring it`,
+        );
+      }
+    },
+  );
   return markers;
 }
 
@@ -244,10 +249,14 @@ async function spoolSegments(opts: {
   const listingByDb: Partial<Record<WalDbName, WalStreamListing>> = {};
   for (const db of WAL_DB_NAMES) {
     const listing = opts.listingByDb[db];
-    if (listing) listingByDb[db] = { segments: [...listing.segments], closers: listing.closers };
+    if (listing)
+      listingByDb[db] = {
+        segments: [...listing.segments],
+        closers: listing.closers,
+      };
   }
 
-  for (;;) {
+  async function planAndSpool(): Promise<CoordinatedReplayResult> {
     const result = planCoordinatedReplay({
       listingByDb,
       generationByDb: opts.generationByDb,
@@ -255,36 +264,37 @@ async function spoolSegments(opts: {
       ...(opts.pointInTimeMs === undefined ? {} : { cutTickMs: opts.pointInTimeMs }),
     });
     let dropped = false;
-    for (const db of WAL_DB_NAMES) {
-      for (const addr of result.plans[db].segments) {
-        const key = walSegmentKey(addr);
-        const spoolPath = path.join(opts.spoolDir, key.replaceAll('/', '_'));
-        try {
-          await fs.access(spoolPath);
-          continue; // already spooled on an earlier pass
-        } catch {
-          /* not yet spooled */
-        }
-        try {
-          const sealed = await opts.store.get(key);
-          const plain = openWalSegment(opts.dataKey, opts.vaultId, addr, sealed);
-          await fs.writeFile(spoolPath, plain);
-        } catch (err) {
-          damaged.push(key);
-          const listing = listingByDb[db]!;
-          listing.segments = listing.segments.filter((s) => s !== addr);
-          dropped = true;
-          opts.log.warn(
-            `restore: wal segment ${key} unusable (${(err as Error).message}) — dropping it from ` +
-              `the ${db} listing and re-planning the coordinated cut`,
-          );
-          break;
-        }
+    const plannedSegments = WAL_DB_NAMES.flatMap((db) =>
+      result.plans[db].segments.map((addr) => ({ addr, db })),
+    );
+    await applyInOrder(plannedSegments, async ({ db, addr }) => {
+      if (dropped) return;
+      const key = walSegmentKey(addr);
+      const spoolPath = path.join(opts.spoolDir, key.replaceAll('/', '_'));
+      try {
+        await fs.access(spoolPath);
+        return; // already spooled on an earlier pass
+      } catch {
+        /* not yet spooled */
       }
-      if (dropped) break;
-    }
-    if (!dropped) return { result, damaged };
+      try {
+        const sealed = await opts.store.get(key);
+        const plain = openWalSegment(opts.dataKey, opts.vaultId, addr, sealed);
+        await fs.writeFile(spoolPath, plain);
+      } catch (err) {
+        damaged.push(key);
+        const listing = listingByDb[db]!;
+        listing.segments = listing.segments.filter((s) => s !== addr);
+        dropped = true;
+        opts.log.warn(
+          `restore: wal segment ${key} unusable (${(err as Error).message}) — dropping it from ` +
+            `the ${db} listing and re-planning the coordinated cut`,
+        );
+      }
+    });
+    return dropped ? planAndSpool() : result;
   }
+  return { result: await planAndSpool(), damaged };
 }
 
 /**
@@ -310,15 +320,15 @@ async function replayDb(
     groups.set(seg.group, list);
   }
   const orderedGroups = [...groups.keys()].sort((a, b) => a - b);
-  for (const group of orderedGroups) {
+  await applyInOrder(orderedGroups, async (group) => {
     await fs.rm(walPath, { force: true });
     await fs.rm(shmPath, { force: true });
     const handle = await fs.open(walPath, 'w');
     try {
-      for (const seg of groups.get(group)!) {
+      await applyInOrder(groups.get(group)!, async (seg) => {
         const spoolPath = path.join(spoolDir, walSegmentKey(seg).replaceAll('/', '_'));
         await handle.appendFile(await fs.readFile(spoolPath));
-      }
+      });
       await handle.sync();
     } finally {
       await handle.close();
@@ -350,7 +360,7 @@ async function replayDb(
         `restore: ${WAL_DB_FILES[db]} did not consume the validated ${scan.validEndOffset}-byte WAL`,
       );
     }
-  }
+  });
   await fs.rm(walPath, { force: true });
   await fs.rm(shmPath, { force: true });
   return { groupsApplied: orderedGroups.length };
@@ -364,13 +374,19 @@ function checkDb(destDir: string, db: WalDbName): { integrity: string; fkViolati
       | { integrity_check: string }
       | undefined;
     const fks = conn.prepare('PRAGMA foreign_key_check').all();
-    return { integrity: integ?.integrity_check ?? 'no result', fkViolations: fks.length };
+    return {
+      integrity: integ?.integrity_check ?? 'no result',
+      fkViolations: fks.length,
+    };
   } finally {
     conn.close();
   }
 }
 
-const noopLog: Required<EngineLogger> = { info: () => undefined, warn: () => undefined };
+const noopLog: Required<EngineLogger> = {
+  info: () => undefined,
+  warn: () => undefined,
+};
 
 /**
  * Replay both databases' WAL segments onto the restored base files in
@@ -403,7 +419,7 @@ export async function replayWalSegments(opts: ReplayWalOptions): Promise<WalRepl
   const spoolDir = await fs.mkdtemp(path.join(opts.destDir, '.wal-restore-spool-'));
   try {
     const listingByDb: Partial<Record<WalDbName, WalStreamListing>> = {};
-    for (const db of WAL_DB_NAMES) {
+    await applyInOrder(WAL_DB_NAMES, async (db) => {
       const generation = opts.generationByDb[db];
       if (generation !== undefined) {
         listingByDb[db] = await listStream(
@@ -415,14 +431,17 @@ export async function replayWalSegments(opts: ReplayWalOptions): Promise<WalRepl
           log,
         );
       }
-    }
+    });
     const markers =
       opts.generationByDb.vault !== undefined && opts.generationByDb.journal !== undefined
         ? await listPairMarkers(
             opts.store,
             opts.dataKey,
             opts.vaultId,
-            { vault: opts.generationByDb.vault, journal: opts.generationByDb.journal },
+            {
+              vault: opts.generationByDb.vault,
+              journal: opts.generationByDb.journal,
+            },
             log,
           )
         : [];
@@ -457,7 +476,7 @@ export async function replayWalSegments(opts: ReplayWalOptions): Promise<WalRepl
     }
 
     const perDb = {} as Record<WalDbName, WalReplayDbOutcome>;
-    for (const db of WAL_DB_NAMES) {
+    await applyInOrder(WAL_DB_NAMES, async (db) => {
       const generation = opts.generationByDb[db] ?? null;
       if (generation === null) {
         // No WAL stream for this database (or the manifest doesn't carry
@@ -471,7 +490,7 @@ export async function replayWalSegments(opts: ReplayWalOptions): Promise<WalRepl
           integrityCheck: 'skipped',
           foreignKeyViolations: 0,
         };
-        continue;
+        return;
       }
       const plan = plans[db];
       const { groupsApplied } = await replayDb(opts.destDir, db, plan, spoolDir);
@@ -506,8 +525,14 @@ export async function replayWalSegments(opts: ReplayWalOptions): Promise<WalRepl
         `restore: ${WAL_DB_FILES[db]} replayed ${plan.segments.length} segments ` +
           `across ${groupsApplied} groups (last tick ${plan.lastTickMs})`,
       );
-    }
-    return { perDb, damaged, coordinatedCutMs, newestMarkerTickMs, expectedCutMs };
+    });
+    return {
+      perDb,
+      damaged,
+      coordinatedCutMs,
+      newestMarkerTickMs,
+      expectedCutMs,
+    };
   } finally {
     await fs.rm(spoolDir, { recursive: true, force: true });
   }

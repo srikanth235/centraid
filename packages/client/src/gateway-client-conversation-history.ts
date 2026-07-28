@@ -15,6 +15,13 @@
  */
 
 import {
+  conversationsPath,
+  conversationPath,
+  conversationSearchPath,
+  blobsPath,
+} from '@centraid/blueprints/kit/conversation-client.js';
+
+import {
   auth,
   authHeaders,
   doFetch,
@@ -22,13 +29,6 @@ import {
   scopedAuthHeaders,
   GatewayClientError,
 } from './gateway-client-core.js';
-import {
-  conversationsPath,
-  conversationPath,
-  conversationSearchPath,
-  blobsPath,
-} from '@centraid/blueprints/kit/conversation-client.js';
-import type { ConversationAttachmentRef } from './gateway-client-conversation.js';
 
 // ───────────────────────── chat history ─────────────────────
 // Routes single-sourced in @centraid/blueprints/kit/conversation-client.js (#420).
@@ -75,7 +75,10 @@ export async function fetchAssistantAttachmentUrl(
 ): Promise<string> {
   const { baseUrl, token } = await auth();
   const path = `${blobsPath(appId)}/${encodeURIComponent(hash)}?mime=${encodeURIComponent(mime)}`;
-  const res = await doFetch(baseUrl, path, { method: 'GET', headers: authHeaders(token) });
+  const res = await doFetch(baseUrl, path, {
+    method: 'GET',
+    headers: authHeaders(token),
+  });
   if (!res.ok) {
     throw new GatewayClientError('gateway_error', `attachment fetch failed (HTTP ${res.status})`);
   }

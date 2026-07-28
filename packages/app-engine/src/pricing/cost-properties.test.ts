@@ -1,5 +1,6 @@
-import { describe, expect, test } from 'vitest';
 import { fc } from '@centraid/test-kit/fast-check';
+import { describe, expect, test } from 'vitest';
+
 import { costFromEntry, entryToModelPrice } from './cost.js';
 import type { PricingEntry } from './types.js';
 
@@ -23,10 +24,18 @@ const entryArb: fc.Arbitrary<PricingEntry> = fc.record({
 });
 
 const usageArb = fc.record({
-  inputTokens: fc.option(fc.integer({ min: 0, max: 100_000 }), { nil: undefined }),
-  outputTokens: fc.option(fc.integer({ min: 0, max: 100_000 }), { nil: undefined }),
-  cacheReadTokens: fc.option(fc.integer({ min: 0, max: 100_000 }), { nil: undefined }),
-  cacheWriteTokens: fc.option(fc.integer({ min: 0, max: 100_000 }), { nil: undefined }),
+  inputTokens: fc.option(fc.integer({ min: 0, max: 100_000 }), {
+    nil: undefined,
+  }),
+  outputTokens: fc.option(fc.integer({ min: 0, max: 100_000 }), {
+    nil: undefined,
+  }),
+  cacheReadTokens: fc.option(fc.integer({ min: 0, max: 100_000 }), {
+    nil: undefined,
+  }),
+  cacheWriteTokens: fc.option(fc.integer({ min: 0, max: 100_000 }), {
+    nil: undefined,
+  }),
 });
 
 /**

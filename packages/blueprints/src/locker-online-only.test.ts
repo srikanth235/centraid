@@ -2,14 +2,23 @@
    browser blueprint under jsdom while the package's TypeScript config is
    intentionally Node-only. */
 // @ts-nocheck
+import { cpSync, mkdirSync, rmSync, symlinkSync } from 'node:fs';
 // @vitest-environment jsdom
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { cpSync, mkdirSync, rmSync, symlinkSync } from 'node:fs';
+
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 const PKG = path.resolve(import.meta.dirname, '..');
 const SCRATCH = path.resolve(PKG, '.locker-online-only');
+
+type LockerWriteTestSeam = (input: {
+  action: string;
+  input?: Record<string, unknown>;
+  onlineOnly?: boolean;
+}) => Promise<{ status: 'failed'; error: string }>;
+type LockerRenderTestSeam = () => void;
+type LockerRefreshTestSeam = () => void;
 
 describe('locker-online-only', () => {
   beforeAll(() => {
@@ -28,13 +37,16 @@ describe('locker-online-only', () => {
   describe('Locker sealed writes', () => {
     it('marks add and edit payloads online-only while leaving non-secret actions queueable', async () => {
       const { createLogic } = await import(pathToFileURL(path.resolve(SCRATCH, 'logic.ts')).href);
-      const write = vi.fn(async () => ({ status: 'failed', error: 'expected test stop' }));
+      const write = vi.fn<LockerWriteTestSeam>(async () => ({
+        status: 'failed',
+        error: 'expected test stop',
+      }));
       window.centraid = { write };
       const logic = createLogic({
         state: {},
         data: {},
-        render: vi.fn(),
-        refresh: vi.fn(),
+        render: vi.fn<LockerRenderTestSeam>(),
+        refresh: vi.fn<LockerRefreshTestSeam>(),
       });
       const common = {
         type: 'login',

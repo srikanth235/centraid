@@ -3,6 +3,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+
 import { AUTOMATIONS_README, DEFAULT_APP_CSS, README_TEMPLATE } from './scaffold-defaults.js';
 
 describe('scaffold-defaults', () => {
@@ -21,7 +22,7 @@ describe('scaffold-defaults', () => {
 
   it('README_TEMPLATE interpolates the app id into layout paths', () => {
     const md = README_TEMPLATE('todos');
-    expect(md).toMatch(/^# todos\n/);
+    expect(md).toMatch(/^# todos\n/u);
     expect(md).toContain('/centraid/todos/');
     expect(md).toContain('app.json');
     expect(md).toContain('automations/');

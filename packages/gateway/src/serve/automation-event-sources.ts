@@ -116,14 +116,17 @@ async function gmailPoll(input: PollProviderEventSourceInput): Promise<ProviderP
     if (profile.status !== 200 || !historyId) {
       throw new Error(`Gmail profile baseline failed (${profile.status})`);
     }
-    return { events: [], cursor: { provider: 'gmail', historyId } satisfies GmailCursor };
+    return {
+      events: [],
+      cursor: { provider: 'gmail', historyId } satisfies GmailCursor,
+    };
   }
 
   const events = new Map<string, NormalizedProviderEvent>();
   let pageToken: string | undefined;
   let nextHistoryId = cursor.historyId;
   let pages = 0;
-  do {
+  const readPage = async (): Promise<ProviderPollResult | undefined> => {
     if (pages++ >= MAX_PROVIDER_PAGES_PER_POLL) {
       // The provider window is larger than this poll's safety budget. Move
       // explicitly to "now", retain the bounded prefix already collected,
@@ -194,10 +197,16 @@ async function gmailPoll(input: PollProviderEventSourceInput): Promise<ProviderP
       }
     }
     pageToken = string(body.nextPageToken);
-  } while (pageToken);
+    return pageToken ? readPage() : undefined;
+  };
+  const terminal = await readPage();
+  if (terminal) return terminal;
   return {
     events: [...events.values()],
-    cursor: { provider: 'gmail', historyId: nextHistoryId } satisfies GmailCursor,
+    cursor: {
+      provider: 'gmail',
+      historyId: nextHistoryId,
+    } satisfies GmailCursor,
   };
 }
 
@@ -299,14 +308,15 @@ async function githubPoll(input: PollProviderEventSourceInput): Promise<Provider
   let pages = 1;
   let skipped: number | undefined;
   let gapReason: string | undefined;
-  while (nextPage) {
+  const readNextPage = async (): Promise<void> => {
+    if (!nextPage) return;
     if (pages++ >= MAX_PROVIDER_PAGES_PER_POLL) {
       // The first-page ETag is the new durable provider position. Commit the
       // bounded newest prefix and mark the unknown older tail as skipped
       // instead of retrying the same page window indefinitely.
       skipped = 1;
       gapReason = 'github_events_page_limit';
-      break;
+      return;
     }
     const page = await input.pollJson(input.connection, nextPage);
     if (page.status !== 200) {
@@ -314,7 +324,9 @@ async function githubPoll(input: PollProviderEventSourceInput): Promise<Provider
     }
     if (Array.isArray(page.body)) rows.push(...page.body);
     nextPage = githubNextPage(page.headers);
-  }
+    return readNextPage();
+  };
+  await readNextPage();
   const events = rows
     .map((entry) =>
       object(entry) ? githubPayload(object(entry)!, repo, input.trigger.event) : undefined,

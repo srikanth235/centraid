@@ -1,9 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import {
-  automationTurnInboundText,
-  automationTurnMessages,
-  COMPILE_TURN_INBOUND_TEXT,
-} from './automationTurnMessages.js';
+
 import {
   automationLiveMessages,
   createAutomationLiveTrace,
@@ -12,6 +8,11 @@ import {
   reduceAutomationItemEvent,
   startAutomationLiveItem,
 } from './automationLiveMessages.js';
+import {
+  automationTurnInboundText,
+  automationTurnMessages,
+  COMPILE_TURN_INBOUND_TEXT,
+} from './automationTurnMessages.js';
 
 vi.mock(import('../../../gateway-client.js'), () => ({}));
 
@@ -86,7 +87,11 @@ describe('automationTurnMessages cold projection', () => {
       }),
     ]);
     expect(messages).toStrictEqual([
-      expect.objectContaining({ kind: 'ai', error: false, copyText: 'Partial answer' }),
+      expect.objectContaining({
+        kind: 'ai',
+        error: false,
+        copyText: 'Partial answer',
+      }),
       expect.objectContaining({
         kind: 'ai',
         error: true,
@@ -113,7 +118,11 @@ describe('automation turn live projection', () => {
     state = reduceAutomationItemEvent(state, {
       itemId: 'tool-a',
       ordinal: 2,
-      event: { type: 'tool.start', toolCallId: 'tool-a', toolName: 'mail.read' },
+      event: {
+        type: 'tool.start',
+        toolCallId: 'tool-a',
+        toolName: 'mail.read',
+      },
     });
     state = reduceAutomationItemEvent(state, {
       itemId: 'agent-a',
@@ -133,7 +142,11 @@ describe('automation turn live projection', () => {
     state = reduceAutomationItemEvent(state, {
       itemId: 'tool-b',
       ordinal: 5,
-      event: { type: 'tool.start', toolCallId: 'tool-b', toolName: 'calendar.read' },
+      event: {
+        type: 'tool.start',
+        toolCallId: 'tool-b',
+        toolName: 'calendar.read',
+      },
     });
     state = reduceAutomationItemEvent(state, {
       itemId: 'agent-b',
@@ -184,7 +197,11 @@ describe('automation turn live projection', () => {
     state = reduceAutomationItemEvent(state, {
       itemId: 'standalone-tool',
       ordinal: 2,
-      event: { type: 'tool.start', toolCallId: 'vault', toolName: 'vault.invoke' },
+      event: {
+        type: 'tool.start',
+        toolCallId: 'vault',
+        toolName: 'vault.invoke',
+      },
     });
 
     const messages = automationLiveMessages(state);
@@ -267,7 +284,7 @@ describe('automation turn live projection', () => {
         outputJson: '{"text":"This runner cannot read PDF attachments."}',
       }),
     ]);
-    expect(automationLiveMessages(state)).toEqual([
+    expect(automationLiveMessages(state)).toStrictEqual([
       expect.objectContaining({ kind: 'user', text: 'Run the brief.' }),
       expect.objectContaining({
         kind: 'notice',
@@ -288,7 +305,11 @@ describe('compile-turn inbound bubble (#541)', () => {
   it('never renders the compiler work order as the owner’s own message', () => {
     const messages = automationTurnMessages(turn({ triggerKind: 'compile' }), [
       item(0, 'message_in', { text: WORK_ORDER }),
-      item(1, 'agent', { startedAt: 1, endedAt: 10, outputJson: '{"text":"Plan ready"}' }),
+      item(1, 'agent', {
+        startedAt: 1,
+        endedAt: 10,
+        outputJson: '{"text":"Plan ready"}',
+      }),
     ]);
     const user = messages.find((message) => message.kind === 'user');
     expect(user).toStrictEqual(
@@ -302,7 +323,10 @@ describe('compile-turn inbound bubble (#541)', () => {
       item(0, 'message_in', { text: 'only flag movers over 5%' }),
     ]);
     expect(messages[0]).toStrictEqual(
-      expect.objectContaining({ kind: 'user', text: 'only flag movers over 5%' }),
+      expect.objectContaining({
+        kind: 'user',
+        text: 'only flag movers over 5%',
+      }),
     );
   });
 
@@ -327,7 +351,12 @@ describe('compile-turn inbound bubble (#541)', () => {
     const after = automationTurnMessages(turn({ endedAt: undefined }), [
       item(0, 'message_in', { text: 'go' }),
       item(1, 'agent', { startedAt: 1, endedAt: undefined }),
-      item(2, 'tool', { callId: 'a', name: 'mail.search', startedAt: 2, endedAt: undefined }),
+      item(2, 'tool', {
+        callId: 'a',
+        name: 'mail.search',
+        startedAt: 2,
+        endedAt: undefined,
+      }),
     ]);
     // The tools row is inserted AHEAD of the agent bubble on flush, so index 1
     // changes identity — the ids must not.

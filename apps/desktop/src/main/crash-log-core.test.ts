@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { formatCrashLine, shouldRotate, toCrashRecord } from './crash-log-core.js';
 
 describe(toCrashRecord, () => {

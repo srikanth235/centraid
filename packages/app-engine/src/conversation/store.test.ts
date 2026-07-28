@@ -3,8 +3,9 @@
 // pruning in store-prune.test.ts. Shared fixtures in store-test-fixtures.ts.
 
 import { describe, expect, it } from 'vitest';
-import { ConversationStore } from './store.js';
+
 import { newProvider, newStore } from './store-test-fixtures.js';
+import { ConversationStore } from './store.js';
 
 describe('ConversationStore — conversations', () => {
   it('creates + round-trips a conversation (kind/app/automation/title)', () => {
@@ -26,7 +27,11 @@ describe('ConversationStore — conversations', () => {
 
   it('persists cumulative ACP usage beside the resume handle', () => {
     const store = newStore();
-    const conv = store.createConversation({ kind: 'chat', userId: 'u1', appId: 'app' });
+    const conv = store.createConversation({
+      kind: 'chat',
+      userId: 'u1',
+      appId: 'app',
+    });
     expect(
       store.noteTurn(conv.id, 'u1', {
         kind: 'codex',
@@ -82,7 +87,11 @@ describe('ConversationStore — conversations', () => {
   it('listConversationsMeta returns chat/build threads with a transcript count', () => {
     const provider = newProvider();
     const store = new ConversationStore(provider);
-    const c = store.createConversation({ kind: 'chat', userId: 'u1', appId: 'app' });
+    const c = store.createConversation({
+      kind: 'chat',
+      userId: 'u1',
+      appId: 'app',
+    });
     store.ensureAutomationConversation('app/auto'); // automation — excluded from chat list
     store.insertTurn({
       turnId: 't1',
@@ -90,7 +99,12 @@ describe('ConversationStore — conversations', () => {
       triggerKind: 'interactive',
       startedAt: 1,
     });
-    store.insertMessageIn({ turnId: 't1', role: 'user', text: 'hello', startedAt: 1 });
+    store.insertMessageIn({
+      turnId: 't1',
+      role: 'user',
+      text: 'hello',
+      startedAt: 1,
+    });
     const list = store.listConversationsMeta('u1');
     expect(list).toHaveLength(1);
     expect(list[0]?.id).toBe(c.id);
@@ -123,14 +137,24 @@ describe('ConversationStore — search / pin / archive (issue #420)', () => {
     title: string,
     userText: string,
   ): string {
-    const c = store.createConversation({ kind: 'chat', userId, appId: '_assistant', title });
+    const c = store.createConversation({
+      kind: 'chat',
+      userId,
+      appId: '_assistant',
+      title,
+    });
     store.insertTurn({
       turnId: `${c.id}-t`,
       conversationId: c.id,
       triggerKind: 'interactive',
       startedAt: 1,
     });
-    store.insertMessageIn({ turnId: `${c.id}-t`, role: 'user', text: userText, startedAt: 1 });
+    store.insertMessageIn({
+      turnId: `${c.id}-t`,
+      role: 'user',
+      text: userText,
+      startedAt: 1,
+    });
     // Distinct, increasing updated_at so newest-first ordering is deterministic
     // (real turns bump this; the test seeds it explicitly).
     store.touchConversation(c.id, userId, ++clock);
@@ -215,7 +239,13 @@ describe('ConversationStore — turns', () => {
     });
     expect(store.getTurn('t0')?.seq).toBe(0);
     expect(store.getTurn('t1')?.seq).toBe(1);
-    store.finishTurn({ turnId: 't1', endedAt: 3, ok: false, error: 'boom', summary: 's' });
+    store.finishTurn({
+      turnId: 't1',
+      endedAt: 3,
+      ok: false,
+      error: 'boom',
+      summary: 's',
+    });
     const t = store.getTurn('t1');
     expect(t?.ok).toBe(false);
     expect(t?.error).toBe('boom');
@@ -225,10 +255,24 @@ describe('ConversationStore — turns', () => {
 
   it('deleteTurn removes an unfinished turn but refuses a finished one', () => {
     const store = newStore();
-    const c = store.createConversation({ kind: 'automation', userId: '', automationId: 'app/a' });
-    store.insertTurn({ turnId: 'r0', conversationId: c.id, triggerKind: 'manual', startedAt: 1 });
+    const c = store.createConversation({
+      kind: 'automation',
+      userId: '',
+      automationId: 'app/a',
+    });
+    store.insertTurn({
+      turnId: 'r0',
+      conversationId: c.id,
+      triggerKind: 'manual',
+      startedAt: 1,
+    });
     store.finishTurn({ turnId: 'r0', endedAt: 2, ok: true });
-    store.insertTurn({ turnId: 'r1', conversationId: c.id, triggerKind: 'manual', startedAt: 3 });
+    store.insertTurn({
+      turnId: 'r1',
+      conversationId: c.id,
+      triggerKind: 'manual',
+      startedAt: 3,
+    });
 
     // A finished turn is durable history: deleting it would hand its `seq` to
     // the next insert and alias the archive's seq_from/seq_to ranges.
@@ -239,7 +283,12 @@ describe('ConversationStore — turns', () => {
     // purpose, and nothing archived can be covering it.
     expect(store.deleteTurn('r1')).toBe(true);
     expect(store.getTurn('r1')).toBeUndefined();
-    store.insertTurn({ turnId: 'r1', conversationId: c.id, triggerKind: 'manual', startedAt: 4 });
+    store.insertTurn({
+      turnId: 'r1',
+      conversationId: c.id,
+      triggerKind: 'manual',
+      startedAt: 4,
+    });
     expect(store.getTurn('r1')?.seq).toBe(1);
     store.close();
   });
@@ -270,8 +319,17 @@ describe('ConversationStore — turns', () => {
 
   it('finishTurn rolls up step/agent tokens + step/tool counts', () => {
     const store = newStore();
-    const c = store.createConversation({ kind: 'automation', userId: '', automationId: 'app/a' });
-    store.insertTurn({ turnId: 'r', conversationId: c.id, triggerKind: 'manual', startedAt: 1 });
+    const c = store.createConversation({
+      kind: 'automation',
+      userId: '',
+      automationId: 'app/a',
+    });
+    store.insertTurn({
+      turnId: 'r',
+      conversationId: c.id,
+      triggerKind: 'manual',
+      startedAt: 1,
+    });
     store.openItem({
       turnId: 'r',
       itemId: 'i1',
@@ -335,7 +393,10 @@ describe('ConversationStore — turns', () => {
 
   it('renews a turn-lock lease only for its current owner', () => {
     const store = newStore();
-    const conversation = store.createConversation({ kind: 'chat', userId: 'u1' });
+    const conversation = store.createConversation({
+      kind: 'chat',
+      userId: 'u1',
+    });
     const startedAt = 1_000;
     const refreshedAt = startedAt + 20 * 60_000;
     expect(store.acquireTurnLock(conversation.id, 'owner-a', startedAt)).toBe(true);

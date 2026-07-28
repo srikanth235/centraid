@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { formatRef, isValidId, isValidRef, parseRef } from './ref.js';
 
 describe(isValidId, () => {

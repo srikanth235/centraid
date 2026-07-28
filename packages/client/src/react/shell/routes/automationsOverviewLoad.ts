@@ -11,8 +11,8 @@ import {
 import type { AuOverviewData } from '../../screen-contracts.js';
 import type { ShellActions } from '../actions.js';
 import { openWebhookReveal } from '../webhookReveal.js';
-import { filterConsentForAutomation } from './automationThreadData.js';
 import { buildOverviewData, collectAutomationRuns } from './automationsData.js';
+import { filterConsentForAutomation } from './automationThreadData.js';
 import { cloneAutomationTemplate, surfaceMintedWebhook } from './templatesData.js';
 
 /** Fetch rows, run feed, consent lists → overview DTO with attention badges. */
@@ -38,6 +38,17 @@ export async function loadAutomationsOverviewData(): Promise<AuOverviewData> {
   return buildOverviewData(rows, entries, attentionByRef);
 }
 
+async function revealWebhooksInOrder(
+  webhooks: readonly { url: string; secret: string }[],
+  index = 0,
+): Promise<void> {
+  const webhook = webhooks[index];
+  if (!webhook) return;
+  surfaceMintedWebhook(webhook);
+  await openWebhookReveal(webhook);
+  return revealWebhooksInOrder(webhooks, index + 1);
+}
+
 /** Adopt an empty-state suggestion template into a new automation. */
 export async function adoptOverviewSuggestion(
   templateId: string,
@@ -52,10 +63,9 @@ export async function adoptOverviewSuggestion(
       return;
     }
     const { ref, webhooks } = await cloneAutomationTemplate(tmpl);
-    for (const w of webhooks) {
-      surfaceMintedWebhook(w);
-      await openWebhookReveal(w);
-    }
+    // Reveals are intentionally serialized: each may claim the shared
+    // clipboard/toast surface, so concurrent presentation can lose a secret.
+    await revealWebhooksInOrder(webhooks);
     if (ref) navigate({ kind: 'automation-view', automationId: ref });
     else navigate({ kind: 'automations' });
   } catch (err: unknown) {

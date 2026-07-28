@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { authDeadError, ConnectionLimiter, delay } from './connection-limiter.js';
 
 describe(authDeadError, () => {

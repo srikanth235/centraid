@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import {
   deriveStorageMetrics,
   type FreshnessClocks,
@@ -23,7 +24,12 @@ function input(overrides: Partial<StorageMetricsInput> = {}): StorageMetricsInpu
   return {
     now: NOW,
     freshness: { declaredCadenceMs: DAY, clocks: clocks() },
-    retention: { kind: 'ladder', keepAllDays: 7, dailyDays: 30, weeklyDays: 90 },
+    retention: {
+      kind: 'ladder',
+      keepAllDays: 7,
+      dailyDays: 30,
+      weeklyDays: 90,
+    },
     usage: { backup: { bytesStored: 100, quotaBytes: 1000 } },
     restoreCostClass: 'free-egress',
     ...overrides,
@@ -67,7 +73,10 @@ describe('storage-metrics', () => {
       ] as const) {
         const m = deriveStorageMetrics(
           input({
-            freshness: { declaredCadenceMs: DAY, clocks: clocks({ [key]: null }) },
+            freshness: {
+              declaredCadenceMs: DAY,
+              clocks: clocks({ [key]: null }),
+            },
           }),
         );
         expect(m.freshness.status).toBe('unknown');
@@ -113,7 +122,14 @@ describe('storage-metrics', () => {
   describe('recovery window', () => {
     it('N days = the ladder daily rung', () => {
       const m = deriveStorageMetrics(
-        input({ retention: { kind: 'ladder', keepAllDays: 7, dailyDays: 30, weeklyDays: 90 } }),
+        input({
+          retention: {
+            kind: 'ladder',
+            keepAllDays: 7,
+            dailyDays: 30,
+            weeklyDays: 90,
+          },
+        }),
       );
       expect(m.recoveryWindow.days).toBe(30);
     });

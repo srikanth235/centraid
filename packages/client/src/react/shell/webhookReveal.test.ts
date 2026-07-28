@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import { openWebhookReveal } from './webhookReveal.js';
 
 describe('webhookReveal', () => {
@@ -14,7 +15,10 @@ describe('webhookReveal', () => {
     document.body.innerHTML = '';
   });
 
-  const WEBHOOK = { url: 'https://gw.example/_centraid-hook/abc123', secret: 'shh-once-only' };
+  const WEBHOOK = {
+    url: 'https://gw.example/_centraid-hook/abc123',
+    secret: 'shh-once-only',
+  };
 
   describe(openWebhookReveal, () => {
     it('mounts the URL + secret and resolves on Done', async () => {
@@ -33,7 +37,10 @@ describe('webhookReveal', () => {
     });
 
     it('uses a custom title + note when given', async () => {
-      const p = openWebhookReveal(WEBHOOK, { title: 'New secret', note: 'Update your caller.' });
+      const p = openWebhookReveal(WEBHOOK, {
+        title: 'New secret',
+        note: 'Update your caller.',
+      });
       const card = document.querySelector('.card')!;
       expect(card.textContent).toContain('New secret');
       expect(card.textContent).toContain('Update your caller.');

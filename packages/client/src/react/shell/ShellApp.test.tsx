@@ -1,6 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it } from 'vitest';
+
 import type { ShellRoute } from '../../app-shell-context.js';
 import ShellApp, { type ShellNav } from './ShellApp.js';
 

@@ -4,6 +4,7 @@
 
 import { IDBFactory } from 'fake-indexeddb';
 import { describe, expect, it } from 'vitest';
+
 import { createIndexedDbReplicaIdentityInventory } from './identity-inventory.js';
 
 describe(createIndexedDbReplicaIdentityInventory, () => {

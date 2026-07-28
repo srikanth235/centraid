@@ -15,6 +15,7 @@
 // (scoped frame) + the global kit-* vocabulary (kit.css, loaded once by the
 // route host).
 import type { ReactNode } from 'react';
+
 import styles from './Chrome.module.css';
 
 export interface ChromeProps {

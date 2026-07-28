@@ -18,7 +18,10 @@ export function toIsoUtc(local: string): string {
 
 export function fmtTime(iso: string): string {
   try {
-    return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    return new Date(iso).toLocaleTimeString(undefined, {
+      hour: 'numeric',
+      minute: '2-digit',
+    });
   } catch {
     return iso;
   }
@@ -50,7 +53,11 @@ export function toLocalInput(dateish: string | number | Date): string {
 export function fmtRange(ev: { dtstart: string; dtend?: string | null }): string {
   const s = new Date(ev.dtstart);
   const e = ev.dtend ? new Date(ev.dtend) : null;
-  const opts: Intl.DateTimeFormatOptions = { weekday: 'short', month: 'short', day: 'numeric' };
+  const opts: Intl.DateTimeFormatOptions = {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  };
   const sd = Number.isNaN(s.getTime()) ? String(ev.dtstart) : s.toLocaleDateString(undefined, opts);
   if (!e || Number.isNaN(e.getTime())) return `${sd} · ${fmtTime(ev.dtstart)}`;
   if (localDayKey(s) === localDayKey(e)) {
@@ -137,7 +144,14 @@ export function bucketByDay(list: AgEvent[]): Map<string, DaySegment[]> {
     const start = new Date(ev.dtstart);
     if (Number.isNaN(start.getTime())) {
       const key = String(ev.dtstart).slice(0, 10);
-      push(key, { ev, segStart: 0, segEnd: 0, startsHere: true, endsHere: true, spansAll: false });
+      push(key, {
+        ev,
+        segStart: 0,
+        segEnd: 0,
+        startsHere: true,
+        endsHere: true,
+        spansAll: false,
+      });
       continue;
     }
     let end = ev.dtend ? new Date(ev.dtend) : start;

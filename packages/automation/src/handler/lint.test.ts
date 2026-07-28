@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { lintHandlerSource, formatHandlerLintError } from './lint.js';
 
 const CLEAN_HANDLER = `
@@ -90,15 +91,15 @@ describe(lintHandlerSource, () => {
   });
 
   it('DOES flag unsafe calls inside template-literal interpolation', () => {
-    // eslint-disable-next-line no-template-curly-in-string -- this string IS handler source under test (#247)
-    const findings = lintHandlerSource('const id = `req-${Math.random()}`;');
+    const interpolation = String.fromCharCode(36, 123);
+    const findings = lintHandlerSource(`const id = \`req-${interpolation}Math.random()}\`;`);
     expect(findings).toHaveLength(1);
     expect(findings[0]!.rule).toBe('no-math-random');
   });
 
   it('handles nested braces inside interpolation without desyncing', () => {
-    // eslint-disable-next-line no-template-curly-in-string -- this string IS handler source under test (#247)
-    const src = 'const s = `${ { a: 1 }.a + Date.now() }`; const ok = ctx.state.get("x");';
+    const interpolation = String.fromCharCode(36, 123);
+    const src = `const s = \`${interpolation} { a: 1 }.a + Date.now() }\`; const ok = ctx.state.get("x");`;
     const findings = lintHandlerSource(src);
     expect(findings).toHaveLength(1);
     expect(findings[0]!.rule).toBe('no-date-now');
@@ -137,8 +138,8 @@ describe(formatHandlerLintError, () => {
     const findings = lintHandlerSource('const t = Date.now();');
     const msg = formatHandlerLintError(findings, 'automations/main/handler.js');
     expect(msg).toBeTruthy();
-    expect(msg!).toMatch(/automations\/main\/handler\.js/);
-    expect(msg!).toMatch(/no-date-now/);
-    expect(msg!).toMatch(/1 unsafe pattern/);
+    expect(msg!).toMatch(/automations\/main\/handler\.js/u);
+    expect(msg!).toMatch(/no-date-now/u);
+    expect(msg!).toMatch(/1 unsafe pattern/u);
   });
 });

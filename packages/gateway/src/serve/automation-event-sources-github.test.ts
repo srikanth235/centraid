@@ -8,6 +8,7 @@
 // in automation-event-sources.test-fixtures.ts.
 
 import { describe, expect, it, vi } from 'vitest';
+
 import { pollProviderEventSource, type PollJson } from './automation-event-sources.js';
 import { github, replies } from './automation-event-sources.test-fixtures.js';
 
@@ -143,7 +144,10 @@ describe('pollProviderEventSource — GitHub', () => {
       'github:event:1',
       'github:event:2',
     ]);
-    expect(next.cursor).toMatchObject({ provider: 'github', etag: '"events-all"' });
+    expect(next.cursor).toMatchObject({
+      provider: 'github',
+      etag: '"events-all"',
+    });
   });
 
   it('honors GitHub backoff and baselines a newly authored watcher without replay', async () => {

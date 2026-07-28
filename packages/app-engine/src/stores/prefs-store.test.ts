@@ -1,9 +1,11 @@
+import { readFileSync, writeFileSync } from 'node:fs';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import path from 'node:path';
+import { Readable } from 'node:stream';
+
 import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { describe, expect, it } from 'vitest';
-import { readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { Readable } from 'node:stream';
-import type { IncomingMessage, ServerResponse } from 'node:http';
+
 import {
   PrefsStore,
   makeUserStoreRouteHandler,
@@ -14,13 +16,16 @@ import {
 } from './prefs-store.js';
 
 function freshFile(): string {
-  return join(tempDirSync('centraid-prefs-'), 'prefs.json');
+  return path.join(tempDirSync('centraid-prefs-'), 'prefs.json');
 }
 
 /** A minimal async-iterable IncomingMessage carrying an optional JSON body. */
 function mockReq(method: string, url: string, body?: unknown): IncomingMessage {
   const chunks = body === undefined ? [] : [Buffer.from(JSON.stringify(body))];
-  const req = Readable.from(chunks) as unknown as IncomingMessage & { url: string; method: string };
+  const req = Readable.from(chunks) as unknown as IncomingMessage & {
+    url: string;
+    method: string;
+  };
   req.url = url;
   req.method = method;
   return req;
@@ -46,30 +51,33 @@ function mockRes(): { res: ServerResponse; out: CapturedRes } {
   return { res, out };
 }
 
-describe('PrefsStore', () => {
+describe(PrefsStore, () => {
   it('starts empty on a missing file', () => {
-    expect(new PrefsStore(freshFile()).getAllPrefs()).toEqual({});
+    expect(new PrefsStore(freshFile()).getAllPrefs()).toStrictEqual({});
   });
 
   it('starts empty when the file holds a non-object (defensive)', () => {
     const f = freshFile();
     writeFileSync(f, JSON.stringify(['not', 'an', 'object']));
-    expect(new PrefsStore(f).getAllPrefs()).toEqual({});
+    expect(new PrefsStore(f).getAllPrefs()).toStrictEqual({});
   });
 
   it('starts empty when the file is unreadable JSON', () => {
     const f = freshFile();
     writeFileSync(f, '{ not json');
-    expect(new PrefsStore(f).getAllPrefs()).toEqual({});
+    expect(new PrefsStore(f).getAllPrefs()).toStrictEqual({});
   });
 
   it('merges a patch and persists atomically (survives a reload)', () => {
     const f = freshFile();
     const store = new PrefsStore(f);
     const after = store.setPrefs({ runner: 'codex', theme: 'night' });
-    expect(after).toEqual({ runner: 'codex', theme: 'night' });
+    expect(after).toStrictEqual({ runner: 'codex', theme: 'night' });
     // A fresh instance reads the same bytes off disk (tmp + rename landed).
-    expect(new PrefsStore(f).getAllPrefs()).toEqual({ runner: 'codex', theme: 'night' });
+    expect(new PrefsStore(f).getAllPrefs()).toStrictEqual({
+      runner: 'codex',
+      theme: 'night',
+    });
     // getAllPrefs returns a defensive copy, not the live cache.
     const copy = store.getAllPrefs();
     copy.runner = 'mutated';
@@ -81,18 +89,18 @@ describe('PrefsStore', () => {
     const store = new PrefsStore(f);
     store.setPrefs({ a: 1, b: 2, c: 3 });
     const after = store.setPrefs({ a: null, b: undefined });
-    expect(after).toEqual({ c: 3 });
-    expect(JSON.parse(readFileSync(f, 'utf8'))).toEqual({ c: 3 });
+    expect(after).toStrictEqual({ c: 3 });
+    expect(JSON.parse(readFileSync(f, 'utf8'))).toStrictEqual({ c: 3 });
   });
 
   it('an empty patch is a no-op that still returns the current prefs', () => {
     const store = new PrefsStore(freshFile());
     store.setPrefs({ x: 1 });
-    expect(store.setPrefs({})).toEqual({ x: 1 });
+    expect(store.setPrefs({})).toStrictEqual({ x: 1 });
   });
 });
 
-describe('resolveSubsystemModel', () => {
+describe(resolveSubsystemModel, () => {
   it('prefers the explicit override over any pref', () => {
     const prefs = {
       'model.claude-code.assistant': 'from-subsystem-pref',
@@ -144,7 +152,7 @@ describe('resolveSubsystemModel', () => {
   });
 });
 
-describe('resolveSubsystemConfigPins', () => {
+describe(resolveSubsystemConfigPins, () => {
   const prefs = {
     'config.claude-code.default.thought_level': 'medium',
     'config.claude-code.assistant.thought_level': 'high',
@@ -157,27 +165,30 @@ describe('resolveSubsystemConfigPins', () => {
       resolveSubsystemConfigPins(prefs, 'claude-code', 'assistant', {
         thought_level: 'max',
       }),
-    ).toEqual({ thought_level: 'max', mode: 'plan' });
+    ).toStrictEqual({ thought_level: 'max', mode: 'plan' });
   });
 
   it('keeps categories scoped to the selected runner and subsystem', () => {
-    expect(resolveSubsystemConfigPins(prefs, 'claude-code', 'assistant')).toEqual({
+    expect(resolveSubsystemConfigPins(prefs, 'claude-code', 'assistant')).toStrictEqual({
       thought_level: 'high',
       mode: 'plan',
     });
-    expect(resolveSubsystemConfigPins(prefs, 'claude-code', 'builder')).toEqual({
+    expect(resolveSubsystemConfigPins(prefs, 'claude-code', 'builder')).toStrictEqual({
       thought_level: 'medium',
       mode: 'plan',
     });
-    expect(resolveSubsystemConfigPins(prefs, 'codex', 'assistant')).toEqual({
+    expect(resolveSubsystemConfigPins(prefs, 'codex', 'assistant')).toStrictEqual({
       thought_level: 'low',
     });
   });
 });
 
-describe('resolveSubsystemRunner', () => {
+describe(resolveSubsystemRunner, () => {
   it('prefers the per-subsystem pin over the default agent', () => {
-    const prefs = { 'runner.assistant': 'claude-code', 'agent.runner.kind': 'codex' };
+    const prefs = {
+      'runner.assistant': 'claude-code',
+      'agent.runner.kind': 'codex',
+    };
     expect(resolveSubsystemRunner(prefs, 'assistant')).toBe('claude-code');
   });
 
@@ -259,7 +270,7 @@ describe('resolveSubsystemRunner + resolveSubsystemModel compose', () => {
   });
 });
 
-describe('resolveSubsystemRunnerLadder', () => {
+describe(resolveSubsystemRunnerLadder, () => {
   it('keeps the primary first and removes unknown and duplicate kinds', () => {
     expect(
       resolveSubsystemRunnerLadder(
@@ -269,7 +280,7 @@ describe('resolveSubsystemRunnerLadder', () => {
         'assistant',
         'codex',
       ),
-    ).toEqual(['codex', 'claude-code']);
+    ).toStrictEqual(['codex', 'claude-code']);
   });
 
   it('accepts the CLI-friendly JSON representation and default ladder', () => {
@@ -279,11 +290,11 @@ describe('resolveSubsystemRunnerLadder', () => {
         'builder',
         'codex',
       ),
-    ).toEqual(['codex', 'gemini', 'claude-code']);
+    ).toStrictEqual(['codex', 'gemini', 'claude-code']);
   });
 });
 
-describe('makeUserStoreRouteHandler', () => {
+describe(makeUserStoreRouteHandler, () => {
   const handlerFor = (ownerId?: () => string) => {
     const store = new PrefsStore(freshFile());
     return { handler: makeUserStoreRouteHandler(() => store, ownerId), store };
@@ -292,16 +303,16 @@ describe('makeUserStoreRouteHandler', () => {
   it('ignores routes outside the /_centraid-user prefix', async () => {
     const { handler } = handlerFor();
     const { res, out } = mockRes();
-    expect(await handler(mockReq('GET', '/centraid/other'), res)).toBe(false);
+    await expect(handler(mockReq('GET', '/centraid/other'), res)).resolves.toBe(false);
     expect(out.statusCode).toBe(0);
   });
 
   it('GET /id returns the owner id when a provider is wired', async () => {
     const { handler } = handlerFor(() => 'party-42');
     const { res, out } = mockRes();
-    expect(await handler(mockReq('GET', '/_centraid-user/id'), res)).toBe(true);
+    await expect(handler(mockReq('GET', '/_centraid-user/id'), res)).resolves.toBe(true);
     expect(out.statusCode).toBe(200);
-    expect(out.json).toEqual({ id: 'party-42' });
+    expect(out.json).toStrictEqual({ id: 'party-42' });
   });
 
   it('GET /id 404s when no vault/owner provider is wired', async () => {
@@ -322,12 +333,12 @@ describe('makeUserStoreRouteHandler', () => {
     const { handler } = handlerFor();
     let cap = mockRes();
     await handler(mockReq('GET', '/_centraid-user/prefs'), cap.res);
-    expect(cap.out.json).toEqual({ prefs: {} });
+    expect(cap.out.json).toStrictEqual({ prefs: {} });
 
     cap = mockRes();
     await handler(mockReq('PUT', '/_centraid-user/prefs', { patch: { theme: 'paper' } }), cap.res);
     expect(cap.out.statusCode).toBe(200);
-    expect(cap.out.json).toEqual({ prefs: { theme: 'paper' } });
+    expect(cap.out.json).toStrictEqual({ prefs: { theme: 'paper' } });
   });
 
   it('rejects a preflight-failed patch without changing prefs', async () => {
@@ -358,7 +369,11 @@ describe('makeUserStoreRouteHandler', () => {
     });
     const { res } = mockRes();
     await handler(mockReq('PUT', '/_centraid-user/prefs', { patch: { a: 2 } }), res);
-    expect(observed).toEqual({ patch: { a: 2 }, before: { a: 1 }, after: { a: 2 } });
+    expect(observed).toStrictEqual({
+      patch: { a: 2 },
+      before: { a: 1 },
+      after: { a: 2 },
+    });
   });
 
   it('PUT /prefs 400s without a patch object', async () => {

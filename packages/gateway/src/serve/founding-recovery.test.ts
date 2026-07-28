@@ -1,8 +1,11 @@
+import { existsSync, mkdirSync, promises as fs, writeFileSync } from 'node:fs';
+import path from 'node:path';
+
+import { forEachSequentially } from '@centraid/test-kit/sequential';
 import { tempDir } from '@centraid/test-kit/temp-dir';
 import { KeyStore, uuidv7 } from '@centraid/vault';
 import { afterEach, describe, expect, test } from 'vitest';
-import { existsSync, mkdirSync, promises as fs, writeFileSync } from 'node:fs';
-import path from 'node:path';
+
 import { daemonLayoutFor } from '../cli/paths.js';
 import { recoverPendingFoundingVaults } from './founding-recovery.js';
 import { GatewayDatabase } from './gateway-db.js';
@@ -12,7 +15,7 @@ import { openVaultRegistry } from './vault-registry.js';
 const cleanups: Array<() => Promise<void> | void> = [];
 describe('founding-recovery', () => {
   afterEach(async () => {
-    for (const cleanup of cleanups.splice(0).toReversed()) await cleanup();
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
   });
 
   const logger = {

@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+
 import { webGatewayId, type WebConnection } from './web-state.js';
 
 const base: WebConnection = {

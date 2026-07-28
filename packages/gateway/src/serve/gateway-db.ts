@@ -7,8 +7,8 @@
  * gate cannot disagree with a second catalog.
  */
 
-import { chmodSync, mkdirSync, statfsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { chmodSync, mkdirSync, statfsSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 
@@ -312,7 +312,9 @@ function installGatewaySchema(db: DatabaseSync): void {
     ) STRICT;
   `);
   const recoveryKitColumns = (
-    db.prepare('PRAGMA table_info(recovery_kit)').all() as Array<{ name: string }>
+    db.prepare('PRAGMA table_info(recovery_kit)').all() as Array<{
+      name: string;
+    }>
   ).map((column) => column.name);
   if (!recoveryKitColumns.includes('founding_pending')) {
     db.exec(
@@ -384,7 +386,10 @@ export function darwinNetworkFileSystem(
 }
 
 function defaultMountTable(): string | undefined {
-  const result = spawnSync('/sbin/mount', [], { encoding: 'utf8', timeout: 2_000 });
+  const result = spawnSync('/sbin/mount', [], {
+    encoding: 'utf8',
+    timeout: 2_000,
+  });
   return result.status === 0 && typeof result.stdout === 'string' ? result.stdout : undefined;
 }
 

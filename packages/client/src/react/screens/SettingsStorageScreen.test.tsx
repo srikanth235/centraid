@@ -1,6 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
 import SettingsStorageScreen, {
   type SettingsStorageBridgeProps,
   type StorageConnectionRowDTO,
@@ -34,7 +35,10 @@ function makeProps(over: Partial<SettingsStorageBridgeProps> = {}): SettingsStor
       .mockResolvedValue({ kind: 'fs' }),
     attachVaultConnection: vi
       .fn<SettingsStorageBridgeProps['attachVaultConnection']>()
-      .mockResolvedValue({ ok: true, value: { kind: 's3', connectionId: 'c1' } }),
+      .mockResolvedValue({
+        ok: true,
+        value: { kind: 's3', connectionId: 'c1' },
+      }),
     detachVaultConnection: vi
       .fn<SettingsStorageBridgeProps['detachVaultConnection']>()
       .mockResolvedValue({ kind: 'fs' }),

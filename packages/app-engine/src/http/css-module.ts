@@ -28,7 +28,9 @@
  */
 
 import path from 'node:path';
+
 import * as esbuild from 'esbuild';
+
 import { computeEtag } from './asset-variants.js';
 
 export interface CompiledCssModule {

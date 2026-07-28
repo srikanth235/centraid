@@ -1,9 +1,9 @@
-import { tempDirSync } from '@centraid/test-kit/temp-dir';
+import { rmSync } from 'node:fs';
 // Queue conformance: enqueue, dedupe, resume, state transitions, and the
 // guarantee that the replica store's schema rebuild is not collateral damage.
+import path from 'node:path';
 
-import { rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { NodeSqliteFileDriver } from './node-sqlite-driver';
@@ -29,7 +29,7 @@ function upload(overrides: Partial<NewUpload> = {}): NewUpload {
 describe('store', () => {
   beforeEach(() => {
     dir = tempDirSync('centraid-queue-');
-    driver = new NodeSqliteFileDriver(join(dir, 'uploads.db'));
+    driver = new NodeSqliteFileDriver(path.join(dir, 'uploads.db'));
     store = UploadQueueStore.create(driver);
   });
 
@@ -79,11 +79,17 @@ describe('store', () => {
 
       store.setState(item.itemId, 'uploading');
       store.setState(item.itemId, 'completing');
-      store.settle(item.itemId, { casAck: 'replicated', custody: 'remote-only' });
+      store.settle(item.itemId, {
+        casAck: 'replicated',
+        custody: 'remote-only',
+      });
 
       const settled = store.get(item.itemId);
       expect(settled?.state).toBe('settled');
-      expect(settled?.receipt).toStrictEqual({ casAck: 'replicated', custody: 'remote-only' });
+      expect(settled?.receipt).toStrictEqual({
+        casAck: 'replicated',
+        custody: 'remote-only',
+      });
     });
 
     it('walks the part state machine', () => {
@@ -129,7 +135,7 @@ describe('store', () => {
       store.markPartPut(item.itemId, 1, '"etag-1"');
       driver.close();
 
-      driver = new NodeSqliteFileDriver(join(dir, 'uploads.db'));
+      driver = new NodeSqliteFileDriver(path.join(dir, 'uploads.db'));
       store = UploadQueueStore.create(driver);
       const recovered = store.pending();
       expect(recovered).toHaveLength(1);
@@ -148,7 +154,13 @@ describe('store', () => {
         shape: 'photos',
         action: 'upload',
         input: { staged_sha: item.sha256, kind: 'photo' },
-        derivatives: [{ variant: 'thumb', uri: 'file://thumb.jpg', mediaType: 'image/jpeg' }],
+        derivatives: [
+          {
+            variant: 'thumb',
+            uri: 'file://thumb.jpg',
+            mediaType: 'image/jpeg',
+          },
+        ],
       });
       const duplicate = store.enqueueFollowup({
         itemId: item.itemId,
@@ -160,7 +172,10 @@ describe('store', () => {
         itemId: item.itemId,
         shape: 'docs',
         action: 'upload',
-        input: { staged_sha: item.sha256, title: 'Same bytes, separate document' },
+        input: {
+          staged_sha: item.sha256,
+          title: 'Same bytes, separate document',
+        },
       });
 
       expect(duplicate.followupId).toBe(first.followupId);
@@ -169,7 +184,7 @@ describe('store', () => {
       store.settle(item.itemId, { casAck: 'replicated' });
       driver.close();
 
-      driver = new NodeSqliteFileDriver(join(dir, 'uploads.db'));
+      driver = new NodeSqliteFileDriver(path.join(dir, 'uploads.db'));
       store = UploadQueueStore.create(driver);
       expect(store.pendingFollowups()).toMatchObject([
         {
@@ -236,7 +251,7 @@ describe('store', () => {
       store.settle(item.itemId, { casAck: 'replicated' });
       const followups = store.pendingFollowups();
       expect(followups).toHaveLength(1);
-      expect(followups[0]?.intentId, 'intent_id was backfilled').toMatch(/^upload-followup-/);
+      expect(followups[0]?.intentId, 'intent_id was backfilled').toMatch(/^upload-followup-/u);
       expect(followups[0]?.attempts, 'attempts column added at v4').toBe(0);
     });
 
@@ -250,7 +265,7 @@ describe('store', () => {
         store = UploadQueueStore.create(driver);
       }, 'reopen must not throw "duplicate column name"').not.toThrow();
       store.settle(item.itemId, { casAck: 'replicated' });
-      expect(store.pendingFollowups()[0]?.intentId).toMatch(/^upload-followup-/);
+      expect(store.pendingFollowups()[0]?.intentId).toMatch(/^upload-followup-/u);
     });
 
     it('survives a kill between the v3→v4 ALTER and its version bump (idempotent)', () => {

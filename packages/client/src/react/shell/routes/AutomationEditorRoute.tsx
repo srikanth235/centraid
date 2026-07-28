@@ -1,4 +1,5 @@
 import { type JSX, useRef } from 'react';
+
 import {
   auth,
   compileAutomation,
@@ -19,21 +20,17 @@ import {
   searchVaultEntities,
   updateAutomation,
 } from '../../../gateway-client.js';
-import type {
-  AuEditorCatalogConnectorDTO,
-  AuEditorTriggerDTO,
-  AuEditorTriggerInput,
-  AutomationEditorData,
-} from '../../screen-contracts.js';
+import type { AuEditorCatalogConnectorDTO, AutomationEditorData } from '../../screen-contracts.js';
 import AutomationEditorScreen from '../../screens/AutomationEditorScreen.js';
 import { buildFeatured, type ConnectionRowDTO } from '../../screens/SettingsConnectionsScreen.js';
 import { useShellActions } from '../actions.js';
 import PageScroll from '../PageScroll.js';
 import { openWebhookReveal } from '../webhookReveal.js';
-import { buildAutomationAgentEditorData } from './automationEditorAgentData.js';
 import { loadCompileAttempts, loadTurnSteps, watchTurnSteps } from './automationCompileData.js';
+import { buildAutomationAgentEditorData } from './automationEditorAgentData.js';
 import { buildCreateAutomationEditorData } from './automationEditorCreateData.js';
 import { loadAutomationEditorData } from './automationEditorData.js';
+import { triggerToDto, vaultForTriggers } from './automationEditorTriggers.js';
 import { deriveAutomationHero } from './automationsData.js';
 import { decideConsentItem, filterConsentForAutomation } from './automationThreadData.js';
 import {
@@ -43,54 +40,7 @@ import {
 } from './settingsConnectionsData.js';
 import { loadProviders } from './settingsProvidersData.js';
 
-/** Load-side trigger shape → the editor DTO's display shape (webhook needs
- *  its minted id + pending flag so the Connectors tab can render the URL). */
-function triggerToDto(t: CentraidAutomationRow['triggers'][number]): AuEditorTriggerDTO {
-  switch (t.kind) {
-    case 'webhook':
-      return { id: t.id ?? null, kind: 'webhook', pending: !!t.pending };
-    case 'cron':
-      return { expr: t.expr, kind: 'cron', ...(t.tz ? { tz: t.tz } : {}) };
-    case 'data':
-      return {
-        entities: [...t.entities],
-        kind: 'data',
-        ...(t.every ? { every: t.every } : {}),
-      };
-    case 'condition':
-      return {
-        entity: t.entity,
-        kind: 'condition',
-        ...(t.where === undefined ? {} : { where: t.where }),
-        ...(t.every ? { every: t.every } : {}),
-      };
-    case 'event':
-      return {
-        connectorKind: t.connectorKind,
-        event: t.event,
-        filter: t.filter ? { ...t.filter } : undefined,
-        kind: 'event',
-        ...(t.every ? { every: t.every } : {}),
-      };
-  }
-}
-
-export function vaultForTriggers(triggers: readonly (AuEditorTriggerDTO | AuEditorTriggerInput)[]) {
-  const entities = triggers.flatMap((trigger) =>
-    trigger.kind === 'condition'
-      ? [trigger.entity]
-      : trigger.kind === 'data'
-        ? trigger.entities
-        : [],
-  );
-  const scopes = Array.from(new Set(entities)).map((entity) => {
-    const [schema, table] = entity.split('.', 2);
-    return { schema: schema || entity, ...(table ? { table } : {}), verbs: 'read' };
-  });
-  return scopes.length > 0
-    ? { purpose: 'dpv:ServiceProvision', why: 'Evaluate automation triggers.', scopes }
-    : undefined;
-}
+export { vaultForTriggers } from './automationEditorTriggers.js';
 
 // React-owned automation editor — the instructions-first create/edit form
 // (Automations UI revamp, see receipts/issue-387-automations-ui-revamp.md). This is a real
@@ -346,7 +296,12 @@ export default function AutomationEditorRoute({
           const typeHits = entityTypeCache
             .filter((name) => name.toLowerCase().includes(q))
             .slice(0, 6)
-            .map((name) => ({ id: '*', subtitle: 'Domain model', title: name, type: name }));
+            .map((name) => ({
+              id: '*',
+              subtitle: 'Domain model',
+              title: name,
+              type: name,
+            }));
           const [anchorHits, instanceHits] = await Promise.all([
             searchVaultAnchors(term).catch(() => []),
             searchVaultEntities(term).catch(() => []),
@@ -452,7 +407,9 @@ export default function AutomationEditorRoute({
           });
           if (!ok) return false;
           try {
-            const { webhook } = await rotateAutomationWebhookSecret({ automationId: ref });
+            const { webhook } = await rotateAutomationWebhookSecret({
+              automationId: ref,
+            });
             await openWebhookReveal(webhook, {
               note: "This secret is shown once. Update your caller now — you won't see it again.",
               title: 'New webhook secret',

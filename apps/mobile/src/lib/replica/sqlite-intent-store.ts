@@ -151,7 +151,12 @@ export class SqliteIntentStore implements IntentRecordStore {
     }
     // Spread the patch directly (not JSON-cloned) so an explicit `reason:
     // undefined` clears the field, matching the memory/IndexedDB stores.
-    return { ...existing, ...patch, intentId, createdOrder: existing.createdOrder };
+    return {
+      ...existing,
+      ...patch,
+      intentId,
+      createdOrder: existing.createdOrder,
+    };
   }
 
   private read(intentId: string): ReplicaIntent | undefined {

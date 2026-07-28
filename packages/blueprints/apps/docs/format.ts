@@ -1,3 +1,4 @@
+import { I } from './icons.ts';
 // Formatting + file-type helpers — pure functions of their arguments; none
 // hold or mutate app state, though `emptyStateFor` below takes `state` as a
 // plain argument to derive its copy. Split out of app.tsx so both the
@@ -5,7 +6,6 @@
 // empty-row copy) and the row/details/quick-look components can call these
 // directly instead of threading them all as props.
 import { fmtBytes as fmtBytesBase } from './kit.ts';
-import { I } from './icons.ts';
 import type { AppState, CustodyInfo, DocFields, EmptyStateCfg, TypeMeta } from './types.ts';
 
 // The drive shows an em dash for absent sizes everywhere it prints bytes.
@@ -15,7 +15,10 @@ export function fmtDate(iso: string | null | undefined): string {
   if (!iso) return '';
   try {
     const d = new Date(iso);
-    const m = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    const m = d.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+    });
     return d.getFullYear() === new Date().getFullYear() ? m : `${m}, ${d.getFullYear()}`;
   } catch {
     return String(iso).slice(0, 10);
@@ -63,7 +66,12 @@ export function typeMeta(mediaType: string | null | undefined): TypeMeta {
     t === 'application/vnd.ms-powerpoint' ||
     t === 'application/vnd.oasis.opendocument.presentation'
   )
-    return { label: 'PPT', name: 'Presentation', cat: 'slide', cv: '--c-slide' };
+    return {
+      label: 'PPT',
+      name: 'Presentation',
+      cat: 'slide',
+      cv: '--c-slide',
+    };
   if (
     t.includes('word') ||
     t === 'application/msword' ||
@@ -180,7 +188,11 @@ export function emptyStateFor(state: AppState, hasActiveFiles: boolean): EmptySt
       sub: 'Leases, IDs, warranties, tax forms — file the important stuff here.',
       needsUpload: 'Upload your first document',
     };
-  return { icon: I.allDocs!, title: 'Nothing here', sub: 'No documents to show.' };
+  return {
+    icon: I.allDocs!,
+    title: 'Nothing here',
+    sub: 'No documents to show.',
+  };
 }
 
 // The blob custody projection (issue #352 phase 4, blob/custody.ts) in

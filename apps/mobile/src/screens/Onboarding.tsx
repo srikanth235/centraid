@@ -1,14 +1,14 @@
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as Haptics from 'expo-haptics';
 // governance: allow-repo-hygiene file-size-limit cohesive founding/onboarding ceremony — connection scan, create/restore peers, mandatory kit share + reselect proof, and terminal state share one state machine
 import React, { useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { CameraView, useCameraPermissions } from 'expo-camera';
-import * as Haptics from 'expo-haptics';
 import Svg, { Circle, Defs, Ellipse, G, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
 
 import { family } from '../kit/theme';
-import { BRAND_TEAL, setOnboarded, setProfileColor, setProfileName } from '../lib/profile';
 import { isTunnelAvailable, pair, parsePairingInput } from '../lib/phone-link';
+import { BRAND_TEAL, setOnboarded, setProfileColor, setProfileName } from '../lib/profile';
 import { pickRecoveryKit, shareRecoveryKit } from '../lib/recovery-kit-files';
 import {
   initializeMobileVault,
@@ -381,7 +381,11 @@ function VerifyKitStep({
     setBusy(true);
     setError(undefined);
     try {
-      await verifyMobileFoundingKit(session, { kit, password, lossConsent: true });
+      await verifyMobileFoundingKit(session, {
+        kit,
+        password,
+        lossConsent: true,
+      });
       await rememberInitializedVault(session, initialized);
       onComplete();
     } catch (reason) {
@@ -668,7 +672,11 @@ const styles = StyleSheet.create({
     marginTop: 12,
     padding: 17,
   },
-  choiceHead: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
+  choiceHead: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
   choiceSub: {
     color: C.ink3,
     fontFamily: family.sansRegular,
@@ -688,7 +696,12 @@ const styles = StyleSheet.create({
   },
   checkboxChecked: { backgroundColor: C.brand, borderColor: C.brand },
   checkboxMark: { color: '#fff', fontFamily: family.sansBold, fontSize: 14 },
-  consent: { alignItems: 'flex-start', flexDirection: 'row', gap: 11, marginTop: 22 },
+  consent: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 11,
+    marginTop: 22,
+  },
   consentText: {
     color: C.ink2,
     flex: 1,
@@ -705,7 +718,12 @@ const styles = StyleSheet.create({
     marginBottom: 22,
     width: 76,
   },
-  error: { color: '#E88', fontFamily: family.sansRegular, fontSize: 13, marginTop: 14 },
+  error: {
+    color: '#E88',
+    fontFamily: family.sansRegular,
+    fontSize: 13,
+    marginTop: 14,
+  },
   fieldLabel: {
     color: C.ink4,
     fontFamily: family.monoMedium,
@@ -783,10 +801,29 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     width: '100%',
   },
-  scroll: { flexGrow: 1, paddingHorizontal: 26, paddingTop: 20, paddingBottom: 34 },
-  textBtn: { alignItems: 'center', height: 48, justifyContent: 'center', marginTop: 10 },
+  scroll: {
+    flexGrow: 1,
+    paddingHorizontal: 26,
+    paddingTop: 20,
+    paddingBottom: 34,
+  },
+  textBtn: {
+    alignItems: 'center',
+    height: 48,
+    justifyContent: 'center',
+    marginTop: 10,
+  },
   textBtnLabel: { color: C.ink3, fontFamily: family.sansMedium, fontSize: 15 },
-  topRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
+  topRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
   wordmark: { alignItems: 'center', flexDirection: 'row', gap: 8 },
-  wordmarkText: { color: C.ink3, fontFamily: family.monoMedium, fontSize: 11, letterSpacing: 2 },
+  wordmarkText: {
+    color: C.ink3,
+    fontFamily: family.monoMedium,
+    fontSize: 11,
+    letterSpacing: 2,
+  },
 });

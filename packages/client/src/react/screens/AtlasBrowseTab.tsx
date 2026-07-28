@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
+
 import {
   browseColumns,
   browseDeleteRow,
@@ -9,17 +10,18 @@ import {
   type BrowseTableEntry,
 } from '../../gateway-client.js';
 import Icon from '../ui/Icon.js';
-import styles from './AtlasBrowseTab.module.css';
-import { DeleteDialog } from './AtlasBrowseDeleteDialog.js';
-import { Grid, MachineryBar } from './AtlasBrowseGrid.js';
-import { RowEditor } from './AtlasBrowseRowEditor.js';
-import { TablePicker } from './AtlasBrowseTablePicker.js';
 import {
   groupBrowseTables,
   rowIdOf,
   type DeleteState,
   type EditorState,
 } from './atlasBrowseData.js';
+import { DeleteDialog } from './AtlasBrowseDeleteDialog.js';
+import { Grid, MachineryBar } from './AtlasBrowseGrid.js';
+import { RowEditor } from './AtlasBrowseRowEditor.js';
+import { TablePicker } from './AtlasBrowseTablePicker.js';
+
+import styles from './AtlasBrowseTab.module.css';
 
 // Browse tab — the vault-aware table editor (issue #441 B3). A table picker
 // (left rail on desktop, a collapsible sheet on narrow), a keyset-paginated
@@ -374,7 +376,13 @@ export default function AtlasBrowseTab({ initialTable }: AtlasBrowseTabProps): J
                   onSort={onSort}
                   onToggleExpand={toggleExpand}
                   writesLocked={writesLocked}
-                  onEdit={(row) => setEditor({ mode: 'edit', id: rowIdOf(row, cols.columns), row })}
+                  onEdit={(row) =>
+                    setEditor({
+                      mode: 'edit',
+                      id: rowIdOf(row, cols.columns),
+                      row,
+                    })
+                  }
                   onDelete={askDelete}
                 />
               ) : gridLoading ? (

@@ -1,6 +1,16 @@
-import type { GatewayServeHandle } from '@centraid/gateway';
-import path from 'node:path';
 import crypto from 'node:crypto';
+import path from 'node:path';
+
+import type { GatewayServeHandle } from '@centraid/gateway';
+
+import { desktopSessionIdFor } from './app-sessions.js';
+import {
+  ensureDetachedGateway,
+  getOrCreateDesktopOwnerId,
+  preferEmbeddedGateway,
+  type DetachedGatewayHandle,
+} from './detached-gateway.js';
+import { startDesktopEmbeddedGateway } from './embedded-gateway.js';
 import {
   gatewayModelCatalogFile,
   gatewayVaultDir,
@@ -9,22 +19,14 @@ import {
 } from './gateway-paths.js';
 import { desktopGatewayKeyStore } from './gateway-secrets.js';
 import { setLocalGatewayInfoProvider } from './gateway-store.js';
-import { desktopSessionIdFor } from './app-sessions.js';
-import { loadPersistedSettings, templatesCacheDir } from './settings.js';
-import { phoneLinkStatus } from './phone-link.js';
 import {
   backoffForAttempt,
   initialSupervisorState,
   recordFailure,
   type SupervisorState,
 } from './gateway-supervisor-core.js';
-import {
-  ensureDetachedGateway,
-  getOrCreateDesktopOwnerId,
-  preferEmbeddedGateway,
-  type DetachedGatewayHandle,
-} from './detached-gateway.js';
-import { startDesktopEmbeddedGateway } from './embedded-gateway.js';
+import { phoneLinkStatus } from './phone-link.js';
+import { loadPersistedSettings, templatesCacheDir } from './settings.js';
 
 /**
  * Electron-flavored local-gateway lifecycle (issue #351 / #468).
@@ -59,7 +61,10 @@ export interface LocalGatewayRuntime {
   health: {
     registerProbe: (
       name: string,
-      probe: () => Promise<{ status: 'ok' | 'degraded' | 'error'; detail?: string }>,
+      probe: () => Promise<{
+        status: 'ok' | 'degraded' | 'error';
+        detail?: string;
+      }>,
     ) => void;
   };
   vaults: {
@@ -203,7 +208,11 @@ async function startDetached(): Promise<LocalGatewayRuntime> {
   // from an older build than the one on disk, respawn it instead of adopting
   // the stale daemon — so a rebuilt gateway (dev) or an updated app (prod)
   // actually takes effect. Safe now that stop waits for real exit.
-  const detached = await ensureDetachedGateway({ dataDir, ownerId, replaceOwnedIfStale: true });
+  const detached = await ensureDetachedGateway({
+    dataDir,
+    ownerId,
+    replaceOwnedIfStale: true,
+  });
   // Phone tunnel lives in the Electron main process; register is a no-op on
   // detached handles (child owns its own health registry). Keep the probe
   // call for API parity.

@@ -13,7 +13,9 @@ import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import path from 'node:path';
+
 import * as esbuild from 'esbuild';
+
 import { findQuery, ManifestError, parseManifest } from '../registry/manifest.js';
 import { computeEtag, finishStaticAsset } from './asset-variants.js';
 import type { Encoding } from './compression.js';
@@ -82,22 +84,21 @@ async function queryTreeSignature(
     if (!isInside(queryRoot, realDirectory) || seenDirs.has(realDirectory)) return;
     seenDirs.add(realDirectory);
     const entries = await fs.readdir(directory, { withFileTypes: true });
-    for (const entry of entries) {
-      if (entry.name.startsWith('.')) continue;
-      const file = path.join(directory, entry.name);
-      const real = await fs.realpath(file).catch(() => undefined);
-      if (!real || !isInside(queryRoot, real)) continue;
-      const stat = await fs.stat(real).catch(() => undefined);
-      if (!stat) continue;
-      if (stat.isDirectory()) {
-        await walk(real);
-        continue;
-      }
-      if (!stat.isFile() || !QUERY_MODULE_EXTENSIONS.has(path.extname(real))) continue;
-      const relative = path.relative(queryRoot, real).split(path.sep).join('/');
-      lines.push(`${relative}\0${stat.mtimeMs}\0${stat.ctimeMs}\0${stat.size}`);
-      files.push(real);
-    }
+    await Promise.all(
+      entries.map(async (entry) => {
+        if (entry.name.startsWith('.')) return;
+        const file = path.join(directory, entry.name);
+        const real = await fs.realpath(file).catch(() => undefined);
+        if (!real || !isInside(queryRoot, real)) return;
+        const stat = await fs.stat(real).catch(() => undefined);
+        if (!stat) return;
+        if (stat.isDirectory()) return walk(real);
+        if (!stat.isFile() || !QUERY_MODULE_EXTENSIONS.has(path.extname(real))) return;
+        const relative = path.relative(queryRoot, real).split(path.sep).join('/');
+        lines.push(`${relative}\0${stat.mtimeMs}\0${stat.ctimeMs}\0${stat.size}`);
+        files.push(real);
+      }),
+    );
   }
 
   await walk(queryRoot);
@@ -112,14 +113,20 @@ async function hashQuerySources(
 ): Promise<string> {
   const hash = createHash('sha256');
   hash.update('app.json\0').update(manifestText).update('\0');
-  for (const file of [...new Set(files)].sort()) {
+  const sortedFiles = [...new Set(files)].sort();
+  async function hashNext(index: number): Promise<void> {
+    const file = sortedFiles[index];
+    if (!file) return;
     const relative = path.relative(queryRoot, file).split(path.sep).join('/');
     hash
       .update(relative)
       .update('\0')
       .update(await fs.readFile(file))
       .update('\0');
+    return hashNext(index + 1);
   }
+  // Hash updates are stateful and must follow the canonical filename order.
+  await hashNext(0);
   return hash.digest('hex');
 }
 
@@ -129,7 +136,9 @@ async function resolveQueryImport(
   specifier: string,
 ): Promise<esbuild.OnResolveResult> {
   if (!specifier.startsWith('./') && !specifier.startsWith('../')) {
-    return { errors: [{ text: `query bundles allow relative imports only: "${specifier}"` }] };
+    return {
+      errors: [{ text: `query bundles allow relative imports only: "${specifier}"` }],
+    };
   }
   const target = path.resolve(resolveDir, specifier);
   const extension = path.extname(target);
@@ -139,13 +148,19 @@ async function resolveQueryImport(
   const candidates = extension
     ? [target]
     : [target, `${target}.ts`, `${target}.js`, `${target}.mjs`];
-  for (const candidate of candidates) {
+  async function resolveCandidate(index: number): Promise<esbuild.OnResolveResult | undefined> {
+    const candidate = candidates[index];
+    if (!candidate) return undefined;
     const real = await fs.realpath(candidate).catch(() => undefined);
-    if (!real || !isInside(queryRoot, real)) continue;
+    if (!real || !isInside(queryRoot, real)) return resolveCandidate(index + 1);
     const stat = await fs.stat(real).catch(() => undefined);
-    if (!stat?.isFile() || !QUERY_MODULE_EXTENSIONS.has(path.extname(real))) continue;
+    if (!stat?.isFile() || !QUERY_MODULE_EXTENSIONS.has(path.extname(real))) {
+      return resolveCandidate(index + 1);
+    }
     return { path: real };
   }
+  const resolved = await resolveCandidate(0);
+  if (resolved) return resolved;
   return {
     errors: [
       {
@@ -298,22 +313,25 @@ export async function bundleDeclaredQuery(
       'App query source directory is missing.',
     );
   }
+  const verifiedQueryRoot = queryRoot;
   // Prefer a `queries/<name>.ts` source, then `<name>.js` — a TS-authored app
   // ships `.ts` handlers, a builder-generated one ships `.js`. Each candidate
   // runs the same escape/real-file guards; the first that resolves wins.
-  let entryFile: string | undefined;
-  for (const ext of ['.ts', '.js']) {
-    const entryCandidate = path.resolve(queryRoot, `${queryName}${ext}`);
-    if (!isInside(queryRoot, entryCandidate)) {
+  async function resolveEntry(index: number): Promise<string | undefined> {
+    if (index > 1) return undefined;
+    const ext = index === 0 ? '.ts' : '.js';
+    const entryCandidate = path.resolve(verifiedQueryRoot, `${queryName}${ext}`);
+    if (!isInside(verifiedQueryRoot, entryCandidate)) {
       throw new QueryBundleError('invalid_query_name', 400, 'Query path escapes queries/.');
     }
     const real = await fs.realpath(entryCandidate).catch(() => undefined);
     const stat = real ? await fs.stat(real).catch(() => undefined) : undefined;
-    if (real && stat?.isFile() && isInside(queryRoot, real) && path.extname(real) === ext) {
-      entryFile = real;
-      break;
+    if (real && stat?.isFile() && isInside(verifiedQueryRoot, real) && path.extname(real) === ext) {
+      return real;
     }
+    return resolveEntry(index + 1);
   }
+  const entryFile = await resolveEntry(0);
   if (!entryFile) {
     throw new QueryBundleError(
       'query_source_missing',
@@ -325,7 +343,7 @@ export async function bundleDeclaredQuery(
   let signature: string;
   let files: string[];
   try {
-    ({ signature, files } = await queryTreeSignature(queryRoot, manifestText));
+    ({ signature, files } = await queryTreeSignature(verifiedQueryRoot, manifestText));
   } catch {
     throw new QueryBundleError(
       'query_source_unavailable',

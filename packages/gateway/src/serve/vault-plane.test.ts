@@ -1,30 +1,38 @@
+import { promises as fs } from 'node:fs';
+import http from 'node:http';
+import path from 'node:path';
+
+import { Dispatcher, Registry } from '@centraid/app-engine';
+import { forEachSequentially } from '@centraid/test-kit/sequential';
 import { tempDir } from '@centraid/test-kit/temp-dir';
+import { KeyStore, aesGcmKeyProtector, ensureAppEnrolled, uuidv7 } from '@centraid/vault';
 // governance: allow-repo-hygiene file-size-limit one end-to-end suite over a single served gateway+vault fixture — the scenarios intentionally share state to test the plane as one surface
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import http from 'node:http';
-import { KeyStore, aesGcmKeyProtector, ensureAppEnrolled, uuidv7 } from '@centraid/vault';
-import { Dispatcher, Registry } from '@centraid/app-engine';
+
+import { makeVaultRouteHandler } from '../routes/vault-routes.js';
 import { openVaultPlane, type VaultPlane } from './vault-plane.js';
 import { openVaultRegistry } from './vault-registry.js';
-import { makeVaultRouteHandler } from '../routes/vault-routes.js';
 
-const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
+const silentLogger = {
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+};
 
 const cleanups: Array<() => Promise<void> | void> = [];
 describe('vault-plane', () => {
   afterEach(async () => {
-    while (cleanups.length > 0) await cleanups.pop()?.();
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
   });
 
   async function directoryBytes(dir: string): Promise<number> {
-    let total = 0;
-    for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
-      const full = path.join(dir, entry.name);
-      total += entry.isDirectory() ? await directoryBytes(full) : (await fs.stat(full)).size;
-    }
-    return total;
+    const sizes = await Promise.all(
+      (await fs.readdir(dir, { withFileTypes: true })).map(async (entry) => {
+        const full = path.join(dir, entry.name);
+        return entry.isDirectory() ? directoryBytes(full) : (await fs.stat(full)).size;
+      }),
+    );
+    return sizes.reduce((total, size) => total + size, 0);
   }
 
   function openPlane(dir: string): VaultPlane {
@@ -99,7 +107,7 @@ describe('vault-plane', () => {
       logger: silentLogger,
     });
     expect(foreign.list()).toStrictEqual([]);
-    expect(foreign.failedMounts()[0]?.message).toMatch(/authentication failed/);
+    expect(foreign.failedMounts()[0]?.message).toMatch(/authentication failed/u);
     foreign.stop();
   });
 
@@ -348,7 +356,11 @@ describe('vault-plane', () => {
     const appBridge = plane.bridgeFor('tasks');
     const deniedApp = await appBridge({
       op: 'search',
-      payload: { entity: 'schedule.task', query: 'budget', purpose: 'dpv:ServiceProvision' },
+      payload: {
+        entity: 'schedule.task',
+        query: 'budget',
+        purpose: 'dpv:ServiceProvision',
+      },
     });
     expect(deniedApp.ok).toBe(false);
     expect(deniedApp.code).toBe('VAULT_CONSENT');
@@ -358,7 +370,11 @@ describe('vault-plane', () => {
     });
     const appHit = await appBridge({
       op: 'search',
-      payload: { entity: 'schedule.task', query: 'budg', purpose: 'dpv:ServiceProvision' },
+      payload: {
+        entity: 'schedule.task',
+        query: 'budg',
+        purpose: 'dpv:ServiceProvision',
+      },
     });
     expect(appHit.ok).toBe(true);
     const appRows = (appHit.result as { rows: Record<string, unknown>[] }).rows;
@@ -501,7 +517,11 @@ describe('vault-plane', () => {
     const surface = plane.scopeSurface('planner');
     expect(surface.scopes).toStrictEqual(
       expect.arrayContaining([
-        expect.objectContaining({ plane: 'app', schema: 'schedule', verbs: 'read+act' }),
+        expect.objectContaining({
+          plane: 'app',
+          schema: 'schedule',
+          verbs: 'read+act',
+        }),
       ]),
     );
     expect(surface.highlights.some((h) => h.schema === 'schedule')).toBe(true);
@@ -567,7 +587,9 @@ describe('vault-plane', () => {
     plane.ensureAgentInstallGrant('scope-less-automation', {
       scopes: [{ schema: 'schedule', table: 'task', verbs: 'read' }],
     });
-    const read = await plane.agentBridgeFor('scope-less-automation', { scopes: [] })({
+    const read = await plane.agentBridgeFor('scope-less-automation', {
+      scopes: [],
+    })({
       op: 'read',
       payload: { entity: 'schedule.task' },
     });
@@ -710,7 +732,11 @@ describe('vault-plane', () => {
   test('owner routes: status, apps, grant, parked confirm, revoke', async () => {
     const dir = await tempDir();
     // The route handler speaks to the registry; the acts land on its active plane.
-    const registry = openVaultRegistry({ rootDir: dir, logger: silentLogger, ownerName: 'Priya' });
+    const registry = openVaultRegistry({
+      rootDir: dir,
+      logger: silentLogger,
+      ownerName: 'Priya',
+    });
     registry.create('Personal');
     cleanups.push(() => registry.stop());
     const plane = registry.current();
@@ -779,7 +805,9 @@ describe('vault-plane', () => {
       },
     });
     const invocationId = (parked.result as { invocationId: string }).invocationId;
-    const parkedList = (await (await fetch(`${base}/parked`)).json()) as { parked: unknown[] };
+    const parkedList = (await (await fetch(`${base}/parked`)).json()) as {
+      parked: unknown[];
+    };
     expect(parkedList.parked).toHaveLength(1);
     // The wire carries WHO and WHAT so the desktop confirmation UI can
     // render "Planner wants schedule.propose_event: …" (issue: consent UX,
@@ -800,7 +828,9 @@ describe('vault-plane', () => {
     expect(((await confirm.json()) as { status: string }).status).toBe('executed');
 
     // Revoke over HTTP; the app goes dark.
-    const revoke = await fetch(`${base}/grants/${grantId}`, { method: 'DELETE' });
+    const revoke = await fetch(`${base}/grants/${grantId}`, {
+      method: 'DELETE',
+    });
     expect(revoke.status).toBe(200);
     const dark = await plane.bridgeFor('planner')({
       op: 'read',
@@ -845,7 +875,10 @@ describe('vault-plane', () => {
           {
             name: 'propose',
             confirmation: 'none',
-            input: { type: 'object', properties: { summary: { type: 'string' } } },
+            input: {
+              type: 'object',
+              properties: { summary: { type: 'string' } },
+            },
           },
         ],
         queries: [],
@@ -960,7 +993,10 @@ describe('vault-plane', () => {
       },
     });
     expect(invoked.ok).toBe(true);
-    expect(invoked.result).toMatchObject({ status: 'executed', invocationId: 'run-1:v0' });
+    expect(invoked.result).toMatchObject({
+      status: 'executed',
+      invocationId: 'run-1:v0',
+    });
 
     // Replay: the same invocationId returns the recorded outcome, no double write.
     const replayed = await bridge({
@@ -982,7 +1018,10 @@ describe('vault-plane', () => {
       op: 'invoke',
       payload: {
         command: 'social.draft_message',
-        input: { recipient_party_id: ownerParty, body_text: 'your day, summarized' },
+        input: {
+          recipient_party_id: ownerParty,
+          body_text: 'your day, summarized',
+        },
         purpose: 'dpv:ServiceProvision',
       },
     });
@@ -1030,7 +1069,11 @@ describe('vault-plane', () => {
     const agentBridge = plane.agentBridgeFor('reconciler');
     const bootstrap = await agentBridge({
       op: 'changes',
-      payload: { entities: ['core.event'], purpose: 'dpv:ServiceProvision', cursor: null },
+      payload: {
+        entities: ['core.event'],
+        purpose: 'dpv:ServiceProvision',
+        cursor: null,
+      },
     });
     expect(bootstrap.ok).toBe(true);
     const cursor = (bootstrap.result as { cursor: string }).cursor;
@@ -1079,7 +1122,11 @@ describe('vault-plane', () => {
     expect(confirmed.status).toBe('executed');
     const pull = await agentBridge({
       op: 'changes',
-      payload: { entities: ['core.event'], purpose: 'dpv:ServiceProvision', cursor },
+      payload: {
+        entities: ['core.event'],
+        purpose: 'dpv:ServiceProvision',
+        cursor,
+      },
     });
     expect(pull.ok).toBe(true);
     const changes = (pull.result as { changes: Array<{ entity: string }> }).changes;
@@ -1213,14 +1260,21 @@ describe('vault-plane', () => {
 
   test('owner routes (issue #272): picker searches, POST links asserts, DELETE ends', async () => {
     const dir = await tempDir();
-    const registry = openVaultRegistry({ rootDir: dir, logger: silentLogger, ownerName: 'Priya' });
+    const registry = openVaultRegistry({
+      rootDir: dir,
+      logger: silentLogger,
+      ownerName: 'Priya',
+    });
     registry.create('Personal');
     cleanups.push(() => registry.stop());
     const plane = registry.current();
     const purpose = 'dpv:ServiceProvision';
     const note = plane.gateway.invoke(plane.ownerCredential, {
       command: 'knowledge.create_note',
-      input: { title: 'Camera shopping', body_text: 'compare mirrorless bodies' },
+      input: {
+        title: 'Camera shopping',
+        body_text: 'compare mirrorless bodies',
+      },
       purpose,
     });
     const noteId = (note as { output: { note_id: string } }).output.note_id;
@@ -1270,19 +1324,30 @@ describe('vault-plane', () => {
       }),
     });
     expect(linkRes.status).toBe(200);
-    const linked = (await linkRes.json()) as { status: string; output: { link_id: string } };
+    const linked = (await linkRes.json()) as {
+      status: string;
+      output: { link_id: string };
+    };
     expect(linked.status).toBe('executed');
     const row = plane.db.vault
       .prepare('SELECT asserted_by, valid_to FROM core_link WHERE link_id = ?')
-      .get(linked.output.link_id) as { asserted_by: string; valid_to: string | null };
+      .get(linked.output.link_id) as {
+      asserted_by: string;
+      valid_to: string | null;
+    };
     expect(row).toMatchObject({ asserted_by: 'owner', valid_to: null });
 
     // A malformed body is a 400, not a crash.
-    const bad = await fetch(`${base}/links`, { method: 'POST', body: JSON.stringify({}) });
+    const bad = await fetch(`${base}/links`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
     expect(bad.status).toBe(400);
 
     // DELETE /links/<id> end-dates — temporal, the row survives.
-    const unlinkRes = await fetch(`${base}/links/${linked.output.link_id}`, { method: 'DELETE' });
+    const unlinkRes = await fetch(`${base}/links/${linked.output.link_id}`, {
+      method: 'DELETE',
+    });
     expect(unlinkRes.status).toBe(200);
     expect(((await unlinkRes.json()) as { status: string }).status).toBe('executed');
     const ended = plane.db.vault

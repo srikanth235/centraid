@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Icon from '../kit/components/Icon';
+
 import Button from '../kit/components/Button';
+import Icon from '../kit/components/Icon';
 import { family, radii, spacing, t, useTheme, type ThemeColors } from '../kit/theme';
 import {
   confirmParked,
@@ -71,7 +72,10 @@ export default function ApprovalsScreen({
       await confirmParked(invocationId, approve);
       setState((prev) =>
         prev.kind === 'ready'
-          ? { kind: 'ready', rows: prev.rows.filter((r) => r.invocationId !== invocationId) }
+          ? {
+              kind: 'ready',
+              rows: prev.rows.filter((r) => r.invocationId !== invocationId),
+            }
           : prev,
       );
     } catch (err) {
@@ -214,7 +218,11 @@ function summarizeInput(input: Record<string, unknown>): string {
 
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    actionError: { ...t('small'), color: colors.danger, marginBottom: spacing[3] },
+    actionError: {
+      ...t('small'),
+      color: colors.danger,
+      marginBottom: spacing[3],
+    },
     backBtn: {
       alignItems: 'center',
       height: 36,
@@ -237,7 +245,11 @@ const makeStyles = (colors: ThemeColors) =>
       borderWidth: 1,
       padding: spacing[4],
     },
-    cardActions: { flexDirection: 'row', gap: spacing[3], marginTop: spacing[3] },
+    cardActions: {
+      flexDirection: 'row',
+      gap: spacing[3],
+      marginTop: spacing[3],
+    },
     cardBtn: { flex: 1 },
     cardCaller: { ...t('small'), color: colors.ink3, marginTop: 2 },
     cardCommand: { ...t('bodyStrong'), color: colors.ink },

@@ -9,6 +9,7 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+
 import { rewriteWorkspaceDependencies, topologicalPublishOrder } from './pack-helpers.mjs';
 
 const __dirname = import.meta.dirname;
@@ -83,7 +84,9 @@ function main() {
           // crude glob: only * as suffix/prefix on basename
           const re = new RegExp('^' + base.replace(/\./gu, '\\.').replace(/\*/gu, '.*') + '$', 'u');
           if (!re.test(name)) continue;
-          fs.cpSync(path.join(fromDir, name), path.join(destDir, name), { recursive: true });
+          fs.cpSync(path.join(fromDir, name), path.join(destDir, name), {
+            recursive: true,
+          });
         }
         continue;
       }

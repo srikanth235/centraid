@@ -1,7 +1,9 @@
 // Minimal ZIP reader unit tests (issue #545 B6).
 
 import { deflateRawSync } from 'node:zlib';
+
 import { describe, expect, test } from 'vitest';
+
 import { readZipEntries } from './zip.js';
 
 /** Build a tiny non-zip64 archive with one stored and one deflated file. */
@@ -93,6 +95,6 @@ describe('zip', () => {
   });
 
   test('readZipEntries throws on a non-zip buffer', () => {
-    expect(() => readZipEntries(Buffer.from('not a zip'))).toThrow(/not a zip file/);
+    expect(() => readZipEntries(Buffer.from('not a zip'))).toThrow(/not a zip file/u);
   });
 });

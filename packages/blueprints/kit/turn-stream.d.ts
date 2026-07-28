@@ -32,7 +32,12 @@ export type TurnStreamEvent =
       locations?: Array<{ path: string; line?: number }>;
       /** `hash` is the CAS sha256 when the runner reported one — the chip shows
        *  it, matching the reloaded transcript's artifact chips (#567). */
-      artifacts?: Array<{ dataBase64: string; mime: string; filename?: string; hash?: string }>;
+      artifacts?: Array<{
+        dataBase64: string;
+        mime: string;
+        filename?: string;
+        hash?: string;
+      }>;
       rawJson?: string;
     }
   | {
@@ -99,6 +104,16 @@ export function isEndFrame(rawFrame: string): boolean;
 
 /** Parse a whole SSE text blob into events (pure; used by tests). */
 export function parseSseText(text: string): TurnStreamEvent[];
+
+/**
+ * Read an SSE body in transport order and dispatch each complete raw frame.
+ * Frame callbacks are synchronous; use this as the single fetch-SSE boundary.
+ */
+export function consumeSseFrames(
+  body: ReadableStream<Uint8Array>,
+  onFrame: (rawFrame: string) => void,
+  opts?: { signal?: AbortSignal },
+): Promise<void>;
 
 /**
  * Read a `_turn` SSE body to completion, dispatching each parsed event.

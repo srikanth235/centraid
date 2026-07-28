@@ -23,17 +23,17 @@
 // shares vault.db's disk trust; the remote tier is the third party).
 
 import { nowIso } from '../ids.js';
-import type { LocalBlobStore } from './local.js';
-import { resolveRange, sha256OfBytes, type BlobRange, type BlobStore } from './store.js';
-import { sealBlob, sealBlobStream, unsealBlob } from './seal.js';
+import {
+  DEFAULT_REPLICATION_CONCURRENCY,
+  EMPTY_BLOB_METRICS,
+  type BlobCache,
+  type BlobMetrics,
+} from './cache.js';
 import { exportLocalTier } from './custody-export.js';
-import { fetchFrameDirectory, fetchRemoteRange, fetchRemoteWhole } from './custody-read.js';
 import { localBlobPath, openLocalBlobStream, readLocalBlob } from './custody-local-read.js';
-import { createRemoteBlobStream } from './custody-remote-stream.js';
+import { fetchFrameDirectory, fetchRemoteRange, fetchRemoteWhole } from './custody-read.js';
 import { reconcileCustody } from './custody-reconcile.js';
-import { resolveWriteStore } from './store-routing.js';
-import type { ReplicaStore } from './replica-index.js';
-import type { FrameDirectory } from './seal-frames.js';
+import { createRemoteBlobStream } from './custody-remote-stream.js';
 // Re-export the split custody types so existing facade importers stay untouched.
 import {
   remoteEncryptionKey,
@@ -44,13 +44,13 @@ import {
   type ReconcileOptions,
   type BlobSweepStatus,
 } from './custody-types.js';
-import {
-  DEFAULT_REPLICATION_CONCURRENCY,
-  EMPTY_BLOB_METRICS,
-  type BlobCache,
-  type BlobMetrics,
-} from './cache.js';
+import type { LocalBlobStore } from './local.js';
+import type { ReplicaStore } from './replica-index.js';
 import { driveReplication } from './replicate-driver.js';
+import type { FrameDirectory } from './seal-frames.js';
+import { sealBlob, sealBlobStream, unsealBlob } from './seal.js';
+import { resolveWriteStore } from './store-routing.js';
+import { resolveRange, sha256OfBytes, type BlobRange, type BlobStore } from './store.js';
 
 export { sealBlob, sealBlobStream, unsealBlob } from './seal.js';
 export type {
@@ -132,14 +132,8 @@ export class BlobCustody {
     };
   }
 
-  /**
-   * Hash raw bytes and store them locally — the one ingress everything uses.
-   * With a cache wired (issue #405 §3/§5), a NEW blob first passes the budget
-   * precheck (`cache.admit`): evict to make room, or `VaultBlobBackpressureError`
-   * when nothing is safely evictable — never deleting un-replicated bytes to fit.
-   * The precheck COMPOSES with the hard `VaultDiskFullError` (blob/local.ts): the
-   * soft budget vs. the real ENOSPC floor.
-   */
+  /** Hash and store raw bytes. New blobs pass the cache budget precheck before the
+   * hard ENOSPC floor; dedup hits allocate nothing and skip both. */
   ingestSync(bytes: Buffer): { sha256: string; byteSize: number } {
     const sha = sha256OfBytes(bytes);
     const existed = this.local.hasSync(sha);
@@ -443,10 +437,12 @@ export class BlobCustody {
     if (!remote) return Promise.resolve([]);
     return (async () => {
       const shas = await remote.store.list();
-      for (const sha of shas) {
-        await remote.store.delete(sha);
-        this.cache?.replica.unmark(sha);
-      }
+      await Promise.all(
+        shas.map(async (sha) => {
+          await remote.store.delete(sha);
+          this.cache?.replica.unmark(sha);
+        }),
+      );
       return shas;
     })();
   }

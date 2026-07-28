@@ -57,7 +57,10 @@ export async function fetchReplicaBootstrap(
 ): Promise<ReplicaSnapshot> {
   const response = await fetcher(gatewayAuth.baseUrl, '/centraid/_vault/replica/bootstrap', {
     method: 'GET',
-    headers: { ...authHeaders(gatewayAuth.token), Accept: 'application/json' },
+    headers: {
+      ...authHeaders(gatewayAuth.token),
+      Accept: 'application/json',
+    },
     cache: 'no-store',
     ...(signal ? { signal } : {}),
   });
@@ -118,7 +121,10 @@ export async function fetchReplicaBootstrapPage(
     `/centraid/_vault/replica/bootstrap?${params}`,
     {
       method: 'GET',
-      headers: { ...authHeaders(gatewayAuth.token), Accept: 'application/json' },
+      headers: {
+        ...authHeaders(gatewayAuth.token),
+        Accept: 'application/json',
+      },
       cache: 'no-store',
       ...(options.signal ? { signal: options.signal } : {}),
     },
@@ -152,12 +158,17 @@ export async function fetchReplicaChanges(
       ? undefined
       : normalizedShapeIds(shapeIdsOrFetcher);
   const fetcher = typeof shapeIdsOrFetcher === 'function' ? shapeIdsOrFetcher : customFetcher;
-  const params = new URLSearchParams({ since: `${cursor.epoch}:${cursor.seq}` });
+  const params = new URLSearchParams({
+    since: `${cursor.epoch}:${cursor.seq}`,
+  });
   // Presence is significant: `shapeIds=` attests a persisted empty catalog.
   if (shapeIds) params.set('shapeIds', shapeIds.join(','));
   const response = await fetcher(gatewayAuth.baseUrl, `/centraid/_vault/changes?${params}`, {
     method: 'GET',
-    headers: { ...authHeaders(gatewayAuth.token), Accept: 'application/json' },
+    headers: {
+      ...authHeaders(gatewayAuth.token),
+      Accept: 'application/json',
+    },
     cache: 'no-store',
     signal,
   });
@@ -180,24 +191,32 @@ export async function fetchReplicaIntentOutcomes(
 ): Promise<IntentOutcome[]> {
   const ids = [...new Set(intentIds.filter(Boolean))];
   const outcomes = new Map<string, IntentOutcome>();
-  for (let offset = 0; offset < ids.length; offset += OUTCOME_RECONCILE_BATCH) {
-    const batch = ids.slice(offset, offset + OUTCOME_RECONCILE_BATCH);
-    const response = await fetcher(gatewayAuth.baseUrl, '/centraid/_vault/replica/outcomes', {
-      method: 'POST',
-      headers: {
-        ...authHeaders(gatewayAuth.token, 'application/json'),
-        Accept: 'application/json',
-      },
-      body: JSON.stringify({ intentIds: batch, through }),
-      cache: 'no-store',
-      ...(signal ? { signal } : {}),
-    });
-    const body = await readReplicaJson<{ outcomes?: IntentOutcome[] }>(
-      response,
-      'reconcile replica intents',
-    );
-    validateOutcomes(body.outcomes);
-    for (const outcome of body.outcomes ?? []) {
+  const batches = Array.from(
+    { length: Math.ceil(ids.length / OUTCOME_RECONCILE_BATCH) },
+    (_, index) => ids.slice(index * OUTCOME_RECONCILE_BATCH, (index + 1) * OUTCOME_RECONCILE_BATCH),
+  );
+  const receivedBatches = await Promise.all(
+    batches.map(async (batch) => {
+      const response = await fetcher(gatewayAuth.baseUrl, '/centraid/_vault/replica/outcomes', {
+        method: 'POST',
+        headers: {
+          ...authHeaders(gatewayAuth.token, 'application/json'),
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({ intentIds: batch, through }),
+        cache: 'no-store',
+        ...(signal ? { signal } : {}),
+      });
+      const body = await readReplicaJson<{ outcomes?: IntentOutcome[] }>(
+        response,
+        'reconcile replica intents',
+      );
+      validateOutcomes(body.outcomes);
+      return { batch, outcomes: body.outcomes ?? [] };
+    }),
+  );
+  for (const { batch, outcomes: receivedOutcomes } of receivedBatches) {
+    for (const outcome of receivedOutcomes) {
       if (!batch.includes(outcome.intentId)) {
         throw new ReplicaProtocolError('Replica outcome did not match a requested intent');
       }

@@ -23,11 +23,18 @@
  */
 
 import { promises as fs } from 'node:fs';
+
 import { aesGcmKeyProtector, KeyStore } from '@centraid/vault';
 
 export type ServiceKeyCredential =
   | { kind: 'systemd'; path: string; encoded: string; keysDir: string }
-  | { kind: 'keychain'; service: string; account: string; encoded: string; keysDir: string };
+  | {
+      kind: 'keychain';
+      service: string;
+      account: string;
+      encoded: string;
+      keysDir: string;
+    };
 
 /**
  * Prove `credential` can read this data directory's keys, rewrapping any

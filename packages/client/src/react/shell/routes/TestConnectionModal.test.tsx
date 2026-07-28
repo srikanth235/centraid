@@ -1,6 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import TestConnectionModal from './TestConnectionModal.js';
 
 // connectFlowIO.js (pulled in transitively for local-vault loading elsewhere
@@ -9,14 +10,18 @@ import TestConnectionModal from './TestConnectionModal.js';
 // side effect doesn't reach for a `window.CentraidApi` this file only wires
 // up inside `beforeEach` (same trap spaceModals.test.ts / ConnectFlow.test.tsx
 // sidestep).
-vi.mock(import('../../../gateway-client.js'), () => ({ listVaults: () => Promise.resolve([]) }));
+vi.mock(import('../../../gateway-client.js'), () => ({
+  listVaults: () => Promise.resolve([]),
+}));
 
-const testGatewayConnection = vi.fn();
+const testGatewayConnection = vi.fn<typeof window.CentraidApi.testGatewayConnection>();
 
 describe('routes/TestConnectionModal', () => {
   beforeEach(() => {
     testGatewayConnection.mockReset();
-    (globalThis as unknown as { CentraidApi: unknown }).CentraidApi = { testGatewayConnection };
+    (globalThis as unknown as { CentraidApi: unknown }).CentraidApi = {
+      testGatewayConnection,
+    };
   });
 
   let root: Root | null = null;
@@ -52,11 +57,19 @@ describe('routes/TestConnectionModal', () => {
       testGatewayConnection.mockResolvedValue({
         ok: true,
         stages: [{ id: 'reach', label: 'Reach', status: 'pass' }],
-        gateway: { version: '0.5.2', schemaEpoch: 3, instanceId: 'i1', compatible: true },
+        gateway: {
+          version: '0.5.2',
+          schemaEpoch: 3,
+          instanceId: 'i1',
+          compatible: true,
+        },
       });
       const el = mount(vi.fn());
       await flush();
-      expect(testGatewayConnection).toHaveBeenCalledWith({ gatewayId: 'home', kind: 'gateway' });
+      expect(testGatewayConnection).toHaveBeenCalledWith({
+        gatewayId: 'home',
+        kind: 'gateway',
+      });
       expect(el.textContent).toContain('Reach');
       expect(el.textContent).toContain('v0.5.2');
     });
@@ -75,7 +88,7 @@ describe('routes/TestConnectionModal', () => {
 
     it('Close fires onClose', async () => {
       testGatewayConnection.mockResolvedValue({ ok: true, stages: [] });
-      const onClose = vi.fn();
+      const onClose = vi.fn<() => void>();
       const el = mount(onClose);
       await flush();
       const close = [...el.querySelectorAll('button')].find(

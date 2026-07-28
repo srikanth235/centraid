@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+
 import {
   buildNpmInstallArgs,
   defaultInstallPrefix,
@@ -41,16 +42,23 @@ test('rewriteWorkspaceDependencies throws on missing workspace package', () => {
   assert.throws(
     () =>
       rewriteWorkspaceDependencies(
-        { name: '@centraid/x', dependencies: { '@centraid/missing': 'workspace:*' } },
+        {
+          name: '@centraid/x',
+          dependencies: { '@centraid/missing': 'workspace:*' },
+        },
         {},
       ),
-    /No published version/,
+    /No published version/u,
   );
 });
 
 test('topologicalPublishOrder places deps before dependents', () => {
   const pkgs = {
-    protocol: { name: '@centraid/protocol', version: '0.1.0', dependencies: {} },
+    protocol: {
+      name: '@centraid/protocol',
+      version: '0.1.0',
+      dependencies: {},
+    },
     gateway: {
       name: '@centraid/gateway',
       version: '0.1.0',
@@ -81,7 +89,7 @@ test('parseInstallArgs reads OpenClaw-like flags', () => {
 });
 
 test('parseInstallArgs rejects unknown flags', () => {
-  assert.throws(() => parseInstallArgs(['--docker']), /Unknown flag/);
+  assert.throws(() => parseInstallArgs(['--docker']), /Unknown flag/u);
 });
 
 test('buildNpmInstallArgs registry vs pack dir', () => {
@@ -97,8 +105,13 @@ test('buildNpmInstallArgs registry vs pack dir', () => {
     ['/packs/a.tgz', '/packs/b.tgz'],
   );
   assert.throws(
-    () => buildNpmInstallArgs({ version: 'latest', fromPackDir: '/empty', packFiles: [] }),
-    /No pack tarballs/,
+    () =>
+      buildNpmInstallArgs({
+        version: 'latest',
+        fromPackDir: '/empty',
+        packFiles: [],
+      }),
+    /No pack tarballs/u,
   );
 });
 
@@ -108,10 +121,10 @@ test('formatPostInstallMessage never implies silent service', () => {
     prefix: '/home/u/.centraid',
     withService: false,
   });
-  assert.match(msg, /serve --data-dir/);
-  assert.match(msg, /service install/);
-  assert.match(msg, /Optional OS service/);
-  assert.doesNotMatch(msg, /installed the OS service/i);
+  assert.match(msg, /serve --data-dir/u);
+  assert.match(msg, /service install/u);
+  assert.match(msg, /Optional OS service/u);
+  assert.doesNotMatch(msg, /installed the OS service/iu);
 });
 
 test('nodeVersionSatisfies and engines parse', () => {

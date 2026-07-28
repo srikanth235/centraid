@@ -1,9 +1,11 @@
+import { randomUUID } from 'node:crypto';
+import path from 'node:path';
+
 import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { describe, expect, it } from 'vitest';
-import { join } from 'node:path';
-import { randomUUID } from 'node:crypto';
-import { makeJournalDbProvider } from '../stores/gateway-db.js';
+
 import { ConversationStore } from '../conversation/store.js';
+import { makeJournalDbProvider } from '../stores/gateway-db.js';
 import { AnalyticsStore } from './analytics-store.js';
 
 /*
@@ -13,8 +15,11 @@ import { AnalyticsStore } from './analytics-store.js';
  */
 function setup(): { runs: ConversationStore; analytics: AnalyticsStore } {
   const dir = tempDirSync('centraid-analytics-');
-  const ledger = makeJournalDbProvider(join(dir, 'journal.db'));
-  return { runs: new ConversationStore(ledger), analytics: new AnalyticsStore(ledger) };
+  const ledger = makeJournalDbProvider(path.join(dir, 'journal.db'));
+  return {
+    runs: new ConversationStore(ledger),
+    analytics: new AnalyticsStore(ledger),
+  };
 }
 
 interface SeedOptions {
@@ -41,7 +46,7 @@ function seedFire(runs: ConversationStore, opts: SeedOptions = {}): string {
     turnId: runId,
     conversationId,
     triggerKind: 'manual',
-    ...(opts.hydrationTokens !== undefined ? { hydrationTokens: opts.hydrationTokens } : {}),
+    ...(opts.hydrationTokens === undefined ? {} : { hydrationTokens: opts.hydrationTokens }),
     startedAt,
   });
   runs.insertItem({
@@ -94,7 +99,12 @@ describe('AnalyticsStore (read-only lens over the run_summary view)', () => {
     const { runs, analytics } = setup();
     const runId = seedFire(runs, { finish: false });
     expect(analytics.getSummary(runId)).toBeUndefined();
-    runs.finishTurn({ turnId: runId, endedAt: 2_000, ok: false, error: 'boom' });
+    runs.finishTurn({
+      turnId: runId,
+      endedAt: 2_000,
+      ok: false,
+      error: 'boom',
+    });
     const got = analytics.getSummary(runId);
     expect(got?.ok).toBe(false);
     expect(got?.error).toBe('boom');
@@ -102,9 +112,21 @@ describe('AnalyticsStore (read-only lens over the run_summary view)', () => {
 
   it('lists summaries newest-first, optionally scoped to one automation', () => {
     const { runs, analytics } = setup();
-    seedFire(runs, { runId: 'r1', automationRef: 'auto.a/job', startedAt: 100 });
-    seedFire(runs, { runId: 'r2', automationRef: 'auto.b/job', startedAt: 300 });
-    seedFire(runs, { runId: 'r3', automationRef: 'auto.a/job', startedAt: 200 });
+    seedFire(runs, {
+      runId: 'r1',
+      automationRef: 'auto.a/job',
+      startedAt: 100,
+    });
+    seedFire(runs, {
+      runId: 'r2',
+      automationRef: 'auto.b/job',
+      startedAt: 300,
+    });
+    seedFire(runs, {
+      runId: 'r3',
+      automationRef: 'auto.a/job',
+      startedAt: 200,
+    });
     expect(analytics.listSummaries().map((r) => r.runId)).toStrictEqual(['r2', 'r3', 'r1']);
     expect(
       analytics.listSummaries({ automationRef: 'auto.a/job' }).map((r) => r.runId),
@@ -127,7 +149,12 @@ describe('AnalyticsStore (read-only lens over the run_summary view)', () => {
     const { runs, analytics } = setup();
     const runId = randomUUID();
     const conversationId = runs.ensureAutomationConversation('auto.a/job', 'auto.a');
-    runs.insertTurn({ turnId: runId, conversationId, triggerKind: 'manual', startedAt: 100 });
+    runs.insertTurn({
+      turnId: runId,
+      conversationId,
+      triggerKind: 'manual',
+      startedAt: 100,
+    });
     for (const [model, tokens, ordinal] of [
       ['small-model', 10, 0],
       ['big-model', 900, 1],

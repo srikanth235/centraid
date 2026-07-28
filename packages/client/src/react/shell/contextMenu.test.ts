@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import { closeContextMenu, isContextMenuOpen, openMenu } from './contextMenu.js';
 
 describe('contextMenu', () => {

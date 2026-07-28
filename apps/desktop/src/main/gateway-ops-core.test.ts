@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import {
   diagnosticsFileName,
   exportGatewayDiagnostics,
@@ -21,7 +22,10 @@ describe(fetchDiagnosticsText, () => {
     const result = await fetchDiagnosticsText(
       'http://127.0.0.1:1',
       'tok',
-      async () => new Response(JSON.stringify({ status: 'ok', components: [] }), { status: 200 }),
+      async () =>
+        new Response(JSON.stringify({ status: 'ok', components: [] }), {
+          status: 200,
+        }),
     );
     expect(result).toStrictEqual({
       ok: true,
@@ -51,15 +55,24 @@ describe(fetchDiagnosticsText, () => {
       undefined,
       async () => new Response('not json', { status: 200 }),
     );
-    expect(result).toStrictEqual({ ok: false, error: 'diagnostics response was not JSON' });
+    expect(result).toStrictEqual({
+      ok: false,
+      error: 'diagnostics response was not JSON',
+    });
   });
 });
 
 function makeDeps(overrides: Partial<ExportDiagnosticsDeps> = {}): ExportDiagnosticsDeps {
   return {
-    loadSettings: async () => ({ gatewayUrl: 'http://127.0.0.1:4000', gatewayToken: 'tok' }),
+    loadSettings: async () => ({
+      gatewayUrl: 'http://127.0.0.1:4000',
+      gatewayToken: 'tok',
+    }),
     fetchImpl: async () => new Response(JSON.stringify({ status: 'ok' }), { status: 200 }),
-    showSaveDialog: async (defaultPath) => ({ canceled: false, filePath: `/tmp/${defaultPath}` }),
+    showSaveDialog: async (defaultPath) => ({
+      canceled: false,
+      filePath: `/tmp/${defaultPath}`,
+    }),
     writeFile: async () => undefined,
     now: () => new Date(2026, 6, 11),
     ...overrides,
@@ -70,9 +83,14 @@ describe(exportGatewayDiagnostics, () => {
   it('happy path: fetches, saves, and returns the written path', async () => {
     const writes: Array<{ path: string; data: string }> = [];
     const result = await exportGatewayDiagnostics(
-      makeDeps({ writeFile: async (path, data) => void writes.push({ path, data }) }),
+      makeDeps({
+        writeFile: async (path, data) => void writes.push({ path, data }),
+      }),
     );
-    expect(result).toStrictEqual({ ok: true, path: '/tmp/centraid-diagnostics-2026-07-11.json' });
+    expect(result).toStrictEqual({
+      ok: true,
+      path: '/tmp/centraid-diagnostics-2026-07-11.json',
+    });
     expect(writes).toStrictEqual([
       {
         path: '/tmp/centraid-diagnostics-2026-07-11.json',
@@ -134,7 +152,10 @@ describe(exportGatewayDiagnostics, () => {
         },
       }),
     );
-    expect(result).toStrictEqual({ ok: false, error: 'EACCES: permission denied' });
+    expect(result).toStrictEqual({
+      ok: false,
+      error: 'EACCES: permission denied',
+    });
   });
 });
 
@@ -160,9 +181,15 @@ describe(exportGatewayRecoveryKit, () => {
       method: 'POST',
       body: JSON.stringify({ password: 'correct horse' }),
     });
-    expect(result).toStrictEqual({ ok: true, path: '/tmp/centraid-recovery-kit.json' });
+    expect(result).toStrictEqual({
+      ok: true,
+      path: '/tmp/centraid-recovery-kit.json',
+    });
     expect(writes).toStrictEqual([
-      { path: '/tmp/centraid-recovery-kit.json', data: JSON.stringify(kit, null, 2) },
+      {
+        path: '/tmp/centraid-recovery-kit.json',
+        data: JSON.stringify(kit, null, 2),
+      },
     ]);
   });
 });

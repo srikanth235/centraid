@@ -1,3 +1,4 @@
+import type { IconName } from '@centraid/design-tokens';
 // governance: allow-repo-hygiene file-size-limit (#539) single cohesive screen component (header/consent-strip/chat-turn spine/steering composer of one thread surface); splitting would fragment one visual unit
 import {
   type Dispatch,
@@ -8,14 +9,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import type { IconName } from '@centraid/design-tokens';
-import { Icon } from '../ui/index.js';
-import { cx } from '../ui/cx.js';
-import au from '../styles/automation.module.css';
-import styles from './AutomationThreadScreen.module.css';
-import Message, { type MessageCallbacks } from './AssistantMessage.js';
-import ChatComposer from './ChatComposer.js';
-import { EffortPicker, ModelPicker, RunnerPicker } from './AssistantScreen.js';
+
 import type {
   AsstModelPickerDTO,
   AsstMsgDTO,
@@ -31,6 +25,14 @@ import type {
   ParkedItemDTO,
   ThreadRunDTO,
 } from '../screen-contracts.js';
+import { cx } from '../ui/cx.js';
+import { Icon } from '../ui/index.js';
+import Message, { type MessageCallbacks } from './AssistantMessage.js';
+import { EffortPicker, ModelPicker, RunnerPicker } from './AssistantScreen.js';
+import ChatComposer from './ChatComposer.js';
+
+import au from '../styles/automation.module.css';
+import styles from './AutomationThreadScreen.module.css';
 
 // The RUN SCREEN — one of the two automation surfaces, and the one that
 // changes nothing.
@@ -80,7 +82,11 @@ export interface AutomationThreadDataEx extends AutomationThreadData {
   triggerDetail?: {
     cronExprs: string[];
     dataDetail: { entities: string[]; everyLabel: string | null } | null;
-    conditionDetail: { entity: string; everyLabel: string | null; whereText: string } | null;
+    conditionDetail: {
+      entity: string;
+      everyLabel: string | null;
+      whereText: string;
+    } | null;
   };
   runTokens?: Record<string, number>;
   /** Capability-backed attended runner controls for the Q&A conversation. */
@@ -119,6 +125,56 @@ function withoutId(current: ReadonlySet<string>, id: string): ReadonlySet<string
   const next = new Set(current);
   next.delete(id);
   return next;
+}
+
+function pauseWatchRejoin(controller: AbortController, ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = window.setTimeout(resolve, ms);
+    controller.signal.addEventListener(
+      'abort',
+      () => {
+        window.clearTimeout(timer);
+        resolve();
+      },
+      { once: true },
+    );
+  });
+}
+
+async function watchNativeTurnWithBackoff(
+  turnId: string,
+  controller: AbortController,
+  io: {
+    watchTurn: AutomationThreadBridgeProps['watchTurn'];
+    reload: () => Promise<void>;
+    setTraces: Dispatch<SetStateAction<Record<string, AsstMsgDTO[]>>>;
+    setLostWatches: Dispatch<SetStateAction<ReadonlySet<string>>>;
+  },
+  attempt = 0,
+): Promise<void> {
+  if (controller.signal.aborted) return;
+  let settled = false;
+  try {
+    settled = await io.watchTurn(
+      turnId,
+      (messages) => io.setTraces((current) => ({ ...current, [turnId]: messages })),
+      controller.signal,
+    );
+  } catch {
+    settled = false;
+  }
+  if (controller.signal.aborted) return;
+  if (settled) {
+    await io.reload();
+    return;
+  }
+  const delay = WATCH_REJOIN_DELAYS_MS[attempt];
+  if (delay === undefined) {
+    io.setLostWatches((current) => new Set(current).add(turnId));
+    return;
+  }
+  await pauseWatchRejoin(controller, delay);
+  return watchNativeTurnWithBackoff(turnId, controller, io, attempt + 1);
 }
 
 /**
@@ -838,18 +894,22 @@ function Composer({
     }
   };
   const selectRunner = (runnerKind: string): void => {
-    if (!onSetRunner) return;
+    const setRunner = onSetRunner;
+    if (!setRunner) return;
     setPickerLoaded(false);
-    void onSetRunner(runnerKind)
-      .then((next) => {
+    void (async () => {
+      try {
+        const next = await setRunner(runnerKind);
         const changed =
           next.selectedRunnerKind === runnerKind &&
           activePicker?.selectedRunnerKind !== next.selectedRunnerKind;
         setPickerOverride(next);
         if (changed) onRunnerSwitch?.();
         if (!next.supportsAttachments) setPending([]);
-      })
-      .finally(() => setPickerLoaded(true));
+      } finally {
+        setPickerLoaded(true);
+      }
+    })();
   };
   return (
     <div className={styles.composerWrap}>
@@ -1002,7 +1062,10 @@ export default function AutomationThreadScreen({
   /** Running turns whose live stream is gone and stayed gone after rejoins. */
   const [lostWatches, setLostWatches] = useState<ReadonlySet<string>>(new Set());
   const [pendingTrace, setPendingTrace] = useState<AsstMsgDTO[] | null>(null);
-  const [composerContext, setComposerContext] = useState<{ used: number; size: number }>();
+  const [composerContext, setComposerContext] = useState<{
+    used: number;
+    size: number;
+  }>();
   const watchedTurnsRef = useRef(new Set<string>());
   const streamControllersRef = useRef(new Map<string, AbortController>());
   const [regenBusy, setRegenBusy] = useState(false);
@@ -1015,10 +1078,9 @@ export default function AutomationThreadScreen({
 
   const reload = useCallback(
     (): Promise<void> =>
-      loadData().then(
-        (d) => setState(d ?? 'missing'),
-        () => setState('error'),
-      ),
+      loadData()
+        .then((d) => setState(d ?? 'missing'))
+        .catch(() => setState('error')),
     [loadData],
   );
 
@@ -1028,7 +1090,12 @@ export default function AutomationThreadScreen({
 
   const loadTrace = useCallback(
     (turnId: string): Promise<void> =>
-      fetchTurnTrace(turnId, { loadTurnTrace, setLoadingTraces, setTraceErrors, setTraces }),
+      fetchTurnTrace(turnId, {
+        loadTurnTrace,
+        setLoadingTraces,
+        setTraceErrors,
+        setTraces,
+      }),
     [loadTurnTrace],
   );
 
@@ -1048,47 +1115,12 @@ export default function AutomationThreadScreen({
       setLostWatches((current) => withoutId(current, turnId));
       const controller = new AbortController();
       streamControllersRef.current.set(turnId, controller);
-      const pause = (ms: number): Promise<void> =>
-        new Promise((resolve) => {
-          const timer = window.setTimeout(resolve, ms);
-          controller.signal.addEventListener(
-            'abort',
-            () => {
-              window.clearTimeout(timer);
-              resolve();
-            },
-            { once: true },
-          );
-        });
-      void (async () => {
-        for (let attempt = 0; !controller.signal.aborted; attempt++) {
-          let settled = false;
-          try {
-            settled = await watchTurn(
-              turnId,
-              (messages) => setTraces((current) => ({ ...current, [turnId]: messages })),
-              controller.signal,
-            );
-          } catch {
-            settled = false;
-          }
-          if (controller.signal.aborted) return;
-          if (settled) {
-            // `watchTurn` already performed the authoritative ledger re-read
-            // and pushed its messages — only the header/run row needs a reload.
-            await reload();
-            return;
-          }
-          const delay = WATCH_REJOIN_DELAYS_MS[attempt];
-          if (delay === undefined) {
-            // Keep the id in `watchedTurnsRef` so the auto-watch effect does
-            // not immediately restart the loop; `retryWatch` clears it.
-            setLostWatches((current) => new Set(current).add(turnId));
-            return;
-          }
-          await pause(delay);
-        }
-      })().finally(() => {
+      void watchNativeTurnWithBackoff(turnId, controller, {
+        watchTurn,
+        reload,
+        setTraces,
+        setLostWatches,
+      }).finally(() => {
         // Only retire our own registration: `retryWatch` aborts this loop and
         // registers a replacement under the same turn id, and this `finally`
         // runs after that — deleting blindly would orphan the live stream.

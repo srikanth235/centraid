@@ -6,11 +6,11 @@
  * authenticated gateway. It is never written to local/session storage.
  */
 
+import { ASSIST_HANDOFF_EVENT, type AssistHandoffResult } from './assist-oauth-events.js';
 import {
   completeAssistAuthorization,
   type AssistOAuthHandoff,
 } from './gateway-client-connections.js';
-import { ASSIST_HANDOFF_EVENT, type AssistHandoffResult } from './assist-oauth-events.js';
 
 export function parseAssistHandoffUrl(rawUrl: string): AssistOAuthHandoff | undefined {
   let url: URL;
@@ -58,7 +58,9 @@ export function installDesktopAssistHandoff(): () => void {
     if (!handoff) return;
     void completeHandoff(handoff).then((result) => {
       window.dispatchEvent(
-        new CustomEvent<AssistHandoffResult>(ASSIST_HANDOFF_EVENT, { detail: result }),
+        new CustomEvent<AssistHandoffResult>(ASSIST_HANDOFF_EVENT, {
+          detail: result,
+        }),
       );
     });
   });

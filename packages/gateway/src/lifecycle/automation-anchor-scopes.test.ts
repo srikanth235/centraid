@@ -8,6 +8,7 @@ import {
   type Credential,
 } from '@centraid/vault';
 import { afterEach, describe, expect, test } from 'vitest';
+
 import {
   AutomationAnchorError,
   resolveAutomationAnchors,
@@ -88,7 +89,10 @@ describe('automation-anchor-scopes', () => {
         sourceId: 'task-anchored',
         sourceField: 'title',
         targetType: 'core.party',
-        selector: expect.objectContaining({ exact: 'quarterly report', start: 8 }),
+        selector: expect.objectContaining({
+          exact: 'quarterly report',
+          start: 8,
+        }),
         scope: {
           schema: 'schedule',
           table: 'task',
@@ -199,7 +203,9 @@ describe('automation-anchor-scopes', () => {
   test('every anchor read is receipted through the consent gateway', () => {
     const { db, vault } = anchoredTaskFixture();
     const before = (
-      db.journal.prepare('SELECT count(*) AS n FROM consent_receipt').get() as { n: number }
+      db.journal.prepare('SELECT count(*) AS n FROM consent_receipt').get() as {
+        n: number;
+      }
     ).n;
     resolveAutomationAnchors(vault, '@[core.link_anchor/anchor-1]');
     const rows = db.journal
@@ -207,9 +213,16 @@ describe('automation-anchor-scopes', () => {
         `SELECT object_type, action, purpose_concept_id AS purpose, decision FROM consent_receipt
         ORDER BY rowid DESC LIMIT ?`,
       )
-      .all(4) as { object_type: string; action: string; purpose: string; decision: string }[];
+      .all(4) as {
+      object_type: string;
+      action: string;
+      purpose: string;
+      decision: string;
+    }[];
     const after = (
-      db.journal.prepare('SELECT count(*) AS n FROM consent_receipt').get() as { n: number }
+      db.journal.prepare('SELECT count(*) AS n FROM consent_receipt').get() as {
+        n: number;
+      }
     ).n;
     // Previously these three reads went straight at `db.vault` — no credential,
     // no purpose, no audit trail (issue #541 review).
@@ -251,6 +264,6 @@ describe('automation-anchor-scopes', () => {
       },
     };
 
-    expect(() => scopesForAutomationAnchors([first!, second])).toThrow(/without widening/);
+    expect(() => scopesForAutomationAnchors([first!, second])).toThrow(/without widening/u);
   });
 });

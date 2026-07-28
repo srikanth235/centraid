@@ -40,8 +40,9 @@
  * host falls back to the data-only `makeConversationRunner`.
  */
 
-import path from 'node:path';
 import { promises as fs } from 'node:fs';
+import path from 'node:path';
+
 import { defaultCentraidCliDir, runTurn } from '@centraid/agent-runtime';
 import {
   makeConversationRunnerCore,
@@ -60,12 +61,13 @@ import {
   type VaultSqlRunner,
 } from '@centraid/app-engine';
 import { provisionAppPendingWebhooks, WEBHOOK_ROUTE_PREFIX } from '@centraid/automation';
+
+import { ensureDraftBand, type ExtBandOps } from '../lifecycle/ext-band.js';
+import { ensureSession } from '../lifecycle/lifecycle-shared.js';
 import { buildAuthoringExtraPrompt } from '../skills/index.js';
 import { WorktreeStore } from '../worktree-store/index.js';
-import { ensureSession } from '../lifecycle/lifecycle-shared.js';
-import { ensureDraftBand, type ExtBandOps } from '../lifecycle/ext-band.js';
 
-export type { RunTurnFn };
+export { type RunTurnFn } from '@centraid/app-engine';
 
 export interface UnifiedConversationRunnerOptions {
   /** Git store backing app code; the draft worktree lives in its sessions. */

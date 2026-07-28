@@ -4,6 +4,7 @@
 // assembled {title, body}; it never touches `state`/`data` directly. Mirrors
 // tasks/components/Capture.jsx's shape.
 import { useEffect, useRef, useState } from 'react';
+
 import styles from './QuickAdd.module.css';
 
 export interface QuickAddProps {

@@ -1,12 +1,14 @@
+import { mkdirSync } from 'node:fs';
+import path from 'node:path';
+import type { DatabaseSync } from 'node:sqlite';
+
 import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { mkdirSync } from 'node:fs';
-import { join } from 'node:path';
-import type { DatabaseSync } from 'node:sqlite';
-import { ConversationHistoryStore } from './history.js';
-import { repriceLedger } from './reprice.js';
+
 import { makeJournalDbProvider } from '../stores/gateway-db.js';
 import type { WorkspaceProvider } from '../stores/vault-workspace.js';
+import { ConversationHistoryStore } from './history.js';
+import { repriceLedger } from './reprice.js';
 
 const APP = 'todos';
 const OWNER = 'test-owner-uuid-0000';
@@ -17,7 +19,7 @@ const EXPECTED = 1;
 
 function freshVaultDir(): string {
   const dir = tempDirSync('centraid-reprice-');
-  mkdirSync(join(dir, 'apps', APP), { recursive: true });
+  mkdirSync(path.join(dir, 'apps', APP), { recursive: true });
   return dir;
 }
 
@@ -28,15 +30,15 @@ describe(repriceLedger, () => {
 
   beforeEach(() => {
     dir = freshVaultDir();
-    const journal = makeJournalDbProvider(join(dir, 'journal.db'));
+    const journal = makeJournalDbProvider(path.join(dir, 'journal.db'));
     db = journal();
     const workspace: WorkspaceProvider = () => ({
       vaultId: 'vault-test',
       ownerPartyId: OWNER,
-      appsDir: join(dir, 'apps'),
+      appsDir: path.join(dir, 'apps'),
       journal,
-      journalDbFile: join(dir, 'journal.db'),
-      runnerSessionDir: join(dir, 'runner-sessions'),
+      journalDbFile: path.join(dir, 'journal.db'),
+      runnerSessionDir: path.join(dir, 'runner-sessions'),
     });
     store = new ConversationHistoryStore(workspace);
   });
@@ -121,7 +123,10 @@ describe(repriceLedger, () => {
     expect(first.itemsRepriced).toBe(1);
     expect(first.nextCursor).toBeGreaterThan(0);
 
-    const second = repriceLedger(db, { cursor: first.nextCursor, maxWrites: 10 });
+    const second = repriceLedger(db, {
+      cursor: first.nextCursor,
+      maxWrites: 10,
+    });
     expect(second.itemsRepriced).toBe(3);
     const remaining = db
       .prepare(`SELECT COUNT(*) AS n FROM items WHERE kind = 'step' AND cost_usd IS NULL`)

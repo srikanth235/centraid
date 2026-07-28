@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test } from 'vitest';
+
 import { bootstrapVault, type BootstrapResult } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { createGateway, Gateway } from '../gateway/gateway.js';
@@ -14,7 +15,11 @@ describe('ingest', () => {
     db = openVaultDb();
     boot = bootstrapVault(db, { ownerName: 'Priya' });
     gw = createGateway(db);
-    owner = { kind: 'device', deviceId: boot.deviceId, deviceKey: boot.deviceKey };
+    owner = {
+      kind: 'device',
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+    };
   });
 
   const ICS = [
@@ -103,7 +108,10 @@ describe('ingest', () => {
         `SELECT party_id, sort_name, birth_date FROM core_party WHERE display_name = 'Ravi Kumar'`,
       )
       .get() as { party_id: string; sort_name: string; birth_date: string };
-    expect(ravi).toMatchObject({ sort_name: 'Kumar, Ravi', birth_date: '1988-03-12' });
+    expect(ravi).toMatchObject({
+      sort_name: 'Kumar, Ravi',
+      birth_date: '1988-03-12',
+    });
     const ids = db.vault
       .prepare(
         'SELECT scheme, value, is_primary FROM core_party_identifier WHERE party_id = ? ORDER BY scheme',
@@ -150,7 +158,7 @@ describe('ingest', () => {
 
   test('imports are owner-only in v0', () => {
     expect(() => gw.importIcs({ kind: 'device', deviceId: 'x', deviceKey: 'y' }, ICS)).toThrow(
-      /unknown caller/,
+      /unknown caller/u,
     );
   });
 });

@@ -1,15 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit (#406) cohesive web host bridge owns connection identity, lifecycle events, and storage-consent teardown together
-import {
-  decodeTicket,
-  gatewayJson,
-  loadConnection,
-  loadSettingsPatch,
-  publish,
-  saveConnection,
-  saveSettingsPatch,
-  subscribe,
-  webGatewayId,
-} from './web-state.js';
 import type {
   CentraidGatewayRuntime,
   CentraidGatewayVaultEntry,
@@ -24,12 +12,23 @@ import {
   requestPersistentStorage,
   watchServiceWorkerUpdates,
 } from './sw-lifecycle.js';
+import { HEALTH_POLL_INTERVAL_MS, healthSnapshot } from './web-health.js';
+// governance: allow-repo-hygiene file-size-limit (#406) cohesive web host bridge owns connection identity, lifecycle events, and storage-consent teardown together
+import {
+  decodeTicket,
+  gatewayJson,
+  loadConnection,
+  loadSettingsPatch,
+  publish,
+  saveConnection,
+  saveSettingsPatch,
+  subscribe,
+  webGatewayId,
+} from './web-state.js';
 
 const GATEWAY_EVENT = 'gateway-changed';
 const VAULT_EVENT = 'vault-changed';
 const METADATA_EVENT = 'vault-metadata';
-
-const HEALTH_POLL_INTERVAL_MS = 15000;
 
 function settings(): CentraidSettings {
   const connection = loadConnection();
@@ -44,58 +43,6 @@ function settings(): CentraidSettings {
     ...(connection.vaultId ? { activeVaultId: connection.vaultId } : {}),
     ...patch,
   };
-}
-
-async function healthSnapshot(): Promise<CentraidGatewayRuntime> {
-  const started = performance.now();
-  try {
-    const health = await gatewayJson<CentraidGatewayHealth>('/centraid/_gateway/health');
-    const now = Date.now();
-    return {
-      gatewayId: 'web',
-      gatewayLabel: loadConnection().label,
-      gatewayKind: 'remote',
-      trackingSince: now - health.uptimeMs,
-      status: 'up',
-      statusSince: now - health.uptimeMs,
-      lastCheckAt: now,
-      latencyMs: Math.round(performance.now() - started),
-      gatewayStartedAt: Date.parse(health.startedAt),
-      gatewayUptimeMs: health.uptimeMs,
-      checksTotal: 1,
-      checksFailed: 0,
-      samples: [],
-      outages: [],
-      alert: { enabled: false, thresholdSeconds: 120 },
-      pollIntervalMs: HEALTH_POLL_INTERVAL_MS,
-      alertHistory: [],
-      healthStatus: health.status,
-      componentIssues: health.components
-        .filter((component) => component.status !== 'ok')
-        .map((component) => ({
-          component: component.component,
-          status: component.status,
-          ...(component.lastError ? { message: component.lastError } : {}),
-        })),
-    };
-  } catch (error) {
-    return {
-      gatewayId: 'web',
-      gatewayLabel: loadConnection().label,
-      gatewayKind: 'remote',
-      trackingSince: Date.now(),
-      status: 'down',
-      lastCheckAt: Date.now(),
-      lastError: error instanceof Error ? error.message : String(error),
-      checksTotal: 1,
-      checksFailed: 1,
-      samples: [],
-      outages: [],
-      alert: { enabled: false, thresholdSeconds: 120 },
-      pollIntervalMs: HEALTH_POLL_INTERVAL_MS,
-      alertHistory: [],
-    };
-  }
 }
 
 export function installWebHost(): void {
@@ -293,7 +240,13 @@ export function installWebHost(): void {
         return decoded
           ? {
               ok: true,
-              stages: [{ id: 'decode' as const, label: 'Decode ticket', status: 'pass' as const }],
+              stages: [
+                {
+                  id: 'decode' as const,
+                  label: 'Decode ticket',
+                  status: 'pass' as const,
+                },
+              ],
               ticket: {
                 vaultName: decoded.vaultName ?? 'Vault',
                 expiresAt: new Date(decoded.exp ?? 0).toISOString(),
@@ -321,8 +274,16 @@ export function installWebHost(): void {
             return {
               ok: true,
               stages: [
-                { id: 'reach' as const, label: 'Reach gateway over Iroh', status: 'pass' as const },
-                { id: 'auth' as const, label: 'Authenticate device', status: 'pass' as const },
+                {
+                  id: 'reach' as const,
+                  label: 'Reach gateway over Iroh',
+                  status: 'pass' as const,
+                },
+                {
+                  id: 'auth' as const,
+                  label: 'Authenticate device',
+                  status: 'pass' as const,
+                },
               ],
             };
           } catch (error) {
@@ -344,7 +305,11 @@ export function installWebHost(): void {
           ok: false,
           error: 'unreachable',
           stages: [
-            { id: 'reach' as const, label: 'Reach gateway over Iroh', status: 'fail' as const },
+            {
+              id: 'reach' as const,
+              label: 'Reach gateway over Iroh',
+              status: 'fail' as const,
+            },
           ],
         };
       }
@@ -363,9 +328,9 @@ export function installWebHost(): void {
     },
     listGatewayVaults: async () => {
       try {
-        const result = await gatewayJson<{ vaults: CentraidGatewayVaultEntry[] }>(
-          '/centraid/_vault/vaults',
-        );
+        const result = await gatewayJson<{
+          vaults: CentraidGatewayVaultEntry[];
+        }>('/centraid/_vault/vaults');
         return {
           ok: true as const,
           vaults: result.vaults,
@@ -429,7 +394,10 @@ export function installWebHost(): void {
     cancelPhonePairing: async () => undefined,
     revokePhoneDevice: async () => ({ ok: true as const }),
     onPhonePaired: () => () => {},
-    restartGateway: async () => ({ ok: false, error: 'Restart the gateway on its host.' }),
+    restartGateway: async () => ({
+      ok: false,
+      error: 'Restart the gateway on its host.',
+    }),
     exportGatewayDiagnostics: async () => ({
       ok: false as const,
       error: 'Use the gateway CLI to export diagnostics.',
@@ -444,7 +412,10 @@ export function installWebHost(): void {
     deleteVault: async () => {
       throw new Error('Delete vaults on the gateway host.');
     },
-    getUpdateStatus: async () => ({ available: isUpdateAvailable(), version: 'web' }),
+    getUpdateStatus: async () => ({
+      available: isUpdateAvailable(),
+      version: 'web',
+    }),
     onUpdateAvailable: (callback: (msg: { available: boolean; version: string }) => void) => {
       return onSwUpdateAvailable(callback);
     },

@@ -1,9 +1,11 @@
 import { useState, type JSX } from 'react';
+
 import { formatBytes } from '../../format.js';
 import { formatDuration } from '../shell/routes/gatewayData.js';
-import buttonCss from '../ui/Button.module.css';
-import controlsCss from '../styles/controls.module.css';
 import { cx } from '../ui/cx.js';
+
+import controlsCss from '../styles/controls.module.css';
+import buttonCss from '../ui/Button.module.css';
 import styles from './BackupCard.module.css';
 
 export interface InventoryDriftDTO {
@@ -58,7 +60,11 @@ export interface BackupReconciliationDTO {
   audit: {
     source: 'provider' | 'unavailable';
     eventCount: number;
-    recent: Array<{ at: number; kind: string; detail: Record<string, unknown> }>;
+    recent: Array<{
+      at: number;
+      kind: string;
+      detail: Record<string, unknown>;
+    }>;
     error?: string;
   };
 }
@@ -89,7 +95,11 @@ function epochLabel(value: string | number): string {
   const date = new Date(typeof value === 'number' ? value * 1000 : value);
   return Number.isNaN(date.valueOf())
     ? 'unknown date'
-    : date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    : date.toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      });
 }
 
 function sourceLabel(store: StoreInventoryDTO): string {
@@ -217,11 +227,11 @@ export default function BackupInventoryPanel({
             <div>
               <dt>Point-in-time recovery</dt>
               <dd>
-                {current.walCoverage.spanDays !== null
-                  ? `${current.walCoverage.spanDays.toFixed(1)} days · ${current.walCoverage.segmentCount} segments`
-                  : current.walGaps.count > 0
+                {current.walCoverage.spanDays === null
+                  ? current.walGaps.count > 0
                     ? `${current.walGaps.count} chain gaps`
-                    : 'Chain is complete'}
+                    : 'Chain is complete'
+                  : `${current.walCoverage.spanDays.toFixed(1)} days · ${current.walCoverage.segmentCount} segments`}
               </dd>
             </div>
             <div>

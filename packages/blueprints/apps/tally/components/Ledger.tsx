@@ -5,6 +5,7 @@ import { first, money } from '../format.ts';
 import type { LedgerRow, Member, ViewData } from '../types.ts';
 import { ExpenseRow } from './ExpenseRow.tsx';
 import { ExplistSkeleton, KitAvatar } from './Shared.tsx';
+
 import styles from './Ledger.module.css';
 import shared from './shared.module.css';
 

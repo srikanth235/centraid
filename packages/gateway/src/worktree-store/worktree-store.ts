@@ -23,9 +23,10 @@
 // the previous dir — fresh-path-per-publish rotates require() cache
 // lines naturally (the runtime keys its handler cache on path).
 
+import crypto from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
+
 import { run, runRaw, revParse } from './git.js';
 import {
   WorktreeStoreError,
@@ -89,7 +90,9 @@ export class WorktreeStore {
       await fs.mkdir(this.bareDir, { recursive: true });
       // `-b main` pins HEAD; without it the host's `init.defaultBranch`
       // (often `master`) wins and downstream calls chase a dynamic name.
-      await run(['init', '--bare', '-b', 'main', this.bareDir], { cwd: this.root });
+      await run(['init', '--bare', '-b', 'main', this.bareDir], {
+        cwd: this.root,
+      });
     }
 
     if (!(await revParse(this.bareDir, 'refs/heads/main'))) {
@@ -100,7 +103,9 @@ export class WorktreeStore {
         ['commit-tree', EMPTY_TREE_SHA, '-m', 'centraid: init apps repo'],
         { cwd: this.bareDir },
       );
-      await run(['update-ref', 'refs/heads/main', initialSha], { cwd: this.bareDir });
+      await run(['update-ref', 'refs/heads/main', initialSha], {
+        cwd: this.bareDir,
+      });
     }
 
     // Drop worktree metadata pointing at vanished dirs (e.g. host crash).
@@ -279,7 +284,10 @@ export class WorktreeStore {
     // removed (or that vanished beforehand).
     await run(['worktree', 'prune'], { cwd: this.bareDir });
     const branch = sessionBranchName(sessionId);
-    await runRaw(['branch', '-D', branch], { cwd: this.bareDir, allowNonZero: true });
+    await runRaw(['branch', '-D', branch], {
+      cwd: this.bareDir,
+      allowNonZero: true,
+    });
   }
 
   /**
@@ -365,18 +373,21 @@ export class WorktreeStore {
     );
     if (!out) return [];
     const mainAppTree = await this.treeSha(`refs/heads/main:apps/${appId}`);
-    const rows: VersionEntry[] = [];
-    for (const line of out.split('\n')) {
-      const [tag, sha, uploadedAt] = line.split('\t');
-      if (!tag || !sha || !uploadedAt) continue;
-      const m = /\/v(?<version>\d+)$/u.exec(tag);
-      if (!m) continue;
-      const version = Number.parseInt(m.groups?.version ?? '', 10);
-      if (!Number.isFinite(version)) continue;
-      const tagAppTree = await this.treeSha(`${tag}:apps/${appId}`);
-      const active = mainAppTree !== undefined && tagAppTree === mainAppTree;
-      rows.push({ tag, version, sha, uploadedAt, active });
-    }
+    const rows = (
+      await Promise.all(
+        out.split('\n').map(async (line): Promise<VersionEntry | undefined> => {
+          const [tag, sha, uploadedAt] = line.split('\t');
+          if (!tag || !sha || !uploadedAt) return undefined;
+          const m = /\/v(?<version>\d+)$/u.exec(tag);
+          if (!m) return undefined;
+          const version = Math.trunc(Number(m.groups?.version ?? ''));
+          if (!Number.isFinite(version)) return undefined;
+          const tagAppTree = await this.treeSha(`${tag}:apps/${appId}`);
+          const active = mainAppTree !== undefined && tagAppTree === mainAppTree;
+          return { tag, version, sha, uploadedAt, active };
+        }),
+      )
+    ).filter((row): row is VersionEntry => row !== undefined);
     rows.sort((a, b) => b.version - a.version);
     return rows;
   }
@@ -499,7 +510,9 @@ export class WorktreeStore {
     });
     try {
       const appSubdir = `apps/${appId}`;
-      await run(['checkout', `refs/tags/${versionTag}`, '--', appSubdir], { cwd: txDir });
+      await run(['checkout', `refs/tags/${versionTag}`, '--', appSubdir], {
+        cwd: txDir,
+      });
       await run(['add', '--', appSubdir], { cwd: txDir });
       const diff = await runRaw(['diff', '--cached', '--quiet', '--', appSubdir], {
         cwd: txDir,
@@ -523,7 +536,9 @@ export class WorktreeStore {
       // accept the transient code-behind-schema window.
       const newSha = await run(['rev-parse', 'HEAD'], { cwd: txDir });
       const oldMainSha = (await revParse(this.bareDir, 'refs/heads/main')) ?? '';
-      await run(['update-ref', 'refs/heads/main', newSha, oldMainSha], { cwd: this.bareDir });
+      await run(['update-ref', 'refs/heads/main', newSha, oldMainSha], {
+        cwd: this.bareDir,
+      });
       const newMainDir = await this.ensureMainMaterialization(newSha);
       await this.swapActiveMain(newMainDir);
       return { sha: newSha, materializedMainDir: newMainDir };
@@ -572,13 +587,20 @@ export class WorktreeStore {
       await run(['commit', '-m', `delete: ${appId}`], { cwd: txDir });
       const newSha = await run(['rev-parse', 'HEAD'], { cwd: txDir });
       const oldMainSha = (await revParse(this.bareDir, 'refs/heads/main')) ?? '';
-      await run(['update-ref', 'refs/heads/main', newSha, oldMainSha], { cwd: this.bareDir });
+      await run(['update-ref', 'refs/heads/main', newSha, oldMainSha], {
+        cwd: this.bareDir,
+      });
       // Drop the app's version tags too — listVersions(appId) should
       // return [] post-delete. Best-effort per tag.
       const versions = await this.listVersions(appId);
-      for (const v of versions) {
-        await runRaw(['tag', '-d', v.tag], { cwd: this.bareDir, allowNonZero: true });
-      }
+      await Promise.all(
+        versions.map(async (version) =>
+          runRaw(['tag', '-d', version.tag], {
+            cwd: this.bareDir,
+            allowNonZero: true,
+          }),
+        ),
+      );
       const newMainDir = await this.ensureMainMaterialization(newSha);
       await this.swapActiveMain(newMainDir);
       return { sha: newSha, materializedMainDir: newMainDir };

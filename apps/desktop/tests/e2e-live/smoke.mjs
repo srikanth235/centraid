@@ -9,6 +9,7 @@
 // clean shutdown.
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+
 import { launchApp, navTo } from './driver.mjs';
 
 const __dirname = import.meta.dirname;

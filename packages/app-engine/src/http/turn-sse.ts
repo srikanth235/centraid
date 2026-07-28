@@ -17,28 +17,29 @@
  *   - the closing `event: end` frame.
  */
 
-import path from 'node:path';
-import { promises as fs } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
-import { fileURLToPath } from 'node:url';
+import { promises as fs } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import type {
+  ConversationHistoryStore,
+  ConversationTurnAttachment,
+  TurnNode,
+} from '../conversation/history.js';
+import { compileHydrationPlan } from '../conversation/hydration.js';
 import type {
   ConversationTurnInput,
   ConversationRunner,
   TurnResumePlan,
   TurnStreamEvent,
 } from '../conversation/runner.js';
-import type {
-  ConversationHistoryStore,
-  ConversationTurnAttachment,
-  TurnNode,
-} from '../conversation/history.js';
-import { buildReplayEvents } from './turn-replay.js';
-import { writeTurnBusy, type TurnLimiter } from './turn-limiter.js';
-import { costForUsage } from '../model-pricing.js';
-import { withConversationLock, type TurnAttachmentRef } from './turn-sse-support.js';
 import type { TurnAttachment } from '../conversation/turn.js';
-import { compileHydrationPlan } from '../conversation/hydration.js';
+import { costForUsage } from '../model-pricing.js';
+import { writeTurnBusy, type TurnLimiter } from './turn-limiter.js';
+import { buildReplayEvents } from './turn-replay.js';
+import { withConversationLock, type TurnAttachmentRef } from './turn-sse-support.js';
 
 type ToolTurnNode = Extract<TurnNode, { kind: 'tool' }>;
 
@@ -273,8 +274,8 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
       case 'tool.start':
         acc.pending.set(event.toolCallId, {
           toolName: event.toolName,
-          ...(event.sql !== undefined ? { sql: event.sql } : {}),
-          ...(event.args !== undefined ? { args: event.args } : {}),
+          ...(event.sql === undefined ? {} : { sql: event.sql }),
+          ...(event.args === undefined ? {} : { args: event.args }),
           startedAt: Date.now(),
         });
         return;
@@ -284,11 +285,11 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
         const node: ToolTurnNode = {
           kind: 'tool',
           toolName: event.toolName || pending?.toolName || 'tool',
-          ...(pending?.sql !== undefined ? { sql: pending.sql } : {}),
-          ...(pending?.args !== undefined ? { args: pending.args } : {}),
+          ...(pending?.sql === undefined ? {} : { sql: pending.sql }),
+          ...(pending?.args === undefined ? {} : { args: pending.args }),
           ok: event.ok,
-          ...(event.result !== undefined ? { result: event.result } : {}),
-          ...(!event.ok ? { errorText: event.errorText ?? 'Tool failed.' } : {}),
+          ...(event.result === undefined ? {} : { result: event.result }),
+          ...(event.ok ? {} : { errorText: event.errorText ?? 'Tool failed.' }),
           appId,
           startedAt: pending?.startedAt ?? Date.now(),
           endedAt: Date.now(),
@@ -309,19 +310,19 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
       case 'usage':
         // Keep cost + provenance for the ledger (issue #514) — do not strip.
         acc.usage = {
-          ...(event.model !== undefined ? { model: event.model } : {}),
-          ...(event.provider !== undefined ? { provider: event.provider } : {}),
-          ...(event.effort !== undefined ? { effort: event.effort } : {}),
-          ...(event.inputTokens !== undefined ? { inputTokens: event.inputTokens } : {}),
-          ...(event.outputTokens !== undefined ? { outputTokens: event.outputTokens } : {}),
-          ...(event.cacheReadTokens !== undefined
-            ? { cacheReadTokens: event.cacheReadTokens }
-            : {}),
-          ...(event.cacheWriteTokens !== undefined
-            ? { cacheWriteTokens: event.cacheWriteTokens }
-            : {}),
-          ...(event.costUsd !== undefined ? { costUsd: event.costUsd } : {}),
-          ...(event.costSource !== undefined ? { costSource: event.costSource } : {}),
+          ...(event.model === undefined ? {} : { model: event.model }),
+          ...(event.provider === undefined ? {} : { provider: event.provider }),
+          ...(event.effort === undefined ? {} : { effort: event.effort }),
+          ...(event.inputTokens === undefined ? {} : { inputTokens: event.inputTokens }),
+          ...(event.outputTokens === undefined ? {} : { outputTokens: event.outputTokens }),
+          ...(event.cacheReadTokens === undefined
+            ? {}
+            : { cacheReadTokens: event.cacheReadTokens }),
+          ...(event.cacheWriteTokens === undefined
+            ? {}
+            : { cacheWriteTokens: event.cacheWriteTokens }),
+          ...(event.costUsd === undefined ? {} : { costUsd: event.costUsd }),
+          ...(event.costSource === undefined ? {} : { costSource: event.costSource }),
         };
         return;
       case 'error':
@@ -468,7 +469,10 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
         const state = resumeStateFor(kind);
         const compile = (
           afterSeq: number,
-        ): { context?: TurnResumePlan['hydrationContext']; attachments: TurnAttachment[] } => {
+        ): {
+          context?: TurnResumePlan['hydrationContext'];
+          attachments: TurnAttachment[];
+        } => {
           const delta = store.getHydrationDelta(appId, conversationId, afterSeq);
           if (!delta || delta.messages.length === 0) return { attachments: [] };
           const compiled = compileHydrationPlan(delta.messages, {
@@ -495,7 +499,7 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
         // the whole ledger — and the recovery plan would be that same fold.
         const watermark = state?.sessionId ? (state.hydratedThroughSeq ?? -1) : -1;
         const handoff = compile(watermark);
-        const recovery = !state?.sessionId ? undefined : watermark === -1 ? handoff : compile(-1);
+        const recovery = state?.sessionId ? (watermark === -1 ? handoff : compile(-1)) : undefined;
         const plan: TurnResumePlan = {
           ...(state?.sessionId ? { sessionId: state.sessionId } : {}),
           ...(state?.bindingId ? { bindingId: state.bindingId } : {}),
@@ -537,7 +541,10 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
           ? { activeAdapterKind: conversationMeta.adapterKind }
           : {}),
         ...(resume?.sessionId
-          ? { prevAdapterSessionId: resume.sessionId, prevBindingId: resume.bindingId }
+          ? {
+              prevAdapterSessionId: resume.sessionId,
+              prevBindingId: resume.bindingId,
+            }
           : opts.prevAdapterSessionId
             ? { prevAdapterSessionId: opts.prevAdapterSessionId }
             : {}),
@@ -600,7 +607,12 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
               opts.workspaceDirectory ?? opts.dataDir,
               ...(opts.additionalDirectories ?? []),
             ];
-            for (const candidate of acc.artifactCandidates) {
+            // Candidate nodes are ledger-ordered. Attach each node before the
+            // next so optional upload failures keep their notices aligned with
+            // the originating tool item.
+            const attachNextCandidate = async (index: number): Promise<void> => {
+              const candidate = acc.artifactCandidates[index];
+              if (!candidate) return;
               const artifacts: ConversationTurnAttachment[] = (
                 await Promise.all(
                   candidate.locations.map((location) =>
@@ -615,10 +627,13 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
                   ),
                 )
               ).filter((artifact) => artifact !== undefined);
-              for (const inline of candidate.inline) {
+              const uploadNextInline = async (inlineIndex: number): Promise<void> => {
+                const inline = candidate.inline[inlineIndex];
+                if (!inline) return;
                 try {
                   const bytes = Buffer.from(inline.dataBase64, 'base64');
-                  if (bytes.byteLength === 0 || bytes.byteLength > 25 * 1024 * 1024) continue;
+                  if (bytes.byteLength === 0 || bytes.byteLength > 25 * 1024 * 1024)
+                    return uploadNextInline(inlineIndex + 1);
                   const stored = await conversationStore.uploadBlob(appId, bytes);
                   artifacts.push({
                     hash: stored.hash,
@@ -630,9 +645,13 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
                 } catch {
                   // A malformed optional ACP artifact never fails the turn.
                 }
-              }
+                return uploadNextInline(inlineIndex + 1);
+              };
+              await uploadNextInline(0);
               if (artifacts.length > 0) candidate.node.artifacts = artifacts;
-            }
+              return attachNextCandidate(index + 1);
+            };
+            await attachNextCandidate(0);
             const nodes: TurnNode[] = [...acc.toolNodes];
             // The turn consumed tokens whether it ended in a reply or an
             // error, so the `usage` totals apply to either step node.
@@ -662,8 +681,8 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
               // unset → recorded as `'chat'` (issue #181). Read statically off the
               // runner so an errored turn (no `ConversationTurnResult`) is still tagged.
               ...(runner.runKind ? { kind: runner.runKind } : {}),
-              ...(opts.retryOf !== undefined ? { retryOf: opts.retryOf } : {}),
-              ...(opts.idempotencyKey !== undefined ? { idempotencyKey: opts.idempotencyKey } : {}),
+              ...(opts.retryOf === undefined ? {} : { retryOf: opts.retryOf }),
+              ...(opts.idempotencyKey === undefined ? {} : { idempotencyKey: opts.idempotencyKey }),
               userMessage: message,
               ...(opts.attachmentRefs?.length
                 ? {
@@ -671,19 +690,19 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
                       hash: a.hash,
                       mime: a.mime,
                       sizeBytes: a.sizeBytes ?? 0,
-                      ...(a.filename !== undefined ? { filename: a.filename } : {}),
+                      ...(a.filename === undefined ? {} : { filename: a.filename }),
                     })),
                   }
                 : {}),
               startedAt: turnStartedAt,
               endedAt,
               ok: acc.errorMessage === undefined,
-              ...(acc.errorMessage !== undefined ? { error: acc.errorMessage } : {}),
-              ...(acc.finalText !== undefined ? { finalText: acc.finalText } : {}),
+              ...(acc.errorMessage === undefined ? {} : { error: acc.errorMessage }),
+              ...(acc.finalText === undefined ? {} : { finalText: acc.finalText }),
               nodes,
-              ...(runResult?.hydrationTokens !== undefined
-                ? { hydrationTokens: runResult.hydrationTokens }
-                : {}),
+              ...(runResult?.hydrationTokens === undefined
+                ? {}
+                : { hydrationTokens: runResult.hydrationTokens }),
               ...(acc.errorMessage === undefined && runResult?.adapterKind
                 ? {
                     adapter: {

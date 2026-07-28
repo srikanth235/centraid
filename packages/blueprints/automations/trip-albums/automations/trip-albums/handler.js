@@ -74,7 +74,10 @@ export default async ({ ctx, log }) => {
       external_id: `trip:${String(start).slice(0, 10)}`,
       payload: {
         name: tripName(start, end),
-        members: cluster.map((a) => ({ target_type: 'media.media_asset', target_id: a.asset_id })),
+        members: cluster.map((a) => ({
+          target_type: 'media.media_asset',
+          target_id: a.asset_id,
+        })),
       },
     });
   }

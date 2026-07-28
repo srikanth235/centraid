@@ -1,6 +1,7 @@
-import type { JSX, ReactNode } from 'react';
 import { apps, icons } from '@centraid/design-tokens';
 import type { IconName } from '@centraid/design-tokens';
+import type { JSX, ReactNode } from 'react';
+
 import AppCard from './AppCard.js';
 import Button from './Button.js';
 import Icon from './Icon.js';
@@ -23,7 +24,14 @@ function Section({ title, children }: { title: string; children: ReactNode }): J
       >
         {title}
       </h2>
-      <div style={{ alignItems: 'center', display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+      <div
+        style={{
+          alignItems: 'center',
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 16,
+        }}
+      >
         {children}
       </div>
     </section>
@@ -47,7 +55,14 @@ export default function Gallery(): JSX.Element {
         padding: '32px 28px 64px',
       }}
     >
-      <header style={{ alignItems: 'center', display: 'flex', gap: 12, marginBottom: 32 }}>
+      <header
+        style={{
+          alignItems: 'center',
+          display: 'flex',
+          gap: 12,
+          marginBottom: 32,
+        }}
+      >
         <Logo size={36} />
         <div>
           <div style={{ fontSize: 18, fontWeight: 700 }}>desktop-ui</div>

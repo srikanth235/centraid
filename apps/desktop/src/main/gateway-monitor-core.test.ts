@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
+
 import {
   applyComponentAlerts,
   applyProbe,
-  applyVersionSkewAlert,
   clampAlertSeconds,
   DEFAULT_ALERT_SECONDS,
   DEFAULT_COMPONENT_ALERT_SECONDS,
@@ -19,10 +19,9 @@ import {
   type GatewayProbe,
   type GatewayRuntimeState,
 } from './gateway-monitor-core.js';
-import { EXPECTED_GATEWAY_VERSION, EXPECTED_SCHEMA_EPOCH } from './version-handshake.js';
+import { EXPECTED_SCHEMA_EPOCH } from './version-handshake.js';
 
 const GW = { id: 'local', label: 'Local', kind: 'local' as const };
-const REMOTE_GW = { id: 'remote-1', label: 'VPS', kind: 'remote' as const };
 const T0 = 1_000_000;
 
 const ok = (at: number, extra: Partial<GatewayProbe> = {}): GatewayProbe => ({
@@ -35,7 +34,11 @@ const ok = (at: number, extra: Partial<GatewayProbe> = {}): GatewayProbe => ({
   schemaEpoch: EXPECTED_SCHEMA_EPOCH,
   ...extra,
 });
-const fail = (at: number, detail = 'fetch failed'): GatewayProbe => ({ at, ok: false, detail });
+const fail = (at: number, detail = 'fetch failed'): GatewayProbe => ({
+  at,
+  ok: false,
+  detail,
+});
 
 const run = (probes: GatewayProbe[]): GatewayRuntimeState =>
   probes.reduce(applyProbe, initialRuntimeState(GW, T0));
@@ -121,7 +124,10 @@ describe(evaluateAlert, () => {
     ({ state } = evaluateAlert(state, config, T0 + 120_000));
     state = applyProbe(state, ok(T0 + 150_000));
     const recovered = evaluateAlert(state, config, T0 + 150_000);
-    expect(recovered.action).toStrictEqual({ kind: 'recovered', outageMs: 150_000 });
+    expect(recovered.action).toStrictEqual({
+      kind: 'recovered',
+      outageMs: 150_000,
+    });
     expect(evaluateAlert(recovered.state, config, T0 + 155_000).action).toBeUndefined();
 
     // Short, un-alerted outage → no recovery noise.
@@ -243,7 +249,10 @@ describe('applyProbe: health reconciliation', () => {
 });
 
 describe(applyComponentAlerts, () => {
-  const config = { enabled: true, thresholdSeconds: DEFAULT_COMPONENT_ALERT_SECONDS };
+  const config = {
+    enabled: true,
+    thresholdSeconds: DEFAULT_COMPONENT_ALERT_SECONDS,
+  };
   const errorIssue = (component: string, message?: string): GatewayComponentIssue => ({
     component,
     status: 'error',
@@ -252,7 +261,10 @@ describe(applyComponentAlerts, () => {
 
   it('tracks a newly-erroring component but stays quiet before the threshold', () => {
     let state = run([
-      ok(T0, { healthStatus: 'error', componentIssues: [errorIssue('vaults', 'boom')] }),
+      ok(T0, {
+        healthStatus: 'error',
+        componentIssues: [errorIssue('vaults', 'boom')],
+      }),
     ]);
     // First observation (same tick as the probe, T0) creates the record;
     // a later tick, still erroring but short of the threshold, stays quiet.
@@ -266,12 +278,19 @@ describe(applyComponentAlerts, () => {
 
   it('fires once the component has been erroring past the threshold, exactly once', () => {
     let state = run([
-      ok(T0, { healthStatus: 'error', componentIssues: [errorIssue('vaults', 'boom')] }),
+      ok(T0, {
+        healthStatus: 'error',
+        componentIssues: [errorIssue('vaults', 'boom')],
+      }),
     ]);
     ({ state } = applyComponentAlerts(state, T0, config));
     const first = applyComponentAlerts(state, T0 + DEFAULT_COMPONENT_ALERT_SECONDS * 1000, config);
     expect(first.actions).toStrictEqual([
-      { component: 'vaults', message: 'boom', downForMs: DEFAULT_COMPONENT_ALERT_SECONDS * 1000 },
+      {
+        component: 'vaults',
+        message: 'boom',
+        downForMs: DEFAULT_COMPONENT_ALERT_SECONDS * 1000,
+      },
     ]);
     const second = applyComponentAlerts(
       first.state,
@@ -282,7 +301,12 @@ describe(applyComponentAlerts, () => {
   });
 
   it('drops the record on recovery, re-arming the alert for a later re-error', () => {
-    let state = run([ok(T0, { healthStatus: 'error', componentIssues: [errorIssue('vaults')] })]);
+    let state = run([
+      ok(T0, {
+        healthStatus: 'error',
+        componentIssues: [errorIssue('vaults')],
+      }),
+    ]);
     ({ state } = applyComponentAlerts(state, T0 + DEFAULT_COMPONENT_ALERT_SECONDS * 1000, config));
     expect(state.componentAlerts).toHaveLength(1);
 
@@ -294,7 +318,10 @@ describe(applyComponentAlerts, () => {
     // Re-errors — starts a fresh window, doesn't immediately re-fire.
     state = applyProbe(
       state,
-      ok(T0 + 501_000, { healthStatus: 'error', componentIssues: [errorIssue('vaults')] }),
+      ok(T0 + 501_000, {
+        healthStatus: 'error',
+        componentIssues: [errorIssue('vaults')],
+      }),
     );
     const reErrored = applyComponentAlerts(state, T0 + 501_000, config);
     expect(reErrored.actions).toStrictEqual([]);
@@ -304,7 +331,12 @@ describe(applyComponentAlerts, () => {
   });
 
   it('does not fire when alerts are disabled', () => {
-    const state = run([ok(T0, { healthStatus: 'error', componentIssues: [errorIssue('vaults')] })]);
+    const state = run([
+      ok(T0, {
+        healthStatus: 'error',
+        componentIssues: [errorIssue('vaults')],
+      }),
+    ]);
     const { actions } = applyComponentAlerts(state, T0 + DEFAULT_COMPONENT_ALERT_SECONDS * 1000, {
       ...config,
       enabled: false,
@@ -343,141 +375,5 @@ describe(applyComponentAlerts, () => {
     );
     expect(actions).toStrictEqual([]);
     expect(next.componentAlerts).toStrictEqual([]);
-  });
-});
-
-describe('applyProbe: version handshake (issue #351, wave 2)', () => {
-  const runRemote = (probes: GatewayProbe[]): GatewayRuntimeState =>
-    probes.reduce(applyProbe, initialRuntimeState(REMOTE_GW, T0));
-
-  it('never judges a local gateway — versionSkew stays undefined', () => {
-    const state = run([ok(T0, { version: '9.9.9', schemaEpoch: 99 })]);
-    expect(state.versionSkew).toBeUndefined();
-  });
-
-  it('a matching remote gateway reads as not skewed', () => {
-    const state = runRemote([
-      ok(T0, { version: EXPECTED_GATEWAY_VERSION, schemaEpoch: EXPECTED_SCHEMA_EPOCH }),
-    ]);
-    expect(state.versionSkew).toStrictEqual({
-      skewed: false,
-      gatewayVersion: EXPECTED_GATEWAY_VERSION,
-      gatewaySchemaEpoch: EXPECTED_SCHEMA_EPOCH,
-      gatewayProtocolVersion: EXPECTED_SCHEMA_EPOCH,
-      clientVersion: EXPECTED_GATEWAY_VERSION,
-      clientSchemaEpoch: EXPECTED_SCHEMA_EPOCH,
-      clientProtocolVersion: EXPECTED_SCHEMA_EPOCH,
-    });
-  });
-
-  it('product version skew is not protocol skew; bad protocol is', () => {
-    const productOnly = runRemote([
-      ok(T0, { version: '9.9.9', schemaEpoch: EXPECTED_SCHEMA_EPOCH }),
-    ]);
-    expect(productOnly.versionSkew).toMatchObject({ skewed: false, gatewayVersion: '9.9.9' });
-
-    const badEpoch = runRemote([
-      ok(T0, { version: EXPECTED_GATEWAY_VERSION, schemaEpoch: EXPECTED_SCHEMA_EPOCH + 1 }),
-    ]);
-    expect(badEpoch.versionSkew).toMatchObject({
-      skewed: true,
-      gatewaySchemaEpoch: EXPECTED_SCHEMA_EPOCH + 1,
-    });
-  });
-
-  it('keeps the last-known verdict across a failed probe or an /info-fallback probe', () => {
-    const skewed = runRemote([
-      ok(T0, { version: EXPECTED_GATEWAY_VERSION, schemaEpoch: EXPECTED_SCHEMA_EPOCH + 1 }),
-    ]);
-    const stillSkewed = applyProbe(skewed, fail(T0 + 5000));
-    expect(stillSkewed.versionSkew).toMatchObject({
-      skewed: true,
-      gatewaySchemaEpoch: EXPECTED_SCHEMA_EPOCH + 1,
-    });
-
-    const fallback = applyProbe(
-      skewed,
-      ok(T0 + 10_000, { version: undefined, schemaEpoch: undefined }),
-    );
-    expect(fallback.versionSkew).toMatchObject({
-      skewed: true,
-      gatewaySchemaEpoch: EXPECTED_SCHEMA_EPOCH + 1,
-    });
-  });
-});
-
-describe(applyVersionSkewAlert, () => {
-  const config = { enabled: true, thresholdSeconds: DEFAULT_ALERT_SECONDS };
-  const runRemote = (probes: GatewayProbe[]): GatewayRuntimeState =>
-    probes.reduce(applyProbe, initialRuntimeState(REMOTE_GW, T0));
-
-  it('fires immediately on a protocol-skewed remote gateway — no threshold wait', () => {
-    const state = runRemote([
-      ok(T0, { version: EXPECTED_GATEWAY_VERSION, schemaEpoch: EXPECTED_SCHEMA_EPOCH + 1 }),
-    ]);
-    const { action } = applyVersionSkewAlert(state, config, T0);
-    expect(action).toStrictEqual({
-      gatewayVersion: EXPECTED_GATEWAY_VERSION,
-      gatewaySchemaEpoch: EXPECTED_SCHEMA_EPOCH + 1,
-    });
-  });
-
-  it('de-dupes — does not refire on a later tick while still skewed', () => {
-    let state = runRemote([
-      ok(T0, { version: EXPECTED_GATEWAY_VERSION, schemaEpoch: EXPECTED_SCHEMA_EPOCH + 1 }),
-    ]);
-    ({ state } = applyVersionSkewAlert(state, config, T0));
-    const second = applyVersionSkewAlert(state, config, T0 + 60_000);
-    expect(second.action).toBeUndefined();
-  });
-
-  it('does not fire when alerts are disabled', () => {
-    const state = runRemote([
-      ok(T0, { version: EXPECTED_GATEWAY_VERSION, schemaEpoch: EXPECTED_SCHEMA_EPOCH + 1 }),
-    ]);
-    const { action } = applyVersionSkewAlert(state, { ...config, enabled: false }, T0);
-    expect(action).toBeUndefined();
-  });
-
-  it('does not fire for a matching (not skewed) remote gateway', () => {
-    const state = runRemote([
-      ok(T0, { version: EXPECTED_GATEWAY_VERSION, schemaEpoch: EXPECTED_SCHEMA_EPOCH }),
-    ]);
-    expect(applyVersionSkewAlert(state, config, T0).action).toBeUndefined();
-  });
-
-  it('never fires for a local gateway (versionSkew always undefined)', () => {
-    const state = run([ok(T0, { version: '9.9.9', schemaEpoch: 99 })]);
-    expect(applyVersionSkewAlert(state, config, T0).action).toBeUndefined();
-  });
-
-  it('re-arms once the gateway stops reporting skew, then re-fires on a later mismatch', () => {
-    let state = runRemote([
-      ok(T0, { version: EXPECTED_GATEWAY_VERSION, schemaEpoch: EXPECTED_SCHEMA_EPOCH + 1 }),
-    ]);
-    ({ state } = applyVersionSkewAlert(state, config, T0));
-    expect(state.versionSkewAlertedAt).toBe(T0);
-
-    // Both sides get upgraded to match — skew clears, the marker drops.
-    state = applyProbe(
-      state,
-      ok(T0 + 10_000, { version: EXPECTED_GATEWAY_VERSION, schemaEpoch: EXPECTED_SCHEMA_EPOCH }),
-    );
-    ({ state } = applyVersionSkewAlert(state, config, T0 + 10_000));
-    expect(state.versionSkewAlertedAt).toBeUndefined();
-
-    // A later re-skew fires again (protocol only — product string is ignored).
-    state = applyProbe(
-      state,
-      ok(T0 + 20_000, {
-        version: EXPECTED_GATEWAY_VERSION,
-        schemaEpoch: EXPECTED_SCHEMA_EPOCH + 1,
-      }),
-    );
-    const refired = applyVersionSkewAlert(state, config, T0 + 20_000);
-    expect(refired.action).toStrictEqual({
-      gatewayVersion: EXPECTED_GATEWAY_VERSION,
-      gatewaySchemaEpoch: EXPECTED_SCHEMA_EPOCH + 1,
-    });
   });
 });

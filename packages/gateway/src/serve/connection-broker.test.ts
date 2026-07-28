@@ -1,23 +1,29 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import http from 'node:http';
+
+import { forEachSequentially } from '@centraid/test-kit/sequential';
 // governance: allow-repo-hygiene file-size-limit #526 Keep broker custody and Assist regression scenarios together.
 // The connection broker (issue #304): token custody correctness. The three
 // rot points each get a scenario — rotated pair persisted before use,
 // single-flight refresh under concurrency, invalid_grant flips needs-auth
 // with an owner-readable note while a 5xx stays transient (no flip).
-
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import http from 'node:http';
-import { openVaultPlane, type VaultPlane } from './vault-plane.js';
-import { ConnectionBroker } from './connection-broker.js';
-import { ASSIST_DEVELOPMENT_WORKER_ORIGIN } from './assist-oauth.js';
 
-const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
+import { ASSIST_DEVELOPMENT_WORKER_ORIGIN } from './assist-oauth.js';
+import { ConnectionBroker } from './connection-broker.js';
+import { openVaultPlane, type VaultPlane } from './vault-plane.js';
+
+const silentLogger = {
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+};
 
 const cleanups: Array<() => Promise<void> | void> = [];
 describe('connection-broker', () => {
   afterEach(async () => {
     vi.useRealTimers();
-    while (cleanups.length > 0) await cleanups.pop()?.();
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
   });
   function openPlane(dir: string): VaultPlane {
     const plane = openVaultPlane({
@@ -68,7 +74,10 @@ describe('connection-broker', () => {
       });
       req.on('end', () => {
         requests.push(Object.fromEntries(new URLSearchParams(raw)));
-        const next = responses.shift() ?? { status: 500, body: { error: 'unscripted' } };
+        const next = responses.shift() ?? {
+          status: 500,
+          body: { error: 'unscripted' },
+        };
         res.writeHead(next.status, { 'content-type': 'application/json' });
         res.end(JSON.stringify(next.body));
       });
@@ -179,7 +188,10 @@ describe('connection-broker', () => {
       purpose: 'dpv:ServiceProvision',
     });
     const broker = new ConnectionBroker(() => plane);
-    const auth = await broker.resolveForFire({ kind: 'pull.github', label: 'personal' });
+    const auth = await broker.resolveForFire({
+      kind: 'pull.github',
+      label: 'personal',
+    });
     expect(auth && 'values' in auth ? auth.values : undefined).toStrictEqual({
       api_key: 'ghp_broker_live',
     });
@@ -235,7 +247,7 @@ describe('connection-broker', () => {
     expect(JSON.stringify(result)).not.toContain('github-secret-token');
     await expect(
       broker.pollJson(binding, 'https://evil.example/repos/acme/app/events'),
-    ).rejects.toThrow(/outside.*allowed_hosts/);
+    ).rejects.toThrow(/outside.*allowed_hosts/u);
     expect(fetchImpl).toHaveBeenCalledOnce();
   });
 
@@ -266,7 +278,11 @@ describe('connection-broker', () => {
     const broker = new ConnectionBroker(() => plane);
 
     await expect(
-      broker.resolveForFire({ kind: 'pull.linear', label: 'work', connectionId }),
+      broker.resolveForFire({
+        kind: 'pull.linear',
+        label: 'work',
+        connectionId,
+      }),
     ).resolves.toBeUndefined();
   });
 
@@ -286,7 +302,10 @@ describe('connection-broker', () => {
     });
     if (outcome.status !== 'executed') throw new Error('configure failed');
     const broker = new ConnectionBroker(() => plane);
-    const auth = await broker.resolveForFire({ kind: 'pull.linear', label: 'work' });
+    const auth = await broker.resolveForFire({
+      kind: 'pull.linear',
+      label: 'work',
+    });
     expect(auth && 'readOnlyPosts' in auth ? auth.readOnlyPosts : undefined).toStrictEqual([
       { host: 'api.linear.app', path: '/graphql', body: 'graphql-query' },
     ]);
@@ -302,7 +321,10 @@ describe('connection-broker', () => {
       expires_at: new Date(Date.now() + 3600_000).toISOString(),
     });
     const broker = new ConnectionBroker(() => plane);
-    const auth = await broker.resolveForFire({ kind: 'pull.gmail', label: 'personal' });
+    const auth = await broker.resolveForFire({
+      kind: 'pull.gmail',
+      label: 'personal',
+    });
     expect(auth && 'values' in auth ? auth.values : undefined).toStrictEqual({
       access_token: 'ya29.long-lived',
     });
@@ -321,7 +343,7 @@ describe('connection-broker', () => {
         connectionId,
         'http://127.0.0.1:3210/centraid/_vault/oauth/callback',
       ),
-    ).toThrow(/does not match its trusted OAuth endpoints/);
+    ).toThrow(/does not match its trusted OAuth endpoints/u);
   });
 
   test('an expired token refreshes; a ROTATED refresh token persists before the new access token is used', async () => {
@@ -340,7 +362,10 @@ describe('connection-broker', () => {
       token_type: 'Bearer',
     });
     const broker = new ConnectionBroker(() => plane);
-    const auth = await broker.resolveForFire({ kind: 'pull.gmail', label: 'personal' });
+    const auth = await broker.resolveForFire({
+      kind: 'pull.gmail',
+      label: 'personal',
+    });
     expect(auth && 'values' in auth ? auth.values : undefined).toStrictEqual({
       access_token: 'ya29.fresh',
     });
@@ -354,11 +379,14 @@ describe('connection-broker', () => {
     });
     // The rotated pair is on the row, sealed, with a fresh expiry.
     const row = connectionRow(plane, connectionId);
-    expect(String(row.access_token)).toMatch(/^sealed:v1:/);
-    expect(String(row.refresh_token)).toMatch(/^sealed:v1:/);
+    expect(String(row.access_token)).toMatch(/^sealed:v1:/u);
+    expect(String(row.refresh_token)).toMatch(/^sealed:v1:/u);
     expect(row.status).toBe('active');
     // A follow-up resolve uses the persisted rotated pair without refreshing.
-    const again = await broker.resolveForFire({ kind: 'pull.gmail', label: 'personal' });
+    const again = await broker.resolveForFire({
+      kind: 'pull.gmail',
+      label: 'personal',
+    });
     expect(again && 'values' in again ? again.values : undefined).toStrictEqual({
       access_token: 'ya29.fresh',
     });
@@ -374,7 +402,11 @@ describe('connection-broker', () => {
       refresh_token: '1//original',
       expires_at: new Date(Date.now() - 1000).toISOString(),
     });
-    tokens.respond({ access_token: 'ya29.single', refresh_token: '1//rotated', expires_in: 3600 });
+    tokens.respond({
+      access_token: 'ya29.single',
+      refresh_token: '1//rotated',
+      expires_in: 3600,
+    });
     const broker = new ConnectionBroker(() => plane);
     const [a, b, c] = await Promise.all([
       broker.resolveForFire({ kind: 'pull.gmail', label: 'personal' }),
@@ -400,11 +432,14 @@ describe('connection-broker', () => {
     });
     tokens.respond({ status: 400, body: { error: 'invalid_grant' } });
     const broker = new ConnectionBroker(() => plane);
-    const auth = await broker.resolveForFire({ kind: 'pull.gmail', label: 'personal' });
-    expect(auth && 'refused' in auth ? auth.refused : undefined).toMatch(/invalid_grant/);
+    const auth = await broker.resolveForFire({
+      kind: 'pull.gmail',
+      label: 'personal',
+    });
+    expect(auth && 'refused' in auth ? auth.refused : undefined).toMatch(/invalid_grant/u);
     const row = connectionRow(plane, connectionId);
     expect(row.status).toBe('needs-auth');
-    expect(String(row.auth_note)).toMatch(/reconnect/);
+    expect(String(row.auth_note)).toMatch(/reconnect/u);
   });
 
   test('a 5xx token endpoint is transient: the fire skips but the connection does NOT flip', async () => {
@@ -419,8 +454,11 @@ describe('connection-broker', () => {
     tokens.respond({ status: 500, body: { error: 'hiccup' } });
     tokens.respond({ status: 500, body: { error: 'hiccup' } });
     const broker = new ConnectionBroker(() => plane);
-    const auth = await broker.resolveForFire({ kind: 'pull.gmail', label: 'personal' });
-    expect(auth && 'refused' in auth ? auth.refused : undefined).toMatch(/transient/);
+    const auth = await broker.resolveForFire({
+      kind: 'pull.gmail',
+      label: 'personal',
+    });
+    expect(auth && 'refused' in auth ? auth.refused : undefined).toMatch(/transient/u);
     // Retried once, then gave up for this fire — status untouched.
     expect(tokens.requests).toHaveLength(2);
     expect(connectionRow(plane, connectionId).status).toBe('active');
@@ -437,8 +475,11 @@ describe('connection-broker', () => {
     });
     // A short token timeout so the test doesn't wait out the real 30s default.
     const broker = new ConnectionBroker(() => plane, 30);
-    const auth = await broker.resolveForFire({ kind: 'pull.gmail', label: 'personal' });
-    expect(auth && 'refused' in auth ? auth.refused : undefined).toMatch(/transient/);
+    const auth = await broker.resolveForFire({
+      kind: 'pull.gmail',
+      label: 'personal',
+    });
+    expect(auth && 'refused' in auth ? auth.refused : undefined).toMatch(/transient/u);
     // Same outcome as the 5xx-transient case: no flip, connection stays active.
     expect(connectionRow(plane, connectionId).status).toBe('active');
   });
@@ -454,9 +495,14 @@ describe('connection-broker', () => {
     });
     tokens.respond({ access_token: 'ya29.after-force', expires_in: 3600 });
     const broker = new ConnectionBroker(() => plane);
-    const auth = await broker.resolveForFire({ kind: 'pull.gmail', label: 'personal' });
+    const auth = await broker.resolveForFire({
+      kind: 'pull.gmail',
+      label: 'personal',
+    });
     if (!auth || !('refresh' in auth) || !auth.refresh) throw new Error('expected a refresh hook');
-    await expect(auth.refresh()).resolves.toStrictEqual({ access_token: 'ya29.after-force' });
+    await expect(auth.refresh()).resolves.toStrictEqual({
+      access_token: 'ya29.after-force',
+    });
     expect(tokens.requests).toHaveLength(1);
   });
 
@@ -497,9 +543,9 @@ describe('connection-broker', () => {
     const start = new URL(ceremony.authUrl);
     expect(start.origin + start.pathname).toBe(`${ASSIST_DEVELOPMENT_WORKER_ORIGIN}/start`);
     const startFragment = new URLSearchParams(start.hash.slice(1));
-    expect(startFragment.get('browser_binding')).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(startFragment.get('browser_binding')).toMatch(/^[A-Za-z0-9_-]{43}$/u);
     const authorize = new URL(startFragment.get('authorization_url')!);
-    expect(authorize.searchParams.get('state')).toMatch(/^w\.[A-Za-z0-9_-]{43}$/);
+    expect(authorize.searchParams.get('state')).toMatch(/^w\.[A-Za-z0-9_-]{43}$/u);
     expect(authorize.searchParams.get('redirect_uri')).toBe(
       `${ASSIST_DEVELOPMENT_WORKER_ORIGIN}/callback`,
     );
@@ -507,7 +553,7 @@ describe('connection-broker', () => {
     expect(authorize.searchParams.get('scope')).toBe(
       'https://www.googleapis.com/auth/calendar.readonly',
     );
-    expect(ceremony.authUrl).not.toMatch(/openid|userinfo\.email|userinfo\.profile/);
+    expect(ceremony.authUrl).not.toMatch(/openid|userinfo\.email|userinfo\.profile/u);
 
     // A copied browser fragment cannot burn or redeem another device/session's
     // state. The correctly-bound client can still complete afterwards.
@@ -519,7 +565,7 @@ describe('connection-broker', () => {
         clientSessionId: 'x'.repeat(64),
         deviceKey: 'device-b',
       }),
-    ).rejects.toThrow(/different client session/);
+    ).rejects.toThrow(/different client session/u);
     expect(requests).toHaveLength(0);
     await expect(
       broker.completeAssistAuthorization({
@@ -543,7 +589,7 @@ describe('connection-broker', () => {
         scopes: ['https://www.googleapis.com/auth/calendar.readonly'],
       },
     });
-    expect(String(requests[0]!.body.code_verifier)).toMatch(/^[A-Za-z0-9_-]{64}$/);
+    expect(String(requests[0]!.body.code_verifier)).toMatch(/^[A-Za-z0-9_-]{64}$/u);
     expect(JSON.stringify(requests[0])).not.toContain('client_secret');
     await expect(
       broker.completeAssistAuthorization({
@@ -553,7 +599,7 @@ describe('connection-broker', () => {
         clientSessionId: 's'.repeat(64),
         deviceKey: 'device-a',
       }),
-    ).rejects.toThrow(/unknown or expired/);
+    ).rejects.toThrow(/unknown or expired/u);
   });
 
   test('Assist ceremony expires without calling the Worker', async () => {
@@ -586,7 +632,7 @@ describe('connection-broker', () => {
         receipt: 'v1.receipt',
         clientSessionId: 's'.repeat(64),
       }),
-    ).rejects.toThrow(/unknown or expired/);
+    ).rejects.toThrow(/unknown or expired/u);
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
@@ -625,7 +671,7 @@ describe('connection-broker', () => {
         receipt: 'v1.receipt',
         clientSessionId: 's'.repeat(64),
       }),
-    ).rejects.toThrow(/assist_worker_503/);
+    ).rejects.toThrow(/assist_worker_503/u);
 
     expect(fetchImpl).toHaveBeenCalledTimes(2);
     expect(connectionRow(plane, connectionId).status).toBe('active');
@@ -666,7 +712,7 @@ describe('connection-broker', () => {
         receipt: 'v1.expired',
         clientSessionId: 's'.repeat(64),
       }),
-    ).rejects.toThrow(/expired_receipt/);
+    ).rejects.toThrow(/expired_receipt/u);
 
     expect(connectionRow(plane, connectionId).status).toBe('active');
   });
@@ -703,8 +749,13 @@ describe('connection-broker', () => {
         expect(init?.redirect).toBe('error');
         const url = String(input);
         if (url.includes('/gmail/v1/users/me/profile')) {
-          expect(new Headers(init?.headers).get('authorization')).toBe('Bearer fresh-gmail-token');
-          return Response.json({ emailAddress: 'owner@example.com', historyId: '42017' });
+          if (new Headers(init?.headers).get('authorization') !== 'Bearer fresh-gmail-token') {
+            throw new Error('profile request must use the fresh Gmail token');
+          }
+          return Response.json({
+            emailAddress: 'owner@example.com',
+            historyId: '42017',
+          });
         }
         return Response.json({
           access_token: 'fresh-gmail-token',
@@ -810,7 +861,10 @@ describe('connection-broker', () => {
       },
       fetchImpl as typeof fetch,
     );
-    const auth = await broker.resolveForFire({ kind: 'pull.gcal', label: 'Centraid Assist' });
+    const auth = await broker.resolveForFire({
+      kind: 'pull.gcal',
+      label: 'Centraid Assist',
+    });
     expect(auth && 'values' in auth ? auth.values : undefined).toStrictEqual({
       access_token: 'ya29.assist-fresh',
     });
@@ -822,7 +876,7 @@ describe('connection-broker', () => {
     ]);
     expect(JSON.stringify(requests)).not.toContain('client_secret');
     const row = connectionRow(plane, connectionId);
-    expect(String(row.access_token)).toMatch(/^sealed:v1:/);
-    expect(String(row.refresh_token)).toMatch(/^sealed:v1:/);
+    expect(String(row.access_token)).toMatch(/^sealed:v1:/u);
+    expect(String(row.refresh_token)).toMatch(/^sealed:v1:/u);
   });
 });

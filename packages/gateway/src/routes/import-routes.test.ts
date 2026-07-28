@@ -1,20 +1,26 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import crypto from 'node:crypto';
+import { promises as fs } from 'node:fs';
 // The import routes (issue #290 phase 2) over a real vault plane: stage a
 // file over HTTP, review its rows, publish, and see the batch in history.
-
-import { afterEach, describe, expect, test } from 'vitest';
-import { promises as fs } from 'node:fs';
 import http from 'node:http';
-import crypto from 'node:crypto';
+
+import { forEachSequentially } from '@centraid/test-kit/sequential';
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { afterEach, describe, expect, test } from 'vitest';
+
 import { openVaultPlane, type VaultPlane } from '../serve/vault-plane.js';
 import { makeImportRouteHandler } from './import-routes.js';
 
-const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
+const silentLogger = {
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+};
 
 const cleanups: Array<() => Promise<void> | void> = [];
 describe('import-routes', () => {
   afterEach(async () => {
-    while (cleanups.length > 0) await cleanups.pop()?.();
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
   });
 
   async function fixture(): Promise<{ base: string; plane: VaultPlane }> {
@@ -39,7 +45,10 @@ describe('import-routes', () => {
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     cleanups.push(() => new Promise<void>((resolve) => server.close(() => resolve())));
     const address = server.address() as { port: number };
-    return { base: `http://127.0.0.1:${address.port}/centraid/_vault/imports`, plane };
+    return {
+      base: `http://127.0.0.1:${address.port}/centraid/_vault/imports`,
+      plane,
+    };
   }
 
   const ICS = [
@@ -70,7 +79,10 @@ describe('import-routes', () => {
       rows: { disposition: string; entityType: string }[];
     };
     expect(review.rows).toStrictEqual([
-      expect.objectContaining({ disposition: 'create', entityType: 'core.event' }),
+      expect.objectContaining({
+        disposition: 'create',
+        entityType: 'core.event',
+      }),
     ]);
 
     const published = (await (
@@ -85,7 +97,10 @@ describe('import-routes', () => {
     const listed = (await (await fetch(base)).json()) as {
       batches: { status: string; label: string }[];
     };
-    expect(listed.batches[0]).toMatchObject({ status: 'published', label: 'party.ics' });
+    expect(listed.batches[0]).toMatchObject({
+      status: 'published',
+      label: 'party.ics',
+    });
   });
 
   test('an unroutable file is a clean 400, not a hang', async () => {
@@ -97,6 +112,6 @@ describe('import-routes', () => {
     });
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string };
-    expect(body.error).toMatch(/no importer/);
+    expect(body.error).toMatch(/no importer/u);
   });
 });

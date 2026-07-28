@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+
 import {
   automationRow,
   automationTurnItem,
@@ -171,7 +172,7 @@ test('8.5 — toggling the lifecycle menu posts set-enabled; a failed toggle toa
     gateway.state.setEnabledStatus = 500;
     await page.getByTestId('automation-menu-toggle').click();
     await expect(page.locator('[data-global-toast]')).toContainText(
-      /Could not enable Inbox Digest/i,
+      /Could not enable Inbox Digest/iu,
     );
   } finally {
     await closeApp(app);
@@ -192,7 +193,7 @@ test('8.6 — a webhook automation shows its URL and copies it', async () => {
     await page.getByTestId('automation-row').filter({ hasText: 'Webhook Bot' }).click();
     await expect(page.getByTestId('automation-webhook-url')).toContainText('wh-123');
     await page.getByRole('button', { name: 'Copy webhook URL' }).click();
-    await expect(page.locator('[data-global-toast]')).toContainText(/Webhook URL copied/i);
+    await expect(page.locator('[data-global-toast]')).toContainText(/Webhook URL copied/iu);
   } finally {
     await closeApp(app);
   }
@@ -244,7 +245,13 @@ function seedSuccessfulTurn(g: MockGateway, automationRef: string, turnId: strin
     summary: 'All done.',
   });
   g.state.automationItemsByTurn[turnId] = [
-    automationTurnItem({ turnId, ordinal: 1, kind: 'tool', name: 'fetch_inbox', ok: true }),
+    automationTurnItem({
+      turnId,
+      ordinal: 1,
+      kind: 'tool',
+      name: 'fetch_inbox',
+      ok: true,
+    }),
   ];
   g.state.automationTurnFrames = [
     { data: { type: 'turn.start', turnId }, delayMs: 20 },
@@ -309,7 +316,12 @@ test('9.3 — a failed turn surfaces the failure outcome', async () => {
     error: 'Boom.',
   });
   gateway.state.automationItemsByTurn['turn-fail'] = [
-    automationTurnItem({ turnId: 'turn-fail', ordinal: 1, ok: false, error: 'Boom.' }),
+    automationTurnItem({
+      turnId: 'turn-fail',
+      ordinal: 1,
+      ok: false,
+      error: 'Boom.',
+    }),
   ];
   gateway.state.automationTurnFrames = [
     { data: { type: 'turn.start', turnId: 'turn-fail' }, delayMs: 20 },
@@ -334,7 +346,15 @@ test('9.3 — a failed turn surfaces the failure outcome', async () => {
       },
       delayMs: 20,
     },
-    { data: { type: 'turn.end', turnId: 'turn-fail', ok: false, error: 'Boom.' }, delayMs: 20 },
+    {
+      data: {
+        type: 'turn.end',
+        turnId: 'turn-fail',
+        ok: false,
+        error: 'Boom.',
+      },
+      delayMs: 20,
+    },
   ];
   const { app, page } = await launchApp(env);
   try {
@@ -384,7 +404,9 @@ test('9.7 — Run again fires another turn from the automation thread', async ()
     // Re-run lives on the automation thread card ("Run again"), not the
     // run-view detail (those in-view controls were removed as noise).
     await page.getByTestId('run-entry').first().waitFor({ timeout: 15_000 });
-    await expect(page.getByTestId('run-details').first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('run-details').first()).toBeVisible({
+      timeout: 15_000,
+    });
     const before = gateway.countCalls('POST', (p) => p === '/centraid/_automations/turn-now');
     await page.getByRole('button', { name: 'Run again' }).first().click();
     await expect

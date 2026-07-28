@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
-import { describe, expect, test } from 'vitest';
+
 import { fc } from '@centraid/test-kit/fast-check';
+import { describe, expect, test } from 'vitest';
+
 import type { ReplicaDigest } from './digest.js';
 import { canonicalJson, intentPayloadHash } from './payload-hash.js';
 import type { ReplicaValue } from './types.js';
@@ -19,7 +21,9 @@ const jsonSafe = fc.letrec((tie) => ({
     fc.double({ noNaN: true, noDefaultInfinity: true, min: -1e6, max: 1e6 }),
     fc.string({ maxLength: 24 }),
     fc.array(tie('value'), { maxLength: 4 }),
-    fc.dictionary(fc.stringMatching(/^[a-z]{1,8}$/), tie('value'), { maxKeys: 4 }),
+    fc.dictionary(fc.stringMatching(/^[a-z]{1,8}$/u), tie('value'), {
+      maxKeys: 4,
+    }),
   ),
 })).value as fc.Arbitrary<ReplicaValue>;
 
@@ -33,7 +37,7 @@ describe('replica payload-hash property', () => {
   test('object key insertion order never changes canonical JSON', () => {
     fc.assert(
       fc.property(
-        fc.dictionary(fc.stringMatching(/^[a-z]{1,6}$/), fc.integer(), {
+        fc.dictionary(fc.stringMatching(/^[a-z]{1,6}$/u), fc.integer(), {
           minKeys: 2,
           maxKeys: 6,
         }),
@@ -51,8 +55,8 @@ describe('replica payload-hash property', () => {
   test('intentPayloadHash is pure for equal structured payloads', async () => {
     await fc.assert(
       fc.asyncProperty(
-        fc.stringMatching(/^[a-z]{1,12}$/),
-        fc.stringMatching(/^[a-z.]{1,24}$/),
+        fc.stringMatching(/^[a-z]{1,12}$/u),
+        fc.stringMatching(/^[a-z.]{1,24}$/u),
         jsonSafe,
         async (appId, action, input) => {
           const a = await intentPayloadHash({ appId, action, input }, nodeDigest);
@@ -61,7 +65,7 @@ describe('replica payload-hash property', () => {
             nodeDigest,
           );
           expect(a).toBe(b);
-          expect(a).toMatch(/^[a-f0-9]{64}$/);
+          expect(a).toMatch(/^[a-f0-9]{64}$/u);
         },
       ),
       { numRuns: 32, seed: 53301 },
@@ -153,7 +157,7 @@ describe('replica payload-hash property', () => {
       fc.property(
         fc.constantFrom(Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY),
         (n) => {
-          expect(() => canonicalJson(n)).toThrow(/not JSON-safe/);
+          expect(() => canonicalJson(n)).toThrow(/not JSON-safe/u);
         },
       ),
       { numRuns: 6, seed: 53305 },

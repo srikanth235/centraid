@@ -20,15 +20,17 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+
 import { handshakeGateway } from '@centraid/protocol';
 import { endpointIdForSecret } from '@centraid/tunnel';
-import { daemonLayoutFor } from './paths.js';
+
+import { openVaultRegistry } from '../serve/vault-registry.js';
+import { jsonFail, runJson, type Fail } from './json-cli.js';
 import { daemonKeyStore } from './key-store.js';
 import { landlordBearerForEndpointSecret } from './landlord-auth.js';
+import { daemonLayoutFor } from './paths.js';
 import { resolveDaemonConfig } from './resolve-config.js';
-import { openVaultRegistry } from '../serve/vault-registry.js';
 import { queryServiceStatus, type ServiceStatusInfo } from './service-admin.js';
-import { jsonFail, runJson, type Fail } from './json-cli.js';
 
 const quietLogger = {
   info: () => undefined,
@@ -48,20 +50,20 @@ function parseStatusArgs(args: string[], fail: Fail): StatusArgs {
   for (let i = 0; i < args.length; i++) {
     const flag = args[i];
     if (flag === undefined) continue;
-    const next = (): string => {
+    const readValue = (): string => {
       const v = args[++i];
       if (v === undefined) fail(`flag "${flag}" requires a value`, 2);
       return v;
     };
     switch (flag) {
       case '--data-dir':
-        out.dataDir = next();
+        out.dataDir = readValue();
         break;
       case '--config':
-        out.configPath = next();
+        out.configPath = readValue();
         break;
       case '--label':
-        out.label = next();
+        out.label = readValue();
         break;
       case '--json':
         out.json = true;

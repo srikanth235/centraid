@@ -1,12 +1,14 @@
 import { type JSX, type ReactNode, useEffect, useState } from 'react';
+
 import { cronNextRuns, describeCron } from '../../../../cron.js';
 import {
   listAutomationTurns,
   readAutomationTurn,
   runAutomationNow,
 } from '../../../../gateway-client.js';
+import { cx } from '../../../ui/cx.js';
 import { iconSvg } from '../../iconSvg.js';
-import { formatWhereClauses } from './BuilderAutomationTriggers.js';
+import ConfigView from './BuilderAutomationConfigView.js';
 import {
   Glyph,
   fmtRetention,
@@ -14,10 +16,10 @@ import {
   relTime,
   runOriginLabel,
 } from './BuilderAutomationPaneShared.js';
-import ConfigView from './BuilderAutomationConfigView.js';
-import styles from './BuilderAutomationPane.module.css';
+import { formatWhereClauses } from './BuilderAutomationTriggers.js';
+
 import buttonCss from '../../../ui/Button.module.css';
-import { cx } from '../../../ui/cx.js';
+import styles from './BuilderAutomationPane.module.css';
 
 // React port of the vanilla builder's automation-mode right-pane views —
 // Config / Flow / Runs / Code (see builder.ts `renderConfig` /
@@ -146,20 +148,30 @@ function FlowView({ automationRow }: { automationRow: CentraidAutomationRow }): 
       trigSub = t0.id ? `/${t0.id}` : 'A URL + secret are minted server-side.';
     }
   }
-  stages.push({ svg: trigSvg, kind: 'Trigger', title: trigTitle, sub: trigSub });
-
-  // Agent.
-  stages.push({
-    svg: iconSvg('Sparkle', 16),
-    kind: 'Agent',
-    title: m.requires.model || 'Workspace default',
-    sub: m.prompt || 'Not described yet.',
-  });
+  stages.push(
+    {
+      svg: trigSvg,
+      kind: 'Trigger',
+      title: trigTitle,
+      sub: trigSub,
+    },
+    // Agent.
+    {
+      svg: iconSvg('Sparkle', 16),
+      kind: 'Agent',
+      title: m.requires.model || 'Workspace default',
+      sub: m.prompt || 'Not described yet.',
+    },
+  );
 
   // Connected apps / tools (optional).
   const connected = [...(m.requires.mcps ?? []), ...(m.apps ?? [])];
   if (connected.length > 0) {
-    stages.push({ svg: iconSvg('Plug', 16), kind: 'Connected', title: connected.join(', ') });
+    stages.push({
+      svg: iconSvg('Plug', 16),
+      kind: 'Connected',
+      title: connected.join(', '),
+    });
   }
 
   // Outcome.
@@ -226,12 +238,14 @@ function RunsView({ appId }: { appId: string }): JSX.Element {
     try {
       const { turnId } = await runAutomationNow({ automationId: appId });
       const deadline = Date.now() + 6 * 60 * 1000;
-      let rec: CentraidAutomationTurnRecord | null = null;
-      while (Date.now() < deadline) {
-        rec = await readAutomationTurn({ turnId });
-        if (rec && rec.endedAt !== undefined) break;
+      const waitForCompletion = async (): Promise<void> => {
+        const rec = await readAutomationTurn({ turnId });
+        if (rec && rec.endedAt !== undefined) return;
+        if (Date.now() >= deadline) return;
         await new Promise((resolve) => setTimeout(resolve, 1500));
-      }
+        return waitForCompletion();
+      };
+      await waitForCompletion();
     } catch {
       // Surfaced through the refreshed run list below.
     } finally {

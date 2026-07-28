@@ -1,6 +1,8 @@
-import { describe, expect, test } from 'vitest';
 import http from 'node:http';
+
 import { GATEWAY_SCHEMA_EPOCH, GATEWAY_VERSION, ROUTES } from '@centraid/protocol';
+import { describe, expect, test } from 'vitest';
+
 import { getHealth, handshake, listApps } from './client.ts';
 
 function startMockGateway(): Promise<{

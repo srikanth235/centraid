@@ -50,10 +50,18 @@ export const makeStyles = (colors: ThemeColors) =>
       paddingHorizontal: 14,
       paddingVertical: 9,
     },
-    runText: { ...t('small'), color: colors.accent, fontFamily: family.sansMedium },
+    runText: {
+      ...t('small'),
+      color: colors.accent,
+      fontFamily: family.sansMedium,
+    },
     safe: { backgroundColor: colors.bg, flex: 1 },
     scheduleRow: { alignItems: 'center', flexDirection: 'row', gap: 6 },
-    scheduleText: { color: colors.ink3, fontFamily: family.monoMedium, fontSize: 11 },
+    scheduleText: {
+      color: colors.ink3,
+      fontFamily: family.monoMedium,
+      fontSize: 11,
+    },
     subtitle: { ...t('small'), color: colors.ink2, marginTop: 3 },
     title: { color: colors.ink, fontFamily: family.serif, fontSize: 28 },
     togglePill: {

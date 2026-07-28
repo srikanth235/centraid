@@ -12,9 +12,9 @@
  */
 
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { createRequire } from 'node:module';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const require = createRequire(import.meta.url);

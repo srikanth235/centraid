@@ -1,7 +1,10 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
+
+import { localGatewayDataDir } from './gateway-paths.js';
 import {
   addGateway,
   listGateways,
@@ -9,7 +12,6 @@ import {
   resolveGateway,
   updateGatewayRelayHint,
 } from './gateway-store.js';
-import { localGatewayDataDir } from './gateway-paths.js';
 
 const fixture = vi.hoisted(() => ({
   file: '',
@@ -58,7 +60,9 @@ describe('gateway-store', () => {
     const profiles = await listGateways();
     expect(profiles.map((profile) => profile.id)).toStrictEqual(['local', endpointId]);
 
-    const entries = await fs.readdir(path.dirname(fixture.file), { recursive: true });
+    const entries = await fs.readdir(path.dirname(fixture.file), {
+      recursive: true,
+    });
     expect(entries).toStrictEqual(['connections.json']);
     const rows = JSON.parse(await fs.readFile(fixture.file, 'utf8')) as Array<
       Record<string, unknown>
@@ -94,9 +98,15 @@ describe('gateway-store', () => {
   test('remote-only add, use, and forget never creates the platform gateway directory', async () => {
     const endpointId = 'c'.repeat(64);
     expect(localGatewayDataDir()).toBe(fixture.localDataDir);
-    await expect(fs.access(fixture.localDataDir)).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(fs.access(fixture.localDataDir)).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
 
-    await addGateway({ label: 'Remote VPS', endpointId, relayHint: 'relay-cache' });
+    await addGateway({
+      label: 'Remote VPS',
+      endpointId,
+      relayHint: 'relay-cache',
+    });
     const resolved = await resolveGateway(endpointId);
     expect(resolved).toMatchObject({
       profile: { id: endpointId, endpointId },
@@ -104,12 +114,16 @@ describe('gateway-store', () => {
       token: '',
     });
     expect(fixture.ensureProxy).toHaveBeenCalledWith(endpointId, endpointId, 'relay-cache');
-    await expect(fs.access(fixture.localDataDir)).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(fs.access(fixture.localDataDir)).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
 
     await removeGateway(endpointId);
     expect(fixture.closeDialer).toHaveBeenCalledWith(endpointId);
     expect(fixture.clearCredentials).toHaveBeenCalledWith(endpointId);
     expect((await listGateways()).map((profile) => profile.id)).toStrictEqual(['local']);
-    await expect(fs.access(fixture.localDataDir)).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(fs.access(fixture.localDataDir)).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
   });
 });

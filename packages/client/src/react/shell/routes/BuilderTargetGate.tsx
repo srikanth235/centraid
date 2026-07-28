@@ -1,8 +1,10 @@
 import { type JSX, useState } from 'react';
-import ScopePicker from './ScopePicker.js';
+
 import type { MemberScope } from '../memberScope.js';
-import styles from './ScopePicker.module.css';
+import ScopePicker from './ScopePicker.js';
+
 import buttonCss from '../../ui/Button.module.css';
+import styles from './ScopePicker.module.css';
 
 // "Where should this app live?" — the builder's target picker (issue #599,
 // Decision 14).

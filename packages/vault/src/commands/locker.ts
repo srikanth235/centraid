@@ -22,12 +22,13 @@
 // journal records keyed hash tokens, never values.
 
 import { createHmac } from 'node:crypto';
+
 import type { Gateway } from '../gateway/gateway.js';
+import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
 import { cleanupPolyRefs } from '../schema/poly-refs.js';
 import { SEALED_PLACEHOLDER } from '../schema/sealed.js';
-import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
-import { setStarred } from './flags.js';
 import { replaceMemo } from './annotations.js';
+import { setStarred } from './flags.js';
 
 export const LOCKER_ITEM_TYPE = 'locker.item';
 
@@ -228,7 +229,10 @@ const ADD_ITEM: CommandDefinition = {
     required: ['type', 'title'],
     additionalProperties: false,
     properties: {
-      type: { type: 'string', enum: ['login', 'card', 'note', 'identity', 'wifi', 'password'] },
+      type: {
+        type: 'string',
+        enum: ['login', 'card', 'note', 'identity', 'wifi', 'password'],
+      },
       title: { type: 'string', minLength: 1 },
       tags: { type: 'array', items: { type: 'string' } },
       compromised: { type: 'boolean' },
@@ -251,7 +255,15 @@ const ADD_ITEM: CommandDefinition = {
     properties: { item_id: { type: 'string' } },
   },
   preconditions: [],
-  postconditions: [{ name: 'item_created', sql: ITEM_EXISTS_SQL, column: 'n', op: 'eq', value: 1 }],
+  postconditions: [
+    {
+      name: 'item_created',
+      sql: ITEM_EXISTS_SQL,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+  ],
   idempotency: 'once',
   risk: 'low',
   sealedInput: SEALED_INPUT,
@@ -350,7 +362,10 @@ const EDIT_ITEM: CommandDefinition = {
     const f = fieldValues(row.type, input);
     // Only overwrite the type's own columns + title/compromised; leave others.
     const sets: string[] = ['updated_at = :now'];
-    const params: Record<string, string | number | null> = { item_id: itemId, now: ctx.now };
+    const params: Record<string, string | number | null> = {
+      item_id: itemId,
+      now: ctx.now,
+    };
     if (input.title != null) {
       sets.push('title = :title');
       params.title = String(input.title);
@@ -397,7 +412,13 @@ const TRASH_ITEM: CommandDefinition = {
   outputSchema: { type: 'object', properties: { item_id: { type: 'string' } } },
   preconditions: [{ name: 'item_live', sql: ITEM_LIVE_SQL, column: 'n', op: 'eq', value: 1 }],
   postconditions: [
-    { name: 'item_trashed', sql: ITEM_TRASHED_SQL, column: 'n', op: 'eq', value: 1 },
+    {
+      name: 'item_trashed',
+      sql: ITEM_TRASHED_SQL,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
   ],
   idempotency: 'idempotent',
   risk: 'low',
@@ -407,7 +428,11 @@ const TRASH_ITEM: CommandDefinition = {
       .prepare(
         'UPDATE locker_item SET deleted_at = :now, purge_at = :purge, updated_at = :now WHERE item_id = :item_id',
       )
-      .run({ item_id: itemId, now: ctx.now, purge: plusDays(ctx.now, PURGE_WINDOW_DAYS) });
+      .run({
+        item_id: itemId,
+        now: ctx.now,
+        purge: plusDays(ctx.now, PURGE_WINDOW_DAYS),
+      });
     ctx.wrote(LOCKER_ITEM_TYPE, itemId);
     return { item_id: itemId };
   },
@@ -423,7 +448,15 @@ const RESTORE_ITEM: CommandDefinition = {
     properties: { item_id: { type: 'string', minLength: 1 } },
   },
   outputSchema: { type: 'object', properties: { item_id: { type: 'string' } } },
-  preconditions: [{ name: 'item_trashed', sql: ITEM_TRASHED_SQL, column: 'n', op: 'eq', value: 1 }],
+  preconditions: [
+    {
+      name: 'item_trashed',
+      sql: ITEM_TRASHED_SQL,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+  ],
   postconditions: [{ name: 'item_live', sql: ITEM_LIVE_SQL, column: 'n', op: 'eq', value: 1 }],
   idempotency: 'idempotent',
   risk: 'low',
@@ -449,8 +482,24 @@ const PURGE_ITEM: CommandDefinition = {
     properties: { item_id: { type: 'string', minLength: 1 } },
   },
   outputSchema: { type: 'object', properties: { item_id: { type: 'string' } } },
-  preconditions: [{ name: 'item_exists', sql: ITEM_EXISTS_SQL, column: 'n', op: 'eq', value: 1 }],
-  postconditions: [{ name: 'item_gone', sql: ITEM_EXISTS_SQL, column: 'n', op: 'eq', value: 0 }],
+  preconditions: [
+    {
+      name: 'item_exists',
+      sql: ITEM_EXISTS_SQL,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+  ],
+  postconditions: [
+    {
+      name: 'item_gone',
+      sql: ITEM_EXISTS_SQL,
+      column: 'n',
+      op: 'eq',
+      value: 0,
+    },
+  ],
   idempotency: 'once',
   risk: 'medium',
   // Destructive and irreversible (issue #306 decision 2) — parks for owner
@@ -577,7 +626,13 @@ const TOTP_CODE: CommandDefinition = {
     },
   },
   preconditions: [
-    { name: 'item_has_seed', sql: ITEM_HAS_SEED_SQL, column: 'n', op: 'eq', value: 1 },
+    {
+      name: 'item_has_seed',
+      sql: ITEM_HAS_SEED_SQL,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
   ],
   postconditions: [],
   idempotency: 'retry-safe',

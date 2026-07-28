@@ -7,7 +7,17 @@
  */
 
 import os from 'node:os';
+
 import { createTunnelClient, inspectEndpointTicket, sanitizeDeviceName } from '@centraid/tunnel';
+
+import {
+  decodePairingTicket,
+  findReusableProfile,
+  foldIrohPairResponse,
+  isFoldError,
+  isTicketExpired,
+  type RedeemGatewayPairingResult,
+} from './gateway-pairing-core.js';
 import {
   addGateway,
   listGateways,
@@ -17,14 +27,6 @@ import {
 } from './gateway-store.js';
 import { ensureIrohDeviceKey } from './iroh-dialer.js';
 import { setActiveGatewayId, setActiveVaultId } from './settings.js';
-import {
-  decodePairingTicket,
-  findReusableProfile,
-  foldIrohPairResponse,
-  isFoldError,
-  isTicketExpired,
-  type RedeemGatewayPairingResult,
-} from './gateway-pairing-core.js';
 
 export type { RedeemGatewayPairingResult } from './gateway-pairing-core.js';
 
@@ -43,17 +45,29 @@ export async function redeemGatewayPairing(
 ): Promise<RedeemGatewayPairingResult> {
   const payload = decodePairingTicket(input.ticket);
   if (!payload) {
-    return { ok: false, error: 'invalid_ticket', message: 'That pairing code is not valid.' };
+    return {
+      ok: false,
+      error: 'invalid_ticket',
+      message: 'That pairing code is not valid.',
+    };
   }
   if (isTicketExpired(payload)) {
-    return { ok: false, error: 'ticket_expired', message: 'This pairing code has expired.' };
+    return {
+      ok: false,
+      error: 'ticket_expired',
+      message: 'This pairing code has expired.',
+    };
   }
 
   let hint: ReturnType<typeof inspectEndpointTicket>;
   try {
     hint = inspectEndpointTicket(payload.gw);
   } catch {
-    return { ok: false, error: 'invalid_ticket', message: 'That pairing code is not valid.' };
+    return {
+      ok: false,
+      error: 'invalid_ticket',
+      message: 'That pairing code is not valid.',
+    };
   }
 
   const rememberDevice = input.rememberDevice ?? false;

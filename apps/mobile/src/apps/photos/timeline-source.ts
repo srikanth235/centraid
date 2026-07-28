@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useSyncExternalStore } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
+import { useCallback, useEffect, useSyncExternalStore } from 'react';
 
 import { useReplica } from '../../kit/replica/ReplicaProvider';
 import { photoTimelineEngine, type TimelineSnapshot } from './timeline-engine';

@@ -34,6 +34,7 @@
 import { randomBytes } from 'node:crypto';
 import { existsSync, promises as fs } from 'node:fs';
 import path from 'node:path';
+
 import {
   assertCompatibleAppMeta,
   canonicalJson,
@@ -47,6 +48,7 @@ import {
   type SnapshotRow,
 } from '@centraid/backup';
 import { KeyStore, type RemoteTier } from '@centraid/vault';
+
 import { GatewayDatabase } from '../serve/gateway-db.js';
 import { deriveBackupSourceInstanceId } from './backup-state.js';
 import {

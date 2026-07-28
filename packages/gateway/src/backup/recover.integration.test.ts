@@ -1,29 +1,8 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
-/*
- * The blank-machine recovery e2e (issue #439 R1) — the FORMAT.md acceptance
- * test made real, not prose: a fresh empty data dir plus NOTHING but the
- * recovery kit document and the provider api-key becomes a live vault.
- *
- * Machine A: a real seeded vault (tasks + originals + thumbs, following
- * restore-lazy-e2e), a standing outbox grant (so the quarantine has something
- * to revoke), a real backup against `startFakeProviderServer()`, and a subset
- * of its blobs replicated into the provider's attested `cas` store. Then a
- * BLANK machine calls `recover()` with just the kit + the api-key and we assert
- * the whole contract: the vault materializes with its rows intact; remote-held
- * blobs are deferred while local-only ones materialize; the quarantine marker
- * is present pre-mount and fires on first mount; the fenced generation is
- * seeded (old + 1) and the superseded machine's next registration 409s; and the
- * completion report is honest.
- *
- * A second test proves the registry-appMeta compatibility gate refuses a
- * newer-software snapshot BEFORE a single byte is fetched.
- */
-
-import { afterEach, describe, expect, test, vi } from 'vitest';
+import crypto, { randomBytes } from 'node:crypto';
 import { existsSync, promises as fs } from 'node:fs';
 import path from 'node:path';
-import crypto, { randomBytes } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
+
 import {
   BackupProviderError,
   openRemoteBackupProvider,
@@ -32,27 +11,34 @@ import {
   type WrappedRecoveryKitDocument,
 } from '@centraid/backup';
 import { startFakeProviderServer } from '@centraid/backup/dist/testing/fake-provider-server.js';
+import { forEachSequentially } from '@centraid/test-kit/sequential';
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { FsBlobStore, KeyStore, ReplicaIndex } from '@centraid/vault';
-import { openVaultRegistry } from '../serve/vault-registry.js';
-import type { VaultPlane } from '../serve/vault-plane.js';
-import { WorktreeStore } from '../worktree-store/worktree-store.js';
-import { run } from '../worktree-store/git.js';
-import { HealthRegistry } from '../serve/health-registry.js';
-import { BackupService } from './backup-service.js';
+import { afterEach, describe, expect, test, vi } from 'vitest';
+
 import { daemonLayoutFor } from '../cli/paths.js';
+import { HealthRegistry } from '../serve/health-registry.js';
+import type { VaultPlane } from '../serve/vault-plane.js';
+import { openVaultRegistry } from '../serve/vault-registry.js';
+import { run } from '../worktree-store/git.js';
+import { WorktreeStore } from '../worktree-store/worktree-store.js';
+import { BackupService } from './backup-service.js';
 import { recover } from './recover.js';
 
 vi.setConfig({ testTimeout: 30_000 });
 
-/** #568 item J: every recovery kit is password-wrapped; there is no plain path. */
 const KIT_PASSWORD = 'correct horse battery staple';
 
-const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
+const silentLogger = {
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+};
 
 const cleanups: Array<() => Promise<void> | void> = [];
 describe('backup/recover', () => {
   afterEach(async () => {
-    while (cleanups.length > 0) await cleanups.pop()?.();
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
   });
   function invoke(
     plane: VaultPlane,
@@ -72,12 +58,10 @@ describe('backup/recover', () => {
     }).sha256;
   }
 
-  /** A sealed credential + an approved outbox item + a standing grant — the live
-   *  states the quarantine gesture must neutralize, and (crucially) the sealed
-   *  credential MINTS the vault's seal-key file, so the recovered vault has
-   *  sealed secrets and only mounts if `recover()` placed the seal key correctly
-   *  (issue #439 R1). Mirrors vault-quarantine.test.ts's seed. */
-  function seedSealedOutbox(plane: VaultPlane): { itemId: string; grantId: string } {
+  function seedSealedOutbox(plane: VaultPlane): {
+    itemId: string;
+    grantId: string;
+  } {
     invoke(plane, 'sync.configure_credential', {
       kind: 'pull.gmail',
       label: 'personal',
@@ -122,14 +106,11 @@ describe('backup/recover', () => {
     thumbs: string[];
     itemId: string;
     grantId: string;
-    /** The app published into machine A's code store — must survive recovery (issue #517). */
     appId: string;
     serverUrl: string;
     apiKey: string;
   }
 
-  /** Publish a real app into the vault's code store so the snapshot's git bundle
-   *  carries app code the recovery must bring back (issue #517). Returns its id. */
   async function publishSeedApp(plane: VaultPlane): Promise<string> {
     const appId = 'todo';
     const store = new WorktreeStore({ root: plane.codeStoreRoot });
@@ -142,14 +123,15 @@ describe('backup/recover', () => {
       JSON.stringify({ id: appId, name: 'Todo' }, null, 2),
     );
     await fs.writeFile(path.join(appDir, 'index.html'), '<h1>Todo</h1>\n');
-    await store.publish({ sessionId: 'seed-session', appId, message: 'seed v1' });
+    await store.publish({
+      sessionId: 'seed-session',
+      appId,
+      message: 'seed v1',
+    });
     await store.closeSession('seed-session');
     return appId;
   }
 
-  /** Stand up "machine A": seed a real vault, back it up against the fake HTTP
-   *  provider, and replicate a subset of blobs into the provider's cas store so
-   *  its attested inventory is non-empty. Returns everything recovery needs. */
   async function seedMachineA(
     server: Awaited<ReturnType<typeof startFakeProviderServer>>,
   ): Promise<MachineA> {
@@ -167,7 +149,11 @@ describe('backup/recover', () => {
     const service = new BackupService({
       config: {
         enabled: true,
-        provider: { kind: 'remote', endpoint: server.url, apiKey: server.apiKey },
+        provider: {
+          kind: 'remote',
+          endpoint: server.url,
+          apiKey: server.apiKey,
+        },
       },
       cacheDir: backupDir,
       keyStore: new KeyStore(path.join(vaultRoot, 'keys')),
@@ -177,14 +163,12 @@ describe('backup/recover', () => {
     });
     cleanups.push(() => service.stop());
 
-    // Three content items, each an original + a tiny thumb (bytes, not real
-    // images — recovery is byte-level).
     const originals: string[] = [];
     const thumbs: string[] = [];
     for (let i = 0; i < 3; i++) {
-      const taskId = invoke(plane, 'schedule.add_task', { title: `Photo ${i}` })[
-        'task_id'
-      ] as string;
+      const taskId = invoke(plane, 'schedule.add_task', {
+        title: `Photo ${i}`,
+      })['task_id'] as string;
       const originalSha = stage(plane, randomBytes(400 + i), `photo-${i}.bin`);
       const attach = invoke(plane, 'core.attach', {
         subject_type: 'schedule.task',
@@ -210,18 +194,10 @@ describe('backup/recover', () => {
       thumbs.push(thumbSha);
     }
 
-    // A sealed credential + approved outbox item + standing grant (see helper):
-    // the sealed secret mints the seal key, so recovery must place it or the
-    // vault bricks; the approved item + grant are what the quarantine parks.
     const { itemId, grantId } = seedSealedOutbox(plane);
 
-    // A published app in the code store — the snapshot's git bundle carries it,
-    // and a correct recovery must rehydrate the bare repo (issue #517).
     const appId = await publishSeedApp(plane);
 
-    // Machine A's vault BELIEVES originals[0] + originals[1] are durable on the
-    // remote cas tier (marked 'cas' in blob_replica) — the belief the snapshot
-    // carries and the R5 adopt-time reconcile checks against live inventory.
     const replica = new ReplicaIndex(plane.db.vault);
     replica.mark(originals[0]!, 400, 'cas');
     replica.mark(originals[1]!, 401, 'cas');
@@ -230,19 +206,18 @@ describe('backup/recover', () => {
     const status = await service.status();
     const targetId = status[vaultId]!.targetId;
     const oldGeneration = status[vaultId]!.generation;
-    // #568 item J: a kit is always password-wrapped, so the recovery path
-    // takes the wrapped document plus its password — there is no plain branch.
     const kitDocument = wrapRecoveryKit(await service.recoveryKitDocument(), KIT_PASSWORD);
 
-    // Replicate originals[0] + originals[1] into the provider's cas store (the
-    // durable copy a hosted vault keeps), directly via the cas data plane. The
-    // remote CAS holding them is exactly what makes recovery DEFER them; the rest
-    // (originals[2] + the thumbs) stay snapshot-only and must materialize.
-    const casProvider = openRemoteBackupProvider({ baseUrl: server.url, apiKey: server.apiKey });
+    const casProvider = openRemoteBackupProvider({
+      baseUrl: server.url,
+      apiKey: server.apiKey,
+    });
     const casStore = await casProvider.openDataPlane(targetId, 'cas', 'read-write');
-    for (const sha of [originals[0]!, originals[1]!]) {
-      await casStore.put(`blobs/sha256/${sha}`, new Uint8Array(Buffer.from(`remote-${sha}`)));
-    }
+    await Promise.all(
+      [originals[0]!, originals[1]!].map((sha) =>
+        casStore.put(`blobs/sha256/${sha}`, new Uint8Array(Buffer.from(`remote-${sha}`))),
+      ),
+    );
 
     return {
       vaultId,
@@ -265,7 +240,6 @@ describe('backup/recover', () => {
     const a = await seedMachineA(server);
     expect(a.oldGeneration).toBe(1);
 
-    // --- The blank machine: a fresh data dir + the kit + the api-key. ---
     const dataDir = await tempDir('recover-blank');
     const layout = daemonLayoutFor(dataDir);
     const report = await recover({
@@ -277,12 +251,13 @@ describe('backup/recover', () => {
       log: silentLogger,
     });
 
-    // 1. The vault dir exists with both databases, rows intact.
     const vaultDir = path.join(layout.vaultDir, a.vaultId);
     expect(report.vaultDir).toBe(vaultDir);
     expect(existsSync(path.join(vaultDir, 'vault.db'))).toBe(true);
     expect(existsSync(path.join(vaultDir, 'journal.db'))).toBe(true);
-    const restoredDb = new DatabaseSync(path.join(vaultDir, 'vault.db'), { readOnly: true });
+    const restoredDb = new DatabaseSync(path.join(vaultDir, 'vault.db'), {
+      readOnly: true,
+    });
     try {
       expect(
         (restoredDb.prepare('SELECT COUNT(*) AS n FROM schedule_task').get() as { n: number }).n,
@@ -291,7 +266,6 @@ describe('backup/recover', () => {
       restoredDb.close();
     }
 
-    // 2. Remote-held blobs deferred; local-only + thumbs materialized.
     expect(report.inventoryConsulted).toBe(true);
     expect(report.skippedBlobs).toBe(2);
     const restoredBlobs = new FsBlobStore(path.join(vaultDir, 'blobs'));
@@ -300,27 +274,19 @@ describe('backup/recover', () => {
     expect(restoredBlobs.hasSync(a.originals[2]!)).toBe(true); // snapshot-only ⇒ materialized
     for (const thumb of a.thumbs) expect(restoredBlobs.hasSync(thumb)).toBe(true);
 
-    // The seal key was placed where custody expects it (`<root>/keys/<id>.sealkey`)
-    // — the recovered vault has sealed secrets, so a wrong placement would brick
-    // the mount below.
     expect(existsSync(path.join(layout.keysDir, `${a.vaultId}.sealkey`))).toBe(true);
 
-    // The app code store was rehydrated from the bundle (issue #517): the bare
-    // repo exists at `<vaultDir>/code/apps.git`, the consumed `apps.bundle` is
-    // gone, the published app's version tag survived, and a fresh WorktreeStore
-    // (the real runtime seam) mounts it and lists the app — a restore that left
-    // an empty code store would return no apps here.
     const bareDir = path.join(vaultDir, 'code', 'apps.git');
     expect(existsSync(path.join(bareDir, 'HEAD'))).toBe(true);
     expect(existsSync(path.join(vaultDir, 'apps.bundle'))).toBe(false);
     const tags = await run(['tag', '--list'], { cwd: bareDir });
     expect(tags.split('\n')).toContain(`${a.appId}/v1`);
-    const recoveredStore = new WorktreeStore({ root: path.join(vaultDir, 'code') });
+    const recoveredStore = new WorktreeStore({
+      root: path.join(vaultDir, 'code'),
+    });
     await recoveredStore.init();
     await expect(recoveredStore.listApps()).resolves.toStrictEqual([a.appId]);
 
-    // 3. Quarantine marker present pre-mount; mounting fires it (item parked,
-    //    grant revoked). Mounting a sealed vault also proves the seal key opens.
     expect(existsSync(path.join(vaultDir, 'RESTORE_QUARANTINE.json'))).toBe(true);
     expect(report.quarantine).toContain('outbox');
     const mounted = openVaultRegistry({
@@ -342,8 +308,9 @@ describe('backup/recover', () => {
       .get(a.grantId) as { revoked_at: string | null };
     expect(grant.revoked_at).not.toBeNull();
 
-    // 4. Fencing: the seeded state is generation old+1, lastSeq from the restore.
-    const gatewayDb = new DatabaseSync(layout.gatewayDbFile, { readOnly: true });
+    const gatewayDb = new DatabaseSync(layout.gatewayDbFile, {
+      readOnly: true,
+    });
     const targetState = gatewayDb
       .prepare('SELECT config_json FROM backup_targets WHERE vault_id = ?')
       .get(a.vaultId) as { config_json: string };
@@ -355,13 +322,12 @@ describe('backup/recover', () => {
     expect(recoveredTarget.generation).toBe(a.oldGeneration + 1);
     expect(recoveredTarget.lastSeq).toBe(report.seq);
     expect(report.generation).toBe(a.oldGeneration + 1);
-    // The recovered gateway also inherited the keyring.
     expect(new KeyStore(layout.keysDir).export('keyring.key')).not.toBeNull();
 
-    // Arm the fence: the recovered machine's FIRST post-recovery backup registers
-    // at the seeded generation, bumping the provider — and only THEN does the
-    // superseded machine's next registration (still at its old generation) 409.
-    const providerClient = openRemoteBackupProvider({ baseUrl: a.serverUrl, apiKey: a.apiKey });
+    const providerClient = openRemoteBackupProvider({
+      baseUrl: a.serverUrl,
+      apiKey: a.apiKey,
+    });
     await providerClient.registerSnapshot(a.targetId, {
       idempotencyKey: 'recovered-first',
       manifestKey: `u/${a.targetId}/backup/manifests/recovered.json`,
@@ -389,19 +355,24 @@ describe('backup/recover', () => {
     }
     expect(fenced).toBe(true);
 
-    // 5. Adopt-time reconcile (R5): the provider still holds everything the
-    //    restored index believed durable, so nothing is missing, re-pinned, or lost.
-    expect(report.reconcile).toMatchObject({ checked: 2, missing: 0, repinned: [], lost: [] });
+    expect(report.reconcile).toMatchObject({
+      checked: 2,
+      missing: 0,
+      repinned: [],
+      lost: [],
+    });
     expect(report.reconcile.skipped).toBeUndefined();
 
-    // 6. The completion report is honest.
-    expect(report.recoveredAsOf).toBeTypeOf('number');
     expect(report.recoveredAsOf).toBeGreaterThan(0);
-    expect(report.truncated).toBe(false);
-    // No remote-tier resolver in this headless context ⇒ previews stream on
-    // demand, reported honestly (never faked).
-    expect(report.previews.warmed).toBe(false);
-    if (!report.previews.warmed) expect(report.previews.reason.length).toBeGreaterThan(0);
+    expect({
+      truncated: report.truncated,
+      warmed: report.previews.warmed,
+    }).toStrictEqual({
+      truncated: false,
+      warmed: false,
+    });
+    if (report.previews.warmed) throw new Error('headless recovery must not pre-warm previews');
+    expect(report.previews.reason.length).toBeGreaterThan(0);
   }, 45_000);
 
   test('recovery refuses a snapshot written by newer software BEFORE any byte is fetched', async () => {
@@ -409,10 +380,10 @@ describe('backup/recover', () => {
     cleanups.push(() => server.close());
     const a = await seedMachineA(server);
 
-    // A snapshot registered under a vaultUserVersion far newer than this build
-    // can read becomes the newest row — recovery must refuse it from the registry
-    // row's appMeta alone, before opening a manifest or a chunk.
-    const providerClient = openRemoteBackupProvider({ baseUrl: a.serverUrl, apiKey: a.apiKey });
+    const providerClient = openRemoteBackupProvider({
+      baseUrl: a.serverUrl,
+      apiKey: a.apiKey,
+    });
     await providerClient.registerSnapshot(a.targetId, {
       idempotencyKey: 'from-the-future',
       manifestKey: `u/${a.targetId}/backup/manifests/future.json`,
@@ -435,9 +406,8 @@ describe('backup/recover', () => {
         dataDir: layout.dataDir,
         log: silentLogger,
       }),
-    ).rejects.toThrow(/vaultUserVersion 9999 is newer/);
+    ).rejects.toThrow(/vaultUserVersion 9999 is newer/u);
 
-    // Nothing was fetched or written: no vault dir, no staging scratch, no keyring.
     expect(existsSync(path.join(layout.vaultDir, a.vaultId))).toBe(false);
     const rootEntries = existsSync(layout.vaultDir) ? await fs.readdir(layout.vaultDir) : [];
     expect(rootEntries.filter((e) => e.startsWith('.recover-staging-'))).toHaveLength(0);
@@ -449,10 +419,10 @@ describe('backup/recover', () => {
     cleanups.push(() => server.close());
     const a = await seedMachineA(server);
 
-    // The provider LOSES originals[0] after the backup — the exact drift R5 exists
-    // for: the restored index still believes it durable, but the live inventory no
-    // longer holds it. originals[1] stays put.
-    const casProvider = openRemoteBackupProvider({ baseUrl: a.serverUrl, apiKey: a.apiKey });
+    const casProvider = openRemoteBackupProvider({
+      baseUrl: a.serverUrl,
+      apiKey: a.apiKey,
+    });
     const casStore = await casProvider.openDataPlane(a.targetId, 'cas', 'read-write');
     await casStore.delete(`blobs/sha256/${a.originals[0]}`);
 
@@ -467,24 +437,20 @@ describe('backup/recover', () => {
       log: silentLogger,
     });
 
-    // The report flags exactly the dropped blob, re-pinned from the snapshot; none lost.
     expect(report.reconcile.checked).toBe(2);
     expect(report.reconcile.missing).toBe(1);
     expect(report.reconcile.repinned).toStrictEqual([a.originals[0]]);
     expect(report.reconcile.lost).toStrictEqual([]);
 
-    // The re-pin materialized what the snapshot carried: originals[0] is local
-    // again (the lazy restore did not defer it, because the inventory no longer
-    // named it), while originals[1] — still remote — stays deferred.
     const vaultDir = path.join(layout.vaultDir, a.vaultId);
     const restoredBlobs = new FsBlobStore(path.join(vaultDir, 'blobs'));
     expect(restoredBlobs.hasSync(a.originals[0]!)).toBe(true);
     expect(restoredBlobs.hasSync(a.originals[1]!)).toBe(false);
     expect(report.skippedBlobs).toBe(1); // only originals[1] deferred now
 
-    // The restored index no longer believes the dropped blob is durable (so
-    // custody can never evict a phantom copy); the surviving one is untouched.
-    const restoredDb = new DatabaseSync(path.join(vaultDir, 'vault.db'), { readOnly: true });
+    const restoredDb = new DatabaseSync(path.join(vaultDir, 'vault.db'), {
+      readOnly: true,
+    });
     try {
       const index = new ReplicaIndex(restoredDb);
       expect(index.has(a.originals[0]!)).toBe(false);

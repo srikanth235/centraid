@@ -12,6 +12,7 @@
 
 import { existsSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+
 import { GATEWAY_WORKSPACE_PACKAGES } from './assemble-runtime.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');

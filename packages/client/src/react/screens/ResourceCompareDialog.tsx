@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
+
 import { cx } from '../ui/cx.js';
-import buttonCss from '../ui/Button.module.css';
-import a11y from '../styles/a11y.module.css';
-import styles from './ResourceDialogs.module.css';
 import {
   PRESET_MODES,
   presetHint,
@@ -10,6 +8,10 @@ import {
   type PresetMode,
 } from './resource-presets.js';
 import type { ResourceMode } from './resource-summary.js';
+
+import a11y from '../styles/a11y.module.css';
+import buttonCss from '../ui/Button.module.css';
+import styles from './ResourceDialogs.module.css';
 
 // Compare dialog (issue #528 follow-up): every resource mode side by side so the
 // owner sees the consequence BEFORE committing — the gap the inline card left,

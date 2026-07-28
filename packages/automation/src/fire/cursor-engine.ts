@@ -9,12 +9,10 @@
  * are injected readers over the same contract.
  */
 
-import type { ReconcileResult } from './host.js';
-import type { Row } from '../scaffold/app.js';
 import type { Trigger } from '../manifest/manifest.js';
+import type { Row } from '../scaffold/app.js';
 import { floorMinute, readCronCursor } from './cron-cursor.js';
 import { cronMatches } from './cron-match.js';
-import { MemoryCursorStore } from './memory-cursor-store.js';
 import {
   DEFAULT_TRIGGER_CATCH_UP_CAP,
   cursorIdentity,
@@ -31,6 +29,9 @@ import {
   type TriggerCursorFireInput,
   type VaultCursorEngineOptions,
 } from './cursor-engine-support.js';
+import type { ReconcileResult } from './host.js';
+import { MemoryCursorStore } from './memory-cursor-store.js';
+import { applyInOrder, eventSourceKey } from './cursor-engine-order.js';
 
 export {
   DEFAULT_TRIGGER_CATCH_UP_CAP,
@@ -132,7 +133,7 @@ export class VaultCursorEngine implements LocalCursorScheduler {
     this.registrations.clear();
     for (const [key, value] of next) this.registrations.set(key, value);
     try {
-      for (const ref of [...added, ...updated]) await this.bootstrapTriggers(ref, true);
+      await applyInOrder([...added, ...updated], (ref) => this.bootstrapTriggers(ref, true));
     } catch (error) {
       this.registrations.clear();
       for (const [key, value] of previous) this.registrations.set(key, value);
@@ -261,7 +262,7 @@ export class VaultCursorEngine implements LocalCursorScheduler {
     const state = { promise: Promise.resolve(), dirty: false };
     state.promise = (async () => {
       let failure: { error: unknown } | undefined;
-      for (;;) {
+      const drainDirtyWork = async (): Promise<void> => {
         state.dirty = false;
         try {
           await this.process(registration, at);
@@ -272,9 +273,10 @@ export class VaultCursorEngine implements LocalCursorScheduler {
           // POST or a restart. Drain it, then surface the first failure.
           failure ??= { error };
         }
-        if (!state.dirty) break;
-      }
-      if (failure) throw failure.error;
+        if (state.dirty) return drainDirtyWork();
+        if (failure) throw failure.error;
+      };
+      await drainDirtyWork();
     })().finally(() => {
       if (this.inFlight.get(key) === state) this.inFlight.delete(key);
     });
@@ -307,7 +309,9 @@ export class VaultCursorEngine implements LocalCursorScheduler {
     } else if (registration.trigger.kind === 'cron') {
       const schedules =
         registration.cronSchedules ??
-        (registration.cronExprs ?? [registration.trigger.expr]).map((expr) => ({ expr }));
+        (registration.cronExprs ?? [registration.trigger.expr]).map((expr) => ({
+          expr,
+        }));
       result = readCronCursor(schedules, cursor, at);
     } else if (this.readCursor) {
       result = await this.readCursor({
@@ -377,8 +381,10 @@ export class VaultCursorEngine implements LocalCursorScheduler {
     // Durable intent precedes any side effect. The committed source position
     // deliberately stays unchanged until all terminal turns are receipted.
     put(pending());
-    for (const element of elements) {
-      if (acknowledged.has(element.position)) continue;
+    const deliverNext = async (index: number): Promise<void> => {
+      const element = elements[index];
+      if (element === undefined) return;
+      if (acknowledged.has(element.position)) return deliverNext(index + 1);
       const fireInput: TriggerCursorFireInput = {
         automationRef: registration.ref,
         trigger: registration.trigger,
@@ -394,7 +400,9 @@ export class VaultCursorEngine implements LocalCursorScheduler {
       else if (registration.trigger.kind === 'cron') await this.fire(registration.ref);
       acknowledged.add(element.position);
       put(pending());
-    }
+      return deliverNext(index + 1);
+    };
+    await deliverNext(0);
     put();
   }
 
@@ -402,20 +410,19 @@ export class VaultCursorEngine implements LocalCursorScheduler {
     const canReadExternal =
       this.readCursor !== undefined || (allowLegacyEvaluate && this.evaluate !== undefined);
     const at = this.now();
-    for (const registration of this.registrations.values()) {
-      if (
-        registration.ref !== ref ||
-        (registration.trigger.kind !== 'data' &&
-          registration.trigger.kind !== 'webhook' &&
-          registration.trigger.kind !== 'event')
-      ) {
-        // Cron is deliberately absent: its window includes the current minute,
-        // so bootstrapping it would run a `0 9 * * *` automation the instant it
-        // is created (or re-enabled) at 09:00:30. Cron catches up on the next
-        // tick instead — the same no-fire bootstrap data triggers get.
-        continue;
-      }
-      if (!canReadExternal) continue;
+    const eligible = [...this.registrations.values()].filter(
+      (registration) =>
+        registration.ref === ref &&
+        (registration.trigger.kind === 'data' ||
+          registration.trigger.kind === 'webhook' ||
+          registration.trigger.kind === 'event'),
+    );
+    await applyInOrder(eligible, async (registration) => {
+      // Cron is deliberately absent: its window includes the current minute,
+      // so bootstrapping it would run a `0 9 * * *` automation the instant it
+      // is created (or re-enabled) at 09:00:30. Cron catches up on the next
+      // tick instead — the same no-fire bootstrap data triggers get.
+      if (!canReadExternal) return;
       try {
         await this.process(registration, at);
       } catch (error) {
@@ -427,7 +434,7 @@ export class VaultCursorEngine implements LocalCursorScheduler {
         if (registration.trigger.kind !== 'event') throw error;
         this.onError?.(error, registration.ref);
       }
-    }
+    });
   }
 
   private dropRegistrations(ref: string): void {
@@ -484,6 +491,4 @@ export class VaultCursorEngine implements LocalCursorScheduler {
   }
 }
 
-export function eventSourceKey(trigger: Extract<Trigger, { kind: 'event' }>): string {
-  return `event:${trigger.connectorKind}:${trigger.event}`;
-}
+export { eventSourceKey } from './cursor-engine-order.js';

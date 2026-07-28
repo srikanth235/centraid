@@ -23,9 +23,12 @@
  */
 
 import { randomUUID } from 'node:crypto';
+
+import { BlobStore, blobUrl, type PutResult } from '../data/blob-store.js';
+import { resolveItemCost } from '../model-pricing.js';
+import { isValidAppOrAssistantId } from '../registry/app-paths.js';
 import type { WorkspaceProvider } from '../stores/vault-workspace.js';
-import { ConversationStore, type ConversationMeta } from './store.js';
-import type { AdapterUsageSnapshot } from './turn.js';
+import { collectArchivedRows, type ArchiveBlobReader } from './rehydrate.js';
 import type {
   ConversationWorkspaceKind,
   ConversationWorkspaceSelection,
@@ -33,16 +36,16 @@ import type {
   RunKind,
   Turn,
 } from './schema.js';
-import { ASSISTANT_APP_ID, isValidAppOrAssistantId } from '../registry/app-paths.js';
-import { resolveItemCost } from '../model-pricing.js';
+import { ConversationStore, type ConversationMeta } from './store.js';
 import {
   groupRetryFamilies,
   parseStepOutput,
   parseToolArgs,
   parseToolOutput,
 } from './transcript.js';
-import { collectArchivedRows, type ArchiveBlobReader } from './rehydrate.js';
-import { BlobStore, blobUrl, type PutResult } from '../data/blob-store.js';
+import type { AdapterUsageSnapshot } from './turn.js';
+
+export { ASSISTANT_APP_ID } from '../registry/app-paths.js';
 
 export interface ConversationSummary {
   id: string;
@@ -248,7 +251,6 @@ export interface RecordTurnInput {
 // Re-exported for back-compat — every existing import site pulls this from
 // the package root (`@centraid/app-engine`), which re-exports it from here.
 // The value now lives in `app-paths.ts` (see there for why).
-export { ASSISTANT_APP_ID };
 
 export class ConversationHistoryStore {
   private readonly workspace: WorkspaceProvider;
@@ -389,11 +391,11 @@ export class ConversationHistoryStore {
             hash: a.hash,
             mime: a.mime,
             sizeBytes: a.sizeBytes,
-            ...(a.filename !== undefined ? { filename: a.filename } : {}),
+            ...(a.filename === undefined ? {} : { filename: a.filename }),
             ...(a.source !== undefined && a.source !== 'upload' ? { source: a.source } : {}),
-            ...(a.workspacePath !== undefined
-              ? { workspacePath: a.workspacePath }
-              : { url: blobUrl(appId, a.hash) }),
+            ...(a.workspacePath === undefined
+              ? { url: blobUrl(appId, a.hash) }
+              : { workspacePath: a.workspacePath }),
           }));
         }
         return this.attachmentsPayload(appId, itemId);
@@ -419,11 +421,11 @@ export class ConversationHistoryStore {
       hash: a.hash,
       mime: a.mime,
       sizeBytes: a.sizeBytes,
-      ...(a.filename !== undefined ? { filename: a.filename } : {}),
+      ...(a.filename === undefined ? {} : { filename: a.filename }),
       ...(a.source !== undefined && a.source !== 'upload' ? { source: a.source } : {}),
-      ...(a.workspacePath !== undefined
-        ? { workspacePath: a.workspacePath }
-        : { url: blobUrl(appId, a.hash) }),
+      ...(a.workspacePath === undefined
+        ? { url: blobUrl(appId, a.hash) }
+        : { workspacePath: a.workspacePath }),
     }));
   }
 
@@ -543,9 +545,9 @@ export class ConversationHistoryStore {
         conversationId: input.conversationId,
         triggerKind: 'interactive',
         startedAt: input.startedAt,
-        ...(input.hydrationTokens !== undefined ? { hydrationTokens: input.hydrationTokens } : {}),
-        ...(input.retryOf !== undefined ? { retryOf: input.retryOf } : {}),
-        ...(input.idempotencyKey !== undefined ? { idempotencyKey: input.idempotencyKey } : {}),
+        ...(input.hydrationTokens === undefined ? {} : { hydrationTokens: input.hydrationTokens }),
+        ...(input.retryOf === undefined ? {} : { retryOf: input.retryOf }),
+        ...(input.idempotencyKey === undefined ? {} : { idempotencyKey: input.idempotencyKey }),
       });
       const messageItemId = store.insertMessageIn({
         turnId,
@@ -560,8 +562,8 @@ export class ConversationHistoryStore {
           mime: att.mime,
           sizeBytes: att.sizeBytes,
           source: att.source ?? 'upload',
-          ...(att.filename !== undefined ? { filename: att.filename } : {}),
-          ...(att.workspacePath !== undefined ? { workspacePath: att.workspacePath } : {}),
+          ...(att.filename === undefined ? {} : { filename: att.filename }),
+          ...(att.workspacePath === undefined ? {} : { workspacePath: att.workspacePath }),
         });
       }
       // Trace items start at ordinal 1 — the inbound message is ordinal 0.
@@ -575,10 +577,10 @@ export class ConversationHistoryStore {
             mime: artifact.mime,
             sizeBytes: artifact.sizeBytes,
             source: artifact.source ?? 'agent',
-            ...(artifact.filename !== undefined ? { filename: artifact.filename } : {}),
-            ...(artifact.workspacePath !== undefined
-              ? { workspacePath: artifact.workspacePath }
-              : {}),
+            ...(artifact.filename === undefined ? {} : { filename: artifact.filename }),
+            ...(artifact.workspacePath === undefined
+              ? {}
+              : { workspacePath: artifact.workspacePath }),
           });
         }
       });
@@ -586,10 +588,10 @@ export class ConversationHistoryStore {
         turnId,
         endedAt: input.endedAt,
         ok: input.ok,
-        ...(input.error !== undefined ? { error: input.error } : {}),
-        ...(input.finalText !== undefined
-          ? { outputJson: JSON.stringify({ text: input.finalText }) }
-          : {}),
+        ...(input.error === undefined ? {} : { error: input.error }),
+        ...(input.finalText === undefined
+          ? {}
+          : { outputJson: JSON.stringify({ text: input.finalText }) }),
       });
       if (input.failedAdapter) {
         store.noteFailedTurn(input.conversationId, userId, input.failedAdapter);
@@ -597,10 +599,10 @@ export class ConversationHistoryStore {
         store.noteTurn(input.conversationId, userId, input.adapter);
       }
       const now = Date.now();
-      if (!existingTitle) {
-        store.setTitle(input.conversationId, userId, deriveTitle(input.userMessage), now);
-      } else {
+      if (existingTitle) {
         store.touchConversation(input.conversationId, userId, now);
+      } else {
+        store.setTitle(input.conversationId, userId, deriveTitle(input.userMessage), now);
       }
     });
     return { turnId };
@@ -625,9 +627,9 @@ export class ConversationHistoryStore {
     const parsed = parseStepOutput(turn.outputJson);
     const step = store.listItems(turn.turnId).findLast((it) => it.kind === 'step');
     const usage: ConversationTurnUsage = {
-      ...(turn.totalInputTokens !== undefined ? { inputTokens: turn.totalInputTokens } : {}),
-      ...(turn.totalOutputTokens !== undefined ? { outputTokens: turn.totalOutputTokens } : {}),
-      ...(turn.totalCostUsd !== undefined ? { costUsd: turn.totalCostUsd } : {}),
+      ...(turn.totalInputTokens === undefined ? {} : { inputTokens: turn.totalInputTokens }),
+      ...(turn.totalOutputTokens === undefined ? {} : { outputTokens: turn.totalOutputTokens }),
+      ...(turn.totalCostUsd === undefined ? {} : { costUsd: turn.totalCostUsd }),
       ...(step?.model ? { model: step.model } : {}),
       ...(step?.effort ? { effort: step.effort } : {}),
     };
@@ -635,7 +637,7 @@ export class ConversationHistoryStore {
       turnId: turn.turnId,
       ok: turn.ok,
       ...(parsed.text ? { finalText: parsed.text } : {}),
-      ...(turn.error !== undefined ? { error: turn.error } : {}),
+      ...(turn.error === undefined ? {} : { error: turn.error }),
       ...(Object.keys(usage).length > 0 ? { usage } : {}),
     };
   }
@@ -814,9 +816,9 @@ function foldTranscript(src: TranscriptSources): ConversationMessageRow[] {
   const usageOf = (turn: Turn): ConversationTurnUsage | undefined => {
     const step = (itemsByTurn.get(turn.turnId) ?? []).findLast((it) => it.kind === 'step');
     const usage: ConversationTurnUsage = {
-      ...(turn.totalInputTokens !== undefined ? { inputTokens: turn.totalInputTokens } : {}),
-      ...(turn.totalOutputTokens !== undefined ? { outputTokens: turn.totalOutputTokens } : {}),
-      ...(turn.totalCostUsd !== undefined ? { costUsd: turn.totalCostUsd } : {}),
+      ...(turn.totalInputTokens === undefined ? {} : { inputTokens: turn.totalInputTokens }),
+      ...(turn.totalOutputTokens === undefined ? {} : { outputTokens: turn.totalOutputTokens }),
+      ...(turn.totalCostUsd === undefined ? {} : { costUsd: turn.totalCostUsd }),
       ...(step?.model ? { model: step.model } : {}),
       ...(step?.effort ? { effort: step.effort } : {}),
     };
@@ -917,11 +919,11 @@ function foldTranscript(src: TranscriptSources): ConversationMessageRow[] {
             kind: 'tool',
             id: item.itemId,
             tool: item.name ?? 'tool',
-            ...(args.sql !== undefined ? { sql: args.sql } : {}),
-            ...(args.args !== undefined ? { args: args.args } : {}),
+            ...(args.sql === undefined ? {} : { sql: args.sql }),
+            ...(args.args === undefined ? {} : { args: args.args }),
             state: item.ok ? 'ok' : 'error',
-            ...(out.result !== undefined ? { result: out.result } : {}),
-            ...(out.errorText !== undefined ? { errorText: out.errorText } : {}),
+            ...(out.result === undefined ? {} : { result: out.result }),
+            ...(out.errorText === undefined ? {} : { errorText: out.errorText }),
             ...(artifacts.length > 0 ? { artifacts } : {}),
             ...(arch ? { fromArchive: true } : {}),
           },
@@ -943,10 +945,10 @@ function recordNode(
   if (node.kind === 'step') {
     // Prefer agent/ACP cost; else catalog estimate; else NULL (issue #514).
     const usage = {
-      ...(node.inputTokens !== undefined ? { inputTokens: node.inputTokens } : {}),
-      ...(node.outputTokens !== undefined ? { outputTokens: node.outputTokens } : {}),
-      ...(node.cacheReadTokens !== undefined ? { cacheReadTokens: node.cacheReadTokens } : {}),
-      ...(node.cacheWriteTokens !== undefined ? { cacheWriteTokens: node.cacheWriteTokens } : {}),
+      ...(node.inputTokens === undefined ? {} : { inputTokens: node.inputTokens }),
+      ...(node.outputTokens === undefined ? {} : { outputTokens: node.outputTokens }),
+      ...(node.cacheReadTokens === undefined ? {} : { cacheReadTokens: node.cacheReadTokens }),
+      ...(node.cacheWriteTokens === undefined ? {} : { cacheWriteTokens: node.cacheWriteTokens }),
     };
     const resolved =
       node.costSource === 'agent' && node.costUsd !== undefined
@@ -954,7 +956,7 @@ function recordNode(
         : node.costSource === 'estimated' && node.costUsd !== undefined
           ? { costUsd: node.costUsd, costSource: 'estimated' as const }
           : resolveItemCost({
-              ...(node.costUsd !== undefined ? { agentCostUsd: node.costUsd } : {}),
+              ...(node.costUsd === undefined ? {} : { agentCostUsd: node.costUsd }),
               model: node.model,
               usage,
             });
@@ -964,19 +966,24 @@ function recordNode(
       ordinal,
       kind: 'step',
       ...(node.notice
-        ? { name: `notice:${node.notice.level}:${node.notice.code ?? 'runner'}` }
+        ? {
+            name: `notice:${node.notice.level}:${node.notice.code ?? 'runner'}`,
+          }
         : {}),
-      outputJson: JSON.stringify({ text: node.text, ...(node.isError ? { error: true } : {}) }),
+      outputJson: JSON.stringify({
+        text: node.text,
+        ...(node.isError ? { error: true } : {}),
+      }),
       ok: !node.isError,
-      ...(node.model !== undefined ? { model: node.model } : {}),
-      ...(node.provider !== undefined ? { provider: node.provider } : {}),
-      ...(node.effort !== undefined ? { effort: node.effort } : {}),
-      ...(node.inputTokens !== undefined ? { inputTokens: node.inputTokens } : {}),
-      ...(node.outputTokens !== undefined ? { outputTokens: node.outputTokens } : {}),
-      ...(node.cacheReadTokens !== undefined ? { cacheReadTokens: node.cacheReadTokens } : {}),
-      ...(node.cacheWriteTokens !== undefined ? { cacheWriteTokens: node.cacheWriteTokens } : {}),
-      ...(resolved.costUsd !== undefined ? { costUsd: resolved.costUsd } : {}),
-      ...(resolved.costSource !== undefined ? { costSource: resolved.costSource } : {}),
+      ...(node.model === undefined ? {} : { model: node.model }),
+      ...(node.provider === undefined ? {} : { provider: node.provider }),
+      ...(node.effort === undefined ? {} : { effort: node.effort }),
+      ...(node.inputTokens === undefined ? {} : { inputTokens: node.inputTokens }),
+      ...(node.outputTokens === undefined ? {} : { outputTokens: node.outputTokens }),
+      ...(node.cacheReadTokens === undefined ? {} : { cacheReadTokens: node.cacheReadTokens }),
+      ...(node.cacheWriteTokens === undefined ? {} : { cacheWriteTokens: node.cacheWriteTokens }),
+      ...(resolved.costUsd === undefined ? {} : { costUsd: resolved.costUsd }),
+      ...(resolved.costSource === undefined ? {} : { costSource: resolved.costSource }),
       startedAt: node.startedAt,
       endedAt: node.endedAt,
       durationMs: Math.max(0, node.endedAt - node.startedAt),
@@ -989,16 +996,16 @@ function recordNode(
       kind: 'tool',
       name: node.toolName,
       argsJson: JSON.stringify({
-        ...(node.sql !== undefined ? { sql: node.sql } : {}),
-        ...(node.args !== undefined ? { args: node.args } : {}),
+        ...(node.sql === undefined ? {} : { sql: node.sql }),
+        ...(node.args === undefined ? {} : { args: node.args }),
       }),
       outputJson: JSON.stringify({
-        ...(node.result !== undefined ? { result: node.result } : {}),
-        ...(node.errorText !== undefined ? { errorText: node.errorText } : {}),
+        ...(node.result === undefined ? {} : { result: node.result }),
+        ...(node.errorText === undefined ? {} : { errorText: node.errorText }),
       }),
       ok: node.ok,
-      ...(node.errorText !== undefined ? { error: node.errorText } : {}),
-      ...(node.appId !== undefined ? { appId: node.appId } : {}),
+      ...(node.errorText === undefined ? {} : { error: node.errorText }),
+      ...(node.appId === undefined ? {} : { appId: node.appId }),
       startedAt: node.startedAt,
       endedAt: node.endedAt,
       durationMs: Math.max(0, node.endedAt - node.startedAt),
@@ -1016,7 +1023,7 @@ function toMeta(c: ConversationMeta): ConversationSummary {
     adapterSessionId: c.adapterSessionId ?? null,
     turnCount: c.turnCount,
     hydrationCount: c.hydrationCount,
-    ...(c.lastHydratedAt !== undefined ? { lastHydratedAt: c.lastHydratedAt } : {}),
+    ...(c.lastHydratedAt === undefined ? {} : { lastHydratedAt: c.lastHydratedAt }),
     pinned: c.pinned,
     archived: c.archived,
     createdAt: c.createdAt,
@@ -1026,7 +1033,7 @@ function toMeta(c: ConversationMeta): ConversationSummary {
 }
 
 export function deriveTitle(text: string): string {
-  const cleaned = text.replace(/\s+/g, ' ').trim();
+  const cleaned = text.replace(/\s+/gu, ' ').trim();
   if (cleaned.length === 0) return '';
   if (cleaned.length <= 60) return cleaned;
   return `${cleaned.slice(0, 57)}…`;

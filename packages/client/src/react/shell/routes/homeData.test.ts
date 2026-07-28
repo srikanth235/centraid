@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { attentionCount, buildHomeAppItems, buildHomeAutoItems } from './homeData.js';
+
 import type { AutomationFeedEntry } from './automationsData.js';
+import { attentionCount, buildHomeAppItems, buildHomeAutoItems } from './homeData.js';
 
 // `vi.mock` is hoisted above the imports by vitest, so the gateway stub is in
 // place before homeData.js pulls gateway-client-core's load-time side-effect.
@@ -9,7 +10,11 @@ vi.mock(import('../../../gateway-client.js'), () => ({}));
 describe('homeData', () => {
   beforeEach(() => {
     (globalThis as unknown as { CentraidTokens: unknown }).CentraidTokens = {
-      tileFinish: () => ({ background: '#111', boxShadow: 'none', glyphColor: '#fff' }),
+      tileFinish: () => ({
+        background: '#111',
+        boxShadow: 'none',
+        glyphColor: '#fff',
+      }),
     };
   });
 
@@ -61,13 +66,26 @@ describe('homeData', () => {
         isStarred: (id) => id === 'todos',
         tileVariant: 'gradient',
       });
-      expect(items[0]).toMatchObject({ id: 'todos', draft: false, starred: true });
-      expect(items[1]).toMatchObject({ id: 'wip', draft: true, stamp: 'saved', tone: 'draft' });
+      expect(items[0]).toMatchObject({
+        id: 'todos',
+        draft: false,
+        starred: true,
+      });
+      expect(items[1]).toMatchObject({
+        id: 'wip',
+        draft: true,
+        stamp: 'saved',
+        tone: 'draft',
+      });
     });
 
     it('builds automation items with status + trigger labels', () => {
       const items = buildHomeAutoItems([row()], [entry(true)], () => false);
-      expect(items[0]).toMatchObject({ ref: 'digest/main', name: 'Digest', triggerIcon: 'Clock' });
+      expect(items[0]).toMatchObject({
+        ref: 'digest/main',
+        name: 'Digest',
+        triggerIcon: 'Clock',
+      });
       expect(items[0]?.footOk).toBe(true);
     });
 

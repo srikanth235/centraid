@@ -17,11 +17,11 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+
 import { MUTATION_GLOBAL_WATCH, MUTATION_SEEDS } from './seeds.mjs';
 
+export { MUTATION_GLOBAL_WATCH, MUTATION_SEEDS } from './seeds.mjs';
 const root = path.resolve(import.meta.dirname, '../..');
-
-export { MUTATION_GLOBAL_WATCH, MUTATION_SEEDS };
 
 /**
  * Normalize a Stryker JSON report into a score percentage.

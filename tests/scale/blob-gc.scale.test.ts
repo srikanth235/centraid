@@ -1,5 +1,7 @@
 import { recordQualityResult } from '@centraid/test-kit/quality-result';
 import { tempDir } from '@centraid/test-kit/temp-dir';
+import { describe, expect, onTestFinished, test } from 'vitest';
+
 import { BlobCache } from '../../packages/vault/src/blob/cache.js';
 import {
   BlobCustody,
@@ -10,7 +12,6 @@ import {
 import { FsBlobStore, MemoryBlobStore } from '../../packages/vault/src/blob/local.js';
 import { blobUriFor, sha256OfBytes } from '../../packages/vault/src/blob/store.js';
 import { openVaultDb } from '../../packages/vault/src/db.js';
-import { describe, expect, onTestFinished, test } from 'vitest';
 
 const OWNER = 'tests/scale/blob-gc.scale.test.ts';
 const STATES: readonly CustodyState[] = [
@@ -114,7 +115,9 @@ describe('blob-gc.scale', () => {
     // even though the remote already holds a copy. Assert both the on-disk bytes
     // survived AND the outbox rows are intact after the eviction pass.
     const outboxRemaining = (
-      db.vault.prepare('SELECT count(*) AS n FROM blob_outbox').get() as { n: number }
+      db.vault.prepare('SELECT count(*) AS n FROM blob_outbox').get() as {
+        n: number;
+      }
     ).n;
     const DURATION_BUDGET_MS = 30_000;
     const passed =
@@ -130,9 +133,18 @@ describe('blob-gc.scale', () => {
       name: 'Mixed-custody CAS eviction at 5k objects',
       status: passed ? 'passed' : 'failed',
       measurements: [
-        { name: 'wall clock', value: durationMs, unit: 'ms', budget: DURATION_BUDGET_MS },
+        {
+          name: 'wall clock',
+          value: durationMs,
+          unit: 'ms',
+          budget: DURATION_BUDGET_MS,
+        },
         { name: 'objects scanned', value: count, unit: 'objects' },
-        { name: 'objects evicted', value: evicted.evictedBlobs, unit: 'objects' },
+        {
+          name: 'objects evicted',
+          value: evicted.evictedBlobs,
+          unit: 'objects',
+        },
       ],
     });
 

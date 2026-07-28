@@ -23,6 +23,7 @@
  */
 
 import { openRemoteBackupProvider, type UsageByStore } from '@centraid/backup';
+
 import type { StorageConnectionStore } from './storage-connections.js';
 
 /** Refresh a cached report once it's older than this. Real network traffic
@@ -103,7 +104,11 @@ export class StorageUsagePoller {
         error: err instanceof Error ? err.message : String(err),
       };
     }
-    this.cache.set(connectionId, { result, fetchedAtMs: this.now(), refreshing: false });
+    this.cache.set(connectionId, {
+      result,
+      fetchedAtMs: this.now(),
+      refreshing: false,
+    });
     return result;
   }
 
@@ -127,6 +132,9 @@ export class StorageUsagePoller {
       return { providerReported: null, fetchedAt: null };
     }
     const usage = await provider.usageReport(connection.targetId);
-    return { providerReported: usage, fetchedAt: new Date(this.now()).toISOString() };
+    return {
+      providerReported: usage,
+      fetchedAt: new Date(this.now()).toISOString(),
+    };
   }
 }

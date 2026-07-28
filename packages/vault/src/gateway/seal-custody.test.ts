@@ -1,18 +1,19 @@
-import { tempDirSync } from '@centraid/test-kit/temp-dir';
+import { renameSync, rmSync } from 'node:fs';
 // Key custody lifecycle (issue #298 items 1, 2, 8): the fingerprint stamped
 // at first seal makes a missing or regenerated key a loud open-time error,
 // never a silent re-mint discovered as GCM garbage at reveal; the reseal
 // verb rotates the DEK across the live and draft bands atomically; and the
 // sealed-value predicate is structural, so user input cannot satisfy it.
-
-import { renameSync, rmSync } from 'node:fs';
 import path from 'node:path';
+
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+
 import { bootstrapVault, type BootstrapResult } from '../bootstrap.js';
+import { registerLockerCommands } from '../commands/locker.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { createGateway, type Gateway } from '../gateway/gateway.js';
-import { registerLockerCommands } from '../commands/locker.js';
-import { resealVaultKey } from './reseal.js';
+import type { Credential } from '../gateway/types.js';
 import {
   SEALED_PREFIX,
   SealKeyError,
@@ -23,7 +24,7 @@ import {
   sealKeyFingerprint,
   writeSealKeyFile,
 } from '../schema/sealed.js';
-import type { Credential } from '../gateway/types.js';
+import { resealVaultKey } from './reseal.js';
 
 const PURPOSE = 'dpv:ServiceProvision';
 
@@ -42,7 +43,11 @@ describe('seal-custody', () => {
     boot = bootstrapVault(db, { ownerName: 'Priya' });
     gw = createGateway(db);
     registerLockerCommands(gw);
-    owner = { kind: 'device', deviceId: boot.deviceId, deviceKey: boot.deviceKey };
+    owner = {
+      kind: 'device',
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+    };
   });
 
   afterEach(() => {
@@ -188,10 +193,17 @@ describe('seal-custody', () => {
     const { receiptId } = resealVaultKey(db);
     const row = db.journal
       .prepare('SELECT action, decision, detail_json FROM consent_receipt WHERE receipt_id = ?')
-      .get(receiptId) as { action: string; decision: string; detail_json: string };
+      .get(receiptId) as {
+      action: string;
+      decision: string;
+      detail_json: string;
+    };
     expect(row.action).toBe('key.rotate');
     expect(row.decision).toBe('allow');
-    const detail = JSON.parse(row.detail_json) as { resealedCells: number; newFingerprint: string };
+    const detail = JSON.parse(row.detail_json) as {
+      resealedCells: number;
+      newFingerprint: string;
+    };
     expect(detail.resealedCells).toBeGreaterThan(0);
     expect(detail.newFingerprint).toBe(readSealKeyFingerprint(db.vault));
   });
@@ -202,9 +214,14 @@ describe('seal-custody', () => {
       settings_json: string;
     };
     const settings = JSON.parse(row.settings_json) as Record<string, unknown>;
-    settings['blob_store'] = { kind: 's3', endpoint: 'https://s3', bucket: 'b', encrypt: true };
+    settings['blob_store'] = {
+      kind: 's3',
+      endpoint: 'https://s3',
+      bucket: 'b',
+      encrypt: true,
+    };
     db.vault.prepare('UPDATE core_vault SET settings_json = ?').run(JSON.stringify(settings));
-    expect(() => resealVaultKey(db)).toThrow(/blob_store\.encrypt/);
+    expect(() => resealVaultKey(db)).toThrow(/blob_store\.encrypt/u);
   });
 
   test('an interrupted rotation (sidecar present, rename missed) heals at next open', () => {
@@ -298,7 +315,7 @@ describe('seal-custody', () => {
     });
     expect(out.status).toBe('executed');
     const code = (out as { output: { code: string } }).output.code;
-    expect(code).toMatch(/^\d{6}$/); // the live caller gets the real 6 digits
+    expect(code).toMatch(/^\d{6}$/u); // the live caller gets the real 6 digits
 
     // …but the journal receipt (a durable, replayable store) must not hold it.
     const receipt = db.journal
@@ -306,7 +323,9 @@ describe('seal-custody', () => {
       .get() as { detail_json: string };
     expect(receipt.detail_json).not.toContain(code);
     expect(JSON.parse(receipt.detail_json)).toMatchObject({
-      output: { redacted: 'transcript-sensitive derivative (issue #298 item 6)' },
+      output: {
+        redacted: 'transcript-sensitive derivative (issue #298 item 6)',
+      },
     });
     const replay = gw.invoke(owner, {
       command: 'locker.totp_code',
@@ -316,7 +335,9 @@ describe('seal-custody', () => {
     });
     expect(replay).toMatchObject({
       status: 'replayed',
-      output: { redacted: 'transcript-sensitive derivative (issue #298 item 6)' },
+      output: {
+        redacted: 'transcript-sensitive derivative (issue #298 item 6)',
+      },
     });
   });
 
@@ -329,13 +350,18 @@ describe('seal-custody', () => {
       purpose: PURPOSE,
       invocationId,
     });
-    expect(first).toMatchObject({ status: 'executed', output: { item_id: itemId } });
+    expect(first).toMatchObject({
+      status: 'executed',
+      output: { item_id: itemId },
+    });
     const receipt = db.journal
       .prepare(
         "SELECT detail_json FROM consent_receipt WHERE action = 'act locker.star_item' ORDER BY receipt_id DESC LIMIT 1",
       )
       .get() as { detail_json: string } | undefined;
-    expect(JSON.parse(receipt?.detail_json ?? '{}')).toMatchObject({ output: { item_id: itemId } });
+    expect(JSON.parse(receipt?.detail_json ?? '{}')).toMatchObject({
+      output: { item_id: itemId },
+    });
     expect(receipt?.detail_json).not.toContain('transcript-sensitive');
     const replay = gw.invoke(owner, {
       command: 'locker.star_item',
@@ -343,7 +369,10 @@ describe('seal-custody', () => {
       purpose: PURPOSE,
       invocationId,
     });
-    expect(replay).toMatchObject({ status: 'replayed', output: { item_id: itemId } });
+    expect(replay).toMatchObject({
+      status: 'replayed',
+      output: { item_id: itemId },
+    });
   });
 
   // ── stable connector aliases (issue #298 item 4) ────────────────────────
@@ -362,7 +391,11 @@ describe('seal-custody', () => {
   test('delete+recreate heals an alias binding — the rotation gesture', () => {
     const oldId = addLogin('old-token', 'github-token');
     // Trash the old login (soft delete) — the alias frees for its successor.
-    gw.invoke(owner, { command: 'locker.trash_item', input: { item_id: oldId }, purpose: PURPOSE });
+    gw.invoke(owner, {
+      command: 'locker.trash_item',
+      input: { item_id: oldId },
+      purpose: PURPOSE,
+    });
     // A reveal by alias now fails: no live item holds it.
     expect(() =>
       gw.reveal(owner, {
@@ -371,7 +404,7 @@ describe('seal-custody', () => {
         columns: ['password'],
         purpose: PURPOSE,
       }),
-    ).toThrow(/no live locker item/);
+    ).toThrow(/no live locker item/u);
     // Add the replacement with the SAME alias — the binding heals, no manifest edit.
     addLogin('new-token', 'github-token');
     const healed = gw.reveal(owner, {
@@ -403,7 +436,7 @@ describe('seal-custody', () => {
         columns: ['password'],
         purpose: PURPOSE,
       }),
-    ).toThrow(/no live locker item/);
+    ).toThrow(/no live locker item/u);
   });
 
   test('writeSealKeyFile + loadSealKey roundtrip', () => {

@@ -124,7 +124,10 @@ describe('store-core', () => {
     test('bootstraps a shape and executes a bounded local read', () => {
       const store = makeStore();
       try {
-        expect(store.bootstrap(snapshot())).toStrictEqual({ epoch: 'replica-1', seq: 2 });
+        expect(store.bootstrap(snapshot())).toStrictEqual({
+          epoch: 'replica-1',
+          seq: 2,
+        });
         const result = store.read({
           shapeId: 'shape-agenda',
           entity: 'core.event',
@@ -165,11 +168,19 @@ describe('store-core', () => {
                 starts_at: '2026-07-15T12:00:00.000Z',
               },
             },
-            { op: 'delete', shapeId: 'shape-agenda', entity: 'missing.entity', rowId: 'missing' },
+            {
+              op: 'delete',
+              shapeId: 'shape-agenda',
+              entity: 'missing.entity',
+              rowId: 'missing',
+            },
           ],
         };
         expect(() => store.applyChanges(batch)).toThrow(ReplicaProtocolError);
-        expect(store.status().cursor).toStrictEqual({ epoch: 'replica-1', seq: 2 });
+        expect(store.status().cursor).toStrictEqual({
+          epoch: 'replica-1',
+          seq: 2,
+        });
         expect(store.read({ shapeId: 'shape-agenda', entity: 'core.event' }).rows).toHaveLength(2);
       } finally {
         store.close();
@@ -186,7 +197,12 @@ describe('store-core', () => {
           from: { epoch: 'replica-1', seq: 2 },
           to: { epoch: 'replica-1', seq: 3 },
           changes: [
-            { op: 'delete', shapeId: 'shape-agenda', entity: 'core.event', rowId: 'event-1' },
+            {
+              op: 'delete',
+              shapeId: 'shape-agenda',
+              entity: 'core.event',
+              rowId: 'event-1',
+            },
             {
               op: 'upsert',
               shapeId: 'shape-agenda',
@@ -277,12 +293,18 @@ describe('store-core', () => {
           ],
         });
         expect(
-          store.search({ shapeId: 'shape-photos', entity: 'core.content_item', query: 'moon' })
-            .rows,
+          store.search({
+            shapeId: 'shape-photos',
+            entity: 'core.content_item',
+            query: 'moon',
+          }).rows,
         ).toHaveLength(0);
         expect(
-          store.search({ shapeId: 'shape-photos', entity: 'core.content_item', query: 'sunny' })
-            .rows,
+          store.search({
+            shapeId: 'shape-photos',
+            entity: 'core.content_item',
+            query: 'sunny',
+          }).rows,
         ).toHaveLength(1);
       } finally {
         store.close();
@@ -302,7 +324,10 @@ describe('store-core', () => {
             changes: [],
           }),
         ).toThrow(ReplicaRebootstrapRequiredError);
-        expect(store.status()).toStrictEqual({ cursor: null, schemaEpoch: null });
+        expect(store.status()).toStrictEqual({
+          cursor: null,
+          schemaEpoch: null,
+        });
       } finally {
         store.close();
       }
@@ -311,9 +336,15 @@ describe('store-core', () => {
     test('destructively rebuilds an incompatible v0 replica schema', () => {
       const store = makeStore();
       try {
-        expect(store.status()).toStrictEqual({ cursor: null, schemaEpoch: null });
+        expect(store.status()).toStrictEqual({
+          cursor: null,
+          schemaEpoch: null,
+        });
         expect(store.catalog()).toStrictEqual([]);
-        expect(store.bootstrap(snapshot())).toStrictEqual({ epoch: 'replica-1', seq: 2 });
+        expect(store.bootstrap(snapshot())).toStrictEqual({
+          epoch: 'replica-1',
+          seq: 2,
+        });
       } finally {
         store.close();
       }
@@ -333,7 +364,10 @@ describe('store-core', () => {
         // One row per page, as the windowed protocol would deliver them.
         store.bootstrapPage([full.rows[0]!]);
         store.bootstrapPage([full.rows[1]!]);
-        expect(store.bootstrapCommit(full.cursor)).toStrictEqual({ epoch: 'replica-1', seq: 2 });
+        expect(store.bootstrapCommit(full.cursor)).toStrictEqual({
+          epoch: 'replica-1',
+          seq: 2,
+        });
         expect(store.status()).toStrictEqual({
           cursor: { epoch: 'replica-1', seq: 2 },
           schemaEpoch: 'schema-1',
@@ -364,7 +398,10 @@ describe('store-core', () => {
         // Simulates a crash before the final page: rows exist, but no cursor does,
         // so the replica is indistinguishable from one that never bootstrapped and
         // reads fail closed rather than returning a partial library.
-        expect(store.status()).toStrictEqual({ cursor: null, schemaEpoch: null });
+        expect(store.status()).toStrictEqual({
+          cursor: null,
+          schemaEpoch: null,
+        });
         expect(() => store.read({ shapeId: 'shape-agenda', entity: 'core.event' })).toThrow(
           ReplicaRebootstrapRequiredError,
         );

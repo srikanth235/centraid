@@ -11,12 +11,14 @@
  * installs runs `/bin/sleep`, not the actual gateway binary.
  */
 
-import { tempDirSync } from '@centraid/test-kit/temp-dir';
-import { describe, expect, test, vi } from 'vitest';
-import { promises as fs } from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
+import { describe, expect, test, vi } from 'vitest';
+
 import { buildLaunchdPlist, launchAgentPlistPath, type ServiceUnitSpec } from './service-unit.ts';
 
 vi.setConfig({ testTimeout: 30_000 });
@@ -63,10 +65,12 @@ describe('service-install', () => {
     try {
       await fs.mkdir(path.dirname(plistPath), { recursive: true });
       await fs.writeFile(plistPath, plist, 'utf8');
-      execFileSync('launchctl', ['bootstrap', guiTarget(), plistPath], { stdio: 'pipe' });
+      execFileSync('launchctl', ['bootstrap', guiTarget(), plistPath], {
+        stdio: 'pipe',
+      });
 
-      let printed = '';
-      for (let i = 0; i < 40; i++) {
+      const waitForRunning = async (attempt: number): Promise<string> => {
+        let printed = '';
         try {
           printed = execFileSync('launchctl', ['print', `${guiTarget()}/${TEST_LABEL}`], {
             encoding: 'utf8',
@@ -74,13 +78,17 @@ describe('service-install', () => {
         } catch {
           printed = '';
         }
-        if (/state = running/.test(printed)) break;
+        if (/state = running/u.test(printed) || attempt >= 39) return printed;
         await new Promise((resolve) => setTimeout(resolve, 250));
-      }
-      expect(printed).toMatch(/state = running/);
+        return waitForRunning(attempt + 1);
+      };
+      const printed = await waitForRunning(0);
+      expect(printed).toMatch(/state = running/u);
     } finally {
       try {
-        execFileSync('launchctl', ['bootout', `${guiTarget()}/${TEST_LABEL}`], { stdio: 'pipe' });
+        execFileSync('launchctl', ['bootout', `${guiTarget()}/${TEST_LABEL}`], {
+          stdio: 'pipe',
+        });
       } catch {
         // already unloaded — fine, uninstall is idempotent
       }

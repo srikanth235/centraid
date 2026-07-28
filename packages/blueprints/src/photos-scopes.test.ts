@@ -8,6 +8,7 @@
 // paint), so each case installs its own window stub before importing.
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+
 import { afterEach, describe, expect, it } from 'vitest';
 
 interface Scope {
@@ -45,61 +46,64 @@ function mount(scopes: Scope[] | undefined, { readAll = true }: { readAll?: bool
     },
   };
 }
-
-afterEach(() => {
-  delete (globalThis as { window?: unknown }).window;
-});
-
-describe('Photos scopes (#599)', () => {
-  it('treats a host with no scopes as one unnamed, writable scope', () => {
-    mount(undefined, { readAll: false });
-    const scopes = scopesModule.mountedScopes();
-    expect(scopes).toHaveLength(1);
-    expect(scopesModule.ownScopeId(scopes)).toBe('');
-    // An empty id is never stamped, so a solo member's markup is unchanged.
-    expect(scopesModule.scopeAttr(scopesModule.ownScopeId(scopes))).toBeUndefined();
+describe('photos-scopes suite', () => {
+  afterEach(() => {
+    delete (globalThis as { window?: unknown }).window;
   });
 
-  it('disables the write target on a read-only audience, naming it', () => {
-    mount([own, family, club]);
-    const target = scopesModule.photoWriteTarget('new', 'club');
-    expect(target.disabled).toBe(true);
-    expect((target as { reason: string }).reason).toBe('You can view Book Club but not add to it.');
-    // Same answer through the per-scope question the tile controls ask.
-    expect(scopesModule.canWriteScope('club')).toBe(false);
-    expect(scopesModule.canWriteScope('family')).toBe(true);
-  });
-
-  it('sends new things to the audience the member is looking at', () => {
-    mount([own, family, club]);
-    expect(scopesModule.photoWriteTarget('new', 'family')).toEqual({
-      disabled: false,
-      scopeId: 'family',
-      label: 'Family',
+  describe('Photos scopes (#599)', () => {
+    it('treats a host with no scopes as one unnamed, writable scope', () => {
+      mount(undefined, { readAll: false });
+      const scopes = scopesModule.mountedScopes();
+      expect(scopes).toHaveLength(1);
+      expect(scopesModule.ownScopeId(scopes)).toBe('');
+      // An empty id is never stamped, so a solo member's markup is unchanged.
+      expect(scopesModule.scopeAttr(scopesModule.ownScopeId(scopes))).toBeUndefined();
     });
-    // "All" is a reading lens, never a writing one.
-    expect(scopesModule.photoWriteTarget('new', null)).toEqual({
-      disabled: false,
-      scopeId: 'own',
-      label: 'Library',
-    });
-  });
 
-  it('keeps own-scope surfaces on the own scope whatever the chip says', () => {
-    mount([own, family, club]);
-    // Albums, tags and places resolve as `own`, so selecting a read-only
-    // audience never disables making an album in the member's own space.
-    for (const selected of [null, 'family', 'club']) {
-      expect(scopesModule.photoWriteTarget('own', selected)).toEqual({
+    it('disables the write target on a read-only audience, naming it', () => {
+      mount([own, family, club]);
+      const target = scopesModule.photoWriteTarget('new', 'club');
+      expect(target.disabled).toBe(true);
+      expect((target as { reason: string }).reason).toBe(
+        'You can view Book Club but not add to it.',
+      );
+      // Same answer through the per-scope question the tile controls ask.
+      expect(scopesModule.canWriteScope('club')).toBe(false);
+      expect(scopesModule.canWriteScope('family')).toBe(true);
+    });
+
+    it('sends new things to the audience the member is looking at', () => {
+      mount([own, family, club]);
+      expect(scopesModule.photoWriteTarget('new', 'family')).toStrictEqual({
+        disabled: false,
+        scopeId: 'family',
+        label: 'Family',
+      });
+      // "All" is a reading lens, never a writing one.
+      expect(scopesModule.photoWriteTarget('new', null)).toStrictEqual({
         disabled: false,
         scopeId: 'own',
         label: 'Library',
       });
-    }
-  });
+    });
 
-  it('lets the shell answer for a scope it does not know', () => {
-    mount([own, family]);
-    expect(scopesModule.canWriteScope('gone')).toBe(true);
+    it('keeps own-scope surfaces on the own scope whatever the chip says', () => {
+      mount([own, family, club]);
+      // Albums, tags and places resolve as `own`, so selecting a read-only
+      // audience never disables making an album in the member's own space.
+      for (const selected of [null, 'family', 'club']) {
+        expect(scopesModule.photoWriteTarget('own', selected)).toStrictEqual({
+          disabled: false,
+          scopeId: 'own',
+          label: 'Library',
+        });
+      }
+    });
+
+    it('lets the shell answer for a scope it does not know', () => {
+      mount([own, family]);
+      expect(scopesModule.canWriteScope('gone')).toBe(true);
+    });
   });
 });

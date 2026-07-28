@@ -5,9 +5,10 @@
  */
 
 import type { RunnerKind } from '@centraid/app-engine';
+
 import { probeAcpCapabilities } from '../src/backends/acp/probe-capabilities.js';
-import { acpConfigFor, getRunnerBackend, RUNNER_BACKENDS } from '../src/registry.js';
 import { probeCliAvailability } from '../src/preflight.js';
+import { acpConfigFor, getRunnerBackend, RUNNER_BACKENDS } from '../src/registry.js';
 
 const runnerKinds = Object.keys(RUNNER_BACKENDS) as RunnerKind[];
 
@@ -56,10 +57,14 @@ async function probeOne(kind: RunnerKind): Promise<Row> {
 const rows: Row[] = [];
 let next = 0;
 await Promise.all(
-  Array.from({ length: Math.min(MAX_CONCURRENT_PROBES, runnerKinds.length) }, async () => {
-    for (let index = next++; index < runnerKinds.length; index = next++) {
+  Array.from({ length: Math.min(MAX_CONCURRENT_PROBES, runnerKinds.length) }, () => {
+    const probeNext = async (): Promise<void> => {
+      const index = next++;
+      if (index >= runnerKinds.length) return;
       rows[index] = await probeOne(runnerKinds[index]!);
-    }
+      return probeNext();
+    };
+    return probeNext();
   }),
 );
 

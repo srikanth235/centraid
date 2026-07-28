@@ -68,7 +68,11 @@ export function buildRunSnapshot(
         ? 'Today'
         : ds === new Date(nowMs - 86_400_000).toDateString()
           ? 'Yesterday'
-          : d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+          : d.toLocaleDateString(undefined, {
+              weekday: 'short',
+              day: 'numeric',
+              month: 'short',
+            });
     return `${day}, ${d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', second: '2-digit' })}`;
   })();
 

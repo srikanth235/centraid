@@ -4,6 +4,7 @@
 // the owner said (issue #541 review).
 
 import { describe, expect, test } from 'vitest';
+
 import { scopeCovers } from './scope-extent.js';
 
 describe('scope-extent', () => {
@@ -42,7 +43,12 @@ describe('scope-extent', () => {
     expect(scopeCovers(unfiltered, filtered)).toBe(true);
     expect(scopeCovers({ ...unfiltered, rowFilter: null }, filtered)).toBe(true);
     expect(scopeCovers(filtered, unfiltered)).toBe(false);
-    expect(scopeCovers(filtered, { ...unfiltered, rowFilter: structuredClone(filter) })).toBe(true);
+    expect(
+      scopeCovers(filtered, {
+        ...unfiltered,
+        rowFilter: structuredClone(filter),
+      }),
+    ).toBe(true);
     expect(
       scopeCovers(filtered, {
         ...unfiltered,

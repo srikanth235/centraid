@@ -31,7 +31,12 @@ export async function replaySettledUploadFollowups(
 ): Promise<FollowupReplaySummary> {
   let replayed = 0;
   let poisoned = 0;
-  for (const followup of queue.pendingFollowups()) {
+  const followups = queue.pendingFollowups();
+  // Process the persisted follow-up queue in order: each canonical write may
+  // alter the replica state observed by the next durable mutation.
+  const replayNext = async (index: number): Promise<void> => {
+    const followup = followups[index];
+    if (!followup) return;
     try {
       // F14d: the parent sha addresses the derivatives and the canonical write.
       // A malformed value would POST `variant_of=undefined` and write garbage,
@@ -59,7 +64,9 @@ export async function replaySettledUploadFollowups(
         poisoned += 1;
       }
     }
-  }
+    return replayNext(index + 1);
+  };
+  await replayNext(0);
   return { replayed, poisoned };
 }
 

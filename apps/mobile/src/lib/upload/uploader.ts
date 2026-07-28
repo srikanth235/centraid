@@ -15,9 +15,9 @@
 //    finds `alreadyPresent`, and settles from there.
 
 import { assertGatewayMintedUploadUrl } from '../bridge/transfer-policy';
+import { base64ToBytes } from './bytes';
 import { sealDirectory, sealPart } from './cbsf';
 import type { UploadCrypto } from './crypto';
-import { base64ToBytes } from './bytes';
 import type { FileSourceOpener } from './file-source';
 import {
   DirectTransferError,
@@ -83,14 +83,25 @@ export class UploadDrainer {
    * are the only state that matters.
    */
   async drainOnce(): Promise<DrainSummary> {
-    const summary: DrainSummary = { settled: 0, failed: 0, deduped: 0, halted: false };
+    const summary: DrainSummary = {
+      settled: 0,
+      failed: 0,
+      deduped: 0,
+      halted: false,
+    };
     const items = this.deps.store.pending();
-    for (const [index, item] of items.entries()) {
+    const drainNext = async (index: number): Promise<DrainSummary> => {
+      const item = items[index];
+      if (item === undefined) return summary;
       if (!(await this.allowed())) {
         summary.halted = true;
         return summary;
       }
-      this.deps.onProgress?.({ completed: index, total: items.length, sha256: item.sha256 });
+      this.deps.onProgress?.({
+        completed: index,
+        total: items.length,
+        sha256: item.sha256,
+      });
       try {
         const outcome = await this.driveItem(item);
         if (outcome === 'deduped') summary.deduped += 1;
@@ -103,8 +114,9 @@ export class UploadDrainer {
         this.deps.store.fail(item.itemId, messageOf(error), terminal);
         if (terminal) summary.failed += 1;
       }
-    }
-    return summary;
+      return drainNext(index + 1);
+    };
+    return drainNext(0);
   }
 
   private async allowed(): Promise<boolean> {
@@ -268,7 +280,7 @@ async function pool<T>(
   let cursor = 0;
   const errors: unknown[] = [];
   const runners = Array.from({ length: Math.min(Math.max(limit, 1), items.length) }, async () => {
-    for (;;) {
+    const runNext = async (): Promise<void> => {
       const index = cursor++;
       if (index >= items.length || errors.length > 0) return;
       try {
@@ -277,7 +289,9 @@ async function pool<T>(
         errors.push(error);
         return;
       }
-    }
+      return runNext();
+    };
+    return runNext();
   });
   await Promise.all(runners);
   if (errors.length > 0) throw errors[0];

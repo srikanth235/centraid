@@ -43,6 +43,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+
 import type { RuntimeLogger } from '@centraid/app-engine';
 import { isDiskFullError, sharedDiskFullTracker, type DiskFullTracker } from '@centraid/vault';
 
@@ -127,7 +128,12 @@ export class GatewayLogStore {
    *  persist it (best-effort, if a dir was configured), and fan it out
    *  to every live subscriber. */
   append(level: GatewayLogLevel, message: string): GatewayLogEntry {
-    const entry: GatewayLogEntry = { seq: this.nextSeq++, ts: Date.now(), level, message };
+    const entry: GatewayLogEntry = {
+      seq: this.nextSeq++,
+      ts: Date.now(),
+      level,
+      message,
+    };
     this.entries.push(entry);
     if (this.entries.length > this.capacity) {
       this.entries.splice(0, this.entries.length - this.capacity);
@@ -305,7 +311,12 @@ function parseLogLine(line: string): GatewayLogEntry | undefined {
       typeof parsed.message === 'string' &&
       (parsed.level === 'info' || parsed.level === 'warn' || parsed.level === 'error')
     ) {
-      return { seq: parsed.seq, ts: parsed.ts, level: parsed.level, message: parsed.message };
+      return {
+        seq: parsed.seq,
+        ts: parsed.ts,
+        level: parsed.level,
+        message: parsed.message,
+      };
     }
     return undefined;
   } catch {

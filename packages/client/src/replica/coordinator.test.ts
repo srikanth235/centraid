@@ -1,21 +1,26 @@
+import { flushMacrotasks } from '@centraid/test-kit/flush';
 // governance: allow-repo-hygiene file-size-limit cohesive coordinator regression suite; splitting would obscure issue #417 review
 import { describe, expect, test, vi } from 'vitest';
 
-import { flushMacrotasks } from '@centraid/test-kit/flush';
 import type { VaultChangeMessage } from '../vault-change-feed.js';
-import { ReplicaCoordinator, type ReplicaChangeFeedAdapter } from './coordinator.js';
 import { createReplicaCoordinator } from './coordinator-web.js';
+import {
+  ReplicaCoordinator,
+  type ReplicaChangeFeedAdapter,
+  type ReplicaChangePuller,
+  type ReplicaCoordinatorOptions,
+} from './coordinator.js';
 import { ReplicaRebootstrapRequiredError } from './errors.js';
 import { MemoryIntentStore } from './intent-store.js';
 import { IntentQueue } from './intents.js';
-import type { ReplicaWorkerRequest, ReplicaWorkerResponse } from './worker-protocol.js';
-import { ReplicaWorkerClient, type ReplicaWorkerLike } from './worker-client.js';
 import type { ReplicaChangeBatch, ReplicaCursor, ReplicaSnapshot } from './types.js';
+import { ReplicaWorkerClient, type ReplicaWorkerLike } from './worker-client.js';
+import type { ReplicaWorkerRequest, ReplicaWorkerResponse } from './worker-protocol.js';
 
 interface TestFeed extends ReplicaChangeFeedAdapter {
   readonly listener: ((message: VaultChangeMessage) => void) | undefined;
   readonly resumed: ReplicaCursor | undefined;
-  emit(message: VaultChangeMessage): void;
+  emit: (message: VaultChangeMessage) => void;
 }
 
 function createFeed(): TestFeed {
@@ -56,7 +61,11 @@ class StateWorker implements ReplicaWorkerLike {
     this.requests.push(request);
     let result: unknown;
     if (request.op === 'open' || request.op === 'status') {
-      result = { mode: 'memory', cursor: this.cursor, schemaEpoch: this.cursor ? 'schema' : null };
+      result = {
+        mode: 'memory',
+        cursor: this.cursor,
+        schemaEpoch: this.cursor ? 'schema' : null,
+      };
     } else if (request.op === 'catalog') {
       result = [];
     } else if (request.op === 'bootstrap') {
@@ -87,9 +96,15 @@ class StateWorker implements ReplicaWorkerLike {
         rows: [],
       };
     }
-    const response: ReplicaWorkerResponse = { id: request.id, ok: true, result };
+    const response: ReplicaWorkerResponse = {
+      id: request.id,
+      ok: true,
+      result,
+    };
     queueMicrotask(() => {
-      const event = new MessageEvent<ReplicaWorkerResponse>('message', { data: response });
+      const event = new MessageEvent<ReplicaWorkerResponse>('message', {
+        data: response,
+      });
       for (const listener of this.#messages) listener(event);
     });
   }
@@ -138,18 +153,26 @@ describe(ReplicaCoordinator, () => {
   test('uses an in-memory outbox when requested persistence falls back to memory', async () => {
     const worker = new StateWorker();
     const indexedDbFactory = {
-      open: vi.fn(() => {
+      open: vi.fn<IDBFactory['open']>(() => {
         throw new Error('memory fallback must not open IndexedDB');
       }),
     } as unknown as IDBFactory;
     const { replica, status } = await createReplicaCoordinator(
       { gatewayId: 'gateway', vaultId: 'vault' },
       true,
-      { workerFactory: () => worker, indexedDbFactory, idFactory: () => 'memory-intent' },
+      {
+        workerFactory: () => worker,
+        indexedDbFactory,
+        idFactory: () => 'memory-intent',
+      },
     );
 
     expect(status.mode).toBe('memory');
-    await replica.enqueue({ appId: 'agenda', action: 'create', input: { title: 'Local' } });
+    await replica.enqueue({
+      appId: 'agenda',
+      action: 'create',
+      input: { title: 'Local' },
+    });
     expect(indexedDbFactory.open).not.toHaveBeenCalled();
     await replica.purge();
   });
@@ -157,12 +180,18 @@ describe(ReplicaCoordinator, () => {
   test('applies the pending intent overlay to local searches', async () => {
     const worker = new StateWorker();
     const { client } = await ReplicaWorkerClient.connect(
-      { dbName: '/centraid-replica-search.sqlite3', vaultId: 'vault', remember: false },
+      {
+        dbName: '/centraid-replica-search.sqlite3',
+        vaultId: 'vault',
+        remember: false,
+      },
       () => worker,
     );
     const replica = new ReplicaCoordinator(
       client,
-      new IntentQueue(new MemoryIntentStore(), { idFactory: () => 'search-intent' }),
+      new IntentQueue(new MemoryIntentStore(), {
+        idFactory: () => 'search-intent',
+      }),
     );
     await replica.bootstrap(snapshot);
     await replica.enqueue({
@@ -245,7 +274,11 @@ describe(ReplicaCoordinator, () => {
     const batchApplied = new Promise<void>((resolve) => (applied = resolve));
     worker.onApply = applied;
     const { client } = await ReplicaWorkerClient.connect(
-      { dbName: '/centraid-replica-deadbeef.sqlite3', vaultId: 'vault', remember: false },
+      {
+        dbName: '/centraid-replica-deadbeef.sqlite3',
+        vaultId: 'vault',
+        remember: false,
+      },
       () => worker,
     );
     const store = new MemoryIntentStore();
@@ -306,7 +339,10 @@ describe(ReplicaCoordinator, () => {
       },
     });
     await batchApplied;
-    expect((await client.status()).cursor).toStrictEqual({ epoch: 'epoch', seq: 1 });
+    expect((await client.status()).cursor).toStrictEqual({
+      epoch: 'epoch',
+      seq: 1,
+    });
     expect(pulledFrom).toStrictEqual([{ epoch: 'epoch', seq: 0 }]);
     await expect(intents.list()).resolves.toStrictEqual([]);
     await expect(intents.overlayMutations()).resolves.toStrictEqual([]);
@@ -331,7 +367,11 @@ describe(ReplicaCoordinator, () => {
     const batchApplied = new Promise<void>((resolve) => (applied = resolve));
     worker.onApply = applied;
     const { client } = await ReplicaWorkerClient.connect(
-      { dbName: '/centraid-replica-retry.sqlite3', vaultId: 'vault', remember: false },
+      {
+        dbName: '/centraid-replica-retry.sqlite3',
+        vaultId: 'vault',
+        remember: false,
+      },
       () => worker,
     );
     const feed = createFeed();
@@ -353,18 +393,28 @@ describe(ReplicaCoordinator, () => {
     });
     await replica.bootstrap(snapshot);
 
-    feed.emit({ type: 'centraid:vault-cursor', cursor: { epoch: 'epoch', seq: 1 } });
+    feed.emit({
+      type: 'centraid:vault-cursor',
+      cursor: { epoch: 'epoch', seq: 1 },
+    });
 
     await batchApplied;
     expect(attempts).toBe(2);
-    expect((await client.status()).cursor).toStrictEqual({ epoch: 'epoch', seq: 1 });
+    expect((await client.status()).cursor).toStrictEqual({
+      epoch: 'epoch',
+      seq: 1,
+    });
     await replica.close();
   });
 
   test('turns pull rebootstrap errors into one clean feed generation reset', async () => {
     const worker = new StateWorker();
     const { client } = await ReplicaWorkerClient.connect(
-      { dbName: '/centraid-replica-generation.sqlite3', vaultId: 'vault', remember: false },
+      {
+        dbName: '/centraid-replica-generation.sqlite3',
+        vaultId: 'vault',
+        remember: false,
+      },
       () => worker,
     );
     const feed = createFeed();
@@ -381,25 +431,40 @@ describe(ReplicaCoordinator, () => {
       onRebootstrapRequired: required,
     });
     await replica.bootstrap(snapshot);
-    feed.emit({ type: 'centraid:vault-cursor', cursor: { epoch: 'epoch', seq: 1 } });
+    feed.emit({
+      type: 'centraid:vault-cursor',
+      cursor: { epoch: 'epoch', seq: 1 },
+    });
     await rebootstrapRequired;
     expect((await client.status()).cursor).toBeNull();
 
-    await replica.bootstrap({ ...snapshot, cursor: { epoch: 'new-epoch', seq: 0 } });
+    await replica.bootstrap({
+      ...snapshot,
+      cursor: { epoch: 'new-epoch', seq: 0 },
+    });
     await vi.waitFor(() => {
       expect(pulls).toBe(1);
     });
-    expect((await client.status()).cursor).toStrictEqual({ epoch: 'new-epoch', seq: 0 });
+    expect((await client.status()).cursor).toStrictEqual({
+      epoch: 'new-epoch',
+      seq: 0,
+    });
     await replica.close();
   });
 
   test('reconciles durable bootstrap outcomes before exposing the snapshot cursor', async () => {
     const worker = new StateWorker();
     const { client } = await ReplicaWorkerClient.connect(
-      { dbName: '/centraid-replica-deadbeef.sqlite3', vaultId: 'vault', remember: false },
+      {
+        dbName: '/centraid-replica-deadbeef.sqlite3',
+        vaultId: 'vault',
+        remember: false,
+      },
       () => worker,
     );
-    const intents = new IntentQueue(new MemoryIntentStore(), { idFactory: () => 'persisted' });
+    const intents = new IntentQueue(new MemoryIntentStore(), {
+      idFactory: () => 'persisted',
+    });
     const replica = new ReplicaCoordinator(client, intents);
     await replica.enqueue({
       appId: 'agenda',
@@ -427,13 +492,19 @@ describe(ReplicaCoordinator, () => {
   test('settles dependency-only intents individually without optimistic rows', async () => {
     const worker = new StateWorker();
     const { client } = await ReplicaWorkerClient.connect(
-      { dbName: '/centraid-replica-settlement.sqlite3', vaultId: 'vault', remember: false },
+      {
+        dbName: '/centraid-replica-settlement.sqlite3',
+        vaultId: 'vault',
+        remember: false,
+      },
       () => worker,
     );
     const replica = new ReplicaCoordinator(client, new IntentQueue(new MemoryIntentStore()));
     const invalidations: unknown[] = [];
     replica.subscribeInvalidations((items) => invalidations.push(...items));
-    for (const intentId of ['first', 'second']) {
+    const enqueueNext = async (index: number): Promise<void> => {
+      const intentId = ['first', 'second'][index];
+      if (!intentId) return;
       await replica.enqueue({
         intentId,
         appId: 'agenda',
@@ -441,9 +512,14 @@ describe(ReplicaCoordinator, () => {
         input: { eventId: 'event-1' },
         dependencies: [{ shapeId: 'shape', entity: 'core.event' }],
       });
-    }
+      return enqueueNext(index + 1);
+    };
+    await enqueueNext(0);
     await replica.applyIntentOutcome({ intentId: 'first', status: 'denied' });
-    await replica.applyIntentOutcome({ intentId: 'second', status: 'executed' });
+    await replica.applyIntentOutcome({
+      intentId: 'second',
+      status: 'executed',
+    });
 
     expect(invalidations).toContainEqual({
       shapeId: 'shape',
@@ -465,7 +541,11 @@ describe(ReplicaCoordinator, () => {
   test('drops an in-flight stale feed batch after a bootstrap generation reset', async () => {
     const worker = new StateWorker();
     const { client } = await ReplicaWorkerClient.connect(
-      { dbName: '/centraid-replica-feed-race.sqlite3', vaultId: 'vault', remember: false },
+      {
+        dbName: '/centraid-replica-feed-race.sqlite3',
+        vaultId: 'vault',
+        remember: false,
+      },
       () => worker,
     );
     const feed = createFeed();
@@ -476,11 +556,17 @@ describe(ReplicaCoordinator, () => {
       pullChanges: () => pending,
     });
     await replica.bootstrap(snapshot);
-    feed.emit({ type: 'centraid:vault-cursor', cursor: { epoch: 'epoch', seq: 1 } });
+    feed.emit({
+      type: 'centraid:vault-cursor',
+      cursor: { epoch: 'epoch', seq: 1 },
+    });
     await vi.waitFor(() =>
       expect(worker.requests.some((request) => request.op === 'status')).toBe(true),
     );
-    await replica.bootstrap({ ...snapshot, cursor: { epoch: 'new-epoch', seq: 0 } });
+    await replica.bootstrap({
+      ...snapshot,
+      cursor: { epoch: 'new-epoch', seq: 0 },
+    });
     release({
       protocolVersion: 1,
       schemaEpoch: 'schema',
@@ -490,7 +576,10 @@ describe(ReplicaCoordinator, () => {
     });
     await flushMacrotasks();
 
-    expect((await client.status()).cursor).toStrictEqual({ epoch: 'new-epoch', seq: 0 });
+    expect((await client.status()).cursor).toStrictEqual({
+      epoch: 'new-epoch',
+      seq: 0,
+    });
     expect(worker.requests.filter((request) => request.op === 'apply-changes')).toHaveLength(0);
     await replica.close();
   });
@@ -498,13 +587,18 @@ describe(ReplicaCoordinator, () => {
   test('breaks a repeated non-progressing feed loop with one rebootstrap', async () => {
     const worker = new StateWorker();
     const { client } = await ReplicaWorkerClient.connect(
-      { dbName: '/centraid-replica-feed-stuck.sqlite3', vaultId: 'vault', remember: false },
+      {
+        dbName: '/centraid-replica-feed-stuck.sqlite3',
+        vaultId: 'vault',
+        remember: false,
+      },
       () => worker,
     );
     const feed = createFeed();
-    const onRebootstrapRequired = vi.fn();
-    const pullChanges = vi.fn(
-      async (cursor: ReplicaCursor): Promise<ReplicaChangeBatch> => ({
+    const onRebootstrapRequired =
+      vi.fn<NonNullable<ReplicaCoordinatorOptions['onRebootstrapRequired']>>();
+    const pullChanges = vi.fn<ReplicaChangePuller>(
+      async (cursor): Promise<ReplicaChangeBatch> => ({
         protocolVersion: 1,
         schemaEpoch: 'schema',
         from: cursor,
@@ -520,7 +614,10 @@ describe(ReplicaCoordinator, () => {
     });
     await replica.bootstrap(snapshot);
 
-    feed.emit({ type: 'centraid:vault-cursor', cursor: { epoch: 'epoch', seq: 1 } });
+    feed.emit({
+      type: 'centraid:vault-cursor',
+      cursor: { epoch: 'epoch', seq: 1 },
+    });
     await vi.waitFor(() => expect(onRebootstrapRequired).toHaveBeenCalledOnce());
 
     expect(pullChanges).toHaveBeenCalledTimes(3);

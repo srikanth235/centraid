@@ -1,5 +1,7 @@
 import { Fragment, useEffect, useReducer, useRef, useState, type JSX } from 'react';
+
 import type { PaletteBridgeProps, PaletteRowDTO } from '../screen-contracts.js';
+
 import styles from './PaletteScreen.module.css';
 
 function Row({
@@ -130,7 +132,7 @@ export default function PaletteScreen({
   // indexes `rows`, so a group's items need their flat offset. Precomputed
   // rather than counted with a mutable cursor inside the JSX map.
   const groupStarts = groups.reduce<number[]>(
-    (starts, g, i) => [...starts, (starts[i - 1] ?? 0) + (groups[i - 1]?.items.length ?? 0)],
+    (starts, _g, i) => [...starts, (starts[i - 1] ?? 0) + (groups[i - 1]?.items.length ?? 0)],
     [],
   );
 

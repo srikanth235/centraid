@@ -6,6 +6,8 @@
  * `streamAutomationTurn`.
  */
 
+import { consumeSseFrames, frameData } from '@centraid/blueprints/kit/turn-stream.js';
+
 import { auth, authHeaders, doFetch, readJson } from './gateway-client-core.js';
 
 export type GatewayLogLevelDTO = 'info' | 'warn' | 'error';
@@ -61,23 +63,11 @@ export async function streamGatewayLogs(
     if (!res.ok || !res.body) {
       throw new Error(`gateway log stream failed (HTTP ${res.status})`);
     }
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buf = '';
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buf += decoder.decode(value, { stream: true });
-      let sep: number;
-      while ((sep = buf.indexOf('\n\n')) >= 0) {
-        const frame = buf.slice(0, sep);
-        buf = buf.slice(sep + 2);
-        const data = frame
-          .split('\n')
-          .filter((l) => l.startsWith('data:'))
-          .map((l) => l.slice('data:'.length).trimStart())
-          .join('\n');
-        if (!data) continue;
+    await consumeSseFrames(
+      res.body,
+      (frame) => {
+        const data = frameData(frame);
+        if (!data) return;
         try {
           const entry = JSON.parse(data) as GatewayLogEntryDTO;
           if (entry && typeof entry.seq === 'number' && typeof entry.message === 'string') {
@@ -86,8 +76,9 @@ export async function streamGatewayLogs(
         } catch {
           /* skip a malformed frame rather than abort the stream */
         }
-      }
-    }
+      },
+      { signal },
+    );
   } catch (err) {
     // A caller-initiated abort is a normal teardown, not a failure.
     if (signal.aborted) return;

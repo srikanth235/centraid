@@ -3,6 +3,13 @@ import initWasm, {
   connect_failure_marker,
   type BrowserResponse,
 } from './generated/centraid_web_iroh.js';
+import {
+  irohStats,
+  markConnectStart,
+  measureConnect,
+  measureRequest,
+  nowMs,
+} from './iroh-metrics.js';
 import { SERVICE_WORKER_VERSION } from './sw-version.js';
 import { loadConnection, webGatewayId } from './web-state.js';
 
@@ -29,68 +36,6 @@ const CONNECT_TIMEOUT_MS = 15_000;
 const IDEMPOTENT_METHODS = new Set(['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE']);
 
 let endpointPromise: Promise<BrowserEndpoint> | undefined;
-
-// --- Perf instrumentation (issue #404 workstream I) --------------------------
-// Lightweight, guarded probes proving the QUIC connection pool is reused: many
-// request STREAMS ride a single endpoint CONNECT. Surfaced two ways so a test
-// or a console can observe pool reuse without touching internals:
-//   * globalThis.__centraidIrohStats — running counters {connects, streams,
-//     reconnects}. After N pooled requests, connects should be ≪ streams.
-//   * performance marks/measures — `centraid:iroh-connect` (endpoint spawn) and
-//     `centraid:iroh-request` (stream open → first response header/byte), so
-//     the User Timing timeline carries per-phase durations.
-// These never change transport behavior and never throw (every call is wrapped).
-interface IrohStats {
-  /** Endpoint spawns — a fresh QUIC endpoint. Memoized, so this stays ~1. */
-  connects: number;
-  /** node.request() calls — one bidirectional QUIC stream each (retries included). */
-  streams: number;
-  /** Retry rounds after a transient connect/stream failure. */
-  reconnects: number;
-}
-
-function irohStats(): IrohStats {
-  const holder = globalThis as unknown as { __centraidIrohStats?: IrohStats };
-  if (!holder.__centraidIrohStats) {
-    holder.__centraidIrohStats = { connects: 0, streams: 0, reconnects: 0 };
-  }
-  return holder.__centraidIrohStats;
-}
-
-function markConnectStart(): number {
-  try {
-    performance.mark('centraid:iroh-connect-start');
-  } catch {
-    /* User Timing may be unavailable; instrumentation is best-effort. */
-  }
-  return nowMs();
-}
-
-function measureConnect(startMs: number): void {
-  irohStats().connects += 1;
-  try {
-    performance.mark('centraid:iroh-connect-end');
-    performance.measure('centraid:iroh-connect', { start: startMs, end: nowMs() });
-  } catch {
-    /* best-effort */
-  }
-}
-
-function measureRequest(startMs: number): void {
-  try {
-    performance.measure('centraid:iroh-request', { start: startMs, end: nowMs() });
-  } catch {
-    /* best-effort */
-  }
-}
-
-function nowMs(): number {
-  try {
-    return performance.now();
-  } catch {
-    return Date.now();
-  }
-}
 
 function decodeBytes(raw: string): Uint8Array {
   return Uint8Array.from(atob(raw), (char) => char.charCodeAt(0));
@@ -222,7 +167,7 @@ async function requestWithRetry(
   body: Uint8Array,
 ): Promise<BrowserResponse> {
   const idempotent = IDEMPOTENT_METHODS.has(method);
-  for (let attempt = 0; ; attempt += 1) {
+  const attemptRequest = async (attempt: number): Promise<BrowserResponse> => {
     // Each node.request() opens one QUIC stream on the pooled endpoint; count
     // it (retries included) so a probe can prove streams ≫ connects.
     irohStats().streams += 1;
@@ -238,8 +183,10 @@ async function requestWithRetry(
       if (attempt >= MAX_RETRIES || !retryable) throw error;
       irohStats().reconnects += 1;
       await sleep(jitteredBackoff(RETRY_BACKOFF_MS[attempt] ?? 750));
+      return attemptRequest(attempt + 1);
     }
-  }
+  };
+  return attemptRequest(0);
 }
 
 function responseHeaders(raw: string): Headers {
@@ -471,12 +418,16 @@ export function installIrohServiceWorkerBridge(): void {
         headers: JSON.parse(response.headers_json) as Record<string, string | string[]>,
       });
       const reader = response.take_body().getReader();
-      for (;;) {
+      // A MessagePort is an ordered byte stream: do not read the next chunk
+      // until the current one has been posted to the service worker.
+      const pump = async (): Promise<void> => {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) return;
         const bytes = value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength);
         port.postMessage({ type: 'chunk', body: bytes }, [bytes]);
-      }
+        return pump();
+      };
+      await pump();
       port.postMessage({ type: 'end' });
     })().catch((error: unknown) => postError(port, error));
   });

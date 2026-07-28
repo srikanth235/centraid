@@ -1,6 +1,7 @@
 // Password-manager CSV parser unit tests (issue #545 B6).
 
 import { describe, expect, test } from 'vitest';
+
 import { isPasswordsCsvHeader, parsePasswordsCsv } from './passwords-csv.js';
 
 describe('passwords-csv', () => {
@@ -58,7 +59,7 @@ describe('passwords-csv', () => {
 
   test('parsePasswordsCsv throws when the header is not a password export', () => {
     expect(() => parsePasswordsCsv('date,amount\n2026-01-01,10\n')).toThrow(
-      /does not name a password column/,
+      /does not name a password column/u,
     );
   });
 });

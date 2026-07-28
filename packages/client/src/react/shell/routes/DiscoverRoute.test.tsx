@@ -1,19 +1,23 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import type { ShellActions } from '../actions.js';
 
 // Product change (issue #434): APP templates INSTALL in place (registration +
 // consent grants, no code copy) — "Use this template" is gone; the card verb is
 // Install (Open when already installed). Automation templates keep their
 // clone-into-builder flow untouched.
-const listTemplates = vi.fn();
-const gwCloneTemplate = vi.fn();
-const gwInstallTemplate = vi.fn();
+type DiscoverRouteProps = Parameters<typeof import('./DiscoverRoute.js').default>[0];
+type Template = Awaited<ReturnType<typeof listTemplates>>[number];
+
+const listTemplates = vi.fn<typeof import('../../../gateway-client.js').listTemplates>();
+const gwCloneTemplate = vi.fn<typeof import('../../../gateway-client.js').cloneTemplate>();
+const gwInstallTemplate = vi.fn<typeof import('../../../gateway-client.js').installTemplate>();
 vi.mock(import('../../../gateway-client.js'), () => ({
-  listTemplates: () => listTemplates(),
-  cloneTemplate: (a: unknown) => gwCloneTemplate(a),
-  installTemplate: (a: unknown) => gwInstallTemplate(a),
+  listTemplates,
+  cloneTemplate: gwCloneTemplate,
+  installTemplate: gwInstallTemplate,
 }));
 
 let DiscoverRoute: typeof import('./DiscoverRoute.js').default;
@@ -21,19 +25,19 @@ let ShellActionsProvider: typeof import('../actions.js').ShellActionsProvider;
 let root: Root | null = null;
 let host: HTMLElement | null = null;
 
-const showToast = vi.fn();
-const navigate = vi.fn();
-const setUserApps = vi.fn();
+const showToast = vi.fn<ShellActions['showToast']>();
+const navigate = vi.fn<ShellActions['navigate']>();
+const setUserApps = vi.fn<DiscoverRouteProps['setUserApps']>();
 
 function makeActions(): ShellActions {
   return {
     showToast,
     builderEnabled: false,
-    enterBuilder: vi.fn(),
-    openNewAppSheet: vi.fn(),
-    openCommandPalette: vi.fn(),
-    openContextMenu: vi.fn(),
-    confirm: vi.fn().mockResolvedValue(true),
+    enterBuilder: vi.fn<ShellActions['enterBuilder']>(),
+    openNewAppSheet: vi.fn<ShellActions['openNewAppSheet']>(),
+    openCommandPalette: vi.fn<ShellActions['openCommandPalette']>(),
+    openContextMenu: vi.fn<ShellActions['openContextMenu']>(),
+    confirm: vi.fn<ShellActions['confirm']>().mockResolvedValue(true),
     navigate,
   };
 }
@@ -51,7 +55,7 @@ const appTemplate = {
     why: 'Keeps your task list.',
     scopes: [{ schema: 'tasks', table: 'add_task', verbs: 'act' }],
   },
-};
+} satisfies Template;
 
 const autoTemplate = {
   id: 'digest',
@@ -62,8 +66,7 @@ const autoTemplate = {
   version: '1.0',
   kind: 'automation',
   triggerKind: 'cron',
-  triggerLabel: 'Daily',
-};
+} satisfies Template;
 
 describe('DiscoverRoute', () => {
   beforeEach(async () => {
@@ -77,7 +80,7 @@ describe('DiscoverRoute', () => {
     setUserApps.mockClear();
   });
 
-  const refreshApps = vi.fn().mockResolvedValue(undefined);
+  const refreshApps = vi.fn<DiscoverRouteProps['refreshApps']>().mockResolvedValue(undefined);
 
   async function render(userApps: UserAppMeta[] = []): Promise<HTMLElement> {
     host = document.createElement('div');
@@ -123,7 +126,12 @@ describe('DiscoverRoute', () => {
 
     it('clicking "Install" installs in place: pins to Home, refreshes, toasts, and opens the app — no builder, no clone', async () => {
       gwInstallTemplate.mockResolvedValue({
-        app: { id: 'todos', name: 'Todos', iconKey: 'Todo', colorKey: 'violet' },
+        app: {
+          id: 'todos',
+          name: 'Todos',
+          iconKey: 'Todo',
+          colorKey: 'violet',
+        },
         alreadyInstalled: false,
       });
       const el = await render([]);
@@ -147,7 +155,11 @@ describe('DiscoverRoute', () => {
       expect(setUserApps).toHaveBeenCalledOnce();
       const [pinned] = setUserApps.mock.calls[0] as [UserAppMeta[]];
       expect(pinned).toHaveLength(1);
-      expect(pinned[0]).toMatchObject({ id: 'todos', name: 'Todos', centraidAppId: 'todos' });
+      expect(pinned[0]).toMatchObject({
+        id: 'todos',
+        name: 'Todos',
+        centraidAppId: 'todos',
+      });
       expect((pinned[0] as unknown as { __draft?: boolean }).__draft).toBeUndefined();
       expect(refreshApps).toHaveBeenCalledOnce();
       expect(showToast).toHaveBeenCalledWith('Installed "Todos"');
@@ -202,7 +214,11 @@ describe('DiscoverRoute', () => {
       ) as HTMLButtonElement;
       await act(async () => {
         card.dispatchEvent(
-          new MouseEvent('contextmenu', { bubbles: true, clientX: 10, clientY: 10 }),
+          new MouseEvent('contextmenu', {
+            bubbles: true,
+            clientX: 10,
+            clientY: 10,
+          }),
         );
       });
       const labels = [...document.querySelectorAll('[role="menuitem"]')].map((b) => b.textContent);
@@ -214,6 +230,7 @@ describe('DiscoverRoute', () => {
     it('an automation template still clones into the automation builder, unaffected by the app-install change', async () => {
       gwCloneTemplate.mockResolvedValue({
         app: { id: 'digest-2', name: 'Digest 2' },
+        template: autoTemplate,
         webhooks: [],
       });
       const el = await render([]);
@@ -241,6 +258,7 @@ describe('DiscoverRoute', () => {
     it('right-clicking an automation template card and choosing "Use this template" clones it into the automation builder — not the app-install path', async () => {
       gwCloneTemplate.mockResolvedValue({
         app: { id: 'digest-2', name: 'Digest 2' },
+        template: autoTemplate,
         webhooks: [],
       });
       const el = await render([]);
@@ -249,7 +267,11 @@ describe('DiscoverRoute', () => {
       ) as HTMLButtonElement;
       await act(async () => {
         card.dispatchEvent(
-          new MouseEvent('contextmenu', { bubbles: true, clientX: 10, clientY: 10 }),
+          new MouseEvent('contextmenu', {
+            bubbles: true,
+            clientX: 10,
+            clientY: 10,
+          }),
         );
       });
       const useItem = [...document.querySelectorAll('[role="menuitem"]')].find((b) =>
@@ -274,7 +296,11 @@ describe('DiscoverRoute', () => {
       ) as HTMLButtonElement;
       await act(async () => {
         card.dispatchEvent(
-          new MouseEvent('contextmenu', { bubbles: true, clientX: 10, clientY: 10 }),
+          new MouseEvent('contextmenu', {
+            bubbles: true,
+            clientX: 10,
+            clientY: 10,
+          }),
         );
       });
       const previewItem = [...document.querySelectorAll('[role="menuitem"]')].find((b) =>
@@ -284,7 +310,7 @@ describe('DiscoverRoute', () => {
         previewItem.click();
       });
 
-      expect(document.body.textContent).toContain('Daily');
+      expect(document.body.textContent).toContain('Cron');
     });
   });
 });

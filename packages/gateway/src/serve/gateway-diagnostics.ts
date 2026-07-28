@@ -29,6 +29,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+
 import {
   dbSizeBreakdown,
   scanInlineBodyViolations,
@@ -36,15 +37,16 @@ import {
   type InlineBodyViolationScan,
   type VaultDb,
 } from '@centraid/vault';
-import type { GatewayLogEntry, GatewayLogStore } from './gateway-log-store.js';
-import type { HealthRegistry, HealthSnapshot } from './health-registry.js';
-import type { VaultRegistry } from './vault-registry.js';
+
 import {
   GATEWAY_MIN_PROTOCOL_VERSION,
   GATEWAY_PROTOCOL_VERSION,
   GATEWAY_SCHEMA_EPOCH,
   GATEWAY_VERSION,
 } from '../version.js';
+import type { GatewayLogEntry, GatewayLogStore } from './gateway-log-store.js';
+import type { HealthRegistry, HealthSnapshot } from './health-registry.js';
+import type { VaultRegistry } from './vault-registry.js';
 
 /** Default + max entry counts for the embedded log tail. */
 export const DEFAULT_DIAGNOSTICS_LOG_LIMIT = 500;
@@ -203,7 +205,11 @@ export async function buildDiagnosticsBundle(
       minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
       schemaEpoch: GATEWAY_SCHEMA_EPOCH,
     },
-    runtime: { platform: os.platform(), arch: os.arch(), nodeVersion: process.version },
+    runtime: {
+      platform: os.platform(),
+      arch: os.arch(),
+      nodeVersion: process.version,
+    },
     health,
     logs,
     vaults,

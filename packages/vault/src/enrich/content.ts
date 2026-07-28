@@ -9,8 +9,8 @@
 // Consent is the caller's problem (the gateway method evaluates the read and
 // receipts it); this module only resolves and bounds.
 
-import type { VaultDb } from '../db.js';
 import { resolveServableBlob } from '../blob/read.js';
+import type { VaultDb } from '../db.js';
 
 /** Variants an agent may read. `original` is intentionally absent. */
 export const AGENT_CONTENT_VARIANTS = ['thumb', 'preview', 'poster', 'text', 'transcript'] as const;
@@ -22,8 +22,20 @@ export const AGENT_CONTENT_HARD_MAX_BYTES = 4 * 1024 * 1024;
 export const AGENT_CONTENT_MAX_TEXT_CHARS = 262_144;
 
 export type AgentContentOutcome =
-  | { status: 'ok'; kind: 'bytes'; mediaType: string; byteSize: number; base64: string }
-  | { status: 'ok'; kind: 'text'; mediaType: string; text: string; truncated: boolean }
+  | {
+      status: 'ok';
+      kind: 'bytes';
+      mediaType: string;
+      byteSize: number;
+      base64: string;
+    }
+  | {
+      status: 'ok';
+      kind: 'text';
+      mediaType: string;
+      text: string;
+      truncated: boolean;
+    }
   | { status: 'not-found' }
   | { status: 'no-variant' }
   | { status: 'too-large'; byteSize: number; maxBytes: number };
@@ -72,7 +84,11 @@ export async function resolveAgentContent(
       : { status: 'not-found' };
   }
   if (outcome.blob.byteSize > cap) {
-    return { status: 'too-large', byteSize: outcome.blob.byteSize, maxBytes: cap };
+    return {
+      status: 'too-large',
+      byteSize: outcome.blob.byteSize,
+      maxBytes: cap,
+    };
   }
   const bytes = await db.blobs.open(outcome.blob.sha256);
   if (!bytes) return { status: 'not-found' };

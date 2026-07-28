@@ -34,7 +34,11 @@ async function api(ctx, path) {
 function parseFrom(value) {
   if (!value) return { name: null, email: null };
   const m = value.match(/^\s*(?:"?([^"<]*)"?\s*)?<([^>]+)>\s*$/);
-  if (m) return { name: (m[1] || '').trim() || null, email: m[2].trim().toLowerCase() };
+  if (m)
+    return {
+      name: (m[1] || '').trim() || null,
+      email: m[2].trim().toLowerCase(),
+    };
   return { name: null, email: value.trim().toLowerCase() };
 }
 

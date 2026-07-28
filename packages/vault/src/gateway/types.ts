@@ -219,9 +219,19 @@ export interface ChangesResult {
 }
 
 export type InvokeOutcome =
-  | { status: 'executed'; invocationId: string; receiptId: string; output: unknown }
+  | {
+      status: 'executed';
+      invocationId: string;
+      receiptId: string;
+      output: unknown;
+    }
   | { status: 'parked'; invocationId: string; reason: string }
-  | { status: 'denied'; invocationId?: string; receiptId: string; reason: string }
+  | {
+      status: 'denied';
+      invocationId?: string;
+      receiptId: string;
+      reason: string;
+    }
   | {
       status: 'failed';
       invocationId: string;

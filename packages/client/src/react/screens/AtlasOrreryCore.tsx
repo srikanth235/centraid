@@ -1,7 +1,9 @@
 import type { JSX } from 'react';
+
 import type { AtlasGraphNode } from '../../gateway-client.js';
 import { cx } from '../ui/cx.js';
 import { ORRERY } from './atlasOrreryGeometry.js';
+
 import styles from './AtlasRelationsTab.module.css';
 
 // The orrery's brass centre plate (issue #519) — a presentational leaf split out

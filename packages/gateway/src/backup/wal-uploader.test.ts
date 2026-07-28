@@ -1,8 +1,9 @@
 // WAL uploader pure helpers (issue #545 B7).
 
 import { describe, expect, test } from 'vitest';
-import { discardWalFiles, walPairKey } from './wal-uploader.js';
+
 import type { VaultPlane } from '../serve/vault-plane.js';
+import { discardWalFiles, walPairKey } from './wal-uploader.js';
 
 describe('wal-uploader', () => {
   test('walPairKey joins vault and journal generations', () => {
@@ -24,8 +25,16 @@ describe('wal-uploader', () => {
     const holed: string[] = [];
     const uploaded: Array<{ kind: string }> = [];
     const items = [
-      { kind: 'segment' as const, addr: { db: 'vault' as const }, file: '/tmp/a' },
-      { kind: 'closer' as const, closer: { db: 'journal' as const }, file: '/tmp/b' },
+      {
+        kind: 'segment' as const,
+        addr: { db: 'vault' as const },
+        file: '/tmp/a',
+      },
+      {
+        kind: 'closer' as const,
+        closer: { db: 'journal' as const },
+        file: '/tmp/b',
+      },
       { kind: 'pair-marker' as const, marker: {}, file: '/tmp/c' },
     ];
     const plane = {

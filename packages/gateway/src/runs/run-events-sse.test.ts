@@ -1,16 +1,14 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import crypto from 'node:crypto';
 /*
  * SSE streaming for automation runs (issue #158): the
  * `GET /centraid/_automations/turn/events?turnId=` endpoint. Drives
  * `makeAutomationsRouteHandler` with a mock streaming req/res, a real
  * per-app run ledger over a tempdir, and a `RunEventBus` for the live path.
  */
-
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import crypto from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import path from 'node:path';
+
 import {
   ConversationStore,
   AnalyticsStore,
@@ -18,8 +16,11 @@ import {
   makeJournalDbProvider,
   type AutomationTurnStreamEvent,
 } from '@centraid/app-engine';
-import { WorktreeStore } from '../worktree-store/index.js';
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+
 import { makeAutomationsRouteHandler } from '../routes/automations-routes.ts';
+import { WorktreeStore } from '../worktree-store/index.js';
 import { RunEventBus } from './run-event-bus.ts';
 
 let dir: string;
@@ -37,7 +38,12 @@ function ledger(): ConversationStore {
 /** Seed one automation fire turn under its stable conversation. */
 function seedTurn(store: ConversationStore, ref: string, turnId: string, startedAt: number): void {
   const convId = store.ensureAutomationConversation(ref, ref.split('/')[0]);
-  store.insertTurn({ turnId, conversationId: convId, triggerKind: 'manual', startedAt });
+  store.insertTurn({
+    turnId,
+    conversationId: convId,
+    triggerKind: 'manual',
+    startedAt,
+  });
 }
 
 describe('run-events-sse', () => {

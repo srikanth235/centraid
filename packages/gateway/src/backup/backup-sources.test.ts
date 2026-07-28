@@ -1,30 +1,32 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
-// `assembleSourceEntries` (backup-sources.ts) against a REAL `VaultPlane`:
-// real blobs through the real ingest/attach pipeline, a real bare git repo
-// through a real `WorktreeStore` publish, and a real sealed value through
-// `locker.add_item`. No hand-written files under blobs/sha256/ or apps.git —
-// everything here goes through the same product surface a real backup tick
-// would see. FORMAT.md's ordering rule (db, db, blobs…, git-bundle) is
-// asserted directly off the returned array; DEKs travel only in the wrapped
-// recovery kit.
-
-import { afterEach, describe, expect, test } from 'vitest';
-import { existsSync, promises as fs } from 'node:fs';
-import { DatabaseSync } from 'node:sqlite';
 import { randomBytes, createHash } from 'node:crypto';
+import { existsSync, promises as fs } from 'node:fs';
+// `assembleSourceEntries` against a real `VaultPlane`: blobs use the actual
+// ingest/attach pipeline, code uses a real `WorktreeStore`, and sealed values
+// use `locker.add_item`. Ordering is asserted from the returned array; DEKs
+// travel only in the wrapped recovery kit.
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
+
+import { forEachSequentially } from '@centraid/test-kit/sequential';
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { ReplicaIndex } from '@centraid/vault';
+import { afterEach, describe, expect, test } from 'vitest';
+
 import { openVaultPlane, type VaultPlane } from '../serve/vault-plane.js';
-import { WorktreeStore } from '../worktree-store/worktree-store.js';
 import { run } from '../worktree-store/git.js';
+import { WorktreeStore } from '../worktree-store/worktree-store.js';
 import { assembleSourceEntries } from './backup-sources.js';
 
-const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
+const silentLogger = {
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+};
 
 const cleanups: Array<() => Promise<void> | void> = [];
 describe('backup-sources', () => {
   afterEach(async () => {
-    while (cleanups.length > 0) await cleanups.pop()?.();
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
   });
   async function openPlane(): Promise<VaultPlane> {
     const dir = await tempDir('backup-sources-vault');
@@ -69,7 +71,11 @@ describe('backup-sources', () => {
     });
     const out = plane.gateway.invoke(plane.ownerCredential, {
       command: 'core.attach',
-      input: { subject_type: 'schedule.task', subject_id: subjectId, staged_sha: staged.sha256 },
+      input: {
+        subject_type: 'schedule.task',
+        subject_id: subjectId,
+        staged_sha: staged.sha256,
+      },
     });
     if (out.status !== 'executed') throw new Error(`attach failed: ${JSON.stringify(out)}`);
     return staged.sha256;
@@ -114,7 +120,11 @@ describe('backup-sources', () => {
 
     // The capture tick lives in doRunBackup now — run it here as the service would.
     plane.walTick();
-    const entries = await assembleSourceEntries({ plane, bundleDir, log: captured.log });
+    const entries = await assembleSourceEntries({
+      plane,
+      bundleDir,
+      log: captured.log,
+    });
 
     expect(entries.map((e) => e.kind)).toStrictEqual(['db', 'db']);
     expect(entries.map((e) => e.path)).toStrictEqual(['vault.db', 'journal.db']);
@@ -127,7 +137,7 @@ describe('backup-sources', () => {
     expect(captured.info.some((m) => m.includes('no code store bare repo yet'))).toBe(true);
 
     // The staged DB copies are real, openable SQLite files — not stubs.
-    for (const entry of entries) {
+    entries.forEach((entry) => {
       const db = new DatabaseSync(entry.absolutePath, { readOnly: true });
       try {
         const row = db.prepare('SELECT count(*) AS n FROM sqlite_master').get() as { n: number };
@@ -135,10 +145,12 @@ describe('backup-sources', () => {
       } finally {
         db.close();
       }
-    }
+    });
     // vault.db is specifically a staged copy of the real vault, not an empty
     // shell — the bootstrapped core_vault row must be there.
-    const vaultCopy = new DatabaseSync(entries[0]!.absolutePath, { readOnly: true });
+    const vaultCopy = new DatabaseSync(entries[0]!.absolutePath, {
+      readOnly: true,
+    });
     try {
       const row = vaultCopy.prepare('SELECT count(*) AS n FROM core_vault').get() as { n: number };
       expect(row.n).toBe(1);
@@ -159,7 +171,11 @@ describe('backup-sources', () => {
       const taskId = addTask(plane, 'Frame the print');
       const inlineOut = plane.gateway.invoke(plane.ownerCredential, {
         command: 'core.attach',
-        input: { subject_type: 'schedule.task', subject_id: taskId, data_uri: PNG },
+        input: {
+          subject_type: 'schedule.task',
+          subject_id: taskId,
+          data_uri: PNG,
+        },
       });
       if (inlineOut.status !== 'executed') throw new Error('inline attach failed');
       const inlineContentId = (inlineOut as { output: { content_id: string } }).output.content_id;
@@ -180,12 +196,21 @@ describe('backup-sources', () => {
       // (d) A real sealed value — password is a SEALED_COLUMNS entry.
       const lockerOut = plane.gateway.invoke(plane.ownerCredential, {
         command: 'locker.add_item',
-        input: { type: 'login', title: 'GitHub', username: 'priya', password: 'H2$kL9mVq!pR4wZ' },
+        input: {
+          type: 'login',
+          title: 'GitHub',
+          username: 'priya',
+          password: 'H2$kL9mVq!pR4wZ',
+        },
       });
       if (lockerOut.status !== 'executed') throw new Error('locker.add_item failed');
 
       plane.walTick();
-      const entries = await assembleSourceEntries({ plane, bundleDir, log: silentLogger });
+      const entries = await assembleSourceEntries({
+        plane,
+        bundleDir,
+        log: silentLogger,
+      });
 
       expect(entries.map((e) => e.kind)).toStrictEqual(['db', 'db', 'blob', 'blob', 'git-bundle']);
       // Blob entries are sorted by path (backup-sources.ts: deterministic
@@ -204,7 +229,9 @@ describe('backup-sources', () => {
       ]);
 
       // Staged DB copies are real, openable SQLite.
-      const vaultCopy = new DatabaseSync(entries[0]!.absolutePath, { readOnly: true });
+      const vaultCopy = new DatabaseSync(entries[0]!.absolutePath, {
+        readOnly: true,
+      });
       try {
         const row = vaultCopy.prepare('SELECT count(*) AS n FROM locker_item').get() as {
           n: number;
@@ -235,10 +262,14 @@ describe('backup-sources', () => {
       const bundleEntry = entries[4]!;
       const bareRepoDir = path.join(plane.codeStoreRoot, 'apps.git');
       await expect(
-        run(['bundle', 'verify', bundleEntry.absolutePath], { cwd: bareRepoDir }),
+        run(['bundle', 'verify', bundleEntry.absolutePath], {
+          cwd: bareRepoDir,
+        }),
       ).resolves.toBeTruthy();
       const cloneDir = await tempDir('backup-sources-clone');
-      await run(['clone', '--quiet', bundleEntry.absolutePath, cloneDir], { cwd: bundleDir });
+      await run(['clone', '--quiet', bundleEntry.absolutePath, cloneDir], {
+        cwd: bundleDir,
+      });
       const appJson = JSON.parse(
         await fs.readFile(path.join(cloneDir, 'apps', 'todo', 'app.json'), 'utf8'),
       ) as { id: string };
@@ -282,7 +313,11 @@ describe('backup-sources', () => {
     plane.db.blobTransfers.state.completeOutbox(remoteSha);
     new ReplicaIndex(plane.db.vault).mark(remoteSha, remoteBytes.length);
     plane.walTick();
-    const entries = await assembleSourceEntries({ plane, bundleDir, log: silentLogger });
+    const entries = await assembleSourceEntries({
+      plane,
+      bundleDir,
+      log: silentLogger,
+    });
     const blobPaths = entries.filter((entry) => entry.kind === 'blob').map((entry) => entry.path);
 
     expect(blobPaths).toStrictEqual([`blobs/sha256/${pendingSha.slice(0, 2)}/${pendingSha}`]);
@@ -298,18 +333,26 @@ describe('backup-sources', () => {
     // store, so there is no git bundle either — assembly writes nothing at all,
     // and re-running it accumulates nothing (there is no staging dir to wipe).
     plane.walTick();
-    const first = await assembleSourceEntries({ plane, bundleDir, log: silentLogger });
+    const first = await assembleSourceEntries({
+      plane,
+      bundleDir,
+      log: silentLogger,
+    });
     expect(first.map((e) => e.path)).toStrictEqual(['vault.db', 'journal.db']);
 
-    const second = await assembleSourceEntries({ plane, bundleDir, log: silentLogger });
+    const second = await assembleSourceEntries({
+      plane,
+      bundleDir,
+      log: silentLogger,
+    });
     expect(second.map((e) => e.path)).toStrictEqual(['vault.db', 'journal.db']);
     // A code-store-less vault writes nothing into the bundle dir (no bundle, no
     // digest sidecar) — it stays empty across repeated assemblies.
     await expect(fs.readdir(bundleDir)).resolves.toStrictEqual([]);
     for (const entry of second) {
       expect(entry.absolutePath).toContain(path.join('wal-ship', 'bases'));
-      expect(entry.sha256).toMatch(/^[0-9a-f]{64}$/);
-      expect(entry.walGeneration).toMatch(/^[0-9a-f]{32}$/);
+      expect(entry.sha256).toMatch(/^[0-9a-f]{64}$/u);
+      expect(entry.walGeneration).toMatch(/^[0-9a-f]{32}$/u);
       expect(entry.baseTickMs).toBeGreaterThan(0);
     }
     // Both bases from ONE tick — the coordination the restore asserts.
@@ -335,7 +378,7 @@ describe('backup-sources', () => {
       return bases.map((b, i) => (i === 0 ? { ...b, createdAtMs: b.createdAtMs + 60_000 } : b));
     };
     await expect(assembleSourceEntries({ plane, bundleDir, log: silentLogger })).rejects.toThrow(
-      /bases are from different ticks/,
+      /bases are from different ticks/u,
     );
     shipper.currentBases = real;
   });
@@ -351,7 +394,11 @@ describe('backup-sources', () => {
     // First assembly: bundle is generated fresh, sidecar written, in the bundleDir.
     plane.walTick();
     const first = capturingLogger();
-    const e1 = await assembleSourceEntries({ plane, bundleDir, log: first.log });
+    const e1 = await assembleSourceEntries({
+      plane,
+      bundleDir,
+      log: first.log,
+    });
     const bundle1 = e1.find((e) => e.kind === 'git-bundle')!;
     expect(bundle1.absolutePath).toBe(path.join(bundleDir, 'apps.bundle'));
     const digest1 = await fs.readFile(path.join(bundleDir, 'apps.bundle.refs'), 'utf8');
@@ -361,7 +408,11 @@ describe('backup-sources', () => {
     // byte-identical mtime (the engine's reuse fast path keys on exactly this), and
     // the reuse is logged. A fresh `git bundle create` here would have moved mtime.
     const second = capturingLogger();
-    const e2 = await assembleSourceEntries({ plane, bundleDir, log: second.log });
+    const e2 = await assembleSourceEntries({
+      plane,
+      bundleDir,
+      log: second.log,
+    });
     const bundle2 = e2.find((e) => e.kind === 'git-bundle')!;
     expect(bundle2.absolutePath).toBe(bundle1.absolutePath);
     expect((await fs.stat(bundle2.absolutePath)).mtimeMs).toBe(mtime1);
@@ -371,12 +422,18 @@ describe('backup-sources', () => {
     // so the digest changes and the bundle regenerates — and the fresh bundle
     // carries BOTH apps.
     await publishRealApp(plane, 'todo2');
-    const e3 = await assembleSourceEntries({ plane, bundleDir, log: silentLogger });
+    const e3 = await assembleSourceEntries({
+      plane,
+      bundleDir,
+      log: silentLogger,
+    });
     const bundle3 = e3.find((e) => e.kind === 'git-bundle')!;
     const digest3 = await fs.readFile(path.join(bundleDir, 'apps.bundle.refs'), 'utf8');
     expect(digest3).not.toBe(digest1);
     const cloneDir = await tempDir('backup-sources-clone-2');
-    await run(['clone', '--quiet', bundle3.absolutePath, cloneDir], { cwd: bundleDir });
+    await run(['clone', '--quiet', bundle3.absolutePath, cloneDir], {
+      cwd: bundleDir,
+    });
     expect(existsSync(path.join(cloneDir, 'apps', 'todo', 'app.json'))).toBe(true);
     expect(existsSync(path.join(cloneDir, 'apps', 'todo2', 'app.json'))).toBe(true);
   });

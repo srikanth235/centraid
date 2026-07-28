@@ -1,3 +1,4 @@
+import { Feather } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   FlatList,
@@ -11,7 +12,6 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
 
 import OptionSheet, { type SheetOption } from '../../kit/components/OptionSheet';
 import { useTheme } from '../../kit/theme';
@@ -117,13 +117,19 @@ export default function AssistantScreen({ navigation }: AssistantScreenProps): R
         : picker === 'model'
           ? {
               title: 'Model',
-              options: config.models.map((model) => ({ id: model.id, label: model.name })),
+              options: config.models.map((model) => ({
+                id: model.id,
+                label: model.name,
+              })),
               ...(config.selectedModel ? { selectedId: config.selectedModel } : {}),
               onSelect: selectModel,
             }
           : {
               title: 'Effort',
-              options: config.efforts.map((effort) => ({ id: effort.id, label: effort.name })),
+              options: config.efforts.map((effort) => ({
+                id: effort.id,
+                label: effort.name,
+              })),
               ...(config.selectedEffort ? { selectedId: config.selectedEffort } : {}),
               onSelect: selectEffort,
             };
@@ -239,7 +245,11 @@ export default function AssistantScreen({ navigation }: AssistantScreenProps): R
                 <View
                   accessibilityRole="progressbar"
                   accessibilityLabel="Context usage"
-                  accessibilityValue={{ min: 0, max: 100, now: Math.round(contextRatio * 100) }}
+                  accessibilityValue={{
+                    min: 0,
+                    max: 100,
+                    now: Math.round(contextRatio * 100),
+                  }}
                   style={styles.contextTrack}
                 >
                   <View style={[styles.contextFill, { width: `${contextRatio * 100}%` }]} />
@@ -312,7 +322,7 @@ export default function AssistantScreen({ navigation }: AssistantScreenProps): R
           title={pickerSpec.title}
           options={pickerSpec.options}
           {...(pickerSpec.selectedId ? { selectedId: pickerSpec.selectedId } : {})}
-          onSelect={pickerSpec.onSelect}
+          onSelect={(id) => pickerSpec.onSelect(id)}
           onClose={() => setPicker(null)}
         />
       ) : null}

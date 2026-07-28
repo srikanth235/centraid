@@ -11,10 +11,11 @@
 import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
 import Icon from '../../kit/components/Icon';
-import LauncherGrid from './LauncherGrid';
-import { filterLauncherItems, type LauncherItem } from './catalog';
 import { family, t, useTheme, type ThemeColors, type Scheme } from '../../kit/theme';
+import { filterLauncherItems, type LauncherItem } from './catalog';
+import LauncherGrid from './LauncherGrid';
 
 const H_PADDING = 20;
 
@@ -104,7 +105,11 @@ export default function SearchOverlay({
 
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    cancel: { ...t('body'), color: colors.accent, fontFamily: family.sansMedium },
+    cancel: {
+      ...t('body'),
+      color: colors.accent,
+      fontFamily: family.sansMedium,
+    },
     content: { flex: 1, paddingHorizontal: H_PADDING },
     empty: { ...t('small'), color: colors.ink2, paddingVertical: 8 },
     field: {

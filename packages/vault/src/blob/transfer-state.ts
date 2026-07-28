@@ -1,7 +1,8 @@
 import type { DatabaseSync } from 'node:sqlite';
+
 import { nowIso } from '../ids.js';
-import type { MultipartPart } from './remote-transfer.js';
 import type { SerializableSha256State } from './incremental-sha256.js';
+import type { MultipartPart } from './remote-transfer.js';
 
 export interface IngressSessionRow {
   session_id: string;
@@ -307,7 +308,10 @@ export class BlobTransferState {
           WHERE temp_id IS NOT NULL AND upload_id IS NOT NULL`,
       )
       .all(at) as unknown as { temp_id: string; upload_id: string }[];
-    return rows.map((row) => ({ tempId: row.temp_id, uploadId: row.upload_id }));
+    return rows.map((row) => ({
+      tempId: row.temp_id,
+      uploadId: row.upload_id,
+    }));
   }
 
   reservedIngressBytes(exceptSessionId?: string): number {
@@ -320,7 +324,9 @@ export class BlobTransferState {
           WHERE kind = 'fallback' AND state IN ('open','committing')
             AND (? IS NULL OR session_id <> ?)`,
       )
-      .get(exceptSessionId ?? null, exceptSessionId ?? null) as { bytes: number };
+      .get(exceptSessionId ?? null, exceptSessionId ?? null) as {
+      bytes: number;
+    };
     return row.bytes;
   }
 
@@ -336,7 +342,9 @@ export class BlobTransferState {
           WHERE kind = 'fallback' AND state IN ('open','committing')
             AND (? IS NULL OR session_id <> ?)`,
       )
-      .get(exceptSessionId ?? null, exceptSessionId ?? null) as { bytes: number };
+      .get(exceptSessionId ?? null, exceptSessionId ?? null) as {
+      bytes: number;
+    };
     return row.bytes;
   }
 
@@ -438,7 +446,11 @@ export class BlobTransferState {
                 COALESCE(SUM(CASE WHEN state = 'uploading' THEN 1 ELSE 0 END), 0) AS uploading_count
            FROM blob_outbox`,
       )
-      .get() as { pending_count: number; pending_bytes: number; uploading_count: number };
+      .get() as {
+      pending_count: number;
+      pending_bytes: number;
+      uploading_count: number;
+    };
     const failure = this.db
       .prepare(
         `SELECT last_error FROM blob_outbox WHERE last_error IS NOT NULL

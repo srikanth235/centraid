@@ -223,7 +223,7 @@ export function parseWalPairMarkerKey(key: string): WalPairMarkerAddress | null 
   return {
     vaultGeneration: g.vaultGeneration!,
     journalGeneration: g.journalGeneration!,
-    tickMs: Number.parseInt(g.tickMs!, 10),
+    tickMs: Math.trunc(Number(g.tickMs!)),
   };
 }
 
@@ -235,10 +235,10 @@ export function parseWalSegmentKey(key: string): WalSegmentAddress | null {
   const addr: WalSegmentAddress = {
     db: g.db as WalDbName,
     generation: g.generation!,
-    group: Number.parseInt(g.group!, 10),
-    startOffset: Number.parseInt(g.startOffset!, 10),
-    endOffset: Number.parseInt(g.endOffset!, 10),
-    tickMs: Number.parseInt(g.tickMs!, 10),
+    group: Math.trunc(Number(g.group!)),
+    startOffset: Math.trunc(Number(g.startOffset!)),
+    endOffset: Math.trunc(Number(g.endOffset!)),
+    tickMs: Math.trunc(Number(g.tickMs!)),
   };
   return addr.endOffset > addr.startOffset ? addr : null;
 }
@@ -251,8 +251,8 @@ export function parseWalCloserKey(key: string): WalGroupCloser | null {
   return {
     db: g.db as WalDbName,
     generation: g.generation!,
-    group: Number.parseInt(g.group!, 10),
-    endOffset: Number.parseInt(g.endOffset!, 10),
+    group: Math.trunc(Number(g.group!)),
+    endOffset: Math.trunc(Number(g.endOffset!)),
   };
 }
 
@@ -650,7 +650,10 @@ export function openWalPairMarker(
     journalGeneration: addr.journalGeneration,
     tickMs: addr.tickMs,
     vault: { group: parsed.vault.group, endOffset: parsed.vault.endOffset },
-    journal: { group: parsed.journal.group, endOffset: parsed.journal.endOffset },
+    journal: {
+      group: parsed.journal.group,
+      endOffset: parsed.journal.endOffset,
+    },
   };
   assertValidPosition(marker.vault, 'vault');
   assertValidPosition(marker.journal, 'journal');
@@ -771,7 +774,11 @@ export function planWalReplay(
 }
 
 const EMPTY_LISTING: WalStreamListing = { segments: [], closers: [] };
-const EMPTY_PLAN: WalReplayPlan = { segments: [], lastTickMs: -1, truncatedByHole: false };
+const EMPTY_PLAN: WalReplayPlan = {
+  segments: [],
+  lastTickMs: -1,
+  truncatedByHole: false,
+};
 
 /**
  * The `(group, endOffset)` a planned chain actually REACHES — the quantity a
@@ -878,10 +885,18 @@ export function planCoordinatedReplay(opts: {
       plans[db] = generation === undefined ? EMPTY_PLAN : plan(db, generation, cut);
       reached = Math.max(reached, plans[db].lastTickMs);
     }
-    return { plans, coordinatedCutMs: reached, newestMarkerTickMs: -1, coordinated: false };
+    return {
+      plans,
+      coordinatedCutMs: reached,
+      newestMarkerTickMs: -1,
+      coordinated: false,
+    };
   }
 
-  const generations = { vault: generationByDb.vault, journal: generationByDb.journal };
+  const generations = {
+    vault: generationByDb.vault,
+    journal: generationByDb.journal,
+  };
   // Re-filter by generation even though the restore LISTs a pair-scoped prefix
   // and cannot see a foreign marker: a marker's positions are believed
   // ABSOLUTELY, and one minted under a different base pair describes offsets
@@ -912,7 +927,10 @@ export function planCoordinatedReplay(opts: {
         satisfied = false;
         break;
       }
-      const at = reachedPosition(candidate, listingByDb[db] ?? EMPTY_LISTING, { db, generation });
+      const at = reachedPosition(candidate, listingByDb[db] ?? EMPTY_LISTING, {
+        db,
+        generation,
+      });
       const want = marker[db];
       if (at.group !== want.group || at.endOffset !== want.endOffset) {
         satisfied = false;

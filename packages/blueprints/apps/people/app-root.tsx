@@ -15,6 +15,22 @@ import {
   type KeyboardEvent,
   type ReactElement,
 } from 'react';
+
+import type { InlineAppProps } from '../inline-types.ts';
+import { Chrome } from './Chrome.tsx';
+import { Activity } from './components/Activity.tsx';
+import { AddPersonModal } from './components/AddPersonModal.tsx';
+import { BulkBar } from './components/BulkBar.tsx';
+import { Details } from './components/Details.tsx';
+import { GridCard } from './components/Grid.tsx';
+import { Journal } from './components/Journal.tsx';
+import { ListHead, ListRow, WindowFoot } from './components/List.tsx';
+import { NewMenu } from './components/NewMenu.tsx';
+import { Icon } from './components/Shared.tsx';
+import { JournalNav, ListList, SmartNav, Storage } from './components/Sidebar.tsx';
+import { StatusChips } from './components/Toolbar.tsx';
+import { avatarColor, hashInt, listName, PALETTE } from './format.ts';
+import { I } from './icons.ts';
 import {
   closePopover,
   debounce,
@@ -26,22 +42,8 @@ import {
   wireThemeToggle,
 } from './kit.ts';
 import { createLogic } from './logic.ts';
-import { avatarColor, hashInt, listName, PALETTE } from './format.ts';
-import { I } from './icons.ts';
-import { JournalNav, ListList, SmartNav, Storage } from './components/Sidebar.tsx';
-import { StatusChips } from './components/Toolbar.tsx';
-import { BulkBar } from './components/BulkBar.tsx';
-import { NewMenu } from './components/NewMenu.tsx';
-import { GridCard } from './components/Grid.tsx';
-import { ListHead, ListRow, WindowFoot } from './components/List.tsx';
-import { Details } from './components/Details.tsx';
-import { Journal } from './components/Journal.tsx';
-import { Activity } from './components/Activity.tsx';
-import { AddPersonModal } from './components/AddPersonModal.tsx';
-import { Icon } from './components/Shared.tsx';
-import { Chrome } from './Chrome.tsx';
 import type { AppData, AppState, Nav, Person, PersonList } from './types.ts';
-import type { InlineAppProps } from '../inline-types.ts';
+
 import styles from './Chrome.module.css';
 
 export const CHANGE_TABLES = [
@@ -182,6 +184,29 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     });
   }
   const logic = logicRef.current;
+  const {
+    addJournalEntry: handleAddJournalEntry,
+    addPerson: handleAddPerson,
+    cancelCreateList: handleCancelCreateList,
+    cancelRenameList: handleCancelRenameList,
+    clearSelected: handleClearSelected,
+    closeAddModal: handleCloseAddModal,
+    closeDetails: handleCloseDetails,
+    createList: handleCreateList,
+    deleteList: handleDeleteList,
+    favoriteSelected: handleFavoriteSelected,
+    openAddModal: handleOpenAddModal,
+    openDetails: handleOpenDetails,
+    openPersonMenu: handleOpenPersonMenu,
+    renameList: handleRenameList,
+    showMorePeople: handleShowMorePeople,
+    startCreateList: handleStartCreateList,
+    startRenameList: handleStartRenameList,
+    toggleAdder: handleToggleAdder,
+    toggleAllVisible: handleToggleAllVisible,
+    toggleSelect: handleToggleSelect,
+    toggleStar: handleToggleStar,
+  } = logic;
 
   const setRoot = useCallback(
     (el: HTMLDivElement | null) => {
@@ -289,11 +314,11 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       }
       const state = stateRef.current;
       if (state.addModalOpen) {
-        logic.closeAddModal();
+        handleCloseAddModal();
         return;
       }
       if (state.detailsId) {
-        logic.closeDetails();
+        handleCloseDetails();
         return;
       }
       if (state.newMenuOpen) {
@@ -378,13 +403,13 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     board = (
       <Journal
         entries={state.journalData?.entries ?? []}
-        onSubmit={logic.addJournalEntry}
-        onOpenDetails={logic.openDetails}
+        onSubmit={handleAddJournalEntry}
+        onOpenDetails={handleOpenDetails}
       />
     );
   } else if (nav.kind === 'activity') {
     board = (
-      <Activity recent={state.dashboardData?.recent ?? []} onOpenDetails={logic.openDetails} />
+      <Activity recent={state.dashboardData?.recent ?? []} onOpenDetails={handleOpenDetails} />
     );
   } else if (rows.length === 0) {
     const searching = !!state.search.trim();
@@ -413,7 +438,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     const foot =
       state.peopleTruncated && !state.search.trim() ? (
         <div className={styles.windowFoot}>
-          <WindowFoot peopleWindow={state.peopleWindow} onShowMore={logic.showMorePeople} />
+          <WindowFoot peopleWindow={state.peopleWindow} onShowMore={handleShowMorePeople} />
         </div>
       ) : null;
     board =
@@ -425,9 +450,9 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
                 key={p.party_id}
                 p={p}
                 selectedIds={state.selected}
-                onOpenDetails={logic.openDetails}
-                onToggleSelect={logic.toggleSelect}
-                onToggleStar={logic.toggleStar}
+                onOpenDetails={handleOpenDetails}
+                onToggleSelect={handleToggleSelect}
+                onToggleStar={handleToggleStar}
               />
             ))}
           </div>
@@ -441,7 +466,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
                 <ListHead
                   rows={rows}
                   selectedIds={state.selected}
-                  onToggleAll={logic.toggleAllVisible}
+                  onToggleAll={handleToggleAllVisible}
                 />
               </div>
             )}
@@ -453,9 +478,9 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
                   data={data}
                   selectedIds={state.selected}
                   search={state.search}
-                  onOpenDetails={logic.openDetails}
-                  onToggleSelect={logic.toggleSelect}
-                  onOpenMenu={logic.openPersonMenu}
+                  onOpenDetails={handleOpenDetails}
+                  onToggleSelect={handleToggleSelect}
+                  onOpenMenu={handleOpenPersonMenu}
                 />
               ))}
             </div>
@@ -479,12 +504,12 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         nameGuess={nameGuess}
         color={color}
         adders={{ ...state.detailAdders }}
-        onClose={logic.closeDetails}
-        onMove={(anchor) => logic.openPersonMenu(anchor, dp!)}
+        onClose={handleCloseDetails}
+        onMove={(anchor) => handleOpenPersonMenu(anchor, dp!)}
         onMessage={() => logic.logInteraction(dp!, 'Message', 'Sent a message')}
         onCall={() => logic.logInteraction(dp!, 'Call', 'Gave them a call')}
-        onToggleStar={() => logic.toggleStar(dp!)}
-        onToggleAdder={logic.toggleAdder}
+        onToggleStar={() => handleToggleStar(dp!)}
+        onToggleAdder={handleToggleAdder}
         onAddRelationship={(fields) =>
           logic.drawerAct(
             'add-relationship',
@@ -524,7 +549,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
   }
 
   const modal = state.addModalOpen ? (
-    <AddPersonModal lists={data.lists} onSubmit={logic.addPerson} onClose={logic.closeAddModal} />
+    <AddPersonModal lists={data.lists} onSubmit={handleAddPerson} onClose={handleCloseAddModal} />
   ) : null;
 
   return (
@@ -536,7 +561,13 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     <div
       ref={setRoot}
       className={styles.appRoot}
-      style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, minHeight: 0 }}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        flex: 1,
+        minWidth: 0,
+        minHeight: 0,
+      }}
     >
       <Chrome
         narrow={narrow}
@@ -574,19 +605,19 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
             renamingListId={state.renamingListId}
             creatingList={state.creatingList}
             onSelectNav={handleSelectNav}
-            onStartRename={logic.startRenameList}
-            onDeleteList={logic.deleteList}
-            onRenameCommit={logic.renameList}
-            onRenameCancel={logic.cancelRenameList}
-            onCreateCommit={logic.createList}
-            onCreateCancel={logic.cancelCreateList}
+            onStartRename={handleStartRenameList}
+            onDeleteList={handleDeleteList}
+            onRenameCommit={handleRenameList}
+            onRenameCancel={handleCancelRenameList}
+            onCreateCommit={handleCreateList}
+            onCreateCancel={handleCancelCreateList}
           />
         }
         sidebarJournalNav={<JournalNav navKind={nav.kind} onSelectNav={handleSelectNav} />}
         sidebarStorage={<Storage people={data.people} lists={data.lists} />}
         newMenu={
           state.newMenuOpen ? (
-            <NewMenu onAddPerson={logic.openAddModal} onNewList={logic.startCreateList} />
+            <NewMenu onAddPerson={handleOpenAddModal} onNewList={handleStartCreateList} />
           ) : null
         }
         statusChips={
@@ -602,8 +633,8 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         bulk={
           <BulkBar
             n={state.selected.size}
-            onFavorite={logic.favoriteSelected}
-            onClear={logic.clearSelected}
+            onFavorite={handleFavoriteSelected}
+            onClear={handleClearSelected}
           />
         }
         board={board}

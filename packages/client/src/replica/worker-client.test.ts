@@ -16,7 +16,9 @@ class FakeWorker implements ReplicaWorkerLike {
     this.requests.push(request);
     const response = this.respond(request);
     queueMicrotask(() => {
-      const event = new MessageEvent<ReplicaWorkerResponse>('message', { data: response });
+      const event = new MessageEvent<ReplicaWorkerResponse>('message', {
+        data: response,
+      });
       for (const listener of this.#messages) listener(event);
     });
   }
@@ -103,7 +105,11 @@ describe(ReplicaWorkerClient, () => {
   test('opens an injected worker and wraps unavailable fields with a sticky guard', async () => {
     const worker = new FakeWorker(success);
     const { client, status } = await ReplicaWorkerClient.connect(
-      { dbName: '/centraid-replica-deadbeef.sqlite3', vaultId: 'vault', remember: false },
+      {
+        dbName: '/centraid-replica-deadbeef.sqlite3',
+        vaultId: 'vault',
+        remember: false,
+      },
       () => worker,
     );
     expect(status.mode).toBe('memory');
@@ -135,7 +141,11 @@ describe(ReplicaWorkerClient, () => {
       return success(request);
     });
     const { client } = await ReplicaWorkerClient.connect(
-      { dbName: '/centraid-replica-deadbeef.sqlite3', vaultId: 'vault', remember: false },
+      {
+        dbName: '/centraid-replica-deadbeef.sqlite3',
+        vaultId: 'vault',
+        remember: false,
+      },
       () => worker,
     );
     const guard = new OnlineOnlyGuard();
@@ -158,10 +168,17 @@ describe(ReplicaWorkerClient, () => {
   test('exposes clone-safe row envelopes for the shell-to-iframe boundary', async () => {
     const worker = new FakeWorker(success);
     const { client } = await ReplicaWorkerClient.connect(
-      { dbName: '/centraid-replica-deadbeef.sqlite3', vaultId: 'vault', remember: false },
+      {
+        dbName: '/centraid-replica-deadbeef.sqlite3',
+        vaultId: 'vault',
+        remember: false,
+      },
       () => worker,
     );
-    const result = await client.readWire({ shapeId: 'shape', entity: 'core.note' });
+    const result = await client.readWire({
+      shapeId: 'shape',
+      entity: 'core.note',
+    });
     expect(structuredClone(result).rows[0]).toStrictEqual({
       rowId: 'note-1',
       values: { note_id: 'note-1', title: 'Local' },
@@ -174,7 +191,11 @@ describe(ReplicaWorkerClient, () => {
   test('sends clone-safe search requests and optimistic overlays to the worker', async () => {
     const worker = new FakeWorker(success);
     const { client } = await ReplicaWorkerClient.connect(
-      { dbName: '/centraid-replica-deadbeef.sqlite3', vaultId: 'vault', remember: false },
+      {
+        dbName: '/centraid-replica-deadbeef.sqlite3',
+        vaultId: 'vault',
+        remember: false,
+      },
       () => worker,
     );
     const result = await client.searchWire(

@@ -1,7 +1,8 @@
 import 'react-native-gesture-handler';
-import { install as installQuickCrypto } from 'react-native-quick-crypto';
 import { registerRootComponent } from 'expo';
 import { AppRegistry } from 'react-native';
+import { install as installQuickCrypto } from 'react-native-quick-crypto';
+
 import App from './App';
 import { drainUploadQueueInBackground } from './src/lib/upload/boot';
 

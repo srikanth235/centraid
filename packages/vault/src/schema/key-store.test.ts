@@ -11,7 +11,9 @@ import {
 } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+
 import { afterEach, describe, expect, test } from 'vitest';
+
 import {
   KEY_STORE_ENVELOPE_MAGIC,
   KeyStore,
@@ -51,17 +53,19 @@ describe('key-store', () => {
       },
     });
 
-    expect(() => keys.loadOrCreate('endpoint-key.bin')).toThrow(/injected interruption/);
+    expect(() => keys.loadOrCreate('endpoint-key.bin')).toThrow(/injected interruption/u);
     expect(existsSync(keys.file('endpoint-key.bin'))).toBe(false);
     expect(readdirSync(keys.dir)).toStrictEqual([]);
 
     const retry = new KeyStore(keys.dir);
     expect(retry.loadOrCreate('endpoint-key.bin')).toHaveLength(32);
-    expect(readFileSync(retry.file('endpoint-key.bin'), 'utf8')).toMatch(/^CENTRAID-KEY-V1\n/);
+    expect(readFileSync(retry.file('endpoint-key.bin'), 'utf8')).toMatch(/^CENTRAID-KEY-V1\n/u);
   });
 
   test('adopts a legacy raw key without changing its value', () => {
-    const keys = store({ protector: aesGcmKeyProtector(Buffer.alloc(32, 0x51)) });
+    const keys = store({
+      protector: aesGcmKeyProtector(Buffer.alloc(32, 0x51)),
+    });
     mkdirSync(keys.dir, { recursive: true });
     const legacy = Buffer.alloc(32, 7);
     writeFileSync(keys.file('vault.sealkey'), legacy, { mode: 0o600 });
@@ -119,9 +123,9 @@ describe('key-store', () => {
       new KeyStore(plain.dir, {
         protector: aesGcmKeyProtector(Buffer.alloc(32, 9)),
       }).load('vault.sealkey'),
-    ).toThrow(/authentication failed/);
+    ).toThrow(/authentication failed/u);
     expect(() => new KeyStore(plain.dir).load('vault.sealkey')).toThrow(
-      /unavailable custody scheme/,
+      /unavailable custody scheme/u,
     );
   });
 
@@ -130,14 +134,14 @@ describe('key-store', () => {
     mkdirSync(keys.dir, { recursive: true });
     writeFileSync(keys.file('bad.key'), 'not a key', { mode: 0o600 });
     expect(() => keys.load('bad.key')).toThrow(KeyStoreError);
-    expect(() => keys.load('../escape')).toThrow(/invalid key name/);
+    expect(() => keys.load('../escape')).toThrow(/invalid key name/u);
 
     writeFileSync(
       keys.file('foreign.key'),
       `${KEY_STORE_ENVELOPE_MAGIC}${JSON.stringify({ scheme: 'other-v1', payload: 'AA==' })}\n`,
       { mode: 0o600 },
     );
-    expect(() => keys.load('foreign.key')).toThrow(/unavailable custody scheme/);
+    expect(() => keys.load('foreign.key')).toThrow(/unavailable custody scheme/u);
   });
 
   test('rotate, export, import, and destroy cover the named-secret lifecycle', () => {
@@ -156,7 +160,9 @@ describe('key-store', () => {
   });
 
   test('the whole data tree contains envelopes, never raw secret bytes', () => {
-    const keys = store({ protector: aesGcmKeyProtector(Buffer.alloc(32, 0x52)) });
+    const keys = store({
+      protector: aesGcmKeyProtector(Buffer.alloc(32, 0x52)),
+    });
     const dataDir = path.dirname(keys.dir);
     const secrets = [
       Buffer.alloc(32, 0x11),
@@ -190,7 +196,7 @@ describe('key-store', () => {
     expect(stored).not.toHaveLength(0);
     for (const file of stored) {
       const bytes = readFileSync(file);
-      expect(bytes.toString('utf8')).toMatch(/^CENTRAID-KEY-V1\n/);
+      expect(bytes.toString('utf8')).toMatch(/^CENTRAID-KEY-V1\n/u);
       expect(bytes).not.toHaveLength(32);
     }
   });

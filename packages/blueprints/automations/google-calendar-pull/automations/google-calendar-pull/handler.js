@@ -62,7 +62,10 @@ export default {
     let mode = syncToken ? 'incremental' : 'walk';
 
     for (let page = 0; page < MAX_PAGES_PER_RUN; page++) {
-      const params = new URLSearchParams({ maxResults: '250', singleEvents: 'false' });
+      const params = new URLSearchParams({
+        maxResults: '250',
+        singleEvents: 'false',
+      });
       // Calendar's contract: syncToken and pageToken are MUTUALLY EXCLUSIVE
       // (sending both is a 400). A continuation page — whether within this
       // fire or resumed across fires from a saved pageToken — carries the

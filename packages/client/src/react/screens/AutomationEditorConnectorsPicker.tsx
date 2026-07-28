@@ -1,8 +1,10 @@
 import { useEffect, useId, useRef, useState, type JSX } from 'react';
+
 import type { AuEditorCatalogConnectorDTO, AuEditorConnectFormInput } from '../screen-contracts.js';
-import { Button, Icon } from '../ui/index.js';
 import { cx } from '../ui/cx.js';
+import { Button, Icon } from '../ui/index.js';
 import { ConnectorBrandGlyph, type ConnectorTone } from './connectorBrandMarks.js';
+
 import styles from './AutomationEditorScreen.module.css';
 
 const HEALTH_LABEL: Record<

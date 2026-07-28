@@ -4,10 +4,12 @@
 // CAS door. Test-only module — imported by archive.test.ts / selector.test.ts,
 // never shipped.
 
-import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
+
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
+
 import { openJournalDb } from '../../stores/gateway-db.js';
 import type { BlobSink } from './types.js';
 

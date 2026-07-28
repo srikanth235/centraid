@@ -60,7 +60,9 @@ export function runOriginLabel(r: CentraidAutomationTurnRecord): string {
  * real field on the JSON the gateway returns (packages/automation/src/
  * manifest/manifest.ts `Manifest.vault`) — read it structurally.
  */
-export function manifestHasVault(m: CentraidAutomationManifest): boolean {
+export function manifestHasVault(
+  m: CentraidAutomationManifest,
+): m is CentraidAutomationManifest & { vault: unknown } {
   return (m as unknown as Record<string, unknown>).vault !== undefined;
 }
 

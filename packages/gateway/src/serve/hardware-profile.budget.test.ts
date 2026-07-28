@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+
 import { resolveGatewayHardwareProfile, type ResourceMode } from './hardware-profile.js';
 
 /*
@@ -29,7 +30,11 @@ const HOSTS: Record<string, { cores: number; totalMemoryBytes: number; storageFs
     '4c/8GB': { cores: 4, totalMemoryBytes: 8 * 1024 ** 3 },
     '8c/16GB': { cores: 8, totalMemoryBytes: 16 * 1024 ** 3 },
     '16c/64GB': { cores: 16, totalMemoryBytes: 64 * 1024 ** 3 },
-    '8c/16GB@12ms': { cores: 8, totalMemoryBytes: 16 * 1024 ** 3, storageFsyncMs: 12 },
+    '8c/16GB@12ms': {
+      cores: 8,
+      totalMemoryBytes: 16 * 1024 ** 3,
+      storageFsyncMs: 12,
+    },
   };
 
 const CONSERVE: Omit<ResolvedKnobs, 'class' | 'sqliteSynchronous'> = {

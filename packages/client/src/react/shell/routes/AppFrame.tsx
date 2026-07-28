@@ -1,15 +1,17 @@
-import { type CSSProperties, type JSX, useEffect, useMemo, useRef } from 'react';
 import { themes } from '@centraid/design-tokens';
-import { appLiveUrl } from '../../../gateway-client.js';
+import { type CSSProperties, type JSX, useEffect, useMemo, useRef } from 'react';
+
 import type { AppearancePrefs } from '../../../app-shell-context.js';
-import styles from './AppFrame.module.css';
+import { appLiveUrl } from '../../../gateway-client.js';
 import {
   attachAppFrameReplicaBridge,
   type AppFrameResourceRequest,
   type AppFrameResourceResponse,
 } from './appFrameReplicaBridge.js';
 import { isOpaqueAppTunnelUrl, prepareOpaqueAppDocument } from './opaqueAppDocument.js';
+
 import atomsCss from '../../styles/atoms.module.css';
+import styles from './AppFrame.module.css';
 
 const APP_FRAME_URL_STORAGE = 'centraid.client.v1.app-frame-urls';
 const IROH_VIRTUAL_PREFIX = '/__centraid_iroh__/';

@@ -4,10 +4,11 @@
 // side) or throws a `BridgeFailureError` with a stable code. The dispatcher
 // converts both into the wire `BridgeResponse` envelope.
 
-import * as Haptics from 'expo-haptics';
 import { EncodingType, File, Paths, UploadType } from 'expo-file-system';
+import * as Haptics from 'expo-haptics';
 import * as Notifications from 'expo-notifications';
 import { SchedulableTriggerInputTypes } from 'expo-notifications';
+
 import type { BridgeMethod, BridgeRequest, BridgeResponse } from './protocol';
 import { assertGatewayMintedUploadUrl, type BackgroundTransferScope } from './transfer-policy';
 
@@ -258,7 +259,10 @@ export async function dispatch(
   const handler = HANDLERS[req.method];
   if (!handler) {
     return {
-      error: { code: 'unknown_method', message: `Unknown method "${req.method}"` },
+      error: {
+        code: 'unknown_method',
+        message: `Unknown method "${req.method}"`,
+      },
       id: req.id,
       ok: false,
     };
@@ -268,7 +272,11 @@ export async function dispatch(
     return { id: req.id, ok: true, value };
   } catch (err) {
     if (err instanceof BridgeFailureError) {
-      return { error: { code: err.code, message: err.message }, id: req.id, ok: false };
+      return {
+        error: { code: err.code, message: err.message },
+        id: req.id,
+        ok: false,
+      };
     }
     return {
       error: {

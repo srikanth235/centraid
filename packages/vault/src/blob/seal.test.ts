@@ -4,8 +4,10 @@
 // swapped frame, or a truncated directory must all fail closed.
 
 import { randomBytes } from 'node:crypto';
+import { Readable } from 'node:stream';
+
 import { describe, expect, test } from 'vitest';
-import { sealBlob, sealBlobStream, unsealBlob } from './seal.js';
+
 import {
   HEADER_BYTES,
   sealDirectory,
@@ -14,8 +16,8 @@ import {
   TRAILER_BYTES,
   unsealFrame,
 } from './seal-frames.js';
+import { sealBlob, sealBlobStream, unsealBlob } from './seal.js';
 import { sha256OfBytes } from './store.js';
-import { Readable } from 'node:stream';
 
 const KEY = Buffer.alloc(32, 0x5a);
 /** node's AES-GCM `decipher.final()` message when the auth tag fails to verify. */

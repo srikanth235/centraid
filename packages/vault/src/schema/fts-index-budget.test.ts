@@ -4,14 +4,15 @@
 // real triggers, no mocks.
 
 import { describe, expect, test } from 'vitest';
+
 import { bootstrapVault } from '../bootstrap.js';
+import { registerDocumentCommands } from '../commands/documents.js';
+import { registerKnowledgeCommands } from '../commands/knowledge.js';
 import { openVaultDb } from '../db.js';
 import { createGateway } from '../gateway/gateway.js';
 import type { Credential } from '../gateway/types.js';
-import { registerDocumentCommands } from '../commands/documents.js';
-import { registerKnowledgeCommands } from '../commands/knowledge.js';
-import { FTS_BODY_INDEX_BUDGET_CHARS, rebuildFtsIndex, truncateForIndex } from './fts.js';
 import { rebuildDocumentFtsIndex } from './blob.js';
+import { FTS_BODY_INDEX_BUDGET_CHARS, rebuildFtsIndex, truncateForIndex } from './fts.js';
 
 function setup() {
   const db = openVaultDb();
@@ -19,7 +20,11 @@ function setup() {
   const gw = createGateway(db);
   registerKnowledgeCommands(gw);
   registerDocumentCommands(gw);
-  const owner: Credential = { kind: 'device', deviceId: boot.deviceId, deviceKey: boot.deviceKey };
+  const owner: Credential = {
+    kind: 'device',
+    deviceId: boot.deviceId,
+    deviceKey: boot.deviceKey,
+  };
   return { db, gw, owner };
 }
 
@@ -114,12 +119,14 @@ describe('fts-index-budget', () => {
 
   test('rebuildFtsIndex refuses core.document and points at the derivative-aware rebuild', () => {
     const db = openVaultDb();
-    expect(() => rebuildFtsIndex(db.vault, 'core.document')).toThrow(/rebuildDocumentFtsIndex/);
+    expect(() => rebuildFtsIndex(db.vault, 'core.document')).toThrow(/rebuildDocumentFtsIndex/u);
   });
 
   test('rebuildFtsIndex rejects an unknown entity', () => {
     const db = openVaultDb();
-    expect(() => rebuildFtsIndex(db.vault, 'not.a.real.entity')).toThrow(/not a searchable entity/);
+    expect(() => rebuildFtsIndex(db.vault, 'not.a.real.entity')).toThrow(
+      /not a searchable entity/u,
+    );
   });
 
   test('rebuildDocumentFtsIndex re-derives fts_core_document, extracted text still wins', () => {

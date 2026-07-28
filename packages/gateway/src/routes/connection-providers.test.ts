@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { PROVIDER_PRESETS, capabilitiesFromConnectors } from './connection-providers.js';
 
 describe('PROVIDER_PRESETS capabilities', () => {
@@ -9,12 +10,12 @@ describe('PROVIDER_PRESETS capabilities', () => {
       expect(p.capabilities.syncs.length + p.capabilities.actions.length).toBeGreaterThan(0);
       // Capability / action DTOs must never carry secret cells (credKind is not a secret).
       const capJson = JSON.stringify(p.capabilities);
-      expect(capJson).not.toMatch(/client_secret|access_token|refresh_token|"apiKey"/);
+      expect(capJson).not.toMatch(/client_secret|access_token|refresh_token|"apiKey"/u);
       // Syncs map to real pull templates that are not -send.
       for (const s of p.capabilities.syncs) {
         expect(s.templateId.endsWith('-send')).toBe(false);
         expect(s.kind.length).toBeGreaterThan(0);
-        expect(s.defaultCron).toMatch(/\S/);
+        expect(s.defaultCron).toMatch(/\S/u);
       }
       for (const a of p.capabilities.actions) {
         expect(a.toolName.startsWith('connector.')).toBe(true);

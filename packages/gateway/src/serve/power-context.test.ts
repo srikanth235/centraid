@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import {
   evaluatePosture,
   parsePmset,
@@ -46,7 +47,11 @@ describe(evaluatePosture, () => {
 
   it('thermal serious/critical defers even on mains', () => {
     for (const t of ['serious', 'critical'] as const) {
-      const s = evaluatePosture({ ...base, discharging: false, thermalPressure: t });
+      const s = evaluatePosture({
+        ...base,
+        discharging: false,
+        thermalPressure: t,
+      });
       expect(s.reason).toBe('thermal');
       expect(s.deferringBackgroundWork).toBe(true);
       expect(s.kind).toBe('mains');
@@ -55,7 +60,11 @@ describe(evaluatePosture, () => {
 
   it('thermal nominal/fair does not defer', () => {
     for (const t of ['nominal', 'fair'] as const) {
-      const s = evaluatePosture({ ...base, discharging: false, thermalPressure: t });
+      const s = evaluatePosture({
+        ...base,
+        discharging: false,
+        thermalPressure: t,
+      });
       expect(s.reason).toBeNull();
       expect(s.deferringBackgroundWork).toBe(false);
     }
@@ -128,7 +137,9 @@ async function monitorWith(
     probeBattery: async () => opts.probe ?? null,
     ...(opts.steal ? { readStealSample: opts.steal } : {}),
     ...(opts.onDeferringChange
-      ? { onDeferringChange: (s) => opts.onDeferringChange!(s.deferringBackgroundWork) }
+      ? {
+          onDeferringChange: (s) => opts.onDeferringChange!(s.deferringBackgroundWork),
+        }
       : {}),
   });
   await m.ready;
@@ -139,7 +150,12 @@ describe(PowerContextMonitor, () => {
   it('boot probe with no battery on darwin is mains, source os-probe, battery null', async () => {
     const m = await monitorWith({
       platform: 'darwin',
-      probe: { present: false, percent: null, charging: null, discharging: null },
+      probe: {
+        present: false,
+        percent: null,
+        charging: null,
+        discharging: null,
+      },
     });
     const s = m.snapshot();
     expect(s.kind).toBe('mains');
@@ -151,7 +167,12 @@ describe(PowerContextMonitor, () => {
   it('battery-absent null gates battery chrome even when a client push arrives', async () => {
     const m = await monitorWith({
       platform: 'darwin',
-      probe: { present: false, percent: null, charging: null, discharging: null },
+      probe: {
+        present: false,
+        percent: null,
+        charging: null,
+        discharging: null,
+      },
     });
     m.applyClientPush({ onBattery: false });
     // Desktop Mac: probe says no battery, so battery stays null (no chrome).
@@ -209,7 +230,12 @@ describe(PowerContextMonitor, () => {
     const m = await monitorWith({
       platform: 'linux',
       now: () => t,
-      probe: { present: false, percent: null, charging: null, discharging: null },
+      probe: {
+        present: false,
+        percent: null,
+        charging: null,
+        discharging: null,
+      },
       steal: () => samples[Math.min(i++, samples.length - 1)] ?? null,
     });
     // First snapshot at boot took sample[0]; no delta yet.
@@ -221,7 +247,12 @@ describe(PowerContextMonitor, () => {
   it('steal is null on non-linux platforms', async () => {
     const m = await monitorWith({
       platform: 'darwin',
-      probe: { present: false, percent: null, charging: null, discharging: null },
+      probe: {
+        present: false,
+        percent: null,
+        charging: null,
+        discharging: null,
+      },
     });
     expect(m.snapshot().stealPercent).toBeNull();
   });

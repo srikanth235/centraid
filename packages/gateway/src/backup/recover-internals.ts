@@ -9,6 +9,7 @@
 import { existsSync, promises as fs } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+
 import {
   openLocalBackupProvider,
   openRemoteBackupProvider,
@@ -20,12 +21,13 @@ import {
   type WalReplayOutcome,
 } from '@centraid/backup';
 import { bumpReplicaEpoch, ONTOLOGY_VERSION, VAULT_MIGRATIONS } from '@centraid/vault';
-import { run } from '../worktree-store/git.js';
-import { GATEWAY_VERSION } from '../version.js';
-import { loadBackupState, saveBackupState } from './backup-state.js';
+
 import type { GatewayDatabase } from '../serve/gateway-db.js';
-import { warmPreviewTinies } from './restore-warm.js';
+import { GATEWAY_VERSION } from '../version.js';
+import { run } from '../worktree-store/git.js';
+import { loadBackupState, saveBackupState } from './backup-state.js';
 import type { PreviewsRecoverOutcome, RecoverAdoptContext, RecoverInput } from './recover.js';
+import { warmPreviewTinies } from './restore-warm.js';
 
 const LOCAL_PROVIDER_PREFIX = 'local:';
 
@@ -94,8 +96,7 @@ export async function collectRemoteCasShas(
   targetId: string,
 ): Promise<Set<string>> {
   const shas = new Set<string>();
-  let cursor: string | undefined;
-  do {
+  const collectPage = async (cursor: string | undefined): Promise<void> => {
     const page = await provider.listInventory!(targetId, {
       store: 'cas',
       ...(cursor === undefined ? {} : { cursor }),
@@ -105,8 +106,10 @@ export async function collectRemoteCasShas(
       const sha = casShaOf(object.key);
       if (sha) shas.add(sha);
     }
-    cursor = page.nextCursor ?? undefined;
-  } while (cursor !== undefined);
+    const nextCursor = page.nextCursor ?? undefined;
+    if (nextCursor !== undefined) return collectPage(nextCursor);
+  };
+  await collectPage(undefined);
   return shas;
 }
 

@@ -3,6 +3,7 @@
 // sweepLifecycle pure-ish paths with a bootstrapped vault.
 
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+
 import { bootstrapVault, createGrant, enrollApp, type BootstrapResult } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { uuidv7 } from '../ids.js';
@@ -134,7 +135,7 @@ describe('duties-helpers', () => {
       .get(grantId) as { status: string; revoked_at: string | null };
     expect(grant.status).toBe('revoked');
     expect(grant.revoked_at).toBeTruthy();
-    expect(() => revokeGrantCascade(db, owner, 'missing-grant', () => 0)).toThrow(/no grant/);
+    expect(() => revokeGrantCascade(db, owner, 'missing-grant', () => 0)).toThrow(/no grant/u);
   });
 
   test('sweepLifecycle returns a zeroed result shape on a clean vault', () => {

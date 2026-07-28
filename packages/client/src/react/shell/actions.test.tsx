@@ -1,6 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
 import { ShellActions, ShellActionsProvider, useShellActions } from './actions.js';
 
 let root: Root | null = null;
@@ -48,7 +49,7 @@ describe('actions', () => {
         return null;
       };
       const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      expect(() => renderWith(null, Bad)).toThrow(/ShellActionsProvider/);
+      expect(() => renderWith(null, Bad)).toThrow(/ShellActionsProvider/u);
       spy.mockRestore();
     });
   });

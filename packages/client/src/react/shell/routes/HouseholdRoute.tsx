@@ -1,4 +1,5 @@
 import { type JSX, useEffect, useState } from 'react';
+
 import {
   createGatewayDeviceTicket,
   getGatewayDeviceWorkStatus,
@@ -10,8 +11,8 @@ import {
 } from '../../../gateway-client.js';
 import HouseholdScreen from '../../screens/HouseholdScreen.js';
 import { useShellActions } from '../actions.js';
-import { useMemberScopes } from '../useMemberScopes.js';
 import PageScroll from '../PageScroll.js';
+import { useMemberScopes } from '../useMemberScopes.js';
 import SpaceModal, { DEFAULT_SPACE_ICON, randomSpaceColor } from './SpaceModal.js';
 import { createSpace } from './spaceModals.js';
 import { startVisibilityTicker } from './visibility-ticker.js';

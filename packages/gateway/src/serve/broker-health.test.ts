@@ -1,5 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
+
 import { describe, expect, it } from 'vitest';
+
 import { createBrokerHealthProbe } from './broker-health.js';
 
 /** A minimal in-memory `sync_connection*` trio — just enough for the probe's join. */
@@ -53,7 +55,9 @@ function insertConnection(
 
 describe(createBrokerHealthProbe, () => {
   it('reports ok when there are no broker-carried connections', async () => {
-    const probe = createBrokerHealthProbe({ vaults: () => [{ vaultId: 'v1', db: fakeVaultDb() }] });
+    const probe = createBrokerHealthProbe({
+      vaults: () => [{ vaultId: 'v1', db: fakeVaultDb() }],
+    });
     const result = await probe();
     expect(result.status).toBe('ok');
   });
@@ -67,7 +71,9 @@ describe(createBrokerHealthProbe, () => {
       credKind: 'oauth2',
       tokenExpiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
     });
-    const probe = createBrokerHealthProbe({ vaults: () => [{ vaultId: 'v1', db }] });
+    const probe = createBrokerHealthProbe({
+      vaults: () => [{ vaultId: 'v1', db }],
+    });
     expect((await probe()).status).toBe('ok');
   });
 
@@ -80,7 +86,9 @@ describe(createBrokerHealthProbe, () => {
       credKind: 'oauth2',
       authNote: 'token refresh refused (invalid_grant)',
     });
-    const probe = createBrokerHealthProbe({ vaults: () => [{ vaultId: 'v1', db }] });
+    const probe = createBrokerHealthProbe({
+      vaults: () => [{ vaultId: 'v1', db }],
+    });
     const result = await probe();
     expect(result.status).toBe('degraded');
     expect(result.detail).toContain('need re-auth');
@@ -131,15 +139,27 @@ describe(createBrokerHealthProbe, () => {
       status: 'active',
       credKind: 'api_key',
     });
-    const probe = createBrokerHealthProbe({ vaults: () => [{ vaultId: 'v1', db }] });
+    const probe = createBrokerHealthProbe({
+      vaults: () => [{ vaultId: 'v1', db }],
+    });
     expect((await probe()).status).toBe('ok');
   });
 
   it('aggregates across multiple vaults', async () => {
     const dbA = fakeVaultDb();
-    insertConnection(dbA, { id: 'c1', label: 'a-conn', status: 'needs-auth', credKind: 'oauth2' });
+    insertConnection(dbA, {
+      id: 'c1',
+      label: 'a-conn',
+      status: 'needs-auth',
+      credKind: 'oauth2',
+    });
     const dbB = fakeVaultDb();
-    insertConnection(dbB, { id: 'c2', label: 'b-conn', status: 'needs-auth', credKind: 'oauth2' });
+    insertConnection(dbB, {
+      id: 'c2',
+      label: 'b-conn',
+      status: 'needs-auth',
+      credKind: 'oauth2',
+    });
     const probe = createBrokerHealthProbe({
       vaults: () => [
         { vaultId: 'vault-aaaa', db: dbA },
@@ -152,7 +172,9 @@ describe(createBrokerHealthProbe, () => {
 
   it('tolerates a vault whose sync tables are missing (fresh/unmounted plane)', async () => {
     const db = new DatabaseSync(':memory:'); // no tables at all
-    const probe = createBrokerHealthProbe({ vaults: () => [{ vaultId: 'v1', db }] });
+    const probe = createBrokerHealthProbe({
+      vaults: () => [{ vaultId: 'v1', db }],
+    });
     await expect(probe()).resolves.toStrictEqual({
       status: 'ok',
       detail: 'broker-carried connections healthy',

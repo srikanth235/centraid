@@ -104,31 +104,31 @@ interface VaultResolveResult {
  * enforces consent — always `await`. Mirrors app-engine's `ScopedVault`.
  */
 interface VaultApi {
-  read(request: VaultReadRequest): Promise<VaultReadResult>;
-  search(request: VaultSearchRequest): Promise<VaultSearchResult>;
-  invoke(request: VaultInvokeRequest): Promise<VaultOutcome>;
+  read: (request: VaultReadRequest) => Promise<VaultReadResult>;
+  search: (request: VaultSearchRequest) => Promise<VaultSearchResult>;
+  invoke: (request: VaultInvokeRequest) => Promise<VaultOutcome>;
   /** Query a registered app view, clamped to this app's grants. */
-  query(view: string, purpose: string): Promise<unknown>;
+  query: (view: string, purpose: string) => Promise<unknown>;
   /** Commands discoverable by this app (name, schema, risk, confirmation). */
-  describe(): Promise<unknown>;
+  describe: () => Promise<unknown>;
   /** This app's own invocations awaiting owner confirmation. */
-  parked(): Promise<unknown>;
-  resolve(request: VaultResolveRequest): Promise<VaultResolveResult>;
+  parked: () => Promise<unknown>;
+  resolve: (request: VaultResolveRequest) => Promise<VaultResolveResult>;
   /** Plaintext of one entity's sealed columns — receipted per item (#293). */
-  reveal(request: Record<string, unknown>): Promise<unknown>;
+  reveal: (request: Record<string, unknown>) => Promise<unknown>;
 }
 
 /** Per-handler `ctx` (see worker/runner.ts): fetch, abort, vault. */
 interface HandlerCtx {
-  fetch(input: string, init?: RequestInit): Promise<Response>;
+  fetch: (input: string, init?: RequestInit) => Promise<Response>;
   abortSignal: AbortSignal;
   vault: VaultApi;
 }
 
 interface HandlerLog {
-  info(msg: string): void;
-  warn(msg: string): void;
-  error(msg: string): void;
+  info: (msg: string) => void;
+  warn: (msg: string) => void;
+  error: (msg: string) => void;
 }
 
 interface HandlerAppRef {
@@ -222,36 +222,36 @@ interface CentraidClient {
    * it fresh rather than caching a snapshot.
    */
   scopes?: CentraidScope[];
-  read<T = Record<string, unknown>>(opts: {
+  read: <T = Record<string, unknown>>(opts: {
     query: string;
     input?: Record<string, unknown>;
     signal?: AbortSignal;
     /** Which mounted scope to read; defaults to the primary. */
     scope?: string;
-  }): Promise<T>;
+  }) => Promise<T>;
   /**
    * Fan one query across scopes (issue #599). Settled per scope — one audience
    * failing never sinks the others — so it resolves with an answer per scope
    * and never rejects. `scopes` restricts the fan-out (e.g. "Show more" hits
    * only the horizon scopes). Absent on single-scope hosts.
    */
-  readAll?<T = Record<string, unknown>>(opts: {
+  readAll?: <T = Record<string, unknown>>(opts: {
     query: string;
     input?: Record<string, unknown>;
     signal?: AbortSignal;
     scopes?: readonly string[];
-  }): Promise<CentraidScopeRead<T>[]>;
-  write<T = VaultOutcome>(opts: {
+  }) => Promise<CentraidScopeRead<T>[]>;
+  write: <T = VaultOutcome>(opts: {
     action: string;
     input?: Record<string, unknown>;
     intentId?: string;
     signal?: AbortSignal;
     /** Which mounted scope the write lands in; defaults to the primary. */
     scope?: string;
-  }): Promise<T>;
-  describe?(): Promise<unknown>;
+  }) => Promise<T>;
+  describe?: () => Promise<unknown>;
   /** Subscribe to the change feed; returns the unsubscribe. */
-  onChange(cb: (detail: CentraidChangeDetail) => void): () => void;
+  onChange: (cb: (detail: CentraidChangeDetail) => void) => () => void;
   /** Native haptics bridge (mobile shell only; feature-detected). */
   haptic?: Record<string, (() => void) | undefined>;
 }

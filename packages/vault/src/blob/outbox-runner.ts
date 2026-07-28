@@ -1,13 +1,14 @@
 import { rmSync } from 'node:fs';
 import type { DatabaseSync } from 'node:sqlite';
+
+import { jitterDelayMs } from '../timer-jitter.js';
 import type { BlobCache } from './cache.js';
 import type { RemoteTier } from './custody-types.js';
 import type { LocalBlobStore } from './local.js';
-import { drainOutboxRow } from './outbox-drain.js';
 import { cleanupOrphanedMultipartUploads } from './orphan-multipart.js';
+import { drainOutboxRow } from './outbox-drain.js';
 import { desiredStoreForSha } from './store-routing.js';
 import type { BlobTransferState, OutboxRow } from './transfer-state.js';
-import { jitterDelayMs } from '../timer-jitter.js';
 
 const ORPHAN_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
 const ORPHAN_SWEEP_RETRY_MS = 60 * 1000;
@@ -106,12 +107,11 @@ export class BlobOutboxRunner {
     const rows = this.options.state.dueOutbox();
     let next = 0;
     const drainNext = async (): Promise<void> => {
-      for (;;) {
-        const row = rows[next];
-        next += 1;
-        if (!row) return;
-        await this.drainRow(row);
-      }
+      const row = rows[next];
+      next += 1;
+      if (!row) return;
+      await this.drainRow(row);
+      return drainNext();
     };
     const workers = Math.min(rows.length, Math.max(1, this.options.cache.replicationConcurrency));
     await Promise.all(Array.from({ length: workers }, () => drainNext()));
@@ -149,7 +149,10 @@ export class BlobOutboxRunner {
   }
 
   private async cleanupExpiredSessions(): Promise<void> {
-    for (const row of this.options.state.expiredSessions()) {
+    const rows = this.options.state.expiredSessions();
+    const cleanupNext = async (index: number): Promise<void> => {
+      const row = rows[index];
+      if (row === undefined) return;
       this.options.onExpireSession?.(row.session_id);
       if (row.temp_path) rmSync(row.temp_path, { force: true });
       const transfer = this.options.remote()?.transfer;
@@ -162,7 +165,9 @@ export class BlobOutboxRunner {
         await transfer?.deleteTemporary(row.remote_temp_id).catch(() => undefined);
       }
       this.options.state.deleteSession(row.session_id);
-    }
+      return cleanupNext(index + 1);
+    };
+    await cleanupNext(0);
   }
 
   private async cleanupOrphanedMultipart(): Promise<void> {
@@ -174,7 +179,11 @@ export class BlobOutboxRunner {
       return;
     }
     try {
-      await cleanupOrphanedMultipartUploads({ state: this.options.state, transfer, nowMs });
+      await cleanupOrphanedMultipartUploads({
+        state: this.options.state,
+        transfer,
+        nowMs,
+      });
       this.nextOrphanSweepAt = nowMs + ORPHAN_SWEEP_INTERVAL_MS;
     } catch {
       this.nextOrphanSweepAt = nowMs + ORPHAN_SWEEP_RETRY_MS;

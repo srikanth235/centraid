@@ -1,4 +1,5 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import crypto from 'node:crypto';
+import path from 'node:path';
 /*
  * End-to-end coverage for issue #367 §C — the vault blob CAS's S3-compatible
  * remote tier — against a REAL S3-compatible HTTP server
@@ -13,12 +14,11 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  * sweep + sealed-object verification (§C3/§C4), reconcile orphan deletion,
  * the lease-gate skip (§C6), and endpoint-rotation reset (§C9).
  */
-
-import { afterAll, describe, expect, test, vi } from 'vitest';
-import crypto from 'node:crypto';
-import path from 'node:path';
 import { Readable } from 'node:stream';
+
 import { S3TestServer } from '@centraid/backup/dist/testing/s3-test-server.js';
+import { forEachSequentially } from '@centraid/test-kit/sequential';
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import {
   BlobCustody,
   FsBlobStore,
@@ -30,13 +30,14 @@ import {
   unsealBlob,
   type RemoteTier,
 } from '@centraid/vault';
+import { afterAll, describe, expect, test, vi } from 'vitest';
 
 vi.setConfig({ testTimeout: 30_000 });
 
 const cleanups: Array<() => Promise<void> | void> = [];
 describe('storage', () => {
   afterAll(async () => {
-    while (cleanups.length > 0) await cleanups.pop()?.();
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
   });
   async function startServer(): Promise<S3TestServer> {
     const server = await S3TestServer.start();
@@ -184,7 +185,9 @@ describe('storage', () => {
         Buffer.from('orphan bytes'),
       );
 
-      const result = await custody.reconcile(new Set(), { skipOrphanDelete: true });
+      const result = await custody.reconcile(new Set(), {
+        skipOrphanDelete: true,
+      });
       expect(result.orphansDeleted).toStrictEqual([]);
       expect(result.orphansSkipped).toContain(orphanSha);
       // Still there — a conflicted gateway instance must never delete what

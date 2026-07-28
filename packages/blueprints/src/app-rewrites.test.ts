@@ -1,7 +1,9 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
 import { applyAppVisualIdentity, stampAppVisualIdentity } from './app-rewrites.js';
 
 describe(applyAppVisualIdentity, () => {
@@ -9,7 +11,10 @@ describe(applyAppVisualIdentity, () => {
     JSON.stringify({ id: 'hydrate', name: 'Hydrate', version: '0.1.0', ...extra }, null, 2) + '\n';
 
   it('backfills missing iconKey/colorKey', () => {
-    const next = applyAppVisualIdentity(manifest(), { iconKey: 'Water', colorKey: 'teal' });
+    const next = applyAppVisualIdentity(manifest(), {
+      iconKey: 'Water',
+      colorKey: 'teal',
+    });
     const parsed = JSON.parse(next!) as { iconKey: string; colorKey: string };
     expect(parsed.iconKey).toBe('Water');
     expect(parsed.colorKey).toBe('teal');
@@ -66,6 +71,6 @@ describe(stampAppVisualIdentity, () => {
 
   it('is a no-op when app.json is missing', async () => {
     await stampAppVisualIdentity(dir, { iconKey: 'Water' });
-    await expect(fs.access(path.join(dir, 'app.json'))).rejects.toThrow(/ENOENT/);
+    await expect(fs.access(path.join(dir, 'app.json'))).rejects.toThrow(/ENOENT/u);
   });
 });

@@ -12,6 +12,7 @@
 // is a transform, so it stays purely visual with no layout shift. The launched
 // cover's open transition is owned by the root navigator (App.tsx COVER_OPTIONS).
 
+import * as Haptics from 'expo-haptics';
 import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
@@ -20,7 +21,7 @@ import Animated, {
   withSpring,
   type SharedValue,
 } from 'react-native-reanimated';
-import * as Haptics from 'expo-haptics';
+
 import AppIcon from '../../kit/components/AppIcon';
 import { family, useTheme, type ThemeColors } from '../../kit/theme';
 import type { LauncherItem } from './catalog';
@@ -78,7 +79,9 @@ function LauncherTile({
   const { meta, installed } = item;
   const label = installed ? `Open ${meta.name}` : `${meta.name}, on your desktop — tap to pair`;
   const scale = useSharedValue(1);
-  const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
 
   const { pressIn, pressOut } = buildPressHandlers(scale, installed);
 
@@ -123,7 +126,11 @@ const makeStyles = (colors: ThemeColors) =>
     // The scaling content lives on the inner view so the spring transform never
     // fights the tile's layout; icon + label stack and center here.
     tileInner: { alignItems: 'center', gap: 9 },
-    tileLabel: { color: colors.ink2, fontFamily: family.sansMedium, fontSize: 12 },
+    tileLabel: {
+      color: colors.ink2,
+      fontFamily: family.sansMedium,
+      fontSize: 12,
+    },
     tileLabelDim: { color: colors.ink3 },
     // Scale is owned by the reanimated spring now; the press only dims.
     tilePressed: { opacity: 0.7 },

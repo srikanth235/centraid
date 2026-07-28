@@ -1,11 +1,13 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { Registry } from '../registry/registry.js';
-import { Dispatcher } from './dispatcher.js';
+
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
 import { parseManifest, ManifestError } from '../registry/manifest.js';
+import { Registry } from '../registry/registry.js';
 import { buildExtraPrompt } from './build-extra-prompt.js';
+import { Dispatcher } from './dispatcher.js';
 import type { VaultCall, VaultCallResult } from './vault-bridge.js';
 
 const writeJson = (file: string, data: unknown) =>
@@ -91,7 +93,10 @@ describe('ctx.vault worker channel', () => {
         (appId) =>
         async (call): Promise<VaultCallResult> => {
           calls.push({ appId, call });
-          return { ok: true, result: { status: 'executed', output: { event_id: 'ev1' } } };
+          return {
+            ok: true,
+            result: { status: 'executed', output: { event_id: 'ev1' } },
+          };
         },
     });
     const out = await dispatcher.write({
@@ -109,7 +114,10 @@ describe('ctx.vault worker channel', () => {
       appId: 'planner',
       call: {
         op: 'invoke',
-        payload: { command: 'schedule.propose_event', input: { summary: 'Standup' } },
+        payload: {
+          command: 'schedule.propose_event',
+          input: { summary: 'Standup' },
+        },
       },
     });
   });
@@ -121,7 +129,10 @@ describe('ctx.vault worker channel', () => {
       codeDirOverride: async (appId) => path.join(codeRoot, appId),
       vaultFor: () => async (call) => {
         calls.push(call);
-        return { ok: true, result: { status: 'executed', output: { event_id: 'ev1' } } };
+        return {
+          ok: true,
+          result: { status: 'executed', output: { event_id: 'ev1' } },
+        };
       },
     });
     await dispatcher.write({
@@ -156,7 +167,7 @@ describe('ctx.vault worker channel', () => {
     });
 
     const invocationIds = calls.map((call) => String(call.payload.invocationId));
-    expect(invocationIds[0]).toMatch(/^replica:v1:[a-f0-9]{64}$/);
+    expect(invocationIds[0]).toMatch(/^replica:v1:[a-f0-9]{64}$/u);
     expect(invocationIds[0]).not.toBe('handler-selected-first');
     expect(invocationIds[1]).toBe(invocationIds[0]);
     expect(invocationIds[2]).not.toBe(invocationIds[0]);
@@ -184,9 +195,15 @@ describe('ctx.vault worker channel', () => {
         error: 'deny (receipt r123): no active grant covers schedule read',
       }),
     });
-    const out = await dispatcher.read({ app: 'planner', query: 'agenda', input: {} });
+    const out = await dispatcher.read({
+      app: 'planner',
+      query: 'agenda',
+      input: {},
+    });
     expect(out.isError).toBe(false);
-    expect(out.structuredContent).toMatchObject({ deniedCode: 'VAULT_CONSENT' });
+    expect(out.structuredContent).toMatchObject({
+      deniedCode: 'VAULT_CONSENT',
+    });
     expect((out.structuredContent as { message: string }).message).toContain('receipt r123');
   });
 
@@ -195,9 +212,15 @@ describe('ctx.vault worker channel', () => {
       registry,
       codeDirOverride: async (appId) => path.join(codeRoot, appId),
     });
-    const out = await dispatcher.read({ app: 'planner', query: 'agenda', input: {} });
+    const out = await dispatcher.read({
+      app: 'planner',
+      query: 'agenda',
+      input: {},
+    });
     expect(out.isError).toBe(false);
-    expect(out.structuredContent).toMatchObject({ deniedCode: 'VAULT_UNAVAILABLE' });
+    expect(out.structuredContent).toMatchObject({
+      deniedCode: 'VAULT_UNAVAILABLE',
+    });
   });
 });
 
@@ -215,7 +238,10 @@ describe('manifest vault block', () => {
     const manifest = parseManifest(
       JSON.stringify({
         ...base,
-        vault: { purpose: 'dpv:ServiceProvision', scopes: [{ schema: 'schedule', verbs: 'read' }] },
+        vault: {
+          purpose: 'dpv:ServiceProvision',
+          scopes: [{ schema: 'schedule', verbs: 'read' }],
+        },
       }),
     );
     expect(manifest.vault).toStrictEqual({
@@ -229,7 +255,10 @@ describe('manifest vault block', () => {
       parseManifest(
         JSON.stringify({
           ...base,
-          vault: { purpose: 'p', scopes: [{ schema: 'schedule', verbs: 'write' }] },
+          vault: {
+            purpose: 'p',
+            scopes: [{ schema: 'schedule', verbs: 'write' }],
+          },
         }),
       ),
     ).toThrow(ManifestError);

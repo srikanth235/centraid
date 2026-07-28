@@ -25,15 +25,17 @@
 // fields ARE sent: the renderer's automation gallery filters on `kind` and
 // renders the card from emoji/category/trigger*/integrations.
 
-import type { IncomingMessage, ServerResponse } from 'node:http';
 import { promises as fs } from 'node:fs';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import path from 'node:path';
+
 import {
   fetchRemoteTemplates,
   resolveTemplates,
   templateSourceDir,
   type ResolvedTemplate,
 } from '@centraid/blueprints';
+
 import { sendJson } from './route-helpers.js';
 
 /** One requested scope of a template's `app.json` `vault` block. */

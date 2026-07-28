@@ -19,23 +19,23 @@
 // are build outputs (gitignored); the committed source is this generator, the
 // hand-authored `styles/bridge.css` + `styles/fonts.css`, and the fonts.
 import { writeFileSync, readFileSync, copyFileSync, mkdirSync, rmSync } from 'node:fs';
-import { resolve } from 'node:path';
+import path from 'node:path';
 
 const here = import.meta.dirname;
-const repoRoot = resolve(here, '..', '..');
-const kitDir = resolve(repoRoot, 'packages/blueprints/kit');
-const stylesDir = resolve(here, 'styles');
-const componentsDir = resolve(here, 'components');
-const previewsDir = resolve(here, 'previews');
+const repoRoot = path.resolve(here, '..', '..');
+const kitDir = path.resolve(repoRoot, 'packages/blueprints/kit');
+const stylesDir = path.resolve(here, 'styles');
+const componentsDir = path.resolve(here, 'components');
+const previewsDir = path.resolve(here, 'previews');
 for (const d of [stylesDir, componentsDir, previewsDir]) mkdirSync(d, { recursive: true });
 
 // 1. Token CSS — the full :root + per-theme + per-density var blocks.
-const { toCss } = await import(resolve(repoRoot, 'packages/design-tokens/dist/index.js'));
-writeFileSync(resolve(stylesDir, 'tokens.css'), toCss());
+const { toCss } = await import(path.resolve(repoRoot, 'packages/design-tokens/dist/index.js'));
+writeFileSync(path.resolve(stylesDir, 'tokens.css'), toCss());
 console.log('[build] wrote styles/tokens.css');
 
 // 2. The canonical kit stylesheet — copied verbatim, never edited here.
-copyFileSync(resolve(kitDir, 'kit.css'), resolve(stylesDir, 'kit.css'));
+copyFileSync(path.resolve(kitDir, 'kit.css'), path.resolve(stylesDir, 'kit.css'));
 console.log('[build] copied styles/kit.css');
 
 // 3. The flat cssEntry the converter copies into _ds_bundle.css. Concatenated
@@ -43,15 +43,15 @@ console.log('[build] copied styles/kit.css');
 // bridge maps token vars onto the kit's app-level contract → kit.css (reads
 // those vars) last.
 const parts = ['tokens.css', 'fonts.css', 'bridge.css', 'kit.css'].map(
-  (f) => `/* ==== ${f} ==== */\n${readFileSync(resolve(stylesDir, f), 'utf8')}`,
+  (f) => `/* ==== ${f} ==== */\n${readFileSync(path.resolve(stylesDir, f), 'utf8')}`,
 );
-writeFileSync(resolve(stylesDir, 'bundle.css'), parts.join('\n\n'));
+writeFileSync(path.resolve(stylesDir, 'bundle.css'), parts.join('\n\n'));
 console.log('[build] wrote styles/bundle.css (cssEntry)');
 
 // 4. The REAL component source — no wrapper. Copied so the sync bundle is
 // self-contained; the file is the same one the product ships. Dependency-free
 // (no vendored runtime bundle to copy alongside it).
-copyFileSync(resolve(kitDir, 'elements.js'), resolve(componentsDir, 'elements.js'));
+copyFileSync(path.resolve(kitDir, 'elements.js'), path.resolve(componentsDir, 'elements.js'));
 console.log('[build] copied components/elements.js');
 
 // 5. One preview + manifest entry per ported component. Each preview embeds the
@@ -185,7 +185,7 @@ ${indentedBody}
 rmSync(previewsDir, { recursive: true, force: true });
 mkdirSync(previewsDir, { recursive: true });
 for (const c of COMPONENTS) {
-  writeFileSync(resolve(previewsDir, `${c.tag}.html`), previewHtml(c));
+  writeFileSync(path.resolve(previewsDir, `${c.tag}.html`), previewHtml(c));
 }
 console.log(`[build] wrote ${COMPONENTS.length} preview cards → previews/`);
 
@@ -203,5 +203,5 @@ const manifest = {
     preview: `previews/${c.tag}.html`,
   })),
 };
-writeFileSync(resolve(here, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+writeFileSync(path.resolve(here, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 console.log('[build] wrote manifest.json');

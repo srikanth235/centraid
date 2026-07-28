@@ -1,6 +1,8 @@
-import { afterEach, describe, expect, it } from 'vitest';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
+
+import { afterEach, describe, expect, it } from 'vitest';
+
 import type { RouteHandler } from '../serve/build-gateway.js';
 import { HealthRegistry } from '../serve/health-registry.js';
 import { makeHealthRouteHandler } from './health-routes.js';
@@ -41,7 +43,11 @@ describe('health-routes', () => {
       expect(res.status).toBe(200);
       const body = (await res.json()) as {
         status: string;
-        components: Array<{ component: string; status: string; lastError?: string }>;
+        components: Array<{
+          component: string;
+          status: string;
+          lastError?: string;
+        }>;
         recentEvents: Array<{ component: string; level: string }>;
       };
       expect(body.status).toBe('error');
@@ -49,27 +55,43 @@ describe('health-routes', () => {
       expect(body.components.find((c) => c.component === 'outbox')?.lastError).toBe(
         'drain failed: ECONNREFUSED',
       );
-      expect(body.recentEvents[0]).toMatchObject({ component: 'outbox', level: 'error' });
+      expect(body.recentEvents[0]).toMatchObject({
+        component: 'outbox',
+        level: 'error',
+      });
     });
 
     it('runs registered probes at request time', async () => {
       const registry = new HealthRegistry();
-      registry.registerProbe('vaults', async () => ({ status: 'ok', detail: '3 vaults mounted' }));
+      registry.registerProbe('vaults', async () => ({
+        status: 'ok',
+        detail: '3 vaults mounted',
+      }));
       const url = await startHandlerServer(makeHealthRouteHandler(registry));
 
       const res = await fetch(`${url}/centraid/_gateway/health`);
       const body = (await res.json()) as {
-        components: Array<{ component: string; status: string; detail?: string }>;
+        components: Array<{
+          component: string;
+          status: string;
+          detail?: string;
+        }>;
       };
       expect(body.components).toStrictEqual([
-        expect.objectContaining({ component: 'vaults', status: 'ok', detail: '3 vaults mounted' }),
+        expect.objectContaining({
+          component: 'vaults',
+          status: 'ok',
+          detail: '3 vaults mounted',
+        }),
       ]);
     });
 
     it('answers 405 for non-GET and ignores other paths', async () => {
       const url = await startHandlerServer(makeHealthRouteHandler(new HealthRegistry()));
 
-      const post = await fetch(`${url}/centraid/_gateway/health`, { method: 'POST' });
+      const post = await fetch(`${url}/centraid/_gateway/health`, {
+        method: 'POST',
+      });
       expect(post.status).toBe(405);
 
       const other = await fetch(`${url}/centraid/_gateway/info`);

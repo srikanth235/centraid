@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+
 import {
   revalidateBackedUp,
   selectFreeUpCandidates,
@@ -34,7 +35,11 @@ describe('free-up-space eligibility', () => {
       [
         backedUp('ok'),
         backedUp('unverified', { verifiedCasAck: false }),
-        backedUp('remoteOnly', { source: 'replica', localId: undefined, localIds: [] }),
+        backedUp('remoteOnly', {
+          source: 'replica',
+          localId: undefined,
+          localIds: [],
+        }),
         backedUp('queued', { backupState: 'queued' }),
         backedUp('pinned'),
       ],
@@ -53,7 +58,12 @@ describe('free-up-space eligibility', () => {
 
   test('revalidation keeps matches and excludes bytes that changed since backup', async () => {
     const candidates: FreeUpCandidate[] = [
-      { assetId: 'a', localIds: ['stable', 'edited', 'gone'], sha256: 'sha-a', fileSize: 10 },
+      {
+        assetId: 'a',
+        localIds: ['stable', 'edited', 'gone'],
+        sha256: 'sha-a',
+        fileSize: 10,
+      },
     ];
     const probe: DeviceByteProbe = async (localId) =>
       localId === 'stable'
@@ -70,7 +80,14 @@ describe('free-up-space eligibility', () => {
 
   test('an iCloud-only original is reported apart from a missing one', async () => {
     const result = await revalidateBackedUp(
-      [{ assetId: 'a', localIds: ['cloud', 'gone'], sha256: 'sha-a', fileSize: 5 }],
+      [
+        {
+          assetId: 'a',
+          localIds: ['cloud', 'gone'],
+          sha256: 'sha-a',
+          fileSize: 5,
+        },
+      ],
       async (localId) => (localId === 'cloud' ? 'in-cloud' : null),
     );
     expect(result.deletableLocalIds).toStrictEqual([]);

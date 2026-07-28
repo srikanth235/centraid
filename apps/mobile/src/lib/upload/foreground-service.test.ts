@@ -3,14 +3,20 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const native = { start: vi.fn(), update: vi.fn(), stop: vi.fn() };
+const native = {
+  start: vi.fn<(total: number) => void>(),
+  update: vi.fn<(completed: number, total: number) => void>(),
+  stop: vi.fn<() => void>(),
+};
 
 vi.mock(import('react-native'), () => ({
   // foreground-service.ts only reads `Platform.OS` — react-native's real
   // `Platform` type is a union of per-platform statics with many members
   // (Version, isTV, select, …) that a test stub has no reason to implement,
   // so this narrow stand-in is asserted to the real type instead.
-  Platform: { OS: 'android' } as unknown as typeof import('react-native').Platform,
+  Platform: {
+    OS: 'android',
+  } as unknown as typeof import('react-native').Platform,
   NativeModules: { CentraidUploadForeground: native },
 }));
 

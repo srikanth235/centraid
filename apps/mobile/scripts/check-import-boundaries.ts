@@ -23,8 +23,13 @@ function appOf(file: string): string | undefined {
 }
 
 const errors: string[] = [];
-for (const file of await filesUnder(root)) {
-  const source = await readFile(file, 'utf8');
+const sources = await Promise.all(
+  (await filesUnder(root)).map(async (file) => ({
+    file,
+    source: await readFile(file, 'utf8'),
+  })),
+);
+for (const { file, source } of sources) {
   const fromApp = appOf(file);
   for (const match of source.matchAll(
     /(?:from\s+|import\s*\()(?<quote>['"])(?<specifier>[^'"]+)\k<quote>/gu,

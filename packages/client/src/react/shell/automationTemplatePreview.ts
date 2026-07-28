@@ -1,9 +1,10 @@
 import type { TemplateEntry } from '../../app-shell-context.js';
 import { INTEGRATION_HUES } from '../format.js';
-import { iconSvg } from './iconSvg.js';
-import styles from './automationTemplatePreview.module.css';
-import au from '../styles/automation.module.css';
 import { cx } from '../ui/cx.js';
+import { iconSvg } from './iconSvg.js';
+
+import au from '../styles/automation.module.css';
+import styles from './automationTemplatePreview.module.css';
 
 // Automation-template preview — the richer drawer for an automation template
 // (emoji, trigger, what-it-does steps, integration chips, "Use template").

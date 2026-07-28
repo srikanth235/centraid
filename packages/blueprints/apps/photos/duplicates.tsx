@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+
 // The duplicates shelf's render orchestrator (issue #352 phase 3) — same
 // shape as toolbar.jsx: owns its own private state (the loaded clusters,
 // which asset ids are checked) and renders into the SAME `gridRoot` the
@@ -8,7 +10,6 @@
 // refresh() the way the (bounded, cheap) library window does.
 import { DuplicatesView } from './components/Duplicates.tsx';
 import { trashDuplicateAssets } from './duplicates-actions.ts';
-import type { ReactNode } from 'react';
 import type { DuplicateCluster } from './types.ts';
 
 type Root = { render: (node: ReactNode) => void };
@@ -46,7 +47,10 @@ export function createDuplicates({
           await trashDuplicateAssets(ids, { refresh, scope: ownScope() });
           const trashedIds = new Set(ids);
           clusters = (clusters ?? [])
-            .map((c) => ({ ...c, assets: c.assets.filter((a) => !trashedIds.has(a.asset_id)) }))
+            .map((c) => ({
+              ...c,
+              assets: c.assets.filter((a) => !trashedIds.has(a.asset_id)),
+            }))
             .filter((c) => c.assets.length >= 2);
           selected.clear();
           renderDuplicates();

@@ -1,10 +1,12 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import http from 'node:http';
 import { promises as fs } from 'node:fs';
+import http from 'node:http';
 import { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { brotliCompressSync } from 'node:zlib';
+
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+
 import { startWebUiServer, type WebUiServerHandle } from './web-ui-server.js';
 
 let root: string;
@@ -61,7 +63,7 @@ describe('web-ui-server', () => {
     expect(csp).toContain("connect-src 'self' http://127.0.0.1:8765 https: wss:");
     // Iroh-mode apps use a sandboxed data document; direct HTTP retains its API origin.
     expect(csp).toContain("frame-src 'self' data: http://127.0.0.1:8765");
-    const nonce = /<meta name="centraid-csp-nonce" content="([^"]+)">/.exec(html)?.[1];
+    const nonce = /<meta name="centraid-csp-nonce" content="(?<nonce>[^"]+)">/u.exec(html)?.[1];
     expect(nonce).toBeTruthy();
     expect(html).toContain(`<script type="module" src="/assets/app.js" nonce="${nonce}">`);
     expect(csp).toContain(`'nonce-${nonce}'`);
@@ -95,7 +97,9 @@ describe('web-ui-server', () => {
 
   test('publishes gateway discovery and immutable versioned assets', async () => {
     const config = await fetch(`${server.url}/web-config.json`);
-    await expect(config.json()).resolves.toStrictEqual({ gatewayUrl: 'http://127.0.0.1:8765' });
+    await expect(config.json()).resolves.toStrictEqual({
+      gatewayUrl: 'http://127.0.0.1:8765',
+    });
     expect(config.headers.get('cache-control')).toBe('no-store');
 
     const asset = await fetch(`${server.url}/assets/app.js`);
@@ -111,7 +115,9 @@ describe('web-ui-server', () => {
     expect(asset.headers.get('vary')).toContain('Accept-Encoding');
     await expect(asset.text()).resolves.toBe('export {};');
 
-    const shell = await fetch(server.url, { headers: { 'accept-encoding': 'br' } });
+    const shell = await fetch(server.url, {
+      headers: { 'accept-encoding': 'br' },
+    });
     expect(shell.headers.get('content-encoding')).toBeNull();
   });
 

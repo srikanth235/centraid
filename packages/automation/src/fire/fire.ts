@@ -21,6 +21,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
+
 import {
   ConversationStore,
   makeJournalDbProvider,
@@ -29,10 +30,11 @@ import {
   type AutomationTurnStreamEvent,
   type VaultBridge,
 } from '@centraid/app-engine';
-import { parseRef } from '../manifest/ref.js';
-import { handlerPath, readAppOwned } from '../scaffold/app.js';
+
 import { runHandler } from '../handler/runner.js';
 import type { AgentDispatcher, ConnectionAuth, HandlerOutcome } from '../handler/runner.js';
+import { parseRef } from '../manifest/ref.js';
+import { handlerPath, readAppOwned } from '../scaffold/app.js';
 
 /**
  * The gateway broker's per-fire seam (issue #304). Resolves the connector's
@@ -66,7 +68,7 @@ export interface DispatchSurface {
     turnId: string,
     ok: boolean,
   ) => void;
-  close(): Promise<void>;
+  close: () => Promise<void>;
 }
 
 /** Args app-engine hands the host when it needs a dispatch surface for a fire. */
@@ -325,7 +327,9 @@ export async function runFire(
       await dispatch.close().catch(() => undefined);
       return skipRun('connector declares requires.secrets but no vault bridge is mounted');
     }
-    for (const ref of secretRefs) {
+    const revealNext = async (index: number): Promise<string | undefined> => {
+      const ref = secretRefs[index];
+      if (ref === undefined) return;
       const value = await revealSecret(vaultBridge, ref).catch((err: unknown) => {
         onLog(
           'warn',
@@ -333,12 +337,17 @@ export async function runFire(
         );
         return undefined;
       });
-      if (value === undefined) {
-        await flipNeedsAuth(vaultBridge, row.manifest.connector).catch(() => undefined);
-        await dispatch.close().catch(() => undefined);
-        return skipRun(`secret "${ref}" is unavailable — connection flipped to needs-auth`);
-      }
+      if (value === undefined) return ref;
       secretCache.set(ref, value);
+      return revealNext(index + 1);
+    };
+    const unavailableRef = await revealNext(0);
+    if (unavailableRef !== undefined) {
+      await flipNeedsAuth(vaultBridge, row.manifest.connector).catch(() => undefined);
+      await dispatch.close().catch(() => undefined);
+      return skipRun(
+        `secret "${unavailableRef}" is unavailable — connection flipped to needs-auth`,
+      );
     }
   }
 
@@ -396,7 +405,7 @@ export async function runFire(
       triggerOrigin: opts.triggerOrigin ?? 'cron',
       ...(opts.note ? { note: opts.note } : {}),
       ...(opts.failoverNotice ? { failoverNotice: opts.failoverNotice } : {}),
-      ...(opts.input !== undefined ? { input: opts.input } : {}),
+      ...(opts.input === undefined ? {} : { input: opts.input }),
       ...(opts.parentRunId ? { parentRunId: opts.parentRunId } : {}),
       ...(row.manifest.outputSchema ? { outputSchema: row.manifest.outputSchema } : {}),
       history: row.manifest.history,
@@ -445,9 +454,7 @@ export async function runFire(
       const next = failTarget
         ? await readAppOwned(codeAppsDir, failTarget.appId, failTarget.automationId)
         : undefined;
-      if (!next) {
-        onLog('warn', `onFailure target "${row.manifest.onFailure}" not found for ${row.name}`);
-      } else {
+      if (next) {
         try {
           const nestedRuntime = await opts.resolveNestedRuntime?.(next.ref);
           await runFire(
@@ -473,7 +480,11 @@ export async function runFire(
               onLog,
               triggerKind: 'on_failure',
               ...(opts.triggerOrigin ? { triggerOrigin: opts.triggerOrigin } : {}),
-              input: { runId, automationName: row.name, error: outcome.error ?? 'unknown error' },
+              input: {
+                runId,
+                automationName: row.name,
+                error: outcome.error ?? 'unknown error',
+              },
               parentRunId: runId,
               failureDepth: failureDepth + 1,
             },
@@ -485,6 +496,8 @@ export async function runFire(
             `onFailure dispatch ${row.manifest.onFailure} threw: ${err instanceof Error ? err.message : String(err)}`,
           );
         }
+      } else {
+        onLog('warn', `onFailure target "${row.manifest.onFailure}" not found for ${row.name}`);
       }
     }
   }

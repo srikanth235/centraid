@@ -7,6 +7,7 @@
 
 import crypto from 'node:crypto';
 import path from 'node:path';
+
 import { GatewayDatabase } from './gateway-db.js';
 
 export const CONTROL_IDLE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -176,7 +177,9 @@ export class WebControlSessionStore {
   list(): ControlSessionRow[] {
     const now = this.now();
     if (!this.gatewayDatabase) {
-      return this.memory!.filter((row) => row.expiresAt > now).map((row) => ({ ...row }));
+      return this.memory!.filter((row) => row.expiresAt > now).map((row) => ({
+        ...row,
+      }));
     }
     return (
       this.gatewayDatabase.db

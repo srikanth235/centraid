@@ -200,8 +200,14 @@ export function resolvedKnobRows(profile: ResourceProfileDTO): ResourceFactRow[]
     { label: 'Warm pool', value: String(r.workerPoolSize) },
     { label: 'Replication', value: `${r.replicationConcurrency} concurrent` },
     { label: 'SQLite durability', value: r.sqliteSynchronous },
-    { label: 'Vault sweep', value: `every ${formatFriendlyMs(r.vaultSweepIntervalMs)}` },
-    { label: 'Outbox idle poll', value: `every ${formatFriendlyMs(r.outboxIdleIntervalMs)}` },
+    {
+      label: 'Vault sweep',
+      value: `every ${formatFriendlyMs(r.vaultSweepIntervalMs)}`,
+    },
+    {
+      label: 'Outbox idle poll',
+      value: `every ${formatFriendlyMs(r.outboxIdleIntervalMs)}`,
+    },
     {
       label: 'Compression',
       value: `brotli q${r.staticBrotliQuality} · gzip q${r.staticGzipQuality}`,
@@ -380,7 +386,11 @@ const KNOB_META: readonly KnobMeta[] = [
   { key: 'workerMaxConcurrent', label: 'Worker concurrency', tier: 'P0' },
   { key: 'workerMaxOldGenerationMb', label: 'Worker memory (MB)', tier: 'P0' },
   { key: 'workerPoolSize', label: 'Warm pool size', tier: 'P1' },
-  { key: 'replicationConcurrency', label: 'Replication concurrency', tier: 'P1' },
+  {
+    key: 'replicationConcurrency',
+    label: 'Replication concurrency',
+    tier: 'P1',
+  },
 ];
 
 /** One row's profile-derived facts (before the saved-pref/desired merge). */

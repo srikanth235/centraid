@@ -3,8 +3,9 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { INTEGRATION_HUES, insK, insKindLabel, insUsd, relativeTime } from './format.js';
+
 import { relativeTime as appRelativeTime } from '../app-format.js';
+import { INTEGRATION_HUES, insK, insKindLabel, insUsd, relativeTime } from './format.js';
 
 describe('insK / insUsd / insKindLabel', () => {
   it('formats token counts and USD', () => {

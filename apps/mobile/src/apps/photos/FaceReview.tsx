@@ -1,7 +1,7 @@
+import { Feather } from '@expo/vector-icons';
 import React, { useMemo } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
 
 import { useReplicaQuery } from '../../kit/hooks/useReplicaQuery';
 import { useReplica } from '../../kit/replica/ReplicaProvider';
@@ -134,8 +134,17 @@ const styles = StyleSheet.create({
   },
   copy: { flex: 1, marginLeft: 12 },
   count: { fontFamily: family.monoMedium, fontSize: 11 },
-  empty: { fontFamily: family.sansRegular, fontSize: 14, padding: 40, textAlign: 'center' },
-  emptyPeople: { fontFamily: family.sansRegular, fontSize: 13, paddingVertical: 14 },
+  empty: {
+    fontFamily: family.sansRegular,
+    fontSize: 14,
+    padding: 40,
+    textAlign: 'center',
+  },
+  emptyPeople: {
+    fontFamily: family.sansRegular,
+    fontSize: 13,
+    paddingVertical: 14,
+  },
   header: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -156,8 +165,19 @@ const styles = StyleSheet.create({
   },
   personCard: { borderRadius: 14, padding: 12, width: 128 },
   personName: { fontFamily: family.sansMedium, fontSize: 12, marginTop: 8 },
-  row: { alignItems: 'center', borderBottomWidth: 1, flexDirection: 'row', gap: 14, minHeight: 70 },
+  row: {
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    gap: 14,
+    minHeight: 70,
+  },
   safe: { flex: 1 },
-  section: { fontFamily: family.monoBold, fontSize: 10, letterSpacing: 1, marginTop: 18 },
+  section: {
+    fontFamily: family.monoBold,
+    fontSize: 10,
+    letterSpacing: 1,
+    marginTop: 18,
+  },
   title: { fontFamily: family.displayBold, fontSize: 18 },
 });

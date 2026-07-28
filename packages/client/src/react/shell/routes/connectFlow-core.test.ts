@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import {
   buildTestInput,
   canCommitConnectFlow,
@@ -36,7 +37,10 @@ describe(connectFlowReducer, () => {
 
   it('selectMethod resets any state left over from a prior method', () => {
     const dirty = at({ method: 'gateway', step: 'test', ticket: 'stale' });
-    const s = connectFlowReducer(dirty, { method: 'ssh', type: 'selectMethod' });
+    const s = connectFlowReducer(dirty, {
+      method: 'ssh',
+      type: 'selectMethod',
+    });
     expect(s.ticket).toBe('');
     expect(s.step).toBe('details');
   });
@@ -52,7 +56,10 @@ describe(connectFlowReducer, () => {
   });
 
   it('startTest moves to the test step and clears the previous report', () => {
-    const withReport = at({ report: { ok: true, stages: [] }, step: 'details' });
+    const withReport = at({
+      report: { ok: true, stages: [] },
+      step: 'details',
+    });
     const s = connectFlowReducer(withReport, { type: 'startTest' });
     expect(s.step).toBe('test');
     expect(s.testing).toBe(true);
@@ -63,7 +70,14 @@ describe(connectFlowReducer, () => {
     const testing = at({ step: 'test', testing: true });
     const report = {
       ok: true,
-      stages: [{ detail: 'v0.5', id: 'reach' as const, label: 'Reach', status: 'pass' as const }],
+      stages: [
+        {
+          detail: 'v0.5',
+          id: 'reach' as const,
+          label: 'Reach',
+          status: 'pass' as const,
+        },
+      ],
     };
     const s = connectFlowReducer(testing, { report, type: 'testSettled' });
     expect(s.testing).toBe(false);
@@ -88,7 +102,11 @@ describe(connectFlowReducer, () => {
   });
 
   it('continueToVault defaults to "create" for a create-capable method with no reported vaults', () => {
-    const sshNoVaults = at({ method: 'ssh', report: { ok: true, stages: [] }, step: 'test' });
+    const sshNoVaults = at({
+      method: 'ssh',
+      report: { ok: true, stages: [] },
+      step: 'test',
+    });
     const s = connectFlowReducer(sshNoVaults, { type: 'continueToVault' });
     expect(s.vaultChoice).toStrictEqual({ kind: 'create' });
   });
@@ -116,13 +134,17 @@ describe(connectFlowReducer, () => {
   });
 
   it('back from test returns to details, keeping the method', () => {
-    const s = connectFlowReducer(at({ method: 'gateway', step: 'test' }), { type: 'back' });
+    const s = connectFlowReducer(at({ method: 'gateway', step: 'test' }), {
+      type: 'back',
+    });
     expect(s.step).toBe('details');
     expect(s.method).toBe('gateway');
   });
 
   it('back from vault for a local method returns straight to method (skips details/test)', () => {
-    const s = connectFlowReducer(at({ method: 'local', step: 'vault' }), { type: 'back' });
+    const s = connectFlowReducer(at({ method: 'local', step: 'vault' }), {
+      type: 'back',
+    });
     expect(s.step).toBe('method');
   });
 
@@ -144,7 +166,9 @@ describe(connectFlowReducer, () => {
   });
 
   it('commit -> commitSettled reaches done with the result', () => {
-    let s = connectFlowReducer(createInitialConnectFlowState(), { type: 'commit' });
+    let s = connectFlowReducer(createInitialConnectFlowState(), {
+      type: 'commit',
+    });
     expect(s.step).toBe('committing');
     expect(s.committing).toBe(true);
     s = connectFlowReducer(s, {
@@ -153,7 +177,11 @@ describe(connectFlowReducer, () => {
     });
     expect(s.step).toBe('done');
     expect(s.committing).toBe(false);
-    expect(s.result).toStrictEqual({ displayLabel: 'Home', gatewayId: 'gw1', vaultId: 'v1' });
+    expect(s.result).toStrictEqual({
+      displayLabel: 'Home',
+      gatewayId: 'gw1',
+      vaultId: 'v1',
+    });
   });
 
   it('commitFailed reaches the error step with the message', () => {
@@ -181,7 +209,10 @@ describe('buildTestInput / canStartTest', () => {
 
   it('gateway/ticket mode: {kind:"ticket"} once a ticket is present', () => {
     const s = at({ method: 'gateway', ticket: '  t.icket  ' });
-    expect(buildTestInput(s)).toStrictEqual({ kind: 'ticket', ticket: 't.icket' });
+    expect(buildTestInput(s)).toStrictEqual({
+      kind: 'ticket',
+      ticket: 't.icket',
+    });
   });
 
   it('ssh: destination required, dataDir optional', () => {
@@ -191,7 +222,11 @@ describe('buildTestInput / canStartTest', () => {
       destination: 'user@host',
       kind: 'ssh',
     });
-    const withDir = at({ method: 'ssh', sshDataDir: '/data', sshDestination: 'user@host' });
+    const withDir = at({
+      method: 'ssh',
+      sshDataDir: '/data',
+      sshDestination: 'user@host',
+    });
     expect(buildTestInput(withDir)).toStrictEqual({
       dataDir: '/data',
       destination: 'user@host',
@@ -231,7 +266,11 @@ describe(vaultCapability, () => {
         },
       }),
     );
-    expect(cap).toStrictEqual({ canCreate: false, locked: { vaultName: 'Office' }, options: [] });
+    expect(cap).toStrictEqual({
+      canCreate: false,
+      locked: { vaultName: 'Office' },
+      options: [],
+    });
   });
 });
 
@@ -248,7 +287,11 @@ describe(canCommitConnectFlow, () => {
     );
     expect(
       canCommitConnectFlow(
-        at({ method: 'local', newVaultName: 'Mine', vaultChoice: { kind: 'create' } }),
+        at({
+          method: 'local',
+          newVaultName: 'Mine',
+          vaultChoice: { kind: 'create' },
+        }),
       ),
     ).toBe(true);
   });
@@ -272,7 +315,11 @@ describe(canCommitConnectFlow, () => {
     ).toBe(true);
     expect(
       canCommitConnectFlow(
-        at({ method: 'ssh', sshDestination: 'user@host', vaultChoice: { kind: 'create' } }),
+        at({
+          method: 'ssh',
+          sshDestination: 'user@host',
+          vaultChoice: { kind: 'create' },
+        }),
       ),
     ).toBe(false);
     expect(

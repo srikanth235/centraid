@@ -16,9 +16,10 @@
  * never throw.
  */
 
+import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { createHash } from 'node:crypto';
+
 import type { RunnerKind, RunnerModel } from '@centraid/app-engine';
 
 const CATALOG_VERSION = 2 as const;

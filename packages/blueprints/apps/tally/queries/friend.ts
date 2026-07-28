@@ -28,7 +28,13 @@ export default async function friendHandler({ input, ctx }: HandlerArgs) {
     return {
       me,
       currency: data.currency,
-      friend: { party_id: pid, name: p.name, color: p.color, initials: p.initials, net_minor: net },
+      friend: {
+        party_id: pid,
+        name: p.name,
+        color: p.color,
+        initials: p.initials,
+        net_minor: net,
+      },
       ledger,
     };
   } catch (err) {

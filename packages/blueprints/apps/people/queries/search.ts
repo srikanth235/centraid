@@ -63,9 +63,24 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
   if (!term) return { people: [] };
   try {
     const [byName, byRole, byNote] = await Promise.all([
-      ctx.vault.search({ entity: 'core.party', query: term, limit: 50, purpose }),
-      ctx.vault.search({ entity: 'people.profile', query: term, limit: 50, purpose }),
-      ctx.vault.search({ entity: 'knowledge.annotation', query: term, limit: 50, purpose }),
+      ctx.vault.search({
+        entity: 'core.party',
+        query: term,
+        limit: 50,
+        purpose,
+      }),
+      ctx.vault.search({
+        entity: 'people.profile',
+        query: term,
+        limit: 50,
+        purpose,
+      }),
+      ctx.vault.search({
+        entity: 'knowledge.annotation',
+        query: term,
+        limit: 50,
+        purpose,
+      }),
     ]);
 
     // Ranked, de-duped party ids: name hits first, then role, then notes.

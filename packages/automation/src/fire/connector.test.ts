@@ -1,4 +1,4 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import { promises as fs } from 'node:fs';
 // governance: allow-repo-hygiene file-size-limit one suite over the whole connector contract — manifest, secret injection (#293) and connection-credential injection (#304) share the runFire fixture
 /*
  * Connector broker invariants (issue #290 phase 4): manifest contract
@@ -6,14 +6,15 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  * and the honest-liveness fire gate (paused/needs-auth connections never run
  * their connector).
  */
-
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { promises as fs } from 'node:fs';
 import path from 'node:path';
+
 import type { VaultBridge } from '@centraid/app-engine';
-import { runFire, type DispatchSurface, type OpenDispatchArgs } from './fire.js';
-import { validateManifest, type Manifest } from '../manifest/manifest.js';
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
 import { isBrokerReadOnlyPost } from '../handler/runner.js';
+import { validateManifest, type Manifest } from '../manifest/manifest.js';
+import { runFire, type DispatchSurface, type OpenDispatchArgs } from './fire.js';
 
 const VAULT_BLOCK = {
   purpose: 'dpv:ServiceProvision',
@@ -29,7 +30,11 @@ function rawManifest(over: Record<string, unknown> = {}): Record<string, unknown
     prompt: 'sync mail',
     triggers: [{ kind: 'cron', expr: '*/30 * * * *' }],
     requires: {},
-    connector: { kind: 'mcp.gmail', label: 'personal', principal: 'me@example.com' },
+    connector: {
+      kind: 'mcp.gmail',
+      label: 'personal',
+      principal: 'me@example.com',
+    },
     vault: VAULT_BLOCK,
     history: { keep: { count: 100 } },
     generated: { by: 'test', at: '2026-07-06' },
@@ -74,7 +79,7 @@ describe('connector manifest contract', () => {
   it('refuses a connector without a vault block', () => {
     const raw = rawManifest();
     delete raw.vault;
-    expect(() => validateManifest(raw)).toThrow(/manifest\.vault/);
+    expect(() => validateManifest(raw)).toThrow(/manifest\.vault/u);
   });
 });
 
@@ -139,11 +144,16 @@ describe('connector runtime gates', () => {
       return { ok: false, code: 'VAULT_ERROR', error: 'unexpected op' };
     };
     const { outcome, record } = await runFire(
-      { automationRef: 'mail/pull', appsDir, journalDbFile, vaultFor: () => paused },
+      {
+        automationRef: 'mail/pull',
+        appsDir,
+        journalDbFile,
+        vaultFor: () => paused,
+      },
       { openDispatch: openDispatch() },
     );
     expect(outcome.ok).toBe(false);
-    expect(outcome.error).toMatch(/paused/);
+    expect(outcome.error).toMatch(/paused/u);
     expect(record.ok).toBe(false);
     expect(outcome.value).toBeUndefined(); // the handler never executed
   });
@@ -156,7 +166,12 @@ describe('connector runtime gates', () => {
       error: 'deny (receipt r1): no active grant',
     });
     const { outcome } = await runFire(
-      { automationRef: 'mail/pull', appsDir, journalDbFile, vaultFor: () => deny },
+      {
+        automationRef: 'mail/pull',
+        appsDir,
+        journalDbFile,
+        vaultFor: () => deny,
+      },
       { openDispatch: openDispatch() },
     );
     expect(outcome.ok).toBe(true);
@@ -213,14 +228,22 @@ describe('connector runtime gates', () => {
           };
         }
         if (command === 'sync.stage_rows') {
-          return { ok: true, result: { output: { published: { created: 1, updated: 0 } } } };
+          return {
+            ok: true,
+            result: { output: { published: { created: 1, updated: 0 } } },
+          };
         }
         return { ok: true, result: { output: {} } };
       }
       return { ok: false, code: 'VAULT_ERROR', error: 'unexpected op' };
     };
     const { outcome } = await runFire(
-      { automationRef: 'mail/pull', appsDir, journalDbFile, vaultFor: () => bridge },
+      {
+        automationRef: 'mail/pull',
+        appsDir,
+        journalDbFile,
+        vaultFor: () => bridge,
+      },
       { openDispatch: openDispatch() },
     );
     expect(outcome.ok).toBe(true);
@@ -315,13 +338,17 @@ describe('connector runtime gates', () => {
       return { ok: false, code: 'VAULT_ERROR', error: 'unexpected op' };
     };
 
-    for (const automationRef of ['mail-personal/pull', 'mail-work/pull']) {
+    const runNext = async (index: number): Promise<void> => {
+      const automationRef = ['mail-personal/pull', 'mail-work/pull'][index];
+      if (!automationRef) return;
       const { outcome } = await runFire(
         { automationRef, appsDir, journalDbFile, vaultFor: () => bridge },
         { openDispatch: openDispatch() },
       );
       expect(outcome.ok).toBe(true);
-    }
+      return runNext(index + 1);
+    };
+    await runNext(0);
 
     expect(beginInputs).toStrictEqual([
       expect.objectContaining({ connection_id: 'conn-personal' }),
@@ -361,7 +388,12 @@ describe('connector runtime gates', () => {
     };
 
     const { outcome } = await runFire(
-      { automationRef: 'mail/pull', appsDir, journalDbFile, vaultFor: () => bridge },
+      {
+        automationRef: 'mail/pull',
+        appsDir,
+        journalDbFile,
+        vaultFor: () => bridge,
+      },
       { openDispatch: openDispatch() },
     );
 
@@ -415,7 +447,12 @@ describe('connector runtime gates', () => {
     };
 
     const { outcome } = await runFire(
-      { automationRef: 'mail/pull', appsDir, journalDbFile, vaultFor: () => bridge },
+      {
+        automationRef: 'mail/pull',
+        appsDir,
+        journalDbFile,
+        vaultFor: () => bridge,
+      },
       { openDispatch: openDispatch() },
     );
 
@@ -463,18 +500,27 @@ describe('connector runtime gates', () => {
     };
 
     const { outcome } = await runFire(
-      { automationRef: 'mail/pull', appsDir, journalDbFile, vaultFor: () => bridge },
+      {
+        automationRef: 'mail/pull',
+        appsDir,
+        journalDbFile,
+        vaultFor: () => bridge,
+      },
       { openDispatch: openDispatch() },
     );
 
     expect(outcome.ok).toBe(false);
-    expect(outcome.error).toMatch(/provider pagination failed/);
+    expect(outcome.error).toMatch(/provider pagination failed/u);
     expect(invoked.map((payload) => payload.command)).toStrictEqual([
       'sync.begin_run',
       'sync.finish_run',
     ]);
     expect(invoked[1]).toMatchObject({
-      input: { run_id: 'sync-run-1', ok: false, error: expect.stringContaining('pagination') },
+      input: {
+        run_id: 'sync-run-1',
+        ok: false,
+        error: expect.stringContaining('pagination'),
+      },
     });
   });
 
@@ -511,13 +557,22 @@ describe('connector runtime gates', () => {
         };
       }
       if (call.op === 'invoke' && call.payload.command === 'sync.finish_run') {
-        return { ok: false, code: 'VAULT_ERROR', error: 'close bookkeeping failed' };
+        return {
+          ok: false,
+          code: 'VAULT_ERROR',
+          error: 'close bookkeeping failed',
+        };
       }
       return { ok: false, code: 'VAULT_ERROR', error: 'unexpected op' };
     };
 
     const { outcome } = await runFire(
-      { automationRef: 'mail/pull', appsDir, journalDbFile, vaultFor: () => bridge },
+      {
+        automationRef: 'mail/pull',
+        appsDir,
+        journalDbFile,
+        vaultFor: () => bridge,
+      },
       { openDispatch: openDispatch() },
     );
 
@@ -564,14 +619,14 @@ describe('connector secrets (issue #293)', () => {
     );
     expect(m.requires.secrets).toStrictEqual(['locker:item-1:password']);
     expect(() => validateManifest(rawManifest({ requires: { secrets: ['not-a-ref'] } }))).toThrow(
-      /locker:<item_id>:<column>/,
+      /locker:<item_id>:<column>/u,
     );
     const nonConnector = rawManifest({
       requires: { secrets: ['locker:item-1:password'] },
     });
     delete nonConnector.connector;
     delete nonConnector.vault;
-    expect(() => validateManifest(nonConnector)).toThrow(/connector-only/);
+    expect(() => validateManifest(nonConnector)).toThrow(/connector-only/u);
   });
 
   it('injects the secret at the transport layer and scrubs it from everything recorded', async () => {
@@ -601,13 +656,25 @@ describe('connector secrets (issue #293)', () => {
       const bridge: VaultBridge = async (call) => {
         if (call.op === 'reveal') {
           reveals.push(String((call.payload as { entityId: string }).entityId));
-          return { ok: true, result: { values: { password: 'imap-app-p4ss' } } };
+          return {
+            ok: true,
+            result: { values: { password: 'imap-app-p4ss' } },
+          };
         }
         if (call.op === 'read') return { ok: true, result: { rows: [{ status: 'active' }] } };
-        return { ok: false, code: 'VAULT_ERROR', error: `unexpected op ${call.op}` };
+        return {
+          ok: false,
+          code: 'VAULT_ERROR',
+          error: `unexpected op ${call.op}`,
+        };
       };
       const { outcome } = await runFire(
-        { automationRef: 'mail/pull', appsDir, journalDbFile, vaultFor: () => bridge },
+        {
+          automationRef: 'mail/pull',
+          appsDir,
+          journalDbFile,
+          vaultFor: () => bridge,
+        },
         { openDispatch: noDispatch },
       );
       expect(outcome.ok).toBe(true);
@@ -644,10 +711,19 @@ describe('connector secrets (issue #293)', () => {
         return { ok: true, result: { values: { password: 'aliased-secret' } } };
       }
       if (call.op === 'read') return { ok: true, result: { rows: [{ status: 'active' }] } };
-      return { ok: false, code: 'VAULT_ERROR', error: `unexpected op ${call.op}` };
+      return {
+        ok: false,
+        code: 'VAULT_ERROR',
+        error: `unexpected op ${call.op}`,
+      };
     };
     await runFire(
-      { automationRef: 'mail/pull', appsDir, journalDbFile, vaultFor: () => bridge },
+      {
+        automationRef: 'mail/pull',
+        appsDir,
+        journalDbFile,
+        vaultFor: () => bridge,
+      },
       { openDispatch: noDispatch },
     );
     expect(aliases).toStrictEqual(['github-token']);
@@ -673,7 +749,12 @@ describe('connector secrets (issue #293)', () => {
       return { ok: false, code: 'VAULT_ERROR', error: 'unexpected' };
     };
     const { outcome } = await runFire(
-      { automationRef: 'mail/pull', appsDir, journalDbFile, vaultFor: () => bridge },
+      {
+        automationRef: 'mail/pull',
+        appsDir,
+        journalDbFile,
+        vaultFor: () => bridge,
+      },
       { openDispatch: noDispatch },
     );
     expect(outcome.ok).toBe(true);
@@ -722,21 +803,33 @@ describe('connector secrets (issue #293)', () => {
         };
       }
       if (call.op === 'reveal') {
-        return { ok: false, code: 'VAULT_CONSENT', error: 'deny (receipt r9): no revealable row' };
+        return {
+          ok: false,
+          code: 'VAULT_CONSENT',
+          error: 'deny (receipt r9): no revealable row',
+        };
       }
       if (call.op === 'invoke') {
-        const payload = call.payload as { command: string; input: Record<string, unknown> };
+        const payload = call.payload as {
+          command: string;
+          input: Record<string, unknown>;
+        };
         invoked.push({ command: payload.command, input: payload.input });
         return { ok: true, result: { status: 'executed' } };
       }
       return { ok: false, code: 'VAULT_ERROR', error: 'unexpected' };
     };
     const { outcome } = await runFire(
-      { automationRef: 'mail/pull', appsDir, journalDbFile, vaultFor: () => bridge },
+      {
+        automationRef: 'mail/pull',
+        appsDir,
+        journalDbFile,
+        vaultFor: () => bridge,
+      },
       { openDispatch: noDispatch },
     );
     expect(outcome.ok).toBe(false);
-    expect(outcome.error).toMatch(/needs-auth/);
+    expect(outcome.error).toMatch(/needs-auth/u);
     expect(outcome.value).toBeUndefined(); // the handler never executed
     expect(invoked).toStrictEqual([
       {
@@ -778,7 +871,11 @@ describe('broker-injected connection credentials (issue #304)', () => {
 
   const activeBridge: VaultBridge = async (call) => {
     if (call.op === 'read') return { ok: true, result: { rows: [{ status: 'active' }] } };
-    return { ok: false, code: 'VAULT_ERROR', error: `unexpected op ${call.op}` };
+    return {
+      ok: false,
+      code: 'VAULT_ERROR',
+      error: `unexpected op ${call.op}`,
+    };
   };
 
   async function withServer(
@@ -1031,7 +1128,7 @@ describe('broker-injected connection credentials (issue #304)', () => {
       { openDispatch: noDispatch },
     );
     expect(outcome.ok).toBe(false);
-    expect(outcome.error).toMatch(/no usable token/);
+    expect(outcome.error).toMatch(/no usable token/u);
     expect(outcome.value).toBeUndefined();
   });
 
@@ -1095,7 +1192,11 @@ describe('read-only ceiling on injected fetches (issue #304 phase 5)', () => {
 
   const activeBridge: VaultBridge = async (call) => {
     if (call.op === 'read') return { ok: true, result: { rows: [{ status: 'active' }] } };
-    return { ok: false, code: 'VAULT_ERROR', error: `unexpected op ${call.op}` };
+    return {
+      ok: false,
+      code: 'VAULT_ERROR',
+      error: `unexpected op ${call.op}`,
+    };
   };
 
   const postHandler = `export default async ({ ctx }) => {

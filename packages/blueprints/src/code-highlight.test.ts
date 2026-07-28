@@ -1,6 +1,7 @@
 // Unit tests for the dependency-free fenced-code highlighter (issue #420, W2).
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+
 import { describe, expect, it } from 'vitest';
 
 const PKG = path.resolve(import.meta.dirname, '..');
@@ -53,8 +54,8 @@ describe('highlightCode', () => {
     const out = highlightCode(src, 'ts');
     // Strip the span tags — the remaining text (entities decoded) is the source.
     const stripped = out
-      .replace(/<[^>]+>/g, '')
-      .replace(/&#(\d+);/g, (_m: string, n: string) => String.fromCharCode(Number(n)));
+      .replace(/<[^>]+>/gu, '')
+      .replace(/&#(?<codePoint>\d+);/gu, (_m: string, n: string) => String.fromCharCode(Number(n)));
     expect(stripped).toBe(src);
   });
 });

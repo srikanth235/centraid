@@ -223,9 +223,9 @@ function parseRrule(rrule: string): ParsedRule | null {
   }
   const freq = parts.get('FREQ');
   if (!freq || !['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY'].includes(freq)) return null;
-  const interval = Math.max(1, Number.parseInt(parts.get('INTERVAL') ?? '1', 10) || 1);
+  const interval = Math.max(1, Math.trunc(Number(parts.get('INTERVAL') ?? '1')) || 1);
   const countRaw = parts.get('COUNT');
-  const count = countRaw ? Math.max(1, Number.parseInt(countRaw, 10) || 0) || undefined : undefined;
+  const count = countRaw ? Math.max(1, Math.trunc(Number(countRaw)) || 0) || undefined : undefined;
   const until = parts.get('UNTIL') || undefined;
   const byDayRaw = parts.get('BYDAY');
   const byDay = byDayRaw
@@ -234,7 +234,13 @@ function parseRrule(rrule: string): ParsedRule | null {
         .map((d) => d.trim().toUpperCase())
         .filter((d) => DAY_TOKENS.includes(d))
     : undefined;
-  return { freq, interval, count, until, byDay: byDay && byDay.length > 0 ? byDay : undefined };
+  return {
+    freq,
+    interval,
+    count,
+    until,
+    byDay: byDay && byDay.length > 0 ? byDay : undefined,
+  };
 }
 
 // RFC 5545 UNTIL is written extended (2026-07-03T00:00:00Z) or basic
@@ -369,7 +375,11 @@ function expandRecurringEvents(
   const out: EventRow[] = [];
   for (const ev of rows) {
     if (!ev.rrule) {
-      out.push({ ...ev, is_recurrence_instance: false, instance_key: ev.event_id });
+      out.push({
+        ...ev,
+        is_recurrence_instance: false,
+        instance_key: ev.event_id,
+      });
       continue;
     }
     const durationMs = ev.dtend ? new Date(ev.dtend).getTime() - new Date(ev.dtstart).getTime() : 0;
@@ -530,6 +540,10 @@ export default async function upcomingHandler({ query, ctx }: HandlerArgs) {
     };
   } catch (err) {
     const e = err as { code?: string; message?: string };
-    return { events: [], calendars: [], vaultDenied: { code: e.code, message: e.message } };
+    return {
+      events: [],
+      calendars: [],
+      vaultDenied: { code: e.code, message: e.message },
+    };
   }
 }

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from 'vitest';
+
 import { bootstrapVault } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { BlobContentKeyRegistry } from './content-keys.js';
@@ -51,7 +52,7 @@ describe('content-keys', () => {
     expect(cas.getSync(sha)!.equals(before)).toBe(true);
 
     expect(keys.revokeDevice('paired-endpoint-key')).toBe(1);
-    expect(() => keys.grantToDevice(sha, deviceId)).toThrow(/unknown or revoked paired device/);
+    expect(() => keys.grantToDevice(sha, deviceId)).toThrow(/unknown or revoked paired device/u);
     const rotated = keys.grantToDevice(sha, remainingId);
     expect(rotated.keyEpoch).toBe(2);
     expect(rotated.wrapSaltBase64).not.toBe(remainingGrant.wrapSaltBase64);

@@ -1,10 +1,11 @@
+import { Feather } from '@expo/vector-icons';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, TextInput, StyleSheet, ScrollView, Pressable, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { CameraView, useCameraPermissions } from 'expo-camera';
-import Icon from '../kit/components/Icon';
+
 import Button from '../kit/components/Button';
-import { Feather } from '@expo/vector-icons';
+import Icon from '../kit/components/Icon';
 import { family, radii, spacing, t, useTheme, type ThemeColors } from '../kit/theme';
 import {
   hydrateGatewayToken,
@@ -390,10 +391,19 @@ const makeStyles = (colors: ThemeColors) =>
       paddingVertical: spacing[2],
     },
     barSpacer: { width: 36 },
-    body: { paddingBottom: spacing[7], paddingHorizontal: spacing[5], paddingTop: spacing[4] },
+    body: {
+      paddingBottom: spacing[7],
+      paddingHorizontal: spacing[5],
+      paddingTop: spacing[4],
+    },
     camera: { borderRadius: radii.md, flex: 1, overflow: 'hidden' },
     emptyTitle: { ...t('title'), color: colors.ink, marginBottom: spacing[2] },
-    fieldLabel: { ...t('small'), color: colors.ink2, fontWeight: '500', marginBottom: 6 },
+    fieldLabel: {
+      ...t('small'),
+      color: colors.ink2,
+      fontWeight: '500',
+      marginBottom: 6,
+    },
     fieldLabelSpaced: { marginTop: spacing[4] },
     help: { ...t('small'), color: colors.ink3, marginBottom: spacing[3] },
     helpMono: { fontFamily: 'JetBrainsMono_400Regular', color: colors.ink2 },

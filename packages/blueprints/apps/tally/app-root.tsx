@@ -13,23 +13,24 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from 'react';
-import { observeWidth, onDataChange, onFocusRefresh, readFailed, wireThemeToggle } from './kit.ts';
-import { createLogic } from './logic.ts';
-import { first, money } from './format.ts';
-import { FriendsNav, GroupsNav, SmartNav } from './components/Sidebar.tsx';
-import { Dashboard } from './components/Dashboard.tsx';
-import { Ledger } from './components/Ledger.tsx';
-import { SearchResults } from './components/Search.tsx';
+
+import type { InlineAppProps } from '../inline-types.ts';
+import { Chrome, type ChromeAvatar } from './Chrome.tsx';
 import { ActivityFeed } from './components/Activity.tsx';
-import { KitSkeleton } from './components/Shared.tsx';
+import { Dashboard } from './components/Dashboard.tsx';
 import { DetailModal } from './components/DetailModal.tsx';
 import { ExpenseModal } from './components/ExpenseModal.tsx';
-import { SettleModal } from './components/SettleModal.tsx';
-import { GroupModal } from './components/GroupModal.tsx';
 import { FriendModal } from './components/FriendModal.tsx';
-import { Chrome, type ChromeAvatar } from './Chrome.tsx';
+import { GroupModal } from './components/GroupModal.tsx';
+import { Ledger } from './components/Ledger.tsx';
+import { SearchResults } from './components/Search.tsx';
+import { SettleModal } from './components/SettleModal.tsx';
+import { KitSkeleton } from './components/Shared.tsx';
+import { FriendsNav, GroupsNav, SmartNav } from './components/Sidebar.tsx';
+import { first, money } from './format.ts';
+import { observeWidth, onDataChange, onFocusRefresh, readFailed, wireThemeToggle } from './kit.ts';
+import { createLogic } from './logic.ts';
 import type { AppState, Dash, DashboardPayload, LedgerRow, NavPatch, ViewData } from './types.ts';
-import type { InlineAppProps } from '../inline-types.ts';
 
 // Vault entities this app's queries read — the doorbell filter re-derives only
 // when a change names one of these (or names none, i.e. "this app acted").
@@ -177,6 +178,30 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     });
   }
   const logic = logicRef.current;
+  const {
+    closeAddFriend: handleCloseAddFriend,
+    closeDetail: handleCloseDetail,
+    closeExpense: handleCloseExpense,
+    closeNewGroup: handleCloseNewGroup,
+    closeSettle: handleCloseSettle,
+    deleteExpense: handleDeleteExpense,
+    openAddExpense: handleOpenAddExpense,
+    openAddFriend: handleOpenAddFriend,
+    openDetail: handleOpenDetail,
+    openEditExpense: handleOpenEditExpense,
+    openNewGroup: handleOpenNewGroup,
+    openSettle: handleOpenSettle,
+    restoreExpense: handleRestoreExpense,
+    saveAddFriend: handleSaveAddFriend,
+    saveExpense: handleSaveExpense,
+    saveNewGroup: handleSaveNewGroup,
+    saveSettle: handleSaveSettle,
+    setAddFriend: handleSetAddFriend,
+    setExpense: handleSetExpense,
+    setExpenseGroup: handleSetExpenseGroup,
+    setNewGroup: handleSetNewGroup,
+    setSettle: handleSetSettle,
+  } = logic;
 
   const setRoot = useCallback(
     (el: HTMLDivElement | null) => {
@@ -307,7 +332,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
         viewData={state.viewData}
         search={q}
         currency={dash.currency}
-        onOpenDetail={logic.openDetail}
+        onOpenDetail={handleOpenDetail}
       />
     );
   } else if (state.view === 'dashboard') {
@@ -316,9 +341,9 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
         dash={dashWithPending()}
         onOpenFriend={(friendId) => navTo({ view: 'friend', friendId, search: '' })}
         onOpenGroup={(groupId) => navTo({ view: 'group', groupId, search: '' })}
-        onOpenAddFriend={logic.openAddFriend}
-        onOpenNewGroup={logic.openNewGroup}
-        onRestoreExpense={logic.restoreExpense}
+        onOpenAddFriend={handleOpenAddFriend}
+        onOpenNewGroup={handleOpenNewGroup}
+        onRestoreExpense={handleRestoreExpense}
       />
     ) : (
       <KitSkeleton rows={4} />
@@ -331,14 +356,17 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     const pend = pendingForView();
     const viewData: ViewData | null =
       pend.length && state.viewData
-        ? { ...state.viewData, ledger: [...pend, ...(state.viewData.ledger ?? [])] }
+        ? {
+            ...state.viewData,
+            ledger: [...pend, ...(state.viewData.ledger ?? [])],
+          }
         : state.viewData;
     content = (
       <Ledger
         view={state.view}
         viewData={viewData}
         currency={dash.currency}
-        onOpenDetail={logic.openDetail}
+        onOpenDetail={handleOpenDetail}
       />
     );
   }
@@ -352,9 +380,9 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
         me={dash.me}
         groups={dash.groups}
         currency={dash.currency}
-        onClose={logic.closeDetail}
-        onEdit={logic.openEditExpense}
-        onDelete={logic.deleteExpense}
+        onClose={handleCloseDetail}
+        onEdit={handleOpenEditExpense}
+        onDelete={handleDeleteExpense}
       />
     );
   } else if (state.expense) {
@@ -365,11 +393,11 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
         groups={dash.groups}
         me={dash.me}
         currency={dash.currency}
-        onPatch={logic.setExpense}
-        onGroupChange={logic.setExpenseGroup}
-        onClose={logic.closeExpense}
-        onSave={logic.saveExpense}
-        onDelete={logic.deleteExpense}
+        onPatch={handleSetExpense}
+        onGroupChange={handleSetExpenseGroup}
+        onClose={handleCloseExpense}
+        onSave={handleSaveExpense}
+        onDelete={handleDeleteExpense}
       />
     );
   } else if (state.settle) {
@@ -379,9 +407,9 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
         me={dash.me}
         currency={dash.currency}
         personOf={logic.personOf}
-        onPatch={logic.setSettle}
-        onClose={logic.closeSettle}
-        onSave={logic.saveSettle}
+        onPatch={handleSetSettle}
+        onClose={handleCloseSettle}
+        onSave={handleSaveSettle}
       />
     );
   } else if (state.newGroup) {
@@ -389,18 +417,18 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
       <GroupModal
         ng={state.newGroup}
         friends={dash.friends}
-        onPatch={logic.setNewGroup}
-        onClose={logic.closeNewGroup}
-        onSave={logic.saveNewGroup}
+        onPatch={handleSetNewGroup}
+        onClose={handleCloseNewGroup}
+        onSave={handleSaveNewGroup}
       />
     );
   } else if (state.addFriend) {
     modal = (
       <FriendModal
         af={state.addFriend}
-        onPatch={logic.setAddFriend}
-        onClose={logic.closeAddFriend}
-        onSave={logic.saveAddFriend}
+        onPatch={handleSetAddFriend}
+        onClose={handleCloseAddFriend}
+        onSave={handleSaveAddFriend}
       />
     );
   }
@@ -417,7 +445,13 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     // component-width narrow observer wrongly flips to the phone drawer layout.
     <div
       ref={setRoot}
-      style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, minHeight: 0 }}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        flex: 1,
+        minWidth: 0,
+        minHeight: 0,
+      }}
     >
       <Chrome
         narrow={narrow}
@@ -429,10 +463,10 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
         consent={deniedRef.current}
         onOpenSide={() => setSideOpen(true)}
         onCloseSide={() => setSideOpen(false)}
-        onAddExpense={logic.openAddExpense}
-        onNewGroup={logic.openNewGroup}
-        onAddFriend={logic.openAddFriend}
-        onSettle={logic.openSettle}
+        onAddExpense={handleOpenAddExpense}
+        onNewGroup={handleOpenNewGroup}
+        onAddFriend={handleOpenAddFriend}
+        onSettle={handleOpenSettle}
         onSearchInput={() => logic.applySearch()}
         onSearchKeyDown={onSearchKeyDown}
         themeButtonRef={(el) => {

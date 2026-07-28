@@ -8,7 +8,11 @@ const PURPOSE = 'dpv:ServiceProvision';
 
 export default async function seedHandler({ log, ctx }) {
   const invoke = async (command, args) => {
-    const out = await ctx.vault.invoke({ command, input: args, purpose: PURPOSE });
+    const out = await ctx.vault.invoke({
+      command,
+      input: args,
+      purpose: PURPOSE,
+    });
     if (out.status !== 'executed') {
       throw new Error(`${command} ${out.status}: ${out.reason ?? 'no reason'}`);
     }
@@ -26,7 +30,11 @@ export default async function seedHandler({ log, ctx }) {
     role: 'Flatmate from Bangalore days',
     cadence_days: 45,
   });
-  const dadu = await person({ display_name: 'Dadu', role: 'Grandfather', cadence_days: 7 });
+  const dadu = await person({
+    display_name: 'Dadu',
+    role: 'Grandfather',
+    cadence_days: 7,
+  });
   const sana = await person({
     display_name: 'Sana Qureshi',
     role: 'Design lead, ex-colleague',
@@ -65,7 +73,10 @@ export default async function seedHandler({ log, ctx }) {
     party_id: dadu.party_id,
     text: 'Large-print edition of Malgudi Days',
   });
-  await invoke('people.add_gift', { party_id: sana.party_id, text: 'Fountain pen ink sampler' });
+  await invoke('people.add_gift', {
+    party_id: sana.party_id,
+    text: 'Fountain pen ink sampler',
+  });
 
   await invoke('people.add_debt', {
     party_id: arjun.party_id,

@@ -1,14 +1,27 @@
-/* oxlint-disable import/first -- vi.mock is hoisted; subject imports intentionally follow */
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import type { InitOutput } from './generated/centraid_web_iroh.js';
+
+import type {
+  BrowserEndpoint as WasmBrowserEndpoint,
+  InitOutput,
+} from './generated/centraid_web_iroh.js';
+import {
+  irohBridgeIdForConsent,
+  irohFetch,
+  moveIrohDeviceKeyForConsent,
+  pairGatewayOverIroh,
+  purgeIrohDeviceState,
+} from './iroh-transport.js';
+import { loadConnection } from './web-state.js';
 
 const wasm = vi.hoisted(() => {
   const connectFailureMarker = 'IROH_CONNECT_FAILURE';
   class BrowserEndpoint {
-    static spawn = vi.fn(async (_key?: Uint8Array, _relays?: string[]) => new BrowserEndpoint());
-    secret_key = vi.fn(() => new Uint8Array([1, 2, 3]));
-    endpoint_id = vi.fn(() => 'endpoint-web-1');
-    pair_gateway = vi.fn(async () =>
+    static readonly spawn = vi.fn<typeof WasmBrowserEndpoint.spawn>(
+      async (_key?: Uint8Array, _relays?: string[]) => new BrowserEndpoint(),
+    );
+    secret_key = vi.fn<WasmBrowserEndpoint['secret_key']>(() => new Uint8Array([1, 2, 3]));
+    endpoint_id = vi.fn<WasmBrowserEndpoint['endpoint_id']>(() => 'endpoint-web-1');
+    pair_gateway = vi.fn<WasmBrowserEndpoint['pair_gateway']>(async () =>
       JSON.stringify({
         ok: true,
         gatewayId: 'gw-1',
@@ -16,14 +29,14 @@ const wasm = vi.hoisted(() => {
         vaultName: 'Personal',
       }),
     );
-    request = vi.fn();
-    close = vi.fn(async () => undefined);
+    request = vi.fn<WasmBrowserEndpoint['request']>();
+    close = vi.fn<WasmBrowserEndpoint['close']>(async () => undefined);
     // Present only to match the real wasm-bindgen-generated `BrowserEndpoint`
     // shape (which the typed `vi.mock(import(...))` factory below now checks
     // against) — the real methods free/dispose the underlying Rust value;
     // nothing to release in this in-memory stand-in.
-    free = vi.fn();
-    [Symbol.dispose] = vi.fn();
+    free = vi.fn<WasmBrowserEndpoint['free']>();
+    [Symbol.dispose] = vi.fn<WasmBrowserEndpoint[typeof Symbol.dispose]>();
   }
   return {
     connectFailureMarker,
@@ -32,8 +45,12 @@ const wasm = vi.hoisted(() => {
     // (dozens of internal exports table entries); `iroh-transport.ts` only
     // awaits it and never reads the result, so a placeholder cast here is
     // honest — asserting only this one property, not the whole module.
-    initWasm: vi.fn(async (): Promise<InitOutput> => undefined as unknown as InitOutput),
-    connect_failure_marker: () => connectFailureMarker,
+    initWasm: vi.fn<typeof import('./generated/centraid_web_iroh.js').default>(
+      async (): Promise<InitOutput> => undefined as unknown as InitOutput,
+    ),
+    connect_failure_marker: vi.fn<
+      typeof import('./generated/centraid_web_iroh.js').connect_failure_marker
+    >(() => connectFailureMarker),
   };
 });
 
@@ -44,7 +61,7 @@ vi.mock(import('./generated/centraid_web_iroh.js'), () => ({
 }));
 
 vi.mock(import('./web-state.js'), () => ({
-  loadConnection: vi.fn(() => ({
+  loadConnection: vi.fn<typeof import('./web-state.js').loadConnection>(() => ({
     endpointTicket: 'ticket-abc',
     endpointId: 'gw-1',
     vaultId: 'vault-1',
@@ -53,17 +70,8 @@ vi.mock(import('./web-state.js'), () => ({
     avatarColor: '#6f5bf6',
     rememberDevice: true,
   })),
-  webGatewayId: vi.fn(() => 'gw-1'),
+  webGatewayId: vi.fn<typeof import('./web-state.js').webGatewayId>(() => 'gw-1'),
 }));
-
-import {
-  irohBridgeIdForConsent,
-  irohFetch,
-  moveIrohDeviceKeyForConsent,
-  pairGatewayOverIroh,
-  purgeIrohDeviceState,
-} from './iroh-transport.js';
-import { loadConnection } from './web-state.js';
 
 const DEVICE_KEY = 'centraid.web.v1.iroh-device-key';
 const BRIDGE_KEY = 'centraid.web.v1.iroh-bridge';
@@ -116,7 +124,11 @@ describe('iroh-transport', () => {
         rememberDevice: true,
       });
       expect(result.endpointId).toBe('endpoint-web-1');
-      expect(result.response).toMatchObject({ ok: true, gatewayId: 'gw-1', vaultId: 'vault-1' });
+      expect(result.response).toMatchObject({
+        ok: true,
+        gatewayId: 'gw-1',
+        vaultId: 'vault-1',
+      });
       expect(wasm.BrowserEndpoint.spawn).toHaveBeenCalledOnce();
       // encodeBytes([1,2,3]) is deterministic base64 'AQID'.
       expect(localStorage.getItem(DEVICE_KEY)).toBe('AQID');
@@ -168,6 +180,8 @@ describe('iroh-transport', () => {
         return {
           status: 200,
           headers_json: JSON.stringify({ 'content-type': 'application/json' }),
+          free: () => undefined,
+          [Symbol.dispose]: () => undefined,
           take_body: () =>
             new ReadableStream({
               start(controller) {
@@ -179,7 +193,9 @@ describe('iroh-transport', () => {
       });
       wasm.BrowserEndpoint.spawn.mockResolvedValueOnce(node);
 
-      const response = await irohFetch('/centraid/_gateway/health', { method: 'GET' });
+      const response = await irohFetch('/centraid/_gateway/health', {
+        method: 'GET',
+      });
       expect(response.status).toBe(200);
       await expect(response.text()).resolves.toBe('{"ok":true}');
       expect(attempts).toBe(2);

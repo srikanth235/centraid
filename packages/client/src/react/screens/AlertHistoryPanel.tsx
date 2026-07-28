@@ -1,5 +1,7 @@
 import type { JSX } from 'react';
+
 import type { AlertHistoryRowDTO } from '../shell/routes/gatewayData.js';
+
 import styles from './GatewayScreen.module.css';
 
 /**

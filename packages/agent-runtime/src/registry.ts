@@ -41,6 +41,7 @@ import type {
   TurnInput,
   TurnResult,
 } from '@centraid/app-engine';
+
 import { runAcpTurn, type AcpAdapterSpec, type AcpTurnConfig } from './backends/acp/backend.js';
 import { enumerateAcpModels } from './backends/acp/enumerate-models.js';
 import { resolveClaudeModel } from './models/tiers.js';
@@ -194,7 +195,9 @@ function makeAcpBackend(spec: AcpBackendSpec): RunnerBackend {
             ? { recoveryHydrationContext: input.recoveryHydrationContext }
             : {}),
           ...(input.recoveryHydrationAttachments?.length
-            ? { recoveryHydrationAttachments: input.recoveryHydrationAttachments }
+            ? {
+                recoveryHydrationAttachments: input.recoveryHydrationAttachments,
+              }
             : {}),
           ...(input.forceHydration ? { forceHydration: true } : {}),
           ...(input.additionalDirectories?.length

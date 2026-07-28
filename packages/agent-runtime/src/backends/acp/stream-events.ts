@@ -15,6 +15,7 @@
  */
 
 import type { TurnStreamEvent } from '@centraid/app-engine';
+
 import { firstString, textOf } from './content.js';
 import { readCost, readTokenUsage, type TokenUsage, type UsageCost } from './usage.js';
 
@@ -254,9 +255,11 @@ export function createSessionUpdateMapper(
                   // The agent's own `rawOutput.content` is its payload, not
                   // our renderable projection — overwriting the key would
                   // silently drop tool output the agent chose to return.
-                  ...((update.rawOutput as Record<string, unknown>).content !== undefined
-                    ? { rawOutputContent: (update.rawOutput as Record<string, unknown>).content }
-                    : {}),
+                  ...((update.rawOutput as Record<string, unknown>).content === undefined
+                    ? {}
+                    : {
+                        rawOutputContent: (update.rawOutput as Record<string, unknown>).content,
+                      }),
                 }
               : {}),
           }
@@ -391,12 +394,11 @@ export function createSessionUpdateMapper(
         // ACP sessions may self-compact, so `used` is deliberately a latest
         // snapshot rather than a monotonic max.
         contextUsage = {
-          ...(used !== undefined ? { used } : {}),
-          ...(size !== undefined ? { size } : {}),
+          ...(used === undefined ? {} : { used }),
+          ...(size === undefined ? {} : { size }),
         };
         emit({ type: 'context', ...contextUsage });
       }
-      return;
     }
     // user_message_chunk / available_commands_update / current_mode_update /
     // config_option_update: product owns slash commands; config updates are
@@ -411,6 +413,10 @@ export function createSessionUpdateMapper(
     foldTokenUsage: (source) => {
       usageTokens = { ...usageTokens, ...readTokenUsage(source) };
     },
-    usage: () => ({ tokens: usageTokens, cost: usageCost, context: contextUsage }),
+    usage: () => ({
+      tokens: usageTokens,
+      cost: usageCost,
+      context: contextUsage,
+    }),
   };
 }

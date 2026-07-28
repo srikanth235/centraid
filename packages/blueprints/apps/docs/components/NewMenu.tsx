@@ -1,6 +1,7 @@
 // The "+ New" menu popover contents (#newMenu root).
 import { I } from '../icons.ts';
 import { Icon } from './Shared.tsx';
+
 import styles from './NewMenu.module.css';
 
 export function NewMenu({

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from 'vitest';
+
 import { openVaultDb, type VaultDb } from '../db.js';
 import { cleanupOrphanedMultipartUploads, ORPHAN_MULTIPART_GRACE_MS } from './orphan-multipart.js';
 import type { RemoteBlobTransfer, TemporaryMultipartUpload } from './remote-transfer.js';
@@ -26,7 +27,11 @@ describe('orphan-multipart', () => {
     const provider = {
       async beginTemporaryUpload(tempId: string): Promise<string> {
         const uploadId = 'provider-only-upload';
-        uploads.push({ tempId, uploadId, initiatedAt: new Date(initiatedAt).toISOString() });
+        uploads.push({
+          tempId,
+          uploadId,
+          initiatedAt: new Date(initiatedAt).toISOString(),
+        });
         return uploadId;
       },
       async listTemporaryUploads(): Promise<TemporaryMultipartUpload[]> {
@@ -75,9 +80,17 @@ describe('orphan-multipart', () => {
     transfers.setOutboxUpload(sha, 'outbox-active');
     const uploads: TemporaryMultipartUpload[] = [
       { tempId: 'stream-temp', uploadId: 'stream-active', initiatedAt: old },
-      { tempId: 'stream-temp', uploadId: 'stream-unpersisted', initiatedAt: old },
+      {
+        tempId: 'stream-temp',
+        uploadId: 'stream-unpersisted',
+        initiatedAt: old,
+      },
       { tempId: 'outbox-temp', uploadId: 'outbox-active', initiatedAt: old },
-      { tempId: 'outbox-temp', uploadId: 'outbox-unpersisted', initiatedAt: old },
+      {
+        tempId: 'outbox-temp',
+        uploadId: 'outbox-unpersisted',
+        initiatedAt: old,
+      },
     ];
     const aborted: string[] = [];
     const transfer: CleanupTransfer = {

@@ -1,5 +1,6 @@
-import { describe, expect, test } from 'vitest';
 import { fc } from '@centraid/test-kit/fast-check';
+import { describe, expect, test } from 'vitest';
+
 import { bootstrapVault } from '../bootstrap.js';
 import { openVaultDb } from '../db.js';
 import { updateBlobStoreSettings } from '../host.js';
@@ -83,7 +84,11 @@ describe('blob custody generated-state property', () => {
       fc.assert(
         fc.property(custodyFlags, payloadBytes, ({ remote, local, replica, pending }, bytes) => {
           const db = openBootstrappedDb(remote);
-          const sha = applyCustodyState(db, bytes, { local, replica, pending });
+          const sha = applyCustodyState(db, bytes, {
+            local,
+            replica,
+            pending,
+          });
           const expected = remote ? replica && !pending : local;
           const proven = blobCustodyProven(db, sha);
           db.close();
@@ -101,7 +106,12 @@ describe('blob custody generated-state property', () => {
       const all: CustodyCase[] = [false, true].flatMap((remote) =>
         [false, true].flatMap((local) =>
           [false, true].flatMap((replica) =>
-            [false, true].map((pending) => ({ remote, local, replica, pending })),
+            [false, true].map((pending) => ({
+              remote,
+              local,
+              replica,
+              pending,
+            })),
           ),
         ),
       );
@@ -140,7 +150,11 @@ describe('blob custody generated-state property', () => {
       fc.assert(
         fc.property(payloadBytes, (bytes) => {
           const db = openBootstrappedDb(true);
-          const sha = applyCustodyState(db, bytes, { local: true, replica: false, pending: false });
+          const sha = applyCustodyState(db, bytes, {
+            local: true,
+            replica: false,
+            pending: false,
+          });
           expect(blobCustodyProven(db, sha)).toBe(false);
           db.close();
         }),
@@ -156,7 +170,11 @@ describe('blob custody generated-state property', () => {
       fc.assert(
         fc.property(payloadBytes, (bytes) => {
           const db = openBootstrappedDb(true);
-          const sha = applyCustodyState(db, bytes, { local: false, replica: true, pending: true });
+          const sha = applyCustodyState(db, bytes, {
+            local: false,
+            replica: true,
+            pending: true,
+          });
           expect(blobCustodyProven(db, sha)).toBe(false);
           db.close();
         }),
@@ -172,7 +190,11 @@ describe('blob custody generated-state property', () => {
       fc.assert(
         fc.property(payloadBytes, (bytes) => {
           const db = openBootstrappedDb(true);
-          const sha = applyCustodyState(db, bytes, { local: false, replica: true, pending: false });
+          const sha = applyCustodyState(db, bytes, {
+            local: false,
+            replica: true,
+            pending: false,
+          });
           expect(blobCustodyProven(db, sha)).toBe(true);
           db.close();
         }),
@@ -188,7 +210,11 @@ describe('blob custody generated-state property', () => {
       fc.assert(
         fc.property(payloadBytes, (bytes) => {
           const db = openBootstrappedDb(false);
-          const sha = applyCustodyState(db, bytes, { local: true, replica: false, pending: false });
+          const sha = applyCustodyState(db, bytes, {
+            local: true,
+            replica: false,
+            pending: false,
+          });
           expect(blobCustodyProven(db, sha)).toBe(true);
           db.close();
         }),
@@ -204,7 +230,11 @@ describe('blob custody generated-state property', () => {
       fc.assert(
         fc.property(payloadBytes, fc.boolean(), fc.boolean(), (bytes, replica, pending) => {
           const db = openBootstrappedDb(false);
-          const sha = applyCustodyState(db, bytes, { local: true, replica, pending });
+          const sha = applyCustodyState(db, bytes, {
+            local: true,
+            replica,
+            pending,
+          });
           // local tier: only local CAS matters
           expect(blobCustodyProven(db, sha)).toBe(true);
           db.close();
@@ -239,7 +269,11 @@ describe('blob custody generated-state property', () => {
       fc.assert(
         fc.property(payloadBytes, (bytes) => {
           const db = openBootstrappedDb(true);
-          const sha = applyCustodyState(db, bytes, { local: false, replica: true, pending: true });
+          const sha = applyCustodyState(db, bytes, {
+            local: false,
+            replica: true,
+            pending: true,
+          });
           expect(blobCustodyProven(db, sha)).toBe(false);
           db.vault.prepare('DELETE FROM blob_outbox WHERE sha256 = ?').run(sha);
           expect(blobCustodyProven(db, sha)).toBe(true);
@@ -257,7 +291,11 @@ describe('blob custody generated-state property', () => {
       fc.assert(
         fc.property(payloadBytes, (bytes) => {
           const db = openBootstrappedDb(true);
-          const sha = applyCustodyState(db, bytes, { local: false, replica: true, pending: false });
+          const sha = applyCustodyState(db, bytes, {
+            local: false,
+            replica: true,
+            pending: false,
+          });
           expect(blobCustodyProven(db, sha)).toBe(true);
           db.vault.prepare('DELETE FROM blob_replica WHERE sha256 = ?').run(sha);
           expect(blobCustodyProven(db, sha)).toBe(false);
@@ -276,7 +314,11 @@ describe('blob custody generated-state property', () => {
         fc.property(payloadBytes, payloadBytes, (a, b) => {
           fc.pre(!a.equals(b));
           const db = openBootstrappedDb(false);
-          const shaA = applyCustodyState(db, a, { local: true, replica: false, pending: false });
+          const shaA = applyCustodyState(db, a, {
+            local: true,
+            replica: false,
+            pending: false,
+          });
           const shaB = sha256OfBytes(b);
           expect(blobCustodyProven(db, shaA)).toBe(true);
           expect(blobCustodyProven(db, shaB)).toBe(false);

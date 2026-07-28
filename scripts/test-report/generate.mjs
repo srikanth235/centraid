@@ -6,7 +6,7 @@
 // independently testable. Worth a real decomposition, but not inside a CI fix.
 import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { validateMatrix } from './validate-matrix.mjs';
+
 import {
   cellsMissingRatchet,
   collectEnvGatedOwners,
@@ -18,6 +18,7 @@ import {
   summarizeCellStates,
 } from './report-signals.mjs';
 import { coverageScopesBelowFloor, writeSummarySidecars } from './summary-markdown.mjs';
+import { validateMatrix } from './validate-matrix.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const flags = parseFlags(process.argv.slice(2));
@@ -32,7 +33,11 @@ const maxEvidenceAgeMs =
   60 *
   60 *
   1_000;
-const matrix = await readJson(matrixPath, { dimensions: [], surfaces: [], flows: [] });
+const matrix = await readJson(matrixPath, {
+  dimensions: [],
+  surfaces: [],
+  flows: [],
+});
 const validation = await validateMatrix(matrix, { root });
 const coverage = await readJson(
   path.resolve(flags.coverage ?? path.join(root, 'coverage/coverage-summary.json')),
@@ -76,7 +81,9 @@ const unhandledErrors = extractUnhandledErrors(vitest);
 const cellStateCounts = summarizeCellStates(cells);
 const envGatedOwners = await collectEnvGatedOwners(matrix, { root, readFile });
 // Orphaned e2e evidence (owner not on any matrix cell/flow) — #535 F3.
-const unmapped = findUnmappedEvidence(e2e, matrix, { normalizeOwner: normalizeFile });
+const unmapped = findUnmappedEvidence(e2e, matrix, {
+  normalizeOwner: normalizeFile,
+});
 const jobConclusions = await readJson(
   path.resolve(
     flags['job-conclusions'] ?? path.join(root, 'artifacts/test-results/job-conclusions.json'),
@@ -240,7 +247,11 @@ async function readDurableHistory(target, limit) {
   }
   const points = records
     .map((record) =>
-      historyPoint({ label: record.slug ?? record.date, ...record.summary, ...record }),
+      historyPoint({
+        label: record.slug ?? record.date,
+        ...record.summary,
+        ...record,
+      }),
     )
     .filter((point) => point.label);
   points.sort((a, b) => (a.label < b.label ? -1 : a.label > b.label ? 1 : 0));
@@ -394,7 +405,11 @@ function buildCells(manifest, evidenceItems, validationErrors) {
       );
       const owners = [];
       if (cellOwner) {
-        owners.push({ name: 'Cell evidence owner', tier: cellOwner.tier, owner: cellOwner.owner });
+        owners.push({
+          name: 'Cell evidence owner',
+          tier: cellOwner.tier,
+          owner: cellOwner.owner,
+        });
       }
       for (const flow of flows) {
         if (!owners.some((owner) => owner.owner === flow.owner)) owners.push(flow);
@@ -528,7 +543,9 @@ function aggregateCoverage(entries) {
   for (const metric of ['lines', 'branches']) {
     const total = entries.reduce((sum, item) => sum + (item[metric]?.total ?? 0), 0);
     const covered = entries.reduce((sum, item) => sum + (item[metric]?.covered ?? 0), 0);
-    result[metric] = { pct: total ? Math.round((covered / total) * 10_000) / 100 : 100 };
+    result[metric] = {
+      pct: total ? Math.round((covered / total) * 10_000) / 100 : 100,
+    };
   }
   return result;
 }

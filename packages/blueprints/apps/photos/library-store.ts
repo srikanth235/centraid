@@ -44,20 +44,20 @@ export interface ScopeLibrary {
 
 export interface LibraryStoreDeps {
   /** Fan the `library` query across the named scopes. Must never reject. */
-  readScopes(
+  readScopes: (
     scopeIds: readonly string[],
     input: Record<string, unknown>,
-  ): Promise<ScopeReadResult[]>;
+  ) => Promise<ScopeReadResult[]>;
   /** The mounted scope ids, primary first — read live (audiences hydrate late). */
-  scopeIds(): string[];
+  scopeIds: () => string[];
   /** The member's own scope id: the dedupe winner and the default write target. */
-  ownScopeId(): string;
+  ownScopeId: () => string;
   /** The change-feed table gate — a burst touching none of these changes nothing. */
   readTables: ReadonlySet<string>;
   /** Defer `run` under `key`, collapsing repeats (a debounce in the app). */
-  schedule(key: string, run: () => void): void;
+  schedule: (key: string, run: () => void) => void;
   /** Fired after any applied read; the app re-renders from `merged()`. */
-  onData(): void;
+  onData: () => void;
   /** Live assets per page. */
   pageSize?: number;
 }
@@ -118,27 +118,27 @@ function appendPage(prev: ScopeLibrary, data: LibraryData): ScopeLibrary {
 
 export interface LibraryStore {
   /** Re-read every mounted scope from the newest end, at its current depth. */
-  refreshAll(): Promise<void>;
+  refreshAll: () => Promise<void>;
   /** Re-read exactly one scope. The change-feed path, and the only cheap one. */
-  refreshScope(scopeId: string): Promise<void>;
+  refreshScope: (scopeId: string) => Promise<void>;
   /** Page the horizon scopes deeper, each from its own cursor, and append. */
-  showMore(): Promise<void>;
+  showMore: () => Promise<void>;
   /** Route one change-feed burst to the smallest refetch that answers it. */
-  handleChange(detail: LibraryChangeDetail | undefined): void;
+  handleChange: (detail: LibraryChangeDetail | undefined) => void;
   /** The merged timeline across scopes (memoized until the next read lands). */
-  merged(): MergeResult;
+  merged: () => MergeResult;
   /** One scope's accumulated library, empty when it has never answered. */
-  scope(scopeId: string): ScopeLibrary;
+  scope: (scopeId: string) => ScopeLibrary;
   /** The member's own scope's library — albums, places and trash come from here. */
-  own(): ScopeLibrary;
+  own: () => ScopeLibrary;
   /**
    * Apply a page a LIVE read pushed (single-scope hosts, where the replica can
    * hand the app a fresh projection without a round trip). Treated as the
    * newest answer for that scope, so an older in-flight read cannot clobber it.
    */
-  applyScopeData(scopeId: string, data: LibraryData): void;
+  applyScopeData: (scopeId: string, data: LibraryData) => void;
   /** Fence every in-flight read; nothing applies after this. */
-  dispose(): void;
+  dispose: () => void;
 }
 
 export function createLibraryStore(deps: LibraryStoreDeps): LibraryStore {
@@ -182,7 +182,10 @@ export function createLibraryStore(deps: LibraryStoreDeps): LibraryStore {
     }
     // Keep whatever this scope last showed and record why it is stale — a
     // failing audience must not blank the timeline the other scopes still fill.
-    byScope.set(result.scope, { ...scopeOf(result.scope), error: result.error.message });
+    byScope.set(result.scope, {
+      ...scopeOf(result.scope),
+      error: result.error.message,
+    });
   };
 
   async function readInto(

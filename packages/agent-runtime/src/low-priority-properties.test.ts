@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, test } from 'vitest';
 import { fc } from '@centraid/test-kit/fast-check';
+import { afterEach, describe, expect, test } from 'vitest';
+
 import { lowPriorityCommand } from './low-priority.js';
 
 /**
@@ -15,8 +16,10 @@ describe('lowPriorityCommand properties', () => {
     else process.env.CENTRAID_CHILD_PRIORITY = prior;
   });
 
-  const binArb = fc.stringMatching(/^[A-Za-z][A-Za-z0-9._-]{0,12}$/);
-  const argsArb = fc.array(fc.stringMatching(/^[A-Za-z0-9._-]{1,8}$/), { maxLength: 4 });
+  const binArb = fc.stringMatching(/^[A-Za-z][A-Za-z0-9._-]{0,12}$/u);
+  const argsArb = fc.array(fc.stringMatching(/^[A-Za-z0-9._-]{1,8}$/u), {
+    maxLength: 4,
+  });
 
   test('win32 is always identity regardless of niceness or exists', () => {
     fc.assert(

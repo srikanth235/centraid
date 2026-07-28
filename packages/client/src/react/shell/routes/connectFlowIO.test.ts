@@ -47,7 +47,10 @@ describe('connectFlowIO', () => {
   describe(runConnectivityTest, () => {
     it('fails closed when bridge is missing', async () => {
       window.CentraidApi = {} as typeof window.CentraidApi;
-      const report = await runConnectivityTest({ method: 'gateway', url: 'http://x' } as never);
+      const report = await runConnectivityTest({
+        method: 'gateway',
+        url: 'http://x',
+      } as never);
       expect(report.ok).toBe(false);
       expect(report.error).toBe('unavailable');
     });
@@ -58,10 +61,13 @@ describe('connectFlowIO', () => {
           .fn<ConnectFlowBridge['testGatewayConnection']>()
           .mockRejectedValue(new Error('ECONNREFUSED')),
       } as unknown as typeof window.CentraidApi;
-      const report = await runConnectivityTest({ method: 'gateway', url: 'http://x' } as never);
+      const report = await runConnectivityTest({
+        method: 'gateway',
+        url: 'http://x',
+      } as never);
       expect(report.ok).toBe(false);
       expect(report.error).toBe('unreachable');
-      expect(report.stages?.[0]?.detail).toMatch(/ECONNREFUSED/);
+      expect(report.stages?.[0]?.detail).toMatch(/ECONNREFUSED/u);
     });
 
     it('returns bridge report on success', async () => {
@@ -82,7 +88,13 @@ describe('connectFlowIO', () => {
   describe('loadLocalVaults / commitConnectFlow', () => {
     it('maps listVaults rows and tolerates failure', async () => {
       listVaults.mockResolvedValue([
-        { vaultId: 'v1', name: 'Home', ownerPartyId: 'party-1', color: '#fff', icon: 'Folder' },
+        {
+          vaultId: 'v1',
+          name: 'Home',
+          ownerPartyId: 'party-1',
+          color: '#fff',
+          icon: 'Folder',
+        },
       ]);
       await expect(loadLocalVaults()).resolves.toStrictEqual([
         { vaultId: 'v1', name: 'Home', color: '#fff', icon: 'Folder' },
@@ -93,11 +105,11 @@ describe('connectFlowIO', () => {
 
     it('rejects commit without a method or vault choice', async () => {
       await expect(commitConnectFlow({ method: null } as never)).rejects.toThrow(
-        /No connection method/,
+        /No connection method/u,
       );
       await expect(
         commitConnectFlow({ method: 'local', vaultChoice: null } as never),
-      ).rejects.toThrow(/Pick or create/);
+      ).rejects.toThrow(/Pick or create/u);
     });
   });
 });

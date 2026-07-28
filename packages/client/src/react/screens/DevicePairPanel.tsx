@@ -1,23 +1,25 @@
-import { useEffect, useState, type JSX } from 'react';
 import QRCode from 'qrcode';
+import { useEffect, useState, type JSX } from 'react';
+
 import type {
   GatewayDeviceTicket,
   GatewayDeviceTicketInput,
   GatewayMember,
 } from '../../gateway-client.js';
 import { formatClock, formatDuration } from '../shell/routes/gatewayData.js';
-import Icon from '../ui/Icon.js';
 import { cx } from '../ui/cx.js';
-import buttonCss from '../ui/Button.module.css';
-import controlsCss from '../styles/controls.module.css';
-import cardCss from './DevicesCard.module.css';
-import styles from './DevicePairPanel.module.css';
+import Icon from '../ui/Icon.js';
 import { pairErrorMessage, roleLabel } from './device-roles.js';
 import DevicePairTarget, {
   type PairGrant,
   type PairSpace,
   type PairTarget,
 } from './DevicePairTarget.js';
+
+import controlsCss from '../styles/controls.module.css';
+import buttonCss from '../ui/Button.module.css';
+import styles from './DevicePairPanel.module.css';
+import cardCss from './DevicesCard.module.css';
 
 export interface DevicePairPanelProps {
   now: number;
@@ -30,6 +32,9 @@ export interface DevicePairPanelProps {
   /** Spaces the caller may grant, with resolved names. */
   spaces?: readonly PairSpace[];
 }
+
+const NO_MEMBERS: readonly GatewayMember[] = [];
+const NO_SPACES: readonly PairSpace[] = [];
 
 const TTL_PRESETS: readonly { label: string; minutes: number }[] = [
   { label: '15 min', minutes: 15 },
@@ -48,9 +53,9 @@ export default function DevicePairPanel({
   now,
   onCreateTicket,
   onClose,
-  members = [],
+  members = NO_MEMBERS,
   currentMemberId,
-  spaces = [],
+  spaces = NO_SPACES,
 }: DevicePairPanelProps): JSX.Element {
   const [minutes, setMinutes] = useState(15);
   const [target, setTarget] = useState<PairTarget>({ kind: 'self' });
@@ -62,13 +67,20 @@ export default function DevicePairPanel({
   // The rendered QR is stored WITH the ticket it encodes, so "no ticket" and
   // "a newer ticket than the last render" both read as "no QR yet" during
   // render — no effect has to blank it out.
-  const [qr, setQr] = useState<{ ticket: GatewayDeviceTicket; svg: string } | null>(null);
+  const [qr, setQr] = useState<{
+    ticket: GatewayDeviceTicket;
+    svg: string;
+  } | null>(null);
   const qrSvg = qr !== null && ticket !== null && qr.ticket === ticket ? qr.svg : null;
 
   useEffect(() => {
     if (!ticket) return;
     let live = true;
-    void QRCode.toString(ticket.ticket, { type: 'svg', width: 176, margin: 1 }).then(
+    void QRCode.toString(ticket.ticket, {
+      type: 'svg',
+      width: 176,
+      margin: 1,
+    }).then(
       (svg) => {
         if (live) setQr({ svg, ticket });
       },
@@ -133,7 +145,13 @@ export default function DevicePairPanel({
         <div className={styles.grantSummary}>
           {(granted.length > 0
             ? granted
-            : [{ vaultId: ticket.vaultId, vaultName: ticket.vaultName, role: ticket.role }]
+            : [
+                {
+                  vaultId: ticket.vaultId,
+                  vaultName: ticket.vaultName,
+                  role: ticket.role,
+                },
+              ]
           ).map((grant) => (
             <span key={grant.vaultId}>
               {grant.vaultName ?? grant.vaultId} · {roleLabel(grant.role)}
@@ -203,7 +221,7 @@ export default function DevicePairPanel({
           setError(null);
         }}
         members={members}
-        {...(currentMemberId !== undefined ? { currentMemberId } : {})}
+        {...(currentMemberId === undefined ? {} : { currentMemberId })}
         spaces={spaces}
         grants={grants}
         onGrantsChange={setGrants}

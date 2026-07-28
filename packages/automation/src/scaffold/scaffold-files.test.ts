@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest';
 import type { ScaffoldFile } from '@centraid/blueprints';
-import { scaffoldAppFiles, setEnabledInFiles, deleteFromFiles } from './scaffold.js';
+import { describe, expect, it } from 'vitest';
+
 import { lintHandlerSource } from '../handler/lint.js';
+import { scaffoldAppFiles, setEnabledInFiles, deleteFromFiles } from './scaffold.js';
 
 function byPath(files: ScaffoldFile[]): Map<string, string> {
   return new Map(files.map((f) => [f.path, f.content]));
@@ -24,7 +25,7 @@ describe(scaffoldAppFiles, () => {
   });
 
   it('rejects a dotted / path-unsafe app id', () => {
-    expect(() => scaffoldAppFiles('auto.briefing')).toThrow(/Invalid automation app id/);
+    expect(() => scaffoldAppFiles('auto.briefing')).toThrow(/Invalid automation app id/u);
   });
 
   it('emits a replay-safe default handler (passes the determinism lint)', () => {
@@ -58,7 +59,7 @@ describe(scaffoldAppFiles, () => {
       scaffoldAppFiles('watcher2', {
         triggers: [{ kind: 'condition', entity: 'core.invoice' }],
       }),
-    ).toThrow(/manifest\.vault block/);
+    ).toThrow(/manifest\.vault block/u);
   });
 
   it('emits an empty requires slot (runner/model only when given, no tools rail)', () => {
@@ -74,7 +75,10 @@ describe(scaffoldAppFiles, () => {
     expect(reqs.model).toBeUndefined();
 
     const withModel = byPath(
-      scaffoldAppFiles('briefing', { runner: 'claude-code', model: 'anthropic/x' }),
+      scaffoldAppFiles('briefing', {
+        runner: 'claude-code',
+        model: 'anthropic/x',
+      }),
     );
     const reqs2 = (
       JSON.parse(withModel.get('automations/briefing/automation.json')!) as {

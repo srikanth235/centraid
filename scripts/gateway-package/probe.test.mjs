@@ -1,10 +1,11 @@
+import assert from 'node:assert/strict';
 /**
  * Real-path tests for the external info probe (issue #504 packaging).
  * Run: node --test scripts/gateway-package/probe.test.mjs
  */
 import { createServer } from 'node:http';
 import { test } from 'node:test';
-import assert from 'node:assert/strict';
+
 import { probeGatewayInfo, waitForGatewayInfo, INFO_PATH } from './probe.mjs';
 
 test('probeGatewayInfo accepts 200 with version', async () => {
@@ -24,7 +25,7 @@ test('probeGatewayInfo accepts 200 with version', async () => {
     const result = await probeGatewayInfo(base);
     assert.equal(result.ok, true);
     assert.equal(result.status, 200);
-    assert.match(result.detail, /0\.1\.0/);
+    assert.match(result.detail, /0\.1\.0/u);
   } finally {
     server.close();
   }

@@ -1,14 +1,6 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
-import type { RouteHandler } from '../serve/build-gateway.js';
-import type { BackupService } from '../backup/backup-service.js';
-import type { BackupTargetState } from '../backup/backup-state.js';
-import type { VaultRegistry } from '../serve/vault-registry.js';
-import type { EnrollmentStore } from '../serve/enrollment-store.js';
-import type { RecoveryKitStateStore } from '../backup/recovery-kit-state.js';
-import { makeBackupRouteHandler, type BackupStatusBody } from './backup-routes.js';
-import { bootstrapVault, openVaultDb } from '@centraid/vault';
+
 import { AUTHED_DEVICE_HEADER } from '@centraid/app-engine';
 import {
   parseRecoveryKit,
@@ -16,6 +8,16 @@ import {
   wrapRecoveryKit,
   type RecoveryKitDocument,
 } from '@centraid/backup';
+import { bootstrapVault, openVaultDb } from '@centraid/vault';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import type { BackupService } from '../backup/backup-service.js';
+import type { BackupTargetState } from '../backup/backup-state.js';
+import type { RecoveryKitStateStore } from '../backup/recovery-kit-state.js';
+import type { RouteHandler } from '../serve/build-gateway.js';
+import type { EnrollmentStore } from '../serve/enrollment-store.js';
+import type { VaultRegistry } from '../serve/vault-registry.js';
+import { makeBackupRouteHandler, type BackupStatusBody } from './backup-routes.js';
 
 /** Loosened GET-body shape for tests that only assert a slice of it. */
 type BackupStatusBodyForTest = Pick<BackupStatusBody, 'recoveryKit'>;
@@ -132,7 +134,9 @@ describe('backup-routes', () => {
   describe('makeBackupRouteHandler — GET /centraid/_gateway/backup', () => {
     it('reports mounted local-only vault status when no BackupService is wired', async () => {
       const url = await startHandlerServer(
-        makeBackupRouteHandler({ vaults: fakeVaults([{ vaultId: 'v1', name: 'Main' }]) }),
+        makeBackupRouteHandler({
+          vaults: fakeVaults([{ vaultId: 'v1', name: 'Main' }]),
+        }),
       );
       const res = await fetch(`${url}/centraid/_gateway/backup`);
       expect(res.status).toBe(200);
@@ -217,13 +221,17 @@ describe('backup-routes', () => {
         }),
       );
       const res = await fetch(`${url}/centraid/_gateway/backup`);
-      const body = (await res.json()) as { vaults: Array<{ lastError?: string }> };
-      expect(body.vaults[0]?.lastError).toMatch(/conflict_generation/);
+      const body = (await res.json()) as {
+        vaults: Array<{ lastError?: string }>;
+      };
+      expect(body.vaults[0]?.lastError).toMatch(/conflict_generation/u);
     });
 
     it('answers 405 for non-GET', async () => {
       const url = await startHandlerServer(makeBackupRouteHandler({ vaults: fakeVaults([]) }));
-      const res = await fetch(`${url}/centraid/_gateway/backup`, { method: 'POST' });
+      const res = await fetch(`${url}/centraid/_gateway/backup`, {
+        method: 'POST',
+      });
       // POST is a distinct sub-route (`/backup/run`) — POSTing the status
       // path itself is method_not_allowed, not routed to `run`.
       expect(res.status).toBe(405);
@@ -239,11 +247,13 @@ describe('backup-routes', () => {
   describe('makeBackupRouteHandler — POST /centraid/_gateway/backup/run', () => {
     it('refuses with 409 + a clear body when not configured', async () => {
       const url = await startHandlerServer(makeBackupRouteHandler({ vaults: fakeVaults([]) }));
-      const res = await fetch(`${url}/centraid/_gateway/backup/run`, { method: 'POST' });
+      const res = await fetch(`${url}/centraid/_gateway/backup/run`, {
+        method: 'POST',
+      });
       expect(res.status).toBe(409);
       const body = (await res.json()) as { error: string; message: string };
       expect(body.error).toBe('not_configured');
-      expect(body.message).toMatch(/not configured/);
+      expect(body.message).toMatch(/not configured/u);
     });
 
     it('triggers runAll() and answers 202 immediately without waiting for it to finish', async () => {
@@ -260,7 +270,9 @@ describe('backup-routes', () => {
         }),
       );
 
-      const res = await fetch(`${url}/centraid/_gateway/backup/run`, { method: 'POST' });
+      const res = await fetch(`${url}/centraid/_gateway/backup/run`, {
+        method: 'POST',
+      });
       expect(res.status).toBe(202);
       await expect(res.json()).resolves.toStrictEqual({ accepted: true });
       expect(runAll).toHaveBeenCalledOnce();
@@ -277,9 +289,14 @@ describe('backup-routes', () => {
         }),
       );
 
-      const res = await fetch(`${url}/centraid/_gateway/backup/run`, { method: 'POST' });
+      const res = await fetch(`${url}/centraid/_gateway/backup/run`, {
+        method: 'POST',
+      });
       expect(res.status).toBe(202);
-      await expect(res.json()).resolves.toStrictEqual({ accepted: true, alreadyRunning: true });
+      await expect(res.json()).resolves.toStrictEqual({
+        accepted: true,
+        alreadyRunning: true,
+      });
       expect(runAll).not.toHaveBeenCalled();
     });
 
@@ -300,7 +317,9 @@ describe('backup-routes', () => {
       const url = await startHandlerServer(
         makeBackupRouteHandler({ backupService, vaults: fakeVaults([]) }),
       );
-      const res = await fetch(`${url}/centraid/_gateway/backup/verify`, { method: 'POST' });
+      const res = await fetch(`${url}/centraid/_gateway/backup/verify`, {
+        method: 'POST',
+      });
       expect(res.status).toBe(202);
       await expect(res.json()).resolves.toStrictEqual({ accepted: true });
       expect(verifyAll).toHaveBeenCalledOnce();
@@ -351,7 +370,9 @@ describe('backup-routes', () => {
 
   describe('makeBackupRouteHandler — GET /centraid/_gateway/backup — recoveryKit', () => {
     it('carries the confirmed-kit timestamp through when set', async () => {
-      const backupService = fakeBackupService({ recoveryKitConfirmedAt: 1_752_200_000 });
+      const backupService = fakeBackupService({
+        recoveryKitConfirmedAt: 1_752_200_000,
+      });
       const url = await startHandlerServer(
         makeBackupRouteHandler({ backupService, vaults: fakeVaults([]) }),
       );
@@ -385,23 +406,32 @@ describe('backup-routes', () => {
       const res = await fetch(`${url}/centraid/_gateway/backup/kit-confirmed`, {
         method: 'POST',
         headers: OWNER_HEADERS,
-        body: JSON.stringify({ kit: wrapped, password: KIT_PASSWORD, lossConsent: true }),
+        body: JSON.stringify({
+          kit: wrapped,
+          password: KIT_PASSWORD,
+          lossConsent: true,
+        }),
       });
       expect(res.status).toBe(409);
       const body = (await res.json()) as { error: string; message: string };
       expect(body.error).toBe('not_configured');
-      expect(body.message).toMatch(/not configured/);
+      expect(body.message).toMatch(/not configured/u);
     });
 
     it('confirms the kit and echoes the new confirmedAt', async () => {
-      const backupService = fakeBackupService({ recoveryKitConfirmedAt: 1_752_235_200 });
+      const backupService = fakeBackupService({
+        recoveryKitConfirmedAt: 1_752_235_200,
+      });
       const recoveryKitStore = {
         verify: vi.fn<RecoveryKitStateStore['verify']>(async (actual: string) =>
           actual === fingerprint
             ? { confirmedAt: 1_752_235_200, kitFingerprint: actual }
             : undefined,
         ),
-        status: async () => ({ confirmedAt: 1_752_235_200, kitFingerprint: fingerprint }),
+        status: async () => ({
+          confirmedAt: 1_752_235_200,
+          kitFingerprint: fingerprint,
+        }),
       } as unknown as RecoveryKitStateStore;
       const url = await startHandlerServer(
         makeBackupRouteHandler({
@@ -414,7 +444,11 @@ describe('backup-routes', () => {
       const res = await fetch(`${url}/centraid/_gateway/backup/kit-confirmed`, {
         method: 'POST',
         headers: OWNER_HEADERS,
-        body: JSON.stringify({ kit: wrapped, password: KIT_PASSWORD, lossConsent: true }),
+        body: JSON.stringify({
+          kit: wrapped,
+          password: KIT_PASSWORD,
+          lossConsent: true,
+        }),
       });
       expect(res.status).toBe(200);
       const body = (await res.json()) as { ok: boolean; confirmedAt: number };

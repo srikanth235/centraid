@@ -21,7 +21,9 @@
  */
 
 import { createHash } from 'node:crypto';
+
 import type { VaultBridge } from '@centraid/app-engine';
+
 import type { ConditionTrigger, DataTrigger } from '../manifest/manifest.js';
 import { parseRef } from '../manifest/ref.js';
 import type { CursorReadResult } from './cursor-engine.js';

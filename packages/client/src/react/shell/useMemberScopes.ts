@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+
 import { listAppScopes, listVaults } from '../../gateway-client.js';
 import { canWrite, type MemberScope } from './memberScope.js';
 import { useAsyncData } from './useAsyncData.js';

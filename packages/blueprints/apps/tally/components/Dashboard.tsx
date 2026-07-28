@@ -4,6 +4,7 @@
 import { balLabelGroup, money, tint } from '../format.ts';
 import type { Dash, Friend, Group, TrashedExpense } from '../types.ts';
 import { KitAvatar } from './Shared.tsx';
+
 import styles from './Dashboard.module.css';
 import shared from './shared.module.css';
 
@@ -54,7 +55,12 @@ function GroupCard({
       <div className={styles.gcardTop}>
         <span
           className={shared.gicon}
-          style={{ width: '38px', height: '38px', fontSize: '19px', background: tint(g.color) }}
+          style={{
+            width: '38px',
+            height: '38px',
+            fontSize: '19px',
+            background: tint(g.color),
+          }}
         >
           {g.icon || '👥'}
         </span>

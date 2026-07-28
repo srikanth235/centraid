@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
 import { GroupCommitQueue } from './group-commit-queue.js';
 
 describe(GroupCommitQueue, () => {
@@ -25,7 +26,7 @@ describe(GroupCommitQueue, () => {
     const failed = queue.enqueue(() => {
       throw new Error('nope');
     });
-    const failedExpectation = expect(failed).rejects.toThrow('nope');
+    const failedExpectation = await expect(failed).rejects.toThrow('nope');
     const succeeded = queue.enqueue(() => 42);
 
     await vi.advanceTimersByTimeAsync(8);
@@ -60,7 +61,7 @@ describe(GroupCommitQueue, () => {
     const failed = queue.enqueue(() => {
       throw new Error('journal finalization failed');
     });
-    const failedExpectation = expect(failed).rejects.toThrow('journal finalization failed');
+    const failedExpectation = await expect(failed).rejects.toThrow('journal finalization failed');
     const succeeded = queue.enqueue(() => 42);
 
     await vi.advanceTimersByTimeAsync(5);

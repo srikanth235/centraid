@@ -5,13 +5,13 @@
 // kitAsk. The `./queries/*` imports live ONLY here so they never reach the
 // served/browser bundle (the gateway refuses to serve node-side handlers).
 
+import type { InlineAppModule } from '../inline-types.ts';
 import { Root, PHOTOS_READ_TABLES_LIST } from './app-root.tsx';
-import libraryQuery from './queries/library.ts';
-import searchQueryModule from './queries/search.ts';
 import duplicatesQuery from './queries/duplicates.ts';
 import enrichmentStatusQuery from './queries/enrichment-status.ts';
 import facesQuery from './queries/faces.ts';
-import type { InlineAppModule } from '../inline-types.ts';
+import libraryQuery from './queries/library.ts';
+import searchQueryModule from './queries/search.ts';
 
 const photosInlineApp: InlineAppModule = {
   appId: 'photos',

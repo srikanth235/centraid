@@ -1,9 +1,11 @@
+import { promises as fs } from 'node:fs';
+
 import { buildGatewayInfoPayload } from '@centraid/protocol';
 import { tempDir } from '@centraid/test-kit/temp-dir';
 import { endpointIdForSecret } from '@centraid/tunnel';
 import { KeyStore } from '@centraid/vault';
 import { afterEach, describe, expect, test } from 'vitest';
-import { promises as fs } from 'node:fs';
+
 import { GatewayDatabase } from '../serve/gateway-db.js';
 import { commandDevices } from './device-admin.js';
 import { commandLockStatus } from './lock-admin.js';
@@ -14,7 +16,7 @@ const roots: string[] = [];
 
 describe('lock-admin', () => {
   afterEach(async () => {
-    while (roots.length > 0) await fs.rm(roots.pop()!, { recursive: true, force: true });
+    await Promise.all(roots.splice(0).map((root) => fs.rm(root, { recursive: true, force: true })));
   });
 
   const fail = (message: string): never => {
@@ -43,7 +45,7 @@ describe('lock-admin', () => {
     try {
       await expect(
         commandVault(['create', '--data-dir', dataDir, '--name', 'Blocked'], fail),
-      ).rejects.toThrow(/running daemon|another Centraid gateway/i);
+      ).rejects.toThrow(/running daemon|another Centraid gateway/iu);
       // `vault list` answers from the on-disk vault registry and never issues a
       // `gateway.db` read — it is unaffected by the lock BY CONSTRUCTION, which
       // is why it cannot stand in for the read-only-open behaviour asserted in
@@ -65,10 +67,10 @@ describe('lock-admin', () => {
       // until the first SELECT — so `open()` must probe, or every read-only verb
       // dies with `ERR_SQLITE_ERROR: database is locked` and a stack trace.
       expect(() => GatewayDatabase.open(dataDir, { lock: 'read-only' })).toThrow(
-        /another Centraid gateway|database is locked/i,
+        /another Centraid gateway|database is locked/iu,
       );
       await expect(commandDevices(['list', '--data-dir', dataDir], fail)).rejects.toThrow(
-        /the running daemon owns the device registry/i,
+        /the running daemon owns the device registry/iu,
       );
     } finally {
       held.close();
@@ -136,10 +138,10 @@ describe('lock-admin', () => {
         answering: false,
         holderPid: 202,
       });
-      expect(wedged.detail).toMatch(/held but the daemon is not answering.*OS holder pid 202/i);
+      expect(wedged.detail).toMatch(/held but the daemon is not answering.*OS holder pid 202/iu);
       await expect(
         commandLockStatus(['--data-dir', dataDir, '--force'], fail, wedgedFetch),
-      ).rejects.toThrow(/unknown flag "--force"/);
+      ).rejects.toThrow(/unknown flag "--force"/u);
     } finally {
       held.close();
     }

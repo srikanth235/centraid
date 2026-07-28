@@ -13,10 +13,11 @@ import '../theme-vars.js';
 import '../icons.js';
 import type { ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { Gallery } from './ui/index.js';
-import App from './shell/App.js';
-import ErrorBoundary from './shell/ErrorBoundary.js';
-import FirstRunGate from './screens/FirstRunGate.js';
+
+import {
+  consumeInitialAssistHandoff,
+  installDesktopAssistHandoff,
+} from '../assist-oauth-handoff.js';
 import { resetGatewayAuthCache } from '../gateway-client-core.js';
 import {
   getGatewayFoundingStatus,
@@ -24,10 +25,10 @@ import {
   restoreGatewayVault,
   verifyGatewayFoundingKit,
 } from '../gateway-client-founding.js';
-import {
-  consumeInitialAssistHandoff,
-  installDesktopAssistHandoff,
-} from '../assist-oauth-handoff.js';
+import FirstRunGate from './screens/FirstRunGate.js';
+import App from './shell/App.js';
+import ErrorBoundary from './shell/ErrorBoundary.js';
+import { Gallery } from './ui/index.js';
 
 // Install terminal replica cleanup before any AppFrame asks for a local read;
 // inactive gateway removal and vault switches must also reach dormant storage.

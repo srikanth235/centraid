@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+
 import { validateMatrix } from './validate-matrix.mjs';
 
 function baseMatrix(overrides = {}) {
@@ -20,7 +21,10 @@ function baseMatrix(overrides = {}) {
       },
     ],
     cellOwners: {
-      'vault.correctness': { owner: 'packages/vault/package.json', tier: 'unit' },
+      'vault.correctness': {
+        owner: 'packages/vault/package.json',
+        tier: 'unit',
+      },
       'vault.skipdim': null,
     },
     flows: [
@@ -40,20 +44,28 @@ function baseMatrix(overrides = {}) {
 
 describe('validateMatrix', () => {
   test('accepts a minimal well-formed matrix', async () => {
-    const { errors } = await validateMatrix(baseMatrix(), { checkEnvGates: false });
+    const { errors } = await validateMatrix(baseMatrix(), {
+      checkEnvGates: false,
+    });
     expect(errors).toEqual([]);
   });
 
   test('rejects missing cell-owner mapping', async () => {
     const matrix = baseMatrix();
     delete matrix.cellOwners['vault.correctness'];
-    const { errors } = await validateMatrix(matrix, { checkFiles: false, checkEnvGates: false });
+    const { errors } = await validateMatrix(matrix, {
+      checkFiles: false,
+      checkEnvGates: false,
+    });
     expect(errors.some((e) => e.includes('no explicit cell-owner'))).toBe(true);
   });
 
   test('rejects skip cells without notes', async () => {
     const matrix = baseMatrix({ notes: {} });
-    const { errors } = await validateMatrix(matrix, { checkFiles: false, checkEnvGates: false });
+    const { errors } = await validateMatrix(matrix, {
+      checkFiles: false,
+      checkEnvGates: false,
+    });
     expect(errors.some((e) => e.includes('vault.skipdim') && e.includes('no matrix.notes'))).toBe(
       true,
     );
@@ -62,14 +74,20 @@ describe('validateMatrix', () => {
   test('rejects unknown surface on a flow', async () => {
     const matrix = baseMatrix();
     matrix.flows[0].surface = 'not-a-surface';
-    const { errors } = await validateMatrix(matrix, { checkFiles: false, checkEnvGates: false });
+    const { errors } = await validateMatrix(matrix, {
+      checkFiles: false,
+      checkEnvGates: false,
+    });
     expect(errors.some((e) => e.includes('unknown surface'))).toBe(true);
   });
 
   test('rejects invalid assessment status', async () => {
     const matrix = baseMatrix();
     matrix.surfaces[0].assessment.correctness = 'maybe';
-    const { errors } = await validateMatrix(matrix, { checkFiles: false, checkEnvGates: false });
+    const { errors } = await validateMatrix(matrix, {
+      checkFiles: false,
+      checkEnvGates: false,
+    });
     expect(errors.some((e) => e.includes('invalid or missing assessment'))).toBe(true);
   });
 

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { blockingSummary, pausedModuleStatuses } from './popup-state.js';
 
 describe('popup connection state', () => {

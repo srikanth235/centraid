@@ -5,11 +5,13 @@
 // (never per keystroke) so typing never spams the vault with writes.
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent, KeyboardEvent } from 'react';
-import { renderAttachments } from '../kit.ts';
+
 import { flagLevel, plusDays, todayStr } from '../format.ts';
-import type { ActivityEntry, EditPatch, Task } from '../types.ts';
 import { I } from '../icons.ts';
+import { renderAttachments } from '../kit.ts';
+import type { ActivityEntry, EditPatch, Task } from '../types.ts';
 import { Icon } from './Shared.tsx';
+
 import styles from './Detail.module.css';
 import shared from './shared.module.css';
 
@@ -372,7 +374,8 @@ export function Detail({
           <TagStrip task={task} onAddTag={onAddTag} onRemoveTag={onRemoveTag} />
 
           <div className={shared.eyebrowLabel}>
-            Subtasks{children.length ? ` · ${doneChildren}/${children.length}` : ''}
+            Subtasks
+            {children.length ? ` · ${doneChildren}/${children.length}` : ''}
           </div>
           <div className={styles.subtasks}>
             {children.map((s) => (

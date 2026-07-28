@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
+
 import type { LocalBlobStore } from './local.js';
 import type { BlobTransferState } from './transfer-state.js';
 

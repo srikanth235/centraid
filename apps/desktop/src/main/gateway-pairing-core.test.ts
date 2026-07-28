@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import {
   decodePairingTicket,
   findReusableProfile,
@@ -108,7 +109,11 @@ describe(foldIrohPairResponse, () => {
       gatewayId: 'gateway-endpoint',
       vaultId: 'v1',
     });
-    expect(folded).toStrictEqual({ gatewayId: 'gateway-endpoint', vaultId: 'v1', vaultName: '' });
+    expect(folded).toStrictEqual({
+      gatewayId: 'gateway-endpoint',
+      vaultId: 'v1',
+      vaultName: '',
+    });
   });
 
   it('maps ok:false + error:ticket_expired to the stable expired code', () => {
@@ -122,11 +127,17 @@ describe(foldIrohPairResponse, () => {
 
   it('maps any other rejection to invalid_ticket', () => {
     const folded = foldIrohPairResponse({ ok: false, error: 'bad_secret' });
-    expect(folded).toStrictEqual({ error: 'invalid_ticket', message: 'bad_secret' });
+    expect(folded).toStrictEqual({
+      error: 'invalid_ticket',
+      message: 'bad_secret',
+    });
   });
 
   it('treats ok:true with no vaultId as a malformed response', () => {
-    const folded = foldIrohPairResponse({ ok: true, gatewayId: 'gateway-endpoint' });
+    const folded = foldIrohPairResponse({
+      ok: true,
+      gatewayId: 'gateway-endpoint',
+    });
     expect(folded).toStrictEqual({
       error: 'bad_response',
       message: 'Gateway did not return a vault id.',

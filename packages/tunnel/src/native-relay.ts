@@ -3,8 +3,9 @@ import http from 'node:http';
 import { createRequire } from 'node:module';
 import type { AddressInfo } from 'node:net';
 import { fileURLToPath } from 'node:url';
-import type { GatewayEndpointHandle } from './gateway-endpoint.js';
+
 import type { ActivePairing, DesktopTunnelHandle, DesktopTunnelOptions } from './desktop-tunnel.js';
+import type { GatewayEndpointHandle } from './gateway-endpoint.js';
 import type { PairQrPayload, PairRequest, PairResponse } from './protocol.js';
 import { TUNNEL_FORWARDED_HEADER } from './protocol.js';
 
@@ -210,7 +211,11 @@ export async function startNativeDesktopTunnel(
         ticket: relay!.ticket(),
         code,
       };
-      pairing = { code, expiresAt: Date.now() + ttlMs, qrPayload: JSON.stringify(payload) };
+      pairing = {
+        code,
+        expiresAt: Date.now() + ttlMs,
+        qrPayload: JSON.stringify(payload),
+      };
       return { ...pairing };
     },
     activePairing: currentPairing,

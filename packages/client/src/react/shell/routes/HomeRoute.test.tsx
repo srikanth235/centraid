@@ -1,6 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import type { ShellActions } from '../actions.js';
 import type { HomeRouteProps } from './HomeRoute.js';
 
@@ -27,10 +28,15 @@ vi.mock(import('../../../gateway-client.js'), () => ({
 // two), so the row fixtures each test sets on `listAutomations` ride back
 // through here.
 vi.mock(import('./automationsData.js'), () => ({
-  collectAutomationRuns: async () => ({ rows: await listAutomations(), entries: [] }),
+  collectAutomationRuns: async () => ({
+    rows: await listAutomations(),
+    entries: [],
+  }),
 }));
 const loadAppTemplates = vi.fn<typeof import('./templatesData.js').loadAppTemplates>();
-vi.mock(import('./templatesData.js'), () => ({ loadAppTemplates: () => loadAppTemplates() }));
+vi.mock(import('./templatesData.js'), () => ({
+  loadAppTemplates: () => loadAppTemplates(),
+}));
 
 // App info reuses the per-app consent pane — stub its data layer so the modal
 // renders the requested access + a live grant without real gateway I/O.
@@ -149,7 +155,11 @@ function clickMenuItem(label: string): void {
 describe('HomeRoute', () => {
   beforeEach(async () => {
     (globalThis as unknown as { CentraidTokens: unknown }).CentraidTokens = {
-      tileFinish: () => ({ background: '#111', boxShadow: 'none', glyphColor: '#fff' }),
+      tileFinish: () => ({
+        background: '#111',
+        boxShadow: 'none',
+        glyphColor: '#fff',
+      }),
     };
     ({ default: HomeRoute } = await import('./HomeRoute.js'));
     ({ ShellActionsProvider } = await import('../actions.js'));
@@ -230,7 +240,10 @@ describe('HomeRoute', () => {
         clickMenuItem('Rename');
         await flush();
       });
-      expect(renameInstalledApp).toHaveBeenCalledWith({ id: 'photos', name: 'Family Photos' });
+      expect(renameInstalledApp).toHaveBeenCalledWith({
+        id: 'photos',
+        name: 'Family Photos',
+      });
       expect(updateAppMeta).not.toHaveBeenCalled();
       vi.restoreAllMocks();
     });
@@ -270,7 +283,10 @@ describe('HomeRoute', () => {
         automate.click();
         await flush();
       });
-      expect(navigate).toHaveBeenCalledWith({ kind: 'automation-editor', watchEntity: 'media' });
+      expect(navigate).toHaveBeenCalledWith({
+        kind: 'automation-editor',
+        watchEntity: 'media',
+      });
       // The modal closes on navigate.
       expect(document.querySelector('dialog')).toBeNull();
     });

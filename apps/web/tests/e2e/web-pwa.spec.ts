@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+
 import { installHarnessControlTransport } from './control-transport.js';
 
 const API_URL = 'http://127.0.0.1:48765';
@@ -132,7 +133,9 @@ test('boots as a PWA, establishes a cookie control session, and runs an isolated
   const confinement = await frame.evaluate(async () => {
     const [apps, control] = await Promise.all([
       fetch('/centraid/_apps'),
-      fetch('/centraid/_web/control?path=%2Fcentraid%2F_apps', { credentials: 'include' }),
+      fetch('/centraid/_web/control?path=%2Fcentraid%2F_apps', {
+        credentials: 'include',
+      }),
     ]);
     return { apps: apps.status, control: control.status };
   });

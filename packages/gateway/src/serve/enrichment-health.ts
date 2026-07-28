@@ -89,16 +89,21 @@ export function createEnrichmentHealthProbe(options: EnrichmentHealthOptions): H
     const recentlyFailing: string[] = [];
     const stale: string[] = [];
 
-    for (const vault of options.vaults()) {
-      let rows: readonly EnrichmentAutomationRow[];
-      try {
-        rows = await vault.listAutomations();
-      } catch {
-        // Vault workspace not settled/mounted yet (fresh boot, or a plane
-        // nothing has touched) — nothing to probe here; the `vaults`
-        // component already flags a failed mount.
-        continue;
-      }
+    const vaultRows = await Promise.all(
+      options.vaults().map(async (vault) => {
+        try {
+          return { vault, rows: await vault.listAutomations() };
+        } catch {
+          // Vault workspace not settled/mounted yet (fresh boot, or a plane
+          // nothing has touched) — nothing to probe here; the `vaults`
+          // component already flags a failed mount.
+          return undefined;
+        }
+      }),
+    );
+    for (const result of vaultRows) {
+      if (!result) continue;
+      const { vault, rows } = result;
       for (const row of rows) {
         if (!ids.has(row.id)) continue;
         installedTotal += 1;
@@ -134,7 +139,10 @@ export function createEnrichmentHealthProbe(options: EnrichmentHealthOptions): H
       const parts: string[] = [];
       if (recentlyFailing.length > 0) parts.push(`recent failure: ${recentlyFailing.join(', ')}`);
       if (stale.length > 0) parts.push(`stale: ${stale.join(', ')}`);
-      return { status: 'degraded', detail: `${enabledNote} — ${parts.join('; ')}` };
+      return {
+        status: 'degraded',
+        detail: `${enabledNote} — ${parts.join('; ')}`,
+      };
     }
     return { status: 'ok', detail: enabledNote };
   };

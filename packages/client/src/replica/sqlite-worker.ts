@@ -2,12 +2,12 @@ import sqlite3InitModule, { type Database, type SAHPoolUtil } from '@sqlite.org/
 
 import { ReplicaProtocolError } from './errors.js';
 import { SqliteReplicaStore } from './sqlite-store.js';
+import type { ReplicaMode, ReplicaStatus, ReplicaWorkerOpenOptions } from './types.js';
 import type {
   ReplicaWorkerRequest,
   ReplicaWorkerResponse,
   SerializedReplicaError,
 } from './worker-protocol.js';
-import type { ReplicaMode, ReplicaStatus, ReplicaWorkerOpenOptions } from './types.js';
 
 interface WorkerScope {
   addEventListener: (
@@ -19,6 +19,8 @@ interface WorkerScope {
 }
 
 const scope = globalThis as unknown as WorkerScope;
+// WorkerGlobalScope.postMessage deliberately has no targetOrigin parameter.
+const postWorkerResponse = scope.postMessage.bind(scope);
 let store: SqliteReplicaStore | undefined;
 let mode: ReplicaMode | undefined;
 let pool: SAHPoolUtil | undefined;
@@ -29,13 +31,15 @@ let purgeOnly = false;
 scope.addEventListener('message', (event) => {
   void dispatch(event.data).then(
     (result) => {
-      // eslint-disable-next-line unicorn/require-post-message-target-origin -- (#406) Worker.postMessage has no targetOrigin overload; governance: allow-no-unjustified-suppressions Web Worker API false positive
-      scope.postMessage({ id: event.data.id, ok: true, result });
+      postWorkerResponse({ id: event.data.id, ok: true, result });
       if (event.data.op === 'close' || event.data.op === 'purge') scope.close();
     },
     (error: unknown) => {
-      // eslint-disable-next-line unicorn/require-post-message-target-origin -- (#406) Worker.postMessage has no targetOrigin overload; governance: allow-no-unjustified-suppressions Web Worker API false positive
-      scope.postMessage({ id: event.data.id, ok: false, error: serializeError(error) });
+      postWorkerResponse({
+        id: event.data.id,
+        ok: false,
+        error: serializeError(error),
+      });
     },
   );
 });
@@ -91,7 +95,10 @@ async function open(options: ReplicaWorkerOpenOptions): Promise<ReplicaStatus> {
   if (options.remember && opfsAvailable()) {
     try {
       const directory = `/.centraid-replica-${fileStem(options.dbName)}`;
-      pool = await sqlite3.installOpfsSAHPoolVfs({ directory, initialCapacity: 4 });
+      pool = await sqlite3.installOpfsSAHPoolVfs({
+        directory,
+        initialCapacity: 4,
+      });
       mode = 'opfs-sahpool';
       dbName = options.dbName;
       persistentOpened = true;

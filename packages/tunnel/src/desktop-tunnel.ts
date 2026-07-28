@@ -19,6 +19,7 @@
 
 import crypto from 'node:crypto';
 import http from 'node:http';
+
 import type { DeviceStore, PairedDevice } from './device-store.js';
 import type { Accepting, Connection, Endpoint, RecvStream, SendStream } from './iroh.js';
 import { iroh } from './iroh.js';
@@ -155,24 +156,24 @@ class DesktopTunnel {
   }
 
   runAcceptLoop(): void {
-    void (async () => {
-      for (;;) {
-        let incoming;
-        try {
-          incoming = await this.endpoint.acceptNext();
-        } catch {
-          if (this.closed || this.endpoint.isClosed()) return;
-          continue;
-        }
-        if (!incoming) return;
-        void incoming
-          .accept()
-          .then((accepting) => this.routeConnection(accepting))
-          .catch(() => {
-            // Handshake failures are the remote's problem; keep accepting.
-          });
+    const acceptNext = async (): Promise<void> => {
+      let incoming;
+      try {
+        incoming = await this.endpoint.acceptNext();
+      } catch {
+        if (this.closed || this.endpoint.isClosed()) return;
+        return acceptNext();
       }
-    })();
+      if (!incoming) return;
+      void incoming
+        .accept()
+        .then((accepting) => this.routeConnection(accepting))
+        .catch(() => {
+          // Handshake failures are the remote's problem; keep accepting.
+        });
+      return acceptNext();
+    };
+    void acceptNext();
   }
 
   private async routeConnection(accepting: Accepting): Promise<void> {
@@ -195,7 +196,11 @@ class DesktopTunnel {
       ticket: iroh.EndpointTicket.fromAddr(this.endpoint.addr()).toString(),
       code,
     };
-    this.pairing = { code, expiresAt: Date.now() + ttlMs, qrPayload: JSON.stringify(payload) };
+    this.pairing = {
+      code,
+      expiresAt: Date.now() + ttlMs,
+      qrPayload: JSON.stringify(payload),
+    };
     return { ...this.pairing };
   }
 
@@ -272,7 +277,7 @@ class DesktopTunnel {
     const stableId = connection.stableId();
     this.liveConnections.set(stableId, { connection, endpointId });
     try {
-      for (;;) {
+      const serveNextStream = async (): Promise<void> => {
         const bi = await connection.acceptBi();
         // Revocation guard: the allowlist is consulted per stream, so a
         // revoked device loses access even on a connection that predates it.
@@ -283,7 +288,9 @@ class DesktopTunnel {
         void this.serveStream(bi.send, bi.recv).catch(() => {
           // Per-request failures already answered with a 502 frame when possible.
         });
-      }
+        return serveNextStream();
+      };
+      await serveNextStream();
     } catch {
       // Connection closed (by peer, revocation, or shutdown).
     } finally {
@@ -368,7 +375,10 @@ class DesktopTunnel {
       await send.writeAll(
         encodeHeaderFrame({
           status,
-          headers: { 'content-type': 'application/json', 'content-length': String(body.length) },
+          headers: {
+            'content-type': 'application/json',
+            'content-length': String(body.length),
+          },
         } satisfies TunnelResponseHeader),
       );
       await send.writeAll(Array.from(body));

@@ -16,6 +16,7 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
+
 import type { RouteHandler } from '../serve/build-gateway.js';
 import type { GatewayLogEntry, GatewayLogStore } from '../serve/gateway-log-store.js';
 import { sendJson } from './route-helpers.js';
@@ -109,7 +110,10 @@ export function makeLogsRouteHandler(
     const url = new URL(req.url ?? '/', 'http://gateway.local');
     if (url.pathname !== LOGS_PATH && url.pathname !== EVENTS_PATH) return false;
     if ((req.method ?? 'GET').toUpperCase() !== 'GET') {
-      return sendJson(res, 405, { error: 'method_not_allowed', message: 'GET only' });
+      return sendJson(res, 405, {
+        error: 'method_not_allowed',
+        message: 'GET only',
+      });
     }
     const after = intParam(url, 'after') ?? 0;
 

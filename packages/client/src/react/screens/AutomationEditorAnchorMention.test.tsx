@@ -1,6 +1,7 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { describe, expect, it, vi } from 'vitest';
+
 import type { AutomationEditorBridgeProps } from '../screen-contracts.js';
 import AutomationEditorScreen from './AutomationEditorScreen.js';
 

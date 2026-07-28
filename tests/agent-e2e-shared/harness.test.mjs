@@ -1,16 +1,15 @@
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+
 import { afterEach, describe, expect, test, vi } from 'vitest';
+
 import { defaultRunId, writeFlowVerdict } from './harness.mjs';
 
 const scratchDirs = [];
 
 afterEach(async () => {
-  while (scratchDirs.length) {
-    const dir = scratchDirs.pop();
-    await rm(dir, { recursive: true, force: true });
-  }
+  await Promise.all(scratchDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
 async function makeRunDir() {
@@ -22,7 +21,7 @@ async function makeRunDir() {
 describe('defaultRunId', () => {
   test('returns an ISO-stamp plus hex suffix without colons/dots/Z', () => {
     const id = defaultRunId();
-    expect(id).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}-[0-9a-f]{6}$/);
+    expect(id).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}-[0-9a-f]{6}$/u);
     expect(id).not.toContain(':');
     expect(id).not.toContain('.');
     expect(id.endsWith('Z')).toBe(false);
@@ -68,7 +67,11 @@ describe('writeFlowVerdict', () => {
         name: 'pairing-smoke',
         status: 'passed',
       });
-      expect(evidence.measurements[0]).toMatchObject({ name: 'wall clock', value: 42, unit: 'ms' });
+      expect(evidence.measurements[0]).toMatchObject({
+        name: 'wall clock',
+        value: 42,
+        unit: 'ms',
+      });
       expect(log).toHaveBeenCalledWith(expect.stringContaining('pairing-smoke PASS'));
     } finally {
       log.mockRestore();

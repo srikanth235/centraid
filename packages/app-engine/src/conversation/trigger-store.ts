@@ -201,7 +201,10 @@ export class AutomationTriggerStore {
    * able to delete the row between them and make a stored delivery look
    * rejected.
    */
-  appendIngress(input: AppendTriggerIngress): { inserted: boolean; id: number } {
+  appendIngress(input: AppendTriggerIngress): {
+    inserted: boolean;
+    id: number;
+  } {
     const db = this.dbProvider();
     // SAVEPOINT (not BEGIN) so this nests safely inside a caller's transaction
     // — journal.db is one connection shared with the conversation store.
@@ -235,7 +238,10 @@ export class AutomationTriggerStore {
           `trigger ingress ${input.source}/${input.sourceKey}/${input.deliveryId} vanished inside its own transaction`,
         );
       }
-      const appended = { inserted: Number(result.changes) > 0, id: Number(row.id) };
+      const appended = {
+        inserted: Number(result.changes) > 0,
+        id: Number(row.id),
+      };
       db.prepare('RELEASE append_ingress').run();
       return appended;
     } catch (error) {
@@ -266,7 +272,10 @@ export class AutomationTriggerStore {
            FROM trigger_ingress
           WHERE source_key = ? AND id > ?`,
       )
-      .get(sourceKey, afterId) as unknown as { count: number; latest_id: number | null };
+      .get(sourceKey, afterId) as unknown as {
+      count: number;
+      latest_id: number | null;
+    };
     return {
       count: Number(row.count),
       ...(row.latest_id === null ? {} : { latestId: Number(row.latest_id) }),

@@ -1,5 +1,6 @@
 import { tempDir } from '@centraid/test-kit/temp-dir';
 import { describe, expect, test } from 'vitest';
+
 import { GatewayDatabase } from '../serve/gateway-db.js';
 import { RecoveryKitStateStore } from './recovery-kit-state.js';
 

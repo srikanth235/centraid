@@ -21,7 +21,10 @@ export default async function search({ input, ctx }: HandlerArgs) {
           .toLowerCase()
           .includes(term),
       )
-      .map((e) => ({ ...ledgerRow(data, e), group_name: groupName.get(e.group_id) || '' }));
+      .map((e) => ({
+        ...ledgerRow(data, e),
+        group_name: groupName.get(e.group_id) || '',
+      }));
     return { me: data.me, currency: data.currency, results };
   } catch (err) {
     const e = err as { code?: string; message?: string };

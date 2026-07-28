@@ -7,11 +7,11 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
+
+import type { Dispatcher } from '../handlers/dispatcher.js';
 import { makeConversationRunnerCore } from './runner-core.js';
 import type { ConversationTurnInput, TurnStreamEvent } from './runner.js';
-import type { Dispatcher } from '../handlers/dispatcher.js';
-import type { ModelSubsystem } from '../stores/prefs-store.js';
-import type { RunnerPrefs, TurnConfig, TurnInput, TurnResult } from './turn.js';
+import type { RunTurnFn, RunnerPrefs, TurnConfig, TurnInput, TurnResult } from './turn.js';
 
 const dispatcher = {} as Dispatcher;
 
@@ -53,7 +53,11 @@ describe('makeConversationRunnerCore — turn-boundary failover', () => {
           return { adapterKind: 'codex' };
         }
         input.onEvent({ type: 'final', text: 'fallback answer' });
-        return { adapterKind: 'claude-code', sessionId: 'claude-1', hydrated: true };
+        return {
+          adapterKind: 'claude-code',
+          sessionId: 'claude-1',
+          hydrated: true,
+        };
       },
     });
 
@@ -73,7 +77,7 @@ describe('makeConversationRunnerCore — turn-boundary failover', () => {
       }),
     );
 
-    expect(seen.map((entry) => entry.config.prefs.kind)).toEqual(['codex']);
+    expect(seen.map((entry) => entry.config.prefs.kind)).toStrictEqual(['codex']);
     expect(events).toContainEqual(
       expect.objectContaining({ type: 'error', failureClass: 'quota' }),
     );
@@ -92,14 +96,18 @@ describe('makeConversationRunnerCore — turn-boundary failover', () => {
       runTurn: async (turn, config) => {
         kinds.push(config.prefs.kind);
         turn.onEvent({ type: 'assistant.delta', delta: 'partial' });
-        turn.onEvent({ type: 'error', message: 'agent exited', failureClass: 'exit' });
+        turn.onEvent({
+          type: 'error',
+          message: 'agent exited',
+          failureClass: 'exit',
+        });
         return { adapterKind: config.prefs.kind };
       },
     });
 
     await runner.run(turnInput({ onEvent: (event) => events.push(event) }));
-    expect(kinds).toEqual(['codex']);
-    expect(events.map((event) => event.type)).toEqual(['assistant.delta', 'error']);
+    expect(kinds).toStrictEqual(['codex']);
+    expect(events.map((event) => event.type)).toStrictEqual(['assistant.delta', 'error']);
   });
 
   it('skips a runner whose workspace breaker is open', async () => {
@@ -111,7 +119,11 @@ describe('makeConversationRunnerCore — turn-boundary failover', () => {
       runnerHealth: {
         canAttempt: (_scope, kind) =>
           kind === 'codex'
-            ? { allowed: false, failureClass: 'auth', breakerUntil: Date.now() + 1_000 }
+            ? {
+                allowed: false,
+                failureClass: 'auth',
+                breakerUntil: Date.now() + 1_000,
+              }
             : { allowed: true },
         reportFailure: () => undefined,
         reportOk: () => undefined,
@@ -127,7 +139,7 @@ describe('makeConversationRunnerCore — turn-boundary failover', () => {
     });
 
     await runner.run(turnInput());
-    expect(kinds).toEqual(['claude-code']);
+    expect(kinds).toStrictEqual(['claude-code']);
   });
 
   it('hydrates the rung it actually reaches, not the rung the route targeted', async () => {
@@ -180,7 +192,7 @@ describe('makeConversationRunnerCore — turn-boundary failover', () => {
     );
 
     // Only the rung actually attempted is planned — no wasted ledger folds.
-    expect(planned).toEqual(['claude-code']);
+    expect(planned).toStrictEqual(['claude-code']);
     expect(seen?.prevSessionId).toBeUndefined();
     expect(seen?.hydrationContext).toBe('earlier turns');
     expect(seen?.forceHydration).toBe(true);
@@ -214,7 +226,7 @@ describe('makeConversationRunnerCore — turn-boundary failover', () => {
 describe('makeConversationRunnerCore — provider egress consent', () => {
   it('implicitly grants the initial choice and gates an attended cross-provider switch', async () => {
     const grants = new Set<string>();
-    const runTurn = vi.fn(async (): Promise<TurnResult> => ({ adapterKind: 'codex' }));
+    const runTurn = vi.fn<RunTurnFn>(async (): Promise<TurnResult> => ({ adapterKind: 'codex' }));
     const events: TurnStreamEvent[] = [];
     const runner = makeConversationRunnerCore({
       subsystem: 'assistant',
@@ -230,7 +242,7 @@ describe('makeConversationRunnerCore — provider egress consent', () => {
     });
 
     await runner.run(turnInput({ onEvent: (event) => events.push(event) }));
-    expect(runTurn).toHaveBeenCalledTimes(1);
+    expect(runTurn).toHaveBeenCalledOnce();
     expect(grants.has('conv-1:codex')).toBe(true);
 
     await runner.run(
@@ -240,7 +252,7 @@ describe('makeConversationRunnerCore — provider egress consent', () => {
         onEvent: (event) => events.push(event),
       }),
     );
-    expect(runTurn).toHaveBeenCalledTimes(1);
+    expect(runTurn).toHaveBeenCalledOnce();
     expect(events).toContainEqual(
       expect.objectContaining({
         type: 'consent.required',
@@ -265,7 +277,7 @@ describe('makeConversationRunnerCore — provider egress consent', () => {
     // The client re-sends every provider the owner has approved on this
     // conversation, so switching back to an earlier one does not re-prompt.
     const grants = new Set<string>();
-    const runTurn = vi.fn(async (): Promise<TurnResult> => ({ adapterKind: 'gemini' }));
+    const runTurn = vi.fn<RunTurnFn>(async (): Promise<TurnResult> => ({ adapterKind: 'gemini' }));
     const events: TurnStreamEvent[] = [];
     const runner = makeConversationRunnerCore({
       subsystem: 'assistant',
@@ -288,14 +300,14 @@ describe('makeConversationRunnerCore — provider egress consent', () => {
         onEvent: (event) => events.push(event),
       }),
     );
-    expect(runTurn).toHaveBeenCalledTimes(1);
+    expect(runTurn).toHaveBeenCalledOnce();
     expect(grants.has('conv-1:gemini')).toBe(true);
     expect(events.some((event) => event.type === 'consent.required')).toBe(false);
   });
 
   it('treats an explicitly configured ladder rung as recorded subsystem consent', async () => {
     const granted: Array<[string, RunnerPrefs['kind'], string]> = [];
-    const runTurn = vi.fn(
+    const runTurn = vi.fn<RunTurnFn>(
       async (_input: TurnInput, config: TurnConfig): Promise<TurnResult> => ({
         adapterKind: config.prefs.kind,
       }),
@@ -326,7 +338,7 @@ describe('makeConversationRunnerCore — provider egress consent', () => {
     });
 
     await runner.run(turnInput({ prevAdapterKind: 'codex' }));
-    expect(runTurn).toHaveBeenCalledTimes(1);
+    expect(runTurn).toHaveBeenCalledOnce();
     expect(runTurn.mock.calls[0]![1].prefs.kind).toBe('claude-code');
     expect(granted).toContainEqual(['conv-1', 'claude-code', 'ladder']);
   });

@@ -23,7 +23,10 @@ export function buildActivity(asset: Asset): ActivityItem[] {
   }
   const tags = asset.tags ?? [];
   if (tags.length > 0) {
-    activity.push({ text: `Tagged ${tags.map((t) => t.label).join(', ')}`, date: dateLabel });
+    activity.push({
+      text: `Tagged ${tags.map((t) => t.label).join(', ')}`,
+      date: dateLabel,
+    });
   }
   activity.push({ text: 'Uploaded to your library', date: dateLabel });
   return activity;

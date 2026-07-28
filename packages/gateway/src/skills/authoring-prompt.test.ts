@@ -1,6 +1,7 @@
 // Authoring prompt composition (issue #545 B7).
 
 import { describe, expect, test } from 'vitest';
+
 import { buildAuthoringExtraPrompt } from './authoring-prompt.js';
 
 describe('authoring-prompt', () => {

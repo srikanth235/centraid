@@ -42,7 +42,7 @@ export function useAssistantScroll(
       const key = prevConvRef.current;
       if (key) scrollPositions.set(key, el.scrollTop);
     };
-    el.addEventListener('scroll', onScroll, { passive: true });
+    el.addEventListener('scroll', onScroll);
     return () => el.removeEventListener('scroll', onScroll);
   }, [scrollRef]);
 

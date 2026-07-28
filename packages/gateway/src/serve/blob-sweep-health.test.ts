@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { createBlobSweepHealthProbe, type BlobCustodyCounts } from './blob-sweep-health.js';
 
 const ZERO_COUNTS: BlobCustodyCounts = {
@@ -8,7 +9,11 @@ const ZERO_COUNTS: BlobCustodyCounts = {
   missing: 0,
 };
 
-const NEVER_SWEPT = { lastCompletedAt: null, lastError: null, consecutiveFailures: 0 };
+const NEVER_SWEPT = {
+  lastCompletedAt: null,
+  lastError: null,
+  consecutiveFailures: 0,
+};
 
 describe(createBlobSweepHealthProbe, () => {
   it('reports ok, local-only-only, when no vault configures an s3 tier', async () => {

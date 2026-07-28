@@ -1,7 +1,9 @@
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+
 import { afterAll, describe, expect, test } from 'vitest';
+
 import {
   changedFiles,
   parseArgs,
@@ -24,7 +26,10 @@ describe('parseArgs', () => {
   });
 
   test('a trailing --base with no value stays null rather than eating undefined', () => {
-    expect(parseArgs(['--base'])).toStrictEqual({ base: null, dependents: false });
+    expect(parseArgs(['--base'])).toStrictEqual({
+      base: null,
+      dependents: false,
+    });
   });
 });
 

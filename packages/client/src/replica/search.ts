@@ -25,7 +25,10 @@ export const REPLICA_LOCAL_SEARCH: Readonly<Record<string, ReplicaLocalSearchSpe
   'core.transaction': { columns: ['description'] },
   'home.asset_item': { columns: ['name', 'serial_no'] },
   'people.profile': { columns: ['role'] },
-  'locker.item': { columns: ['title', 'username', 'url'], deletedColumn: 'deleted_at' },
+  'locker.item': {
+    columns: ['title', 'username', 'url'],
+    deletedColumn: 'deleted_at',
+  },
   'tally.expense': { columns: ['description'] },
 };
 

@@ -1,4 +1,4 @@
-import { tempDirSync } from '@centraid/test-kit/temp-dir';
+import { randomBytes } from 'node:crypto';
 /*
  * The base clone must be a REFLINK, not a byte copy (issue #408).
  *
@@ -18,11 +18,12 @@ import { tempDirSync } from '@centraid/test-kit/temp-dir';
  * large file and check that free space did not drop by its size. A regression
  * to the one-liner fails here instead of quietly doubling every user's disk.
  */
-
-import { randomBytes } from 'node:crypto';
 import { readFileSync, rmSync, statfsSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+
 import { cloneDbFile } from './wal-shipper.js';
 
 const MiB = 1024 * 1024;

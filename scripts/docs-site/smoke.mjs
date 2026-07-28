@@ -12,7 +12,9 @@
  *  5. No page resurrects retired Duaility branding.
  */
 import { access, readFile, readdir, stat } from 'node:fs/promises';
-import { join, posix } from 'node:path';
+import path from 'node:path';
+
+const { join, posix } = path;
 
 const repoRoot = join(import.meta.dirname, '..', '..');
 const outDir = join(repoRoot, 'dist', 'docs-site');
@@ -54,15 +56,17 @@ async function exists(rel) {
 }
 
 async function walk(dir, prefix = '') {
-  const out = [];
-  for (const entry of await readdir(dir)) {
-    const abs = join(dir, entry);
-    const rel = prefix ? posix.join(prefix, entry) : entry;
-    const info = await stat(abs);
-    if (info.isDirectory()) out.push(...(await walk(abs, rel)));
-    else out.push(rel);
-  }
-  return out;
+  const entries = await readdir(dir);
+  return (
+    await Promise.all(
+      entries.map(async (entry) => {
+        const abs = join(dir, entry);
+        const rel = prefix ? posix.join(prefix, entry) : entry;
+        const info = await stat(abs);
+        return info.isDirectory() ? walk(abs, rel) : [rel];
+      }),
+    )
+  ).flat();
 }
 
 async function resolves(clean, fromPage) {
@@ -87,8 +91,11 @@ async function resolves(clean, fromPage) {
   return false;
 }
 
-for (const rel of REQUIRED) {
-  if (!(await exists(rel))) fail(`missing required file: ${rel}`);
+const required = await Promise.all(
+  REQUIRED.map(async (rel) => ({ rel, exists: await exists(rel) })),
+);
+for (const { rel, exists: present } of required) {
+  if (!present) fail(`missing required file: ${rel}`);
 }
 
 const pages = (await walk(outDir)).filter((f) => f.endsWith('.html'));
@@ -103,7 +110,12 @@ const tagAttr = (html, tag, attr, value, readAttr = 'content') => {
 const titleValues = new Map();
 const descriptionValues = new Map();
 
-for (const page of pages) {
+// Page validation records duplicate titles/descriptions against the first page
+// encountered. Keep that reporting order deterministic even though each page's
+// link checks fan out below.
+const validatePage = async (index) => {
+  const page = pages[index];
+  if (!page) return;
   const html = await readFile(join(outDir, page), 'utf8');
 
   if (/duaility/iu.test(html)) fail(`${page}: retired "Duaility" branding still present`);
@@ -157,20 +169,24 @@ for (const page of pages) {
     }
   }
 
-  for (const href of html.matchAll(HREF_RE)) {
-    const url = href.groups?.url ?? '';
-    if (
-      url.startsWith('http') ||
-      url.startsWith('#') ||
-      url.startsWith('mailto:') ||
-      url.startsWith('data:')
-    ) {
-      continue;
-    }
-    const clean = url.split('#')[0].split('?')[0];
-    if (!(await resolves(clean, page))) fail(`${page}: broken internal link -> ${url}`);
-  }
-}
+  await Promise.all(
+    [...html.matchAll(HREF_RE)].map(async (href) => {
+      const url = href.groups?.url ?? '';
+      if (
+        url.startsWith('http') ||
+        url.startsWith('#') ||
+        url.startsWith('mailto:') ||
+        url.startsWith('data:')
+      ) {
+        return;
+      }
+      const clean = url.split('#')[0].split('?')[0];
+      if (!(await resolves(clean, page))) fail(`${page}: broken internal link -> ${url}`);
+    }),
+  );
+  return validatePage(index + 1);
+};
+await validatePage(0);
 
 const homeHtml = await readFile(homeIndex, 'utf8');
 if (/https:\/\/docs\.centraid\.dev/u.test(homeHtml)) {

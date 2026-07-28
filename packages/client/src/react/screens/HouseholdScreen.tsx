@@ -1,9 +1,11 @@
-import type { JSX } from 'react';
 import { tileFinish } from '@centraid/design-tokens';
 import type { IconName } from '@centraid/design-tokens';
+import type { JSX } from 'react';
+
+import { roleBadge, roleSentence, type MemberScope } from '../shell/memberScope.js';
 import Icon from '../ui/Icon.js';
 import DevicesCard, { type DevicesCardProps } from './DevicesCard.js';
-import { roleBadge, roleSentence, type MemberScope } from '../shell/memberScope.js';
+
 import styles from './HouseholdScreen.module.css';
 
 // Household (issue #599, Decision 14) — one page for the people side of this
@@ -88,12 +90,12 @@ function SpaceCard({
         </span>
       </div>
       <div className={styles.spaceLinks}>
-        <button type="button" className={styles.link} onClick={onOpenStorage}>
+        <button type="button" className={styles.link} onClick={() => onOpenStorage()}>
           <Icon name="Save" size={12} />
           Storage &amp; backups
         </button>
         {onOpenSpaceSettings ? (
-          <button type="button" className={styles.link} onClick={onOpenSpaceSettings}>
+          <button type="button" className={styles.link} onClick={() => onOpenSpaceSettings()}>
             <Icon name="Settings" size={12} />
             Space settings
           </button>
@@ -155,7 +157,7 @@ export default function HouseholdScreen(props: HouseholdScreenProps): JSX.Elemen
             </span>
           ) : null}
           {props.onNewSpace ? (
-            <button type="button" className={styles.link} onClick={props.onNewSpace}>
+            <button type="button" className={styles.link} onClick={() => props.onNewSpace?.()}>
               <Icon name="Plus" size={12} />
               New space
             </button>

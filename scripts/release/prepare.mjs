@@ -15,6 +15,7 @@
 import { execSync } from 'node:child_process';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
+
 import { buildSurfaceMatrix, defaultShipSurfaceIds } from './surfaces.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');

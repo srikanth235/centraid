@@ -1,12 +1,14 @@
 import type { ChangeEvent, Dispatch, JSX, RefObject } from 'react';
+
 import { cx } from '../../ui/cx.js';
-import buttonCss from '../../ui/Button.module.css';
-import controlsCss from '../../styles/controls.module.css';
 import {
   buildTestInput,
   type ConnectFlowEvent,
   type ConnectFlowState,
 } from './connectFlow-core.js';
+
+import controlsCss from '../../styles/controls.module.css';
+import buttonCss from '../../ui/Button.module.css';
 import styles from './ConnectFlow.module.css';
 
 // The 'details' step's two per-method panels — split out of ConnectFlow.tsx
@@ -120,7 +122,8 @@ export function SshDetailsStep({
       </label>
       <label className={styles.field}>
         <span className={styles.fieldLabel}>
-          Remote data directory<span className={styles.fieldOptional}>optional</span>
+          Remote data directory
+          <span className={styles.fieldOptional}>optional</span>
         </span>
         <input
           className={styles.input}

@@ -1,5 +1,6 @@
-import { describe, expect, test, vi } from 'vitest';
 import type { ReplicaReadWireResult } from '@centraid/client/replica/native';
+import { describe, expect, test, vi } from 'vitest';
+
 import { mapReplicaRows } from './useReplicaQuery';
 
 // The hook drags in the ReplicaProvider's native module chain (op-sqlite,

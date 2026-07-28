@@ -23,7 +23,10 @@ const CATEGORIZE_TXN: CommandDefinition = {
   outputSchema: {
     type: 'object',
     required: ['txn_id', 'category_concept_id'],
-    properties: { txn_id: { type: 'string' }, category_concept_id: { type: 'string' } },
+    properties: {
+      txn_id: { type: 'string' },
+      category_concept_id: { type: 'string' },
+    },
   },
   preconditions: [
     {
@@ -69,7 +72,10 @@ function categorizeTxn(ctx: HandlerCtx): Record<string, unknown> {
     entityType: 'core.transaction',
     entityId: input.txn_id,
   });
-  return { txn_id: input.txn_id, category_concept_id: input.category_concept_id };
+  return {
+    txn_id: input.txn_id,
+    category_concept_id: input.category_concept_id,
+  };
 }
 
 const SPLIT_TXN: CommandDefinition = {
@@ -99,7 +105,10 @@ const SPLIT_TXN: CommandDefinition = {
   outputSchema: {
     type: 'object',
     required: ['txn_id', 'split_count'],
-    properties: { txn_id: { type: 'string' }, split_count: { type: 'integer' } },
+    properties: {
+      txn_id: { type: 'string' },
+      split_count: { type: 'integer' },
+    },
   },
   preconditions: [
     {
@@ -131,7 +140,11 @@ const SPLIT_TXN: CommandDefinition = {
 function splitTxn(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as {
     txn_id: string;
-    splits: { amount_minor: number; category_concept_id: string; memo?: string }[];
+    splits: {
+      amount_minor: number;
+      category_concept_id: string;
+      memo?: string;
+    }[];
   };
   // Replace-not-append: splits are behavior rows over an immutable movement.
   ctx.db.prepare('DELETE FROM finance_txn_split WHERE txn_id = ?').run(input.txn_id);
@@ -351,7 +364,11 @@ const FLAG_ANOMALY: CommandDefinition = {
 };
 
 function flagAnomaly(ctx: HandlerCtx): Record<string, unknown> {
-  const input = ctx.input as { txn_id: string; reason: string; confidence?: number };
+  const input = ctx.input as {
+    txn_id: string;
+    reason: string;
+    confidence?: number;
+  };
   const concept = ctx.db
     .prepare(`SELECT concept_id FROM core_concept WHERE notation = 'anomaly'`)
     .get() as { concept_id: string } | undefined;

@@ -1,11 +1,11 @@
-import { tempDirSync } from '@centraid/test-kit/temp-dir';
+import { createHash } from 'node:crypto';
 // Enqueue: addressing bytes and the structural maths the gateway is told at
 // `begin`. Sizes here are exact, not approximate — `sealedSize` is a promise
 // the client makes before uploading and `verifyRemoteSealedObject` checks it.
-
-import { createHash } from 'node:crypto';
 import { rmSync } from 'node:fs';
-import { join } from 'node:path';
+import path from 'node:path';
+
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { FRAME_BYTES } from './cbsf';
@@ -24,7 +24,7 @@ const openFile = async () => bytesFileSource(BYTES);
 describe('enqueue', () => {
   beforeEach(() => {
     dir = tempDirSync('centraid-enqueue-');
-    driver = new NodeSqliteFileDriver(join(dir, 'uploads.db'));
+    driver = new NodeSqliteFileDriver(path.join(dir, 'uploads.db'));
     store = UploadQueueStore.create(driver);
   });
 
@@ -98,7 +98,7 @@ describe('enqueue', () => {
           { store, openFile, newId: () => 'item-1' },
           { localUri: 'file://x', plaintextSize: 4 },
         ),
-      ).rejects.toThrow(/caller declared 4/);
+      ).rejects.toThrow(/caller declared 4/u);
       expect(store.pending()).toHaveLength(0);
     });
 
@@ -123,7 +123,10 @@ describe('enqueue', () => {
     it('accepts an injected native digest, which is how a device escapes the pure-JS hash', async () => {
       const nodeDigest = (): StreamingDigest => {
         const hash = createHash('sha256');
-        return { update: (bytes) => hash.update(bytes), digestHex: () => hash.digest('hex') };
+        return {
+          update: (bytes) => hash.update(bytes),
+          digestHex: () => hash.digest('hex'),
+        };
       };
       const createDigest = vi.fn<() => StreamingDigest>(nodeDigest);
       const item = await enqueueLocalFile(

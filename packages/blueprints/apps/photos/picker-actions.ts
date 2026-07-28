@@ -21,18 +21,23 @@ export async function submitPicker(
   let parked = 0;
   let queued = 0;
   let skipped = 0;
-  for (let i = 0; i < ids.length; i += 1) {
+  const addNext = async (i: number): Promise<void> => {
+    if (i >= ids.length) return;
+    const assetId = ids[i];
+    if (assetId === undefined) return;
     btn.textContent = `Adding ${i + 1} of ${ids.length}…`;
     const outcome = await act(
       'add-to-album',
-      { album_id: album.album_id, asset_id: ids[i] },
+      { album_id: album.album_id, asset_id: assetId },
       scope,
     );
     if (outcome?.status === 'executed') ok += 1;
     else if (outcome?.status === 'parked') parked += 1;
     else if (outcome?.status === 'queued' || outcome?.status === 'in-flight') queued += 1;
     else skipped += 1;
-  }
+    return addNext(i + 1);
+  };
+  await addNext(0);
   closePicker();
   await refresh();
   const parts: string[] = [];

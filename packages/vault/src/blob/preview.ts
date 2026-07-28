@@ -24,6 +24,7 @@
 // replication all "just work" with no new plumbing.
 
 import { BLOB_MEDIUM_EDGE, BLOB_TINY_EDGE } from '@centraid/blob-format';
+
 import type { VaultDb } from '../db.js';
 import { nowIso } from '../ids.js';
 import { stageBlobBytes } from './staging.js';
@@ -49,7 +50,10 @@ export const INGRESS_PREVIEW_MAX_BYTES = 32 * 1024 * 1024;
  * variant vocabulary (schema/blob.ts already spells both), so the ladder
  * needs NO schema change — a rung is just a (variant, maxEdge) pair.
  */
-export const PREVIEW_LADDER: readonly { variant: 'thumb' | 'preview'; maxEdge: number }[] = [
+export const PREVIEW_LADDER: readonly {
+  variant: 'thumb' | 'preview';
+  maxEdge: number;
+}[] = [
   { variant: 'thumb', maxEdge: TINY_EDGE },
   { variant: 'preview', maxEdge: MEDIUM_EDGE },
 ];
@@ -104,6 +108,44 @@ export interface PreviewBackfillResult {
   missingBytes: number;
 }
 
+interface PreviewBackfillItem {
+  content_id: string;
+  media_type: string;
+}
+
+async function stageMissingPreviewRungs(
+  db: VaultDb,
+  codec: PreviewCodec,
+  item: PreviewBackfillItem,
+  bytes: Buffer,
+  parentSha: string,
+  missing: readonly (typeof PREVIEW_LADDER)[number][],
+  result: PreviewBackfillResult,
+  rungIndex = 0,
+): Promise<boolean> {
+  const rung = missing[rungIndex];
+  if (!rung) return false;
+  const out = await codec.downscale(bytes, item.media_type, rung.maxEdge);
+  if (!out) return true;
+  stageBlobBytes(db, {
+    bytes: out.bytes,
+    mediaType: out.mediaType,
+    variant: rung.variant,
+    variantOf: parentSha,
+  });
+  result.generated += 1;
+  return stageMissingPreviewRungs(
+    db,
+    codec,
+    item,
+    bytes,
+    parentSha,
+    missing,
+    result,
+    rungIndex + 1,
+  );
+}
+
 export interface IngressPreviewInput {
   sha256: string;
   bytes: Buffer;
@@ -125,9 +167,11 @@ export async function contributeIngressPreviews(
     return 0;
   }
   let generated = 0;
-  for (const rung of PREVIEW_LADDER) {
+  async function stageNextRung(index: number): Promise<void> {
+    const rung = PREVIEW_LADDER[index];
+    if (!rung) return;
     const output = await codec.downscale(input.bytes, input.mediaType, rung.maxEdge);
-    if (!output) break;
+    if (!output) return;
     stageBlobBytes(db, {
       bytes: output.bytes,
       mediaType: output.mediaType,
@@ -137,7 +181,11 @@ export async function contributeIngressPreviews(
       ...(input.stagedBy ? { stagedBy: input.stagedBy } : {}),
     });
     generated += 1;
+    return stageNextRung(index + 1);
   }
+  // Preview rungs are a quality ladder: a codec declining one stops later,
+  // more expensive rungs from being attempted.
+  await stageNextRung(0);
   if (!hasStagedOrClaimedVariant(db, input.sha256, 'phash')) {
     try {
       const phash = await codec.perceptualHash(input.bytes, input.mediaType);
@@ -253,12 +301,18 @@ export async function backfillPreviews(
         ORDER BY i.created_at
         LIMIT ?`,
     )
-    .all(now, now, limit) as { content_id: string; content_uri: string; media_type: string }[];
+    .all(now, now, limit) as {
+    content_id: string;
+    content_uri: string;
+    media_type: string;
+  }[];
 
-  for (const item of items) {
+  async function processNextItem(index: number): Promise<void> {
+    const item = items[index];
+    if (!item) return;
     result.scanned += 1;
     const parentSha = shaOfBlobUri(item.content_uri);
-    if (!parentSha) continue;
+    if (!parentSha) return processNextItem(index + 1);
     try {
       // Which rungs this item still lacks — recomputed per item so a
       // client-supplied variant that landed since the outer query is honored
@@ -270,31 +324,27 @@ export async function backfillPreviews(
       );
       const missingPhash = !hasVariant(db, item.content_id, 'phash');
       const missingThumbhash = !hasVariant(db, item.content_id, 'thumbhash');
-      if (missing.length === 0 && !missingPhash && !missingThumbhash) continue;
+      if (missing.length === 0 && !missingPhash && !missingThumbhash) {
+        return processNextItem(index + 1);
+      }
       // Local hit first; a remote-only original reads through custody.open at
       // backfill pace (the read-through re-caches it locally as a side effect).
       const bytes = db.blobs.getSync(parentSha) ?? (await db.blobs.open(parentSha));
       if (!bytes) {
         result.missingBytes += 1;
-        continue;
+        return processNextItem(index + 1);
       }
-      let unsupported = false;
-      for (const rung of missing) {
-        const out = await codec.downscale(bytes, item.media_type, rung.maxEdge);
-        if (!out) {
-          // A codec that declines the tiny rung declines the medium too —
-          // it's the same decode. Skip the whole item, count it once.
-          unsupported = true;
-          break;
-        }
-        stageBlobBytes(db, {
-          bytes: out.bytes,
-          mediaType: out.mediaType,
-          variant: rung.variant,
-          variantOf: parentSha,
-        });
-        result.generated += 1;
-      }
+      // A codec that declines the tiny rung declines the medium too — it's the
+      // same decode. Skip the whole item, count it once.
+      let unsupported = await stageMissingPreviewRungs(
+        db,
+        codec,
+        item,
+        bytes,
+        parentSha,
+        missing,
+        result,
+      );
       if (missingPhash) {
         const phash = await codec.perceptualHash(bytes, item.media_type);
         if (phash && !hasVariant(db, item.content_id, 'phash')) {
@@ -332,7 +382,9 @@ export async function backfillPreviews(
       // sinks the batch or the custody sweep this pass rides along with.
     }
     await yieldTick();
+    return processNextItem(index + 1);
   }
+  await processNextItem(0);
   return result;
 }
 

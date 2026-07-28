@@ -21,9 +21,9 @@
  * loudly. Cheap insurance.
  */
 
+import type { ValidateFunction } from 'ajv';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports -- Ajv2020 is both value (constructor) and type (instance). (#247)
 import { Ajv2020 } from 'ajv/dist/2020.js';
-import type { ValidateFunction } from 'ajv';
 
 /** Current manifest schema version. Bump on any incompatible field change. */
 export const MANIFEST_VERSION = 1;
@@ -262,7 +262,10 @@ export const MANIFEST_JSON_SCHEMA: Record<string, unknown> = {
                   required: ['name', 'type'],
                   properties: {
                     name: { type: 'string', minLength: 1 },
-                    type: { type: 'string', enum: ['text', 'integer', 'real', 'blob'] },
+                    type: {
+                      type: 'string',
+                      enum: ['text', 'integer', 'real', 'blob'],
+                    },
                     primaryKey: { type: 'boolean' },
                     notNull: { type: 'boolean' },
                     default: { type: ['string', 'number'] },
@@ -276,7 +279,11 @@ export const MANIFEST_JSON_SCHEMA: Record<string, unknown> = {
                   type: 'object',
                   required: ['columns'],
                   properties: {
-                    columns: { type: 'array', minItems: 1, items: { type: 'string' } },
+                    columns: {
+                      type: 'array',
+                      minItems: 1,
+                      items: { type: 'string' },
+                    },
                     unique: { type: 'boolean' },
                   },
                 },
@@ -302,7 +309,10 @@ export const MANIFEST_JSON_SCHEMA: Record<string, unknown> = {
             properties: {
               schema: { type: 'string', minLength: 1 },
               table: { type: 'string', minLength: 1 },
-              verbs: { type: 'string', enum: ['read', 'read+act', 'act', 'reveal'] },
+              verbs: {
+                type: 'string',
+                enum: ['read', 'read+act', 'act', 'reveal'],
+              },
             },
           },
         },

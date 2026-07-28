@@ -9,13 +9,13 @@
  * than being reimplemented a second, subtly-different way.
  */
 import type { TurnStreamEvent } from '@centraid/blueprints/kit/turn-stream.js';
+
 import {
   readAutomationTurnExpanded,
   streamAutomationTurn,
   type AutomationTurnStreamEvent,
 } from '../../../gateway-client.js';
 import type { AsstMsgDTO, TurnWatchOutcome } from '../../screen-contracts.js';
-import { automationTurnInboundText, automationTurnMessages } from './automationTurnMessages.js';
 import {
   automationLiveMessages,
   createAutomationLiveTraceFromItems,
@@ -24,6 +24,7 @@ import {
   reduceAutomationItemEvent,
   startAutomationLiveItem,
 } from './automationLiveMessages.js';
+import { automationTurnInboundText, automationTurnMessages } from './automationTurnMessages.js';
 
 /** Cold read of one turn as the shared Message DTO. */
 export async function loadTurnTrace(turnId: string): Promise<AsstMsgDTO[]> {

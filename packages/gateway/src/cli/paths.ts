@@ -11,6 +11,7 @@
  */
 
 import path from 'node:path';
+
 import type { GatewayPaths } from '../paths.js';
 
 export interface DaemonLayout extends GatewayPaths {

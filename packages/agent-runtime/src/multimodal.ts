@@ -30,6 +30,7 @@
  */
 
 import { readFileSync } from 'node:fs';
+
 import type { TurnAttachment } from '@centraid/app-engine';
 
 /** The ACP prompt content blocks we can produce (`ContentBlock` subset). */
@@ -37,7 +38,10 @@ export type ContentBlock =
   | { type: 'text'; text: string }
   | { type: 'image'; data: string; mimeType: string }
   | { type: 'audio'; data: string; mimeType: string }
-  | { type: 'resource'; resource: { uri: string; mimeType: string; blob: string } };
+  | {
+      type: 'resource';
+      resource: { uri: string; mimeType: string; blob: string };
+    };
 
 /** `agentCapabilities.promptCapabilities` from the `initialize` result. */
 export interface PromptCapabilities {
@@ -147,7 +151,7 @@ export function acpBlockFor(
   }
 
   const buf = Buffer.from(att.dataBase64, 'base64');
-  const label = att.filename !== undefined ? `"${att.filename}"` : 'attachment';
+  const label = att.filename === undefined ? 'attachment' : `"${att.filename}"`;
   if (isTextualAttachment(mime, att.filename)) {
     const truncated = buf.length > TEXT_ATTACHMENT_MAX_BYTES;
     const text = (truncated ? buf.subarray(0, TEXT_ATTACHMENT_MAX_BYTES) : buf).toString('utf8');
@@ -155,7 +159,10 @@ export function acpBlockFor(
     const body = truncated
       ? `${text}\n[truncated — showing first ${TEXT_ATTACHMENT_MAX_BYTES} of ${buf.length} bytes]`
       : text;
-    return { type: 'text', text: `Attachment ${label} (${att.mime}):\n\`\`\`\n${body}\n\`\`\`` };
+    return {
+      type: 'text',
+      text: `Attachment ${label} (${att.mime}):\n\`\`\`\n${body}\n\`\`\``,
+    };
   }
 
   // PDFs, archives, anything else binary: an embedded resource is the only
@@ -205,7 +212,7 @@ export function acpAttachmentBlocks(
         mime: a.mime,
         dataBase64,
         path: a.path,
-        ...(a.filename !== undefined ? { filename: a.filename } : {}),
+        ...(a.filename === undefined ? {} : { filename: a.filename }),
       },
       caps,
     );

@@ -1,9 +1,11 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { describe, it, beforeEach, afterEach, expect } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { scaffoldApp, updateAppMeta } from './scaffold.js';
+
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { describe, it, beforeEach, afterEach, expect } from 'vitest';
+
 import { AppScaffoldError } from './scaffold-types.js';
+import { scaffoldApp, updateAppMeta } from './scaffold.js';
 
 describe(updateAppMeta, () => {
   let dir: string;
@@ -90,13 +92,13 @@ describe(updateAppMeta, () => {
     // (the seeded display name). Renaming should sync the title.
     await scaffoldApp(dir, 'todos', { name: 'Todos' });
     const before = await fs.readFile(path.join(dir, 'todos', 'index.html'), 'utf8');
-    expect(before).toMatch(/<title>Todos<\/title>/);
+    expect(before).toMatch(/<title>Todos<\/title>/u);
 
     await updateAppMeta(dir, 'todos', { name: 'My Cups' });
 
     const after = await fs.readFile(path.join(dir, 'todos', 'index.html'), 'utf8');
-    expect(after).toMatch(/<title>My Cups<\/title>/);
-    expect(after).not.toMatch(/<title>Todos<\/title>/);
+    expect(after).toMatch(/<title>My Cups<\/title>/u);
+    expect(after).not.toMatch(/<title>Todos<\/title>/u);
   });
 
   it('propagates rename to automations/<sub>/automation.json#name', async () => {
@@ -104,12 +106,17 @@ describe(updateAppMeta, () => {
     // manifest sitting under automations/<sub>/automation.json. Both
     // names start at "Briefing"; rename should sync both.
     const appId = 'briefing';
-    await fs.mkdir(path.join(dir, appId, 'automations', 'briefing'), { recursive: true });
+    await fs.mkdir(path.join(dir, appId, 'automations', 'briefing'), {
+      recursive: true,
+    });
     await fs.writeFile(
       path.join(dir, appId, 'app.json'),
       JSON.stringify({ name: 'Briefing', version: '0.1.0' }, null, 2),
     );
-    const originalGenerated = { by: 'centraid-template', at: '2026-01-01T00:00:00.000Z' };
+    const originalGenerated = {
+      by: 'centraid-template',
+      at: '2026-01-01T00:00:00.000Z',
+    };
     await fs.writeFile(
       path.join(dir, appId, 'automations', 'briefing', 'automation.json'),
       JSON.stringify({ name: 'Briefing', prompt: 'do', generated: originalGenerated }, null, 2),
@@ -127,7 +134,11 @@ describe(updateAppMeta, () => {
         path.join(dir, appId, 'automations', 'briefing', 'automation.json'),
         'utf8',
       ),
-    ) as { name: string; prompt: string; generated: { by: string; at: string } };
+    ) as {
+      name: string;
+      prompt: string;
+      generated: { by: string; at: string };
+    };
     expect(manifest.name).toBe('Morning Briefing');
     // Rename must NOT re-stamp `generated`: that's clone-time metadata,
     // not "last rename time".

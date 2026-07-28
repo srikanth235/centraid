@@ -16,9 +16,10 @@
 // stays low so the live blur reads through — the blur carries the "glass", the
 // film only colours it.
 
+import { BlurView } from 'expo-blur';
 import React, { useMemo } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
-import { BlurView } from 'expo-blur';
+
 import { useTheme, type ThemeColors, type Scheme } from '../theme';
 
 // A light colour cast over the live blur — not an opaque fill.

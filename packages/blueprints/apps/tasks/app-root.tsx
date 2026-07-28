@@ -13,6 +13,12 @@ import {
   type KeyboardEvent,
   type ReactElement,
 } from 'react';
+
+import type { InlineAppProps } from '../inline-types.ts';
+import { Chrome } from './Chrome.tsx';
+import { Board } from './components/Board.tsx';
+import { Detail } from './components/Detail.tsx';
+import { SidebarFoot, SidebarNav } from './components/Sidebar.tsx';
 import {
   observeWidth,
   onDataChange,
@@ -22,12 +28,7 @@ import {
   wireThemeToggle,
 } from './kit.ts';
 import { buildSections, createLogic, sidebarCounts, todayProgress } from './logic.ts';
-import { Board } from './components/Board.tsx';
-import { Detail } from './components/Detail.tsx';
-import { SidebarFoot, SidebarNav } from './components/Sidebar.tsx';
-import { Chrome } from './Chrome.tsx';
 import type { AppState, BoardData, EditPatch, Task, View } from './types.ts';
-import type { InlineAppProps } from '../inline-types.ts';
 
 export const CHANGE_TABLES = [
   'schedule.task',
@@ -74,7 +75,10 @@ function emptyCopy(state: AppState): { title: string; sub: string } {
   const q = state.search.trim();
   if (q) return { title: 'No matches', sub: `No tasks match “${q}”.` };
   if (state.view === 'logbook')
-    return { title: 'Nothing logged yet', sub: 'Completed and cancelled tasks land here.' };
+    return {
+      title: 'Nothing logged yet',
+      sub: 'Completed and cancelled tasks land here.',
+    };
   if (state.view === 'today')
     return {
       title: 'Nothing due today',
@@ -90,7 +94,10 @@ function emptyCopy(state: AppState): { title: string; sub: string } {
       title: 'No loose tasks',
       sub: 'Add a task above and it lands as a receipted vault command.',
     };
-  return { title: 'All clear', sub: 'Add a task above and it lands as a receipted vault command.' };
+  return {
+    title: 'All clear',
+    sub: 'Add a task above and it lands as a receipted vault command.',
+  };
 }
 
 interface BoardPayload {
@@ -107,7 +114,12 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
   const [narrow, setNarrow] = useState(false);
   const [sideOpen, setSideOpen] = useState(false);
   const rootElRef = useRef<HTMLDivElement | null>(null);
-  const dataRef = useRef<BoardData>({ open: [], logbook: [], counts: {}, window: 500 });
+  const dataRef = useRef<BoardData>({
+    open: [],
+    logbook: [],
+    counts: {},
+    window: 500,
+  });
   const stateRef = useRef<AppState>(makeState(initialView(null)));
   const logicRef = useRef<ReturnType<typeof createLogic> | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -300,7 +312,13 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     // component-width narrow observer wrongly flips to the phone drawer layout.
     <div
       ref={setRoot}
-      style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, minHeight: 0 }}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        flex: 1,
+        minWidth: 0,
+        minHeight: 0,
+      }}
     >
       <Chrome
         narrow={narrow}
@@ -365,7 +383,10 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
                 logic.editField(
                   id,
                   { title: title2 },
-                  { toastText: 'Renamed · receipt', activityText: `Renamed to “${title2}”` },
+                  {
+                    toastText: 'Renamed · receipt',
+                    activityText: `Renamed to “${title2}”`,
+                  },
                 )
               }
               onNotesCommit={(id, patch) =>
@@ -384,14 +405,20 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
                 logic.editField(
                   id,
                   { priority: value },
-                  { toastText: 'Priority updated · receipt', activityText: 'Priority updated' },
+                  {
+                    toastText: 'Priority updated · receipt',
+                    activityText: 'Priority updated',
+                  },
                 )
               }
               onPickEffort={(id, value) =>
                 logic.editField(
                   id,
                   { effort_min: value },
-                  { toastText: 'Effort updated · receipt', activityText: 'Effort updated' },
+                  {
+                    toastText: 'Effort updated · receipt',
+                    activityText: 'Effort updated',
+                  },
                 )
               }
               onPickRepeat={(id, patch: EditPatch) =>

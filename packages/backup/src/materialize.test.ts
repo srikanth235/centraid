@@ -1,4 +1,4 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import { createHash, randomBytes } from 'node:crypto';
 /*
  * `materializeSnapshotBlobs` (issue #439 R5) — the targeted blob re-pin the
  * adopt-time reconcile leans on. It must pull ONLY the requested shas out of a
@@ -6,16 +6,18 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  * each against the manifest sha, and report a requested sha the snapshot does
  * not carry as `absent` (which the reconcile records lost) — never write it.
  */
-
-import { describe, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { createHash, randomBytes } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
+
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { describe, expect, test } from 'vitest';
+
 import { createKeyring } from './crypto.js';
-import { openLocalBackupProvider } from './local-provider.js';
 import { createSnapshot, type SourceEntry } from './engine.js';
+import { openLocalBackupProvider } from './local-provider.js';
 import { materializeSnapshotBlobs } from './materialize.js';
+
 const sha256 = (bytes: Buffer): string => createHash('sha256').update(bytes).digest('hex');
 
 /** A minimal but VALID snapshot source: a real base pair plus content-addressed
@@ -40,20 +42,25 @@ async function buildSource(sourceDir: string, blobs: Buffer[]): Promise<SourceEn
     await dbEntry('vault.db', '11'.repeat(16)),
     await dbEntry('journal.db', '22'.repeat(16)),
   ];
-  for (const bytes of blobs) {
-    const sha = sha256(bytes);
-    const rel = `blobs/sha256/${sha.slice(0, 2)}/${sha}`;
-    const abs = path.join(sourceDir, ...rel.split('/'));
-    await fs.mkdir(path.dirname(abs), { recursive: true });
-    await fs.writeFile(abs, bytes);
-    entries.push({ path: rel, kind: 'blob', absolutePath: abs });
-  }
+  const blobEntries = await Promise.all(
+    blobs.map(async (bytes) => {
+      const sha = sha256(bytes);
+      const rel = `blobs/sha256/${sha.slice(0, 2)}/${sha}`;
+      const abs = path.join(sourceDir, ...rel.split('/'));
+      await fs.mkdir(path.dirname(abs), { recursive: true });
+      await fs.writeFile(abs, bytes);
+      return { path: rel, kind: 'blob' as const, absolutePath: abs };
+    }),
+  );
+  entries.push(...blobEntries);
   return entries;
 }
 
 describe('materialize', () => {
   test('materializes exactly the requested carried shas, byte-exact, and reports the rest absent', async () => {
-    const provider = openLocalBackupProvider({ rootDir: await tempDir('mz-provider') });
+    const provider = openLocalBackupProvider({
+      rootDir: await tempDir('mz-provider'),
+    });
     const { targetId } = await provider.createTarget({ label: 'mz' });
     const keyring = await createKeyring(path.join(await tempDir('mz-keyring'), 'keyring.json'));
 
@@ -101,6 +108,6 @@ describe('materialize', () => {
     ).resolves.not.toContain(otherSha);
     await expect(
       fs.access(path.join(destDir, 'blobs', 'sha256', absentSha.slice(0, 2), absentSha)),
-    ).rejects.toThrow(/ENOENT/);
+    ).rejects.toThrow(/ENOENT/u);
   });
 });

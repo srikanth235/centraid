@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+
 import { buildAutomationAgentEditorData } from './automationEditorAgentData.js';
 import { buildCreateAutomationEditorData } from './automationEditorCreateData.js';
 
@@ -11,7 +12,10 @@ vi.mock(import('../../../assist-oauth-handoff.js'), () => ({}));
 
 describe(buildCreateAutomationEditorData, () => {
   it('opens trigger-less create mode with no template or watched entity', () => {
-    const data = buildCreateAutomationEditorData({ instructions: 'do a thing', name: 'Untitled' });
+    const data = buildCreateAutomationEditorData({
+      instructions: 'do a thing',
+      name: 'Untitled',
+    });
     expect(data.mode).toBe('create');
     expect(data.automationId).toBeNull();
     expect(data.rowId).toBeNull();
@@ -32,7 +36,11 @@ describe(buildCreateAutomationEditorData, () => {
 
   it("lets a template's own trigger kind win over watchEntity", () => {
     const cron = buildCreateAutomationEditorData({
-      template: { name: 'Daily digest', desc: 'Every morning', triggerKind: 'cron' },
+      template: {
+        name: 'Daily digest',
+        desc: 'Every morning',
+        triggerKind: 'cron',
+      },
       watchEntity: 'core.transaction',
       instructions: 'x',
       name: 'x',
@@ -42,7 +50,11 @@ describe(buildCreateAutomationEditorData, () => {
     expect(cron.instructions).toBe('Every morning');
 
     const webhook = buildCreateAutomationEditorData({
-      template: { name: 'On webhook', desc: 'When pinged', triggerKind: 'webhook' },
+      template: {
+        name: 'On webhook',
+        desc: 'When pinged',
+        triggerKind: 'webhook',
+      },
       watchEntity: 'core.transaction',
       instructions: 'x',
       name: 'x',

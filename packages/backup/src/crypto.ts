@@ -137,7 +137,10 @@ function epochOf(keyring: Keyring, epoch: number): KeyringEpoch {
 }
 
 /** The active epoch's master key, decoded from base64. */
-export function activeMasterKey(keyring: Keyring): { epoch: number; key: Uint8Array } {
+export function activeMasterKey(keyring: Keyring): {
+  epoch: number;
+  key: Uint8Array;
+} {
   const e = epochOf(keyring, keyring.active);
   return { epoch: e.epoch, key: new Uint8Array(Buffer.from(e.key, 'base64')) };
 }
@@ -185,7 +188,9 @@ export async function saveKeyring(file: string, keyring: Keyring): Promise<void>
   validateKeyring(keyring);
   await fs.mkdir(path.dirname(file), { recursive: true });
   const tmp = `${file}.${process.pid}.${Date.now()}.tmp`;
-  await fs.writeFile(tmp, `${JSON.stringify(keyring, null, 2)}\n`, { mode: 0o600 });
+  await fs.writeFile(tmp, `${JSON.stringify(keyring, null, 2)}\n`, {
+    mode: 0o600,
+  });
   await fs.rename(tmp, file);
 }
 

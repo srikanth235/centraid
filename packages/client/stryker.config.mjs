@@ -13,7 +13,9 @@ export default {
   ],
   mutate: ['src/replica/intents.ts', 'src/replica/payload-hash.ts'],
   reporters: ['clear-text', 'json'],
-  jsonReporter: { fileName: '../../artifacts/mutation/client-replica-report.json' },
+  jsonReporter: {
+    fileName: '../../artifacts/mutation/client-replica-report.json',
+  },
   thresholds: { high: 80, low: 50, break: null },
   timeoutMS: 60_000,
   concurrency: 2,

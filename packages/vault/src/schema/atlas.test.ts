@@ -3,7 +3,7 @@
 // classification is exhaustive, and physical/logical names round-trip.
 
 import { describe, expect, test } from 'vitest';
-import { JOURNAL_TABLES, VAULT_TABLES } from './tables.js';
+
 import {
   ATLAS_KIND_FRIENDLY,
   ATLAS_PACK_LABELS,
@@ -14,6 +14,7 @@ import {
   atlasTablesByPhysical,
   packKindOf,
 } from './atlas.js';
+import { JOURNAL_TABLES, VAULT_TABLES } from './tables.js';
 
 function registrySize(): number {
   const vault = Object.values(VAULT_TABLES).reduce((n, t) => n + t.length, 0);

@@ -315,7 +315,11 @@ test('remembered app launch, no-store document, and assets replay in airplane mo
   const launch =
     '/__centraid_iroh__/d-offline/centraid/_web/session?code=launch-one&theme=dark&bgL=5';
   const online = await page.evaluate(
-    (u) => fetch(u).then(async (response) => ({ url: response.url, body: await response.text() })),
+    (u) =>
+      fetch(u).then(async (response) => ({
+        url: response.url,
+        body: await response.text(),
+      })),
     launch,
   );
   expect(online.body).toContain('offline-app');
@@ -337,7 +341,11 @@ test('remembered app launch, no-store document, and assets replay in airplane mo
   const changedTheme =
     '/__centraid_iroh__/d-offline/centraid/_web/session?code=launch-one&theme=light&bgL=95';
   const offline = await page.evaluate(
-    (u) => fetch(u).then(async (response) => ({ url: response.url, body: await response.text() })),
+    (u) =>
+      fetch(u).then(async (response) => ({
+        url: response.url,
+        body: await response.text(),
+      })),
     changedTheme,
   );
   expect(offline.body).toContain('offline-app');
@@ -354,12 +362,19 @@ test('parent-fetched app bundle runs in an opaque document without shell access'
       .querySelector<HTMLMetaElement>('meta[name="centraid-csp-nonce"]')
       ?.getAttribute('content');
     if (!nonce) throw new Error('shell CSP nonce missing');
-    for (const script of parsed.querySelectorAll<HTMLScriptElement>('script[src]')) {
+    const scripts = Array.from(parsed.querySelectorAll<HTMLScriptElement>('script[src]'));
+    // Module evaluation observes document order, including side-effect imports.
+    // Inline the next fetched script only after the previous one is installed.
+    const inlineNextScript = async (index: number): Promise<void> => {
+      const script = scripts[index];
+      if (!script) return;
       const bundle = await fetch(new URL(script.getAttribute('src')!, response.url));
       script.removeAttribute('src');
       script.textContent = await bundle.text();
       script.setAttribute('nonce', nonce);
-    }
+      return inlineNextScript(index + 1);
+    };
+    await inlineNextScript(0);
     const csp = parsed.createElement('meta');
     csp.httpEquiv = 'Content-Security-Policy';
     csp.content = `default-src 'none'; script-src 'nonce-${nonce}' blob:`;
@@ -405,7 +420,9 @@ test('unpair purges the tunnel caches but keeps the shell cache', async ({ page 
   await expect.poll(() => page.evaluate(() => caches.has('centraid-tunnel-blobs-v11'))).toBe(true);
 
   await page.evaluate(() =>
-    navigator.serviceWorker.controller?.postMessage({ type: 'centraid:purge-tunnel-cache' }),
+    navigator.serviceWorker.controller?.postMessage({
+      type: 'centraid:purge-tunnel-cache',
+    }),
   );
 
   await expect.poll(() => page.evaluate(() => caches.has('centraid-tunnel-blobs-v11'))).toBe(false);

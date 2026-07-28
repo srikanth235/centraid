@@ -1,6 +1,8 @@
+import path from 'node:path';
+
 import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { describe, expect, it } from 'vitest';
-import path from 'node:path';
+
 import { makeJournalDbProvider } from '../stores/gateway-db.js';
 import { ConversationStore } from './store.js';
 
@@ -85,7 +87,12 @@ describe('ConversationStore — prune + delete', () => {
     const store = newStore();
     seedAutomationTurn(store, 'app/a', 'a1', 1);
     seedAutomationTurn(store, 'app/b', 'b1', 1);
-    store.insertMessageIn({ turnId: 'a1', role: 'user', text: 'x', startedAt: 1 });
+    store.insertMessageIn({
+      turnId: 'a1',
+      role: 'user',
+      text: 'x',
+      startedAt: 1,
+    });
     store.stateSet('app/a', 'k', JSON.stringify('v'), 1);
     store.stateSet('app/b', 'k', JSON.stringify('v'), 1);
     store.deleteAutomationData('app/a');
@@ -99,7 +106,10 @@ describe('ConversationStore — prune + delete', () => {
 
   it('deleteConversation (chat) is user-scoped and cascades items + attachments', () => {
     const store = newStore();
-    const conversation = store.createConversation({ kind: 'chat', userId: 'u1' });
+    const conversation = store.createConversation({
+      kind: 'chat',
+      userId: 'u1',
+    });
     store.insertTurn({
       turnId: 't',
       conversationId: conversation.id,
@@ -112,7 +122,12 @@ describe('ConversationStore — prune + delete', () => {
       text: 'hi',
       startedAt: 1,
     });
-    store.insertAttachment({ itemId, hash: 'b'.repeat(64), mime: 'image/png', sizeBytes: 1 });
+    store.insertAttachment({
+      itemId,
+      hash: 'b'.repeat(64),
+      mime: 'image/png',
+      sizeBytes: 1,
+    });
     expect(store.deleteConversation(conversation.id, 'other-user')).toBe(false);
     expect(store.deleteConversation(conversation.id, 'u1')).toBe(true);
     expect(store.listItems('t')).toHaveLength(0);

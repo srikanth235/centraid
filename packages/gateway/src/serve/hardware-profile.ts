@@ -1,4 +1,5 @@
 import { availableParallelism, totalmem } from 'node:os';
+
 import {
   parseResourceMode,
   resourceModeLabel,
@@ -6,8 +7,8 @@ import {
   type ResourceMode,
 } from './resource-mode.js';
 
+export { type ResourceMode } from './resource-mode.js';
 export type HardwareClass = 'constrained' | 'standard';
-export type { ResourceMode };
 
 /**
  * The six prioritized throughput knobs the resolver attributes a source to
@@ -172,7 +173,7 @@ function resolveKnob(params: {
   max: number;
 }): { value: number; source: ResourceKnobSource } {
   if (params.envRaw !== undefined && params.envRaw !== '') {
-    const parsed = Number.parseInt(params.envRaw, 10);
+    const parsed = Math.trunc(Number(params.envRaw));
     if (Number.isFinite(parsed) && parsed >= params.min) {
       return {
         value: Math.min(parsed, params.max),
@@ -185,7 +186,10 @@ function resolveKnob(params: {
     Number.isInteger(params.prefsValue) &&
     params.prefsValue >= params.min
   ) {
-    return { value: Math.min(params.prefsValue, params.max), source: { source: 'prefs' } };
+    return {
+      value: Math.min(params.prefsValue, params.max),
+      source: { source: 'prefs' },
+    };
   }
   return { value: params.fallback, source: { source: 'preset' } };
 }

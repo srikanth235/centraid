@@ -14,10 +14,10 @@
 // transparent Modal, a translateX slide from -width→0 on a bezier, and a fading
 // ~40% black scrim that closes on tap. Each row closes the drawer, then routes.
 
+import { Feather } from '@expo/vector-icons';
 import React, { useEffect, useMemo } from 'react';
 import { Animated, Easing, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
 
 import { useAnimatedValue } from '../../kit/hooks/useAnimatedValue';
 import { family, useTheme, type ThemeColors } from '../../kit/theme';
@@ -48,7 +48,10 @@ type ConnTone = 'connected' | 'idle' | 'offline';
 
 // Truthful, one-gateway status derived from the shared ConnectionState — no
 // invented "gateway health" beyond what Home already resolved.
-function describeConnection(connection: ConnectionState): { label: string; tone: ConnTone } {
+function describeConnection(connection: ConnectionState): {
+  label: string;
+  tone: ConnTone;
+} {
   switch (connection.kind) {
     case 'ready':
       return { label: 'Connected', tone: 'connected' };
@@ -228,7 +231,11 @@ const makeStyles = (colors: ThemeColors) =>
       paddingVertical: 1,
     },
     badgeText: { color: '#fff', fontFamily: family.sansBold, fontSize: 11 },
-    divider: { height: StyleSheet.hairlineWidth, marginHorizontal: 2, marginVertical: 12 },
+    divider: {
+      height: StyleSheet.hairlineWidth,
+      marginHorizontal: 2,
+      marginVertical: 12,
+    },
     header: {
       alignItems: 'center',
       borderBottomWidth: 0.5,

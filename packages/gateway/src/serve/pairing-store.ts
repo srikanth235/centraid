@@ -8,9 +8,8 @@
 
 import crypto from 'node:crypto';
 import path from 'node:path';
-import type { GrantableRole, DeviceEnrollment, EnrollmentStore } from './enrollment-store.js';
-import type { MemberGrant } from './member-store.js';
-import { GatewayDatabase } from './gateway-db.js';
+
+import type { DeviceEnrollment, EnrollmentStore } from './enrollment-store.js';
 import {
   clearReservedFoundingVaults,
   FOUNDING_RESERVATION_TTL_MS,
@@ -20,6 +19,8 @@ import {
   reserveFoundingWithinTransaction,
   stageReservedFoundingVaults,
 } from './founding-reservations.js';
+import { GatewayDatabase } from './gateway-db.js';
+import type { MemberGrant } from './member-store.js';
 
 export {
   encodePairingTicket,
@@ -86,9 +87,12 @@ function enrollFounder(
   return enrollments.enrollWithinTransaction({
     endpointId: input.endpointId,
     memberLabel: input.memberLabel ?? 'You',
-    grants: input.vaultIds.map((vaultId) => ({ vaultId, role: 'admin' as const })),
+    grants: input.vaultIds.map((vaultId) => ({
+      vaultId,
+      role: 'admin' as const,
+    })),
     label: input.label,
-    ...(input.platform !== undefined ? { platform: input.platform } : {}),
+    ...(input.platform === undefined ? {} : { platform: input.platform }),
   });
 }
 
@@ -199,9 +203,9 @@ export class PairingTicketStore {
         memberId: invitation.memberId,
         grants: invitation.grants,
         label: input.label,
-        ...(input.platform !== undefined ? { platform: input.platform } : {}),
-        ...(input.rememberDevice !== undefined ? { rememberDevice: input.rememberDevice } : {}),
-        ...(input.grantProfile !== undefined ? { grantProfile: input.grantProfile } : {}),
+        ...(input.platform === undefined ? {} : { platform: input.platform }),
+        ...(input.rememberDevice === undefined ? {} : { rememberDevice: input.rememberDevice }),
+        ...(input.grantProfile === undefined ? {} : { grantProfile: input.grantProfile }),
       });
     });
   }
@@ -231,8 +235,8 @@ export class PairingTicketStore {
         endpointId: input.endpointId,
         vaultIds: [input.vaultId],
         label: input.label,
-        ...(input.platform !== undefined ? { platform: input.platform } : {}),
-        ...(input.memberLabel !== undefined ? { memberLabel: input.memberLabel } : {}),
+        ...(input.platform === undefined ? {} : { platform: input.platform }),
+        ...(input.memberLabel === undefined ? {} : { memberLabel: input.memberLabel }),
       },
       beforeEnroll,
     )?.[0];
@@ -303,7 +307,10 @@ export class PairingTicketStore {
     clearReservedFoundingVaults(this.gatewayDatabase, reservationId, vaultIds);
   }
 
-  pendingFoundingVaults(): Array<{ reservationId: string; vaultIds: string[] }> {
+  pendingFoundingVaults(): Array<{
+    reservationId: string;
+    vaultIds: string[];
+  }> {
     return pendingFoundingVaults(this.gatewayDatabase);
   }
 
@@ -396,7 +403,13 @@ export class PairingTicketStore {
     ).flatMap((row) => {
       const invitation = invitationOf(row);
       return invitation
-        ? [{ ...invitation, ticketId: row.ticket_id, expiresAt: row.expires_at }]
+        ? [
+            {
+              ...invitation,
+              ticketId: row.ticket_id,
+              expiresAt: row.expires_at,
+            },
+          ]
         : [];
     });
   }

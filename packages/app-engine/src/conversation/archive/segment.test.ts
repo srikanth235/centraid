@@ -6,8 +6,11 @@
  */
 
 import { createHash } from 'node:crypto';
+
 import { describe, expect, it } from 'vitest';
+
 import { archiveRange, readArchivedConversationSegment } from './segment.js';
+import type { EligibleRange } from './selector.js';
 import {
   MemoryBlobSink,
   daysAgo,
@@ -16,7 +19,6 @@ import {
   seedConversation,
   seedTurn,
 } from './test-fixtures.js';
-import type { EligibleRange } from './selector.js';
 
 describe('archiveRange + readArchivedConversationSegment', () => {
   it('gzips turns/items into the CAS, indexes conversation_archive, and folds digest', () => {
@@ -77,7 +79,7 @@ describe('archiveRange + readArchivedConversationSegment', () => {
     const result = archiveRange(journal, blobSink, conv, range, now);
     expect(result.turnCount).toBe(2);
     expect(result.itemCount).toBeGreaterThan(0);
-    expect(result.segmentSha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(result.segmentSha256).toMatch(/^[a-f0-9]{64}$/u);
     expect(blobSink.has(result.segmentSha256)).toBe(true);
 
     const bytes = blobSink.get(result.segmentSha256)!;
@@ -87,7 +89,7 @@ describe('archiveRange + readArchivedConversationSegment', () => {
     expect(segment.seqFrom).toBe(0);
     expect(segment.seqTo).toBe(1);
     expect(segment.turns).toHaveLength(2);
-    expect(segment.items.length).toBe(result.itemCount);
+    expect(segment.items).toHaveLength(result.itemCount);
 
     const archive = journal
       .prepare(
@@ -138,7 +140,10 @@ describe('archiveRange + readArchivedConversationSegment', () => {
     expect(digest.tool_count).toBe(1);
     expect(digest.app_id).toBe('app');
     expect(digest.automation_ref).toBe('app/digest');
-    const models = JSON.parse(digest.models_json) as { model: string; runs: number }[];
+    const models = JSON.parse(digest.models_json) as {
+      model: string;
+      runs: number;
+    }[];
     expect(models.some((m) => m.model === 'gpt-test' && m.runs === 2)).toBe(true);
     const efforts = JSON.parse(digest.efforts_json) as {
       effort: string;
@@ -192,7 +197,7 @@ describe('archiveRange + readArchivedConversationSegment', () => {
         { conversationId: 'chat1', kind: 'chat', seqFrom: 0, seqTo: 0, turns },
         now,
       ),
-    ).toThrow(/did not land in the blob CAS/);
+    ).toThrow(/did not land in the blob CAS/u);
     journal.close();
   });
 });

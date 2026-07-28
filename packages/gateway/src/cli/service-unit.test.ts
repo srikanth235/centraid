@@ -1,5 +1,7 @@
-import { describe, expect, test } from 'vitest';
 import path from 'node:path';
+
+import { describe, expect, test } from 'vitest';
+
 import {
   DEFAULT_LAUNCHD_LABEL,
   DEFAULT_SYSTEMD_UNIT_NAME,
@@ -21,7 +23,7 @@ const spec: ServiceUnitSpec = {
 
 /** Minimal stack-based tag-balance check — enough to catch a malformed plist. */
 function assertWellFormedXml(xml: string): void {
-  const tagRe = /<(\/?)([a-zA-Z][a-zA-Z0-9]*)\b[^>]*?(\/?)>/g;
+  const tagRe = /<(?<closing>\/?)(?<tag>[a-zA-Z][a-zA-Z0-9]*)\b[^>]*?(?<selfClosing>\/?)>/gu;
   const stack: string[] = [];
   let match: RegExpExecArray | null;
   while ((match = tagRe.exec(xml))) {
@@ -29,7 +31,7 @@ function assertWellFormedXml(xml: string): void {
     if (!name || full.startsWith('<!') || full.startsWith('<?')) continue;
     if (closing === '/') {
       const open = stack.pop();
-      expect(open).toBe(name);
+      if (open !== name) throw new Error(`expected closing tag for ${open}`);
       continue;
     }
     if (selfClose === '/') continue;
@@ -74,8 +76,8 @@ describe('service-unit', () => {
 
   test('buildLaunchdPlist sets RunAtLoad and crash-only KeepAlive', () => {
     const xml = buildLaunchdPlist(DEFAULT_LAUNCHD_LABEL, spec);
-    expect(xml).toMatch(/<key>RunAtLoad<\/key>\s*<true\/>/);
-    expect(xml).toMatch(/<key>KeepAlive<\/key>\s*<dict>\s*<key>SuccessfulExit<\/key>\s*<false\/>/);
+    expect(xml).toMatch(/<key>RunAtLoad<\/key>\s*<true\/>/u);
+    expect(xml).toMatch(/<key>KeepAlive<\/key>\s*<dict>\s*<key>SuccessfulExit<\/key>\s*<false\/>/u);
   });
 
   test('buildLaunchdPlist escapes XML-significant characters in paths', () => {
@@ -97,10 +99,13 @@ describe('service-unit', () => {
     // When the desktop app installs the service, nodeBin is the Electron binary;
     // ELECTRON_RUN_AS_NODE=1 in the unit env is what stops launchd's KeepAlive
     // from relaunching the full desktop app in a flash-open/shut respawn loop.
-    const withEnv: ServiceUnitSpec = { ...spec, env: { ELECTRON_RUN_AS_NODE: '1' } };
+    const withEnv: ServiceUnitSpec = {
+      ...spec,
+      env: { ELECTRON_RUN_AS_NODE: '1' },
+    };
     const xml = buildLaunchdPlist(DEFAULT_LAUNCHD_LABEL, withEnv);
     expect(xml).toMatch(
-      /<key>EnvironmentVariables<\/key>\s*<dict>\s*<key>ELECTRON_RUN_AS_NODE<\/key>\s*<string>1<\/string>\s*<\/dict>/,
+      /<key>EnvironmentVariables<\/key>\s*<dict>\s*<key>ELECTRON_RUN_AS_NODE<\/key>\s*<string>1<\/string>\s*<\/dict>/u,
     );
     assertWellFormedXml(xml);
   });
@@ -111,7 +116,10 @@ describe('service-unit', () => {
   });
 
   test('buildSystemdUnit emits Environment lines before ExecStart', () => {
-    const withEnv: ServiceUnitSpec = { ...spec, env: { ELECTRON_RUN_AS_NODE: '1' } };
+    const withEnv: ServiceUnitSpec = {
+      ...spec,
+      env: { ELECTRON_RUN_AS_NODE: '1' },
+    };
     const unit = buildSystemdUnit(withEnv);
     expect(unit).toContain('Environment=ELECTRON_RUN_AS_NODE=1');
     const lines = unit.split('\n');
@@ -136,10 +144,10 @@ describe('service-unit', () => {
 
   test('buildSystemdUnit carries Restart=on-failure, RestartSec, and WantedBy=default.target', () => {
     const unit = buildSystemdUnit(spec);
-    expect(unit).toMatch(/^\[Unit\]/m);
+    expect(unit).toMatch(/^\[Unit\]/mu);
     expect(unit).toContain('[Service]');
     expect(unit).toContain('Restart=on-failure');
-    expect(unit).toMatch(/RestartSec=\d+/);
+    expect(unit).toMatch(/RestartSec=\d+/u);
     expect(unit).toContain('[Install]');
     expect(unit).toContain('WantedBy=default.target');
   });

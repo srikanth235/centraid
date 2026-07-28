@@ -74,7 +74,6 @@ interface PartyEntry {
   name?: string;
 }
 
-const LIST_SCHEME_URI = 'https://centraid.dev/schemes/lists';
 const FLAGS_SCHEME_URI = 'https://centraid.dev/schemes/flags';
 const DAY = 86400000;
 

@@ -39,8 +39,9 @@
 
 import { randomUUID } from 'node:crypto';
 import { type DatabaseSync } from 'node:sqlite';
+
 import type { DatabaseProvider } from '../stores/gateway-db.js';
-import type { AdapterUsageSnapshot } from './turn.js';
+import type { ArchiveSegmentRef } from './rehydrate.js';
 import type {
   Conversation,
   Turn,
@@ -55,7 +56,6 @@ import type {
   ItemKind,
   RunKind,
 } from './schema.js';
-import type { ArchiveSegmentRef } from './rehydrate.js';
 import {
   prepare,
   conversationFromRaw,
@@ -70,6 +70,7 @@ import {
   type RawAttachment,
   type RawState,
 } from './store-sql.js';
+import type { AdapterUsageSnapshot } from './turn.js';
 
 export interface CreateConversationInput {
   /** Defaults to a fresh UUID. Automation conversations use the stable ref. */
@@ -205,7 +206,9 @@ export interface ListTurnsOptions {
 export type ConversationMeta = Conversation & { readonly messageCount: number };
 
 /** A search hit: the conversation meta plus a highlighted match snippet. */
-export type ConversationSearchHit = ConversationMeta & { readonly snippet: string };
+export type ConversationSearchHit = ConversationMeta & {
+  readonly snippet: string;
+};
 
 /**
  * Compile owner-typed words into an FTS5 MATCH expression: each word becomes a
@@ -217,7 +220,7 @@ export type ConversationSearchHit = ConversationMeta & { readonly snippet: strin
  */
 export function conversationMatchExpression(query: string): string | null {
   const tokens = query
-    .split(/\s+/)
+    .split(/\s+/u)
     .map((t) => t.replaceAll('"', ''))
     .filter((t) => /[\p{L}\p{N}]/u.test(t))
     .slice(0, 16);
@@ -339,10 +342,10 @@ export class ConversationStore {
       id,
       kind: input.kind,
       userId: input.userId,
-      ...(input.appId !== undefined ? { appId: input.appId } : {}),
-      ...(input.automationId !== undefined ? { automationId: input.automationId } : {}),
+      ...(input.appId === undefined ? {} : { appId: input.appId }),
+      ...(input.automationId === undefined ? {} : { automationId: input.automationId }),
       title: input.title ?? '',
-      ...(input.adapterKind !== undefined ? { adapterKind: input.adapterKind } : {}),
+      ...(input.adapterKind === undefined ? {} : { adapterKind: input.adapterKind }),
       hydrationCount: 0,
       turnCount: 0,
       pinned: false,
@@ -372,9 +375,9 @@ export class ConversationStore {
         kind: 'automation',
         userId: '',
         automationId: automationRef,
-        ...(appId !== undefined ? { appId } : {}),
-        ...(name !== undefined ? { title: name } : {}),
-        ...(runnerKind !== undefined ? { adapterKind: runnerKind } : {}),
+        ...(appId === undefined ? {} : { appId }),
+        ...(name === undefined ? {} : { title: name }),
+        ...(runnerKind === undefined ? {} : { adapterKind: runnerKind }),
       });
       return conversationId;
     }
@@ -431,7 +434,10 @@ export class ConversationStore {
     ) as unknown as (RawConversation & {
       msg_count: number;
     })[];
-    return rows.map((r) => ({ ...conversationFromRaw(r), messageCount: Number(r.msg_count) }));
+    return rows.map((r) => ({
+      ...conversationFromRaw(r),
+      messageCount: Number(r.msg_count),
+    }));
   }
 
   /**
@@ -455,7 +461,10 @@ export class ConversationStore {
       appId ?? null,
       appId ?? null,
       Math.min(Math.max(limit, 1), 100),
-    ) as unknown as (RawConversation & { msg_count: number; snippet: string })[];
+    ) as unknown as (RawConversation & {
+      msg_count: number;
+      snippet: string;
+    })[];
     return rows.map((r) => ({
       ...conversationFromRaw(r),
       messageCount: Number(r.msg_count),

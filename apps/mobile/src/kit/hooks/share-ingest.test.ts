@@ -37,7 +37,12 @@ describe('processShareIntent routing', () => {
     const ports = fakePorts();
     await processShareIntent(ports, session, GATEWAY, {
       files: [
-        file({ mimeType: 'image/jpeg', fileName: 'p.jpg', width: 4, height: 3 }),
+        file({
+          mimeType: 'image/jpeg',
+          fileName: 'p.jpg',
+          width: 4,
+          height: 3,
+        }),
         file({ mimeType: 'video/mp4', fileName: 'v.mp4', duration: 12 }),
       ],
     });
@@ -58,7 +63,11 @@ describe('processShareIntent routing', () => {
       2,
       session,
       GATEWAY,
-      expect.objectContaining({ kind: 'video', durationS: 12, deleteSourceAfterSettle: true }),
+      expect.objectContaining({
+        kind: 'video',
+        durationS: 12,
+        deleteSourceAfterSettle: true,
+      }),
     );
   });
 
@@ -109,7 +118,10 @@ describe('processShareIntent routing', () => {
 describe('processShareIntent lifecycle', () => {
   it('alerts honestly and resets on an unsupported (text) share, touching no producer', async () => {
     const ports = fakePorts();
-    await processShareIntent(ports, session, GATEWAY, { files: [], text: 'hello' });
+    await processShareIntent(ports, session, GATEWAY, {
+      files: [],
+      text: 'hello',
+    });
     expect(ports.backupDeviceMedia).toHaveBeenCalledTimes(0);
     expect(ports.backupDocument).toHaveBeenCalledTimes(0);
     expect(ports.alert).toHaveBeenCalledExactlyOnceWith(

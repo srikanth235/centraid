@@ -1,15 +1,23 @@
 /* oxlint-disable typescript-eslint/ban-ts-comment -- browser module exercised in jsdom */
 // @ts-nocheck
+import { Blob as NodeBlob, File as NodeFile } from 'node:buffer';
 // @vitest-environment jsdom
 import { createHash, webcrypto } from 'node:crypto';
-import { Blob as NodeBlob, File as NodeFile } from 'node:buffer';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const PKG = path.resolve(import.meta.dirname, '..');
 const moduleUrl = pathToFileURL(path.resolve(PKG, 'kit/edge-upload.js')).href;
 const { sha256FileStream, stageDirectFile, stageFallbackFile } = await import(moduleUrl);
+
+type FetchTestSeam = typeof fetch;
+type BackgroundPutTestSeam = (input: {
+  url: string;
+  transferId: string;
+  bodyBase64: string;
+}) => Promise<{ status: number; headers: Record<string, string> }>;
 
 describe('edge-upload', () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -26,17 +34,28 @@ describe('edge-upload', () => {
     it('resumes the fallback door from the gateway durable offset before committing', async () => {
       const sha256 = '12'.repeat(32);
       const uploaded: Uint8Array[] = [];
-      const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
+      const fetchMock = vi.fn<FetchTestSeam>(async (input: string | URL, init?: RequestInit) => {
         const url = String(input);
         if (url.endsWith('/uploads')) {
-          return Response.json({ mode: 'spool', sessionId: 'fallback-1', offset: 4 });
+          return Response.json({
+            mode: 'spool',
+            sessionId: 'fallback-1',
+            offset: 4,
+          });
         }
         if (url.endsWith('/uploads/fallback-1') && init?.method === 'PATCH') {
           uploaded.push(new Uint8Array(await (init.body as Blob).arrayBuffer()));
-          return new Response(null, { status: 204, headers: { 'upload-offset': '9' } });
+          return new Response(null, {
+            status: 204,
+            headers: { 'upload-offset': '9' },
+          });
         }
         if (url.endsWith('/uploads/fallback-1/commit')) {
-          return Response.json({ sha256, byteSize: 9, custody: 'pending-offsite' });
+          return Response.json({
+            sha256,
+            byteSize: 9,
+            custody: 'pending-offsite',
+          });
         }
         throw new Error(`unexpected fetch ${url}`);
       });
@@ -56,15 +75,24 @@ describe('edge-upload', () => {
       [
         'invalid resumed offset',
         () =>
-          Promise.resolve(new Response(null, { status: 204, headers: { 'upload-offset': '4' } })),
+          Promise.resolve(
+            new Response(null, {
+              status: 204,
+              headers: { 'upload-offset': '4' },
+            }),
+          ),
       ],
     ])(
       'keeps %s classified as resumable after the gateway opens a session',
       async (_name, patch) => {
-        const fetchMock = vi.fn(async (input: string | URL) => {
+        const fetchMock = vi.fn<FetchTestSeam>(async (input: string | URL) => {
           const url = String(input);
           if (url.endsWith('/uploads')) {
-            return Response.json({ mode: 'spool', sessionId: 'fallback-retry', offset: 4 });
+            return Response.json({
+              mode: 'spool',
+              sessionId: 'fallback-retry',
+              offset: 4,
+            });
           }
           if (url.endsWith('/uploads/fallback-retry')) return patch();
           throw new Error(`unexpected fetch ${url}`);
@@ -82,7 +110,7 @@ describe('edge-upload', () => {
 
     it('hands an unavailable direct door back to the permanent gateway fallback', async () => {
       vi.stubGlobal('crypto', webcrypto);
-      const fetchMock = vi.fn(async () =>
+      const fetchMock = vi.fn<FetchTestSeam>(async () =>
         Response.json({ error: 'remote_unavailable' }, { status: 503 }),
       );
       vi.stubGlobal('fetch', fetchMock);
@@ -97,7 +125,7 @@ describe('edge-upload', () => {
       vi.stubGlobal('crypto', webcrypto);
       vi.stubGlobal('Blob', NodeBlob);
       const rawKey = Buffer.alloc(32, 5).toString('base64');
-      const fetchMock = vi.fn(async (input: string | URL) => {
+      const fetchMock = vi.fn<FetchTestSeam>(async (input: string | URL) => {
         const url = String(input);
         if (url.endsWith('/direct')) {
           return Response.json({
@@ -126,7 +154,7 @@ describe('edge-upload', () => {
       const sha256 = 'ab'.repeat(32);
       const rawKey = Buffer.alloc(32, 7).toString('base64');
       let uploaded: Blob | undefined;
-      const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
+      const fetchMock = vi.fn<FetchTestSeam>(async (input: string | URL, init?: RequestInit) => {
         const url = String(input);
         if (url.endsWith('/direct')) {
           return Response.json({
@@ -134,7 +162,10 @@ describe('edge-upload', () => {
             alreadyPresent: false,
             custody: 'pending-offsite',
             contentKey: { keyBase64: rawKey },
-            upload: { kind: 'single', url: 'https://provider.example/upload' },
+            upload: {
+              kind: 'single',
+              url: 'https://provider.example/upload',
+            },
           });
         }
         if (url === 'https://provider.example/upload') {
@@ -142,7 +173,11 @@ describe('edge-upload', () => {
           return new Response(null, { status: 200 });
         }
         if (url.endsWith('/direct/session-1/complete')) {
-          return Response.json({ sha256, byteSize: 3, custody: 'remote-only' });
+          return Response.json({
+            sha256,
+            byteSize: 3,
+            custody: 'remote-only',
+          });
         }
         throw new Error(`unexpected fetch ${url}`);
       });
@@ -169,7 +204,7 @@ describe('edge-upload', () => {
       vi.stubGlobal('crypto', webcrypto);
       vi.stubGlobal('Blob', NodeBlob);
       const rawKey = Buffer.alloc(32, 8).toString('base64');
-      const fetchMock = vi.fn(async (input: string | URL) => {
+      const fetchMock = vi.fn<FetchTestSeam>(async (input: string | URL) => {
         const url = String(input);
         if (url.endsWith('/direct')) {
           return Response.json({
@@ -197,7 +232,7 @@ describe('edge-upload', () => {
       const sha256 = 'cd'.repeat(32);
       const rawKey = Buffer.alloc(32, 9).toString('base64');
       const calls: string[] = [];
-      const fetchMock = vi.fn(async (input: string | URL) => {
+      const fetchMock = vi.fn<FetchTestSeam>(async (input: string | URL) => {
         const url = String(input);
         calls.push(url);
         if (url.endsWith('/direct')) {
@@ -215,11 +250,18 @@ describe('edge-upload', () => {
           });
         }
         if (url === 'https://provider.example/part-2') {
-          return new Response(null, { status: 200, headers: { etag: 'part-2-etag' } });
+          return new Response(null, {
+            status: 200,
+            headers: { etag: 'part-2-etag' },
+          });
         }
         if (url.endsWith('/parts/2')) return Response.json({ completedParts: [1, 2] });
         if (url.endsWith('/complete')) {
-          return Response.json({ sha256, byteSize: 16 * 1024 ** 2 + 1, custody: 'remote-only' });
+          return Response.json({
+            sha256,
+            byteSize: 16 * 1024 ** 2 + 1,
+            custody: 'remote-only',
+          });
         }
         throw new Error(`unexpected fetch ${url}`);
       });
@@ -242,14 +284,14 @@ describe('edge-upload', () => {
       const sha256 = 'ef'.repeat(32);
       const rawKey = Buffer.alloc(32, 11).toString('base64');
       const releases: Array<(value: unknown) => void> = [];
-      const putBackground = vi.fn(
+      const putBackground = vi.fn<BackgroundPutTestSeam>(
         () =>
           new Promise((resolve) => {
             releases.push(resolve);
           }),
       );
       vi.stubGlobal('centraid', { transfer: { putBackground } });
-      const fetchMock = vi.fn(async (input: string | URL) => {
+      const fetchMock = vi.fn<FetchTestSeam>(async (input: string | URL) => {
         const url = String(input);
         if (url.endsWith('/direct')) {
           return Response.json({
@@ -270,7 +312,11 @@ describe('edge-upload', () => {
           return Response.json({ completedParts: [] });
         }
         if (url.endsWith('/complete')) {
-          return Response.json({ sha256, byteSize: 16 * 1024 ** 2 + 1, custody: 'remote-only' });
+          return Response.json({
+            sha256,
+            byteSize: 16 * 1024 ** 2 + 1,
+            custody: 'remote-only',
+          });
         }
         throw new Error(`unexpected fetch ${url}`);
       });
@@ -279,12 +325,17 @@ describe('edge-upload', () => {
       const file = new NodeFile([block, block, block, block, Uint8Array.of(1)], 'background.bin');
 
       const upload = stageDirectFile(file, sha256);
-      await vi.waitFor(() => expect(putBackground).toHaveBeenCalledTimes(2), { timeout: 10_000 });
+      await vi.waitFor(() => expect(putBackground).toHaveBeenCalledTimes(2), {
+        timeout: 10_000,
+      });
       expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/parts/'))).toBe(false);
 
       releases[0]!({ status: 200, headers: { ETag: 'native-part-1' } });
       releases[1]!({ status: 200, headers: { etag: 'native-part-2' } });
-      await expect(upload).resolves.toMatchObject({ sha256, custody: 'remote-only' });
+      await expect(upload).resolves.toMatchObject({
+        sha256,
+        custody: 'remote-only',
+      });
       expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('/parts/'))).toHaveLength(
         2,
       );

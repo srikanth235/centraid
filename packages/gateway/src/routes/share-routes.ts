@@ -26,6 +26,7 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
+
 import { AUTHED_DEVICE_HEADER } from '@centraid/app-engine';
 import {
   isShareableItemType,
@@ -34,6 +35,7 @@ import {
   VaultShareError,
   type ShareVaultRef,
 } from '@centraid/vault';
+
 import type { RouteHandler } from '../serve/build-gateway.js';
 import { canWrite, type EnrollmentStore, type GrantableRole } from '../serve/enrollment-store.js';
 import { readJson, sendJson } from './route-helpers.js';
@@ -88,7 +90,10 @@ export function makeShareRouteHandler(deps: ShareRouteDeps): RouteHandler {
       return {
         ok: false,
         status: 404,
-        payload: { error: 'not_found', message: `unknown vault "${audienceVaultId}"` },
+        payload: {
+          error: 'not_found',
+          message: `unknown vault "${audienceVaultId}"`,
+        },
       };
     }
     if (!canWrite(role)) {
@@ -106,7 +111,10 @@ export function makeShareRouteHandler(deps: ShareRouteDeps): RouteHandler {
       return {
         ok: false,
         status: 404,
-        payload: { error: 'not_found', message: `unknown vault "${audienceVaultId}"` },
+        payload: {
+          error: 'not_found',
+          message: `unknown vault "${audienceVaultId}"`,
+        },
       };
     }
     return { ok: true, audience };

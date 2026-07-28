@@ -4,6 +4,7 @@
 // auditable and revocable, end to end through typed commands.
 
 import { assert, beforeEach, describe, expect, test } from 'vitest';
+
 import {
   bootstrapVault,
   createGrant,
@@ -31,9 +32,16 @@ describe('judgment', () => {
     gw = createGateway(db);
     registerJudgmentCommands(gw);
     registerTallyCommands(gw);
-    owner = { kind: 'device', deviceId: boot.deviceId, deviceKey: boot.deviceKey };
+    owner = {
+      kind: 'device',
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+    };
     me = boot.ownerPartyId;
-    const enrolled = enrollAgent(db, { name: 'assistant', modelRef: 'model-x' });
+    const enrolled = enrollAgent(db, {
+      name: 'assistant',
+      modelRef: 'model-x',
+    });
     const device = enrollDevice(db, boot.ownerPartyId, 'agent-host');
     createGrant(db, {
       granteePartyId: enrolled.partyId,

@@ -5,9 +5,10 @@
  * cannot hide the window off-screen.
  */
 
-import { app, screen, type BrowserWindow, type Rectangle } from 'electron';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+
+import { app, screen, type BrowserWindow, type Rectangle } from 'electron';
 
 const FILE = 'window-state.json';
 const DEBOUNCE_MS = 400;

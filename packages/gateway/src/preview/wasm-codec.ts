@@ -1,5 +1,7 @@
 import { createRequire } from 'node:module';
+
 import type { PreviewCodec, PreviewOutput } from '@centraid/vault';
+
 import { rgbaToThumbHash } from './thumbhash.js';
 
 const MAX_INPUT_PIXELS = 40_000_000;

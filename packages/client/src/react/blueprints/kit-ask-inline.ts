@@ -1,3 +1,5 @@
+import type { InlineKitAsk } from '@centraid/blueprints/apps/inline-types';
+
 // The inline "Ask your <app>" panel — the shell-side replacement for the served
 // kit.ts ask IIFE (which is suppressed inline; see suppress-served-ask.ts). It
 // mounts against the gateway conversation surface: turns stream through
@@ -20,9 +22,8 @@ import {
   vaultParked,
   type TurnStreamEvent,
 } from '../../gateway-client.js';
-import { openConfirm } from '../shell/confirm.js';
 import { providerConsentWire, withProviderConsent } from '../providerConsent.js';
-import type { InlineKitAsk } from '@centraid/blueprints/apps/inline-types';
+import { openConfirm } from '../shell/confirm.js';
 
 export interface InstallInlineAskOptions {
   /** The app root element; the panel mounts into its `[data-ask-mount]`. */
@@ -127,43 +128,50 @@ export function installInlineAsk(options: InstallInlineAskOptions): () => void {
         return;
       }
     }
+    const activeConversationId = conversationId;
     controller = new AbortController();
+    const signal = controller.signal;
     const assistantEl = { el: null as HTMLElement | null };
     try {
       // Accumulated across this send: a consent-gated failover asks for a
       // second provider, and resending without the first loops forever (#567).
       let approvedProviders: string[] = [];
-      for (;;) {
+      // Every consent changes the provider credential wire for the next turn,
+      // so retries are one ordered conversation state machine.
+      const streamWithConsent = async (): Promise<void> => {
         let requiredProvider: string | undefined;
         const providerConsent = providerConsentWire(approvedProviders);
         await streamTurn(
           appId,
           {
-            conversationId,
+            conversationId: activeConversationId,
             message,
             register: 'ask',
-            ...(providerConsent !== undefined ? { providerConsent } : {}),
+            ...(providerConsent === undefined ? {} : { providerConsent }),
           },
           (event) => {
             if (event.type === 'consent.required') requiredProvider = event.provider;
             else onEvent(assistantEl)(event);
           },
-          controller.signal,
+          signal,
         );
-        if (!requiredProvider) break;
+        const provider = requiredProvider;
+        if (!provider) return;
         // Inline apps mount into the SHELL document (the iframe is builder-only,
         // issue #505), so the shell's own confirm dialog is reachable here.
         const approved = await openConfirm({
           confirmLabel: 'Allow provider',
-          title: `Send to ${requiredProvider}?`,
-          message: `Allow this conversation to be sent to ${requiredProvider}? This can include vault tool results.`,
+          title: `Send to ${provider}?`,
+          message: `Allow this conversation to be sent to ${provider}? This can include vault tool results.`,
         });
         if (!approved) {
-          line('kit-ask-note', `Nothing was sent to ${requiredProvider}.`);
-          break;
+          line('kit-ask-note', `Nothing was sent to ${provider}.`);
+          return;
         }
-        approvedProviders = withProviderConsent(approvedProviders, requiredProvider);
-      }
+        approvedProviders = withProviderConsent(approvedProviders, provider);
+        return streamWithConsent();
+      };
+      await streamWithConsent();
     } catch (error) {
       line('kit-ask-err', error instanceof Error ? error.message : String(error));
     }

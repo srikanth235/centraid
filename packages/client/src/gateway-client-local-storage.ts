@@ -90,7 +90,10 @@ export async function getLocalStorageUsage(
   const path = opts.refresh
     ? '/centraid/_gateway/storage/local?refresh=1'
     : '/centraid/_gateway/storage/local';
-  const res = await doFetch(baseUrl, path, { method: 'GET', headers: authHeaders(token) });
+  const res = await doFetch(baseUrl, path, {
+    method: 'GET',
+    headers: authHeaders(token),
+  });
   return readJson<LocalUsageReportDTO>(res, 'local storage usage');
 }
 

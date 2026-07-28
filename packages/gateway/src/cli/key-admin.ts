@@ -10,6 +10,7 @@
 import { existsSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+
 import {
   loadSealKey,
   resealVaultKey,
@@ -17,8 +18,9 @@ import {
   sealKeyFileFor,
   sealKeyFingerprint,
 } from '@centraid/vault';
-import { daemonLayoutFor } from './paths.js';
+
 import { daemonKeyStore } from './key-store.js';
+import { daemonLayoutFor } from './paths.js';
 
 interface KeyArgs {
   dataDir?: string;

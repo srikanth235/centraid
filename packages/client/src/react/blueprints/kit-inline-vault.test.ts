@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
 // The inline kit is imported FIRST so its `./suppress-served-ask` side effect
 // runs before the real kit module (it suppresses kit.ts's auto-mounting Ask
 // IIFE). These suites exercise the authed vault overrides — blob staging, the
@@ -18,7 +19,9 @@ type AttachHandlers = Parameters<typeof wireAttachInput>[2];
 // gateway-client-core touches window.CentraidApi at module load and is the one
 // choke point every override routes through; stub it and capture the calls.
 const doFetch = vi.fn<typeof import('../../gateway-client-core.js').doFetch>();
-vi.mock(import('../../gateway-client-core.js'), () => ({
+const readJson = vi.fn<(res: Response, op: string) => Promise<unknown>>();
+vi.mock(import('../../gateway-client-core.js'), async (importOriginal) => ({
+  ...(await importOriginal()),
   auth: vi.fn<typeof import('../../gateway-client-core.js').auth>(async () => ({
     baseUrl: 'https://gw.test',
     token: 'tok',
@@ -29,13 +32,17 @@ vi.mock(import('../../gateway-client-core.js'), () => ({
   }),
   doFetch: (baseUrl: string, pathname: string, init: RequestInit) =>
     doFetch(baseUrl, pathname, init),
-  // `readJson` is generic (`<T>(res, op) => Promise<T>`); a typed mock erases the
-  // type parameter, so `Mock<...>` stops being assignable to the export.
-  // Bare `vi.fn()` is the only form that satisfies a generic signature.
-  readJson: vi.fn(),
+  readJson: <T>(...args: Parameters<typeof readJson>) => readJson(...args) as Promise<T>,
 }));
 
-function res(init: { ok?: boolean; status?: number; body?: unknown; headers?: HeadersInit } = {}) {
+function res(
+  init: {
+    ok?: boolean;
+    status?: number;
+    body?: unknown;
+    headers?: HeadersInit;
+  } = {},
+) {
   return {
     ok: init.ok ?? true,
     status: init.status ?? 200,
@@ -219,7 +226,10 @@ describe('kit-inline-vault', () => {
       expect(doFetch).toHaveBeenCalledWith(
         'https://gw.test',
         expect.stringContaining('/_vault/blobs/_sha/'),
-        expect.objectContaining({ method: 'HEAD', headers: { Authorization: 'Bearer tok' } }),
+        expect.objectContaining({
+          method: 'HEAD',
+          headers: { Authorization: 'Bearer tok' },
+        }),
       );
       const [action, input] = act.mock.calls[0]!;
       expect(action).toBe('attach');
@@ -295,7 +305,9 @@ describe('kit-inline-vault', () => {
       });
 
       await reanchorReference('lk1', null);
-      expect(JSON.parse(String(callArgs(1)[1].body))).toStrictEqual({ selector: null });
+      expect(JSON.parse(String(callArgs(1)[1].body))).toStrictEqual({
+        selector: null,
+      });
     });
   });
 });

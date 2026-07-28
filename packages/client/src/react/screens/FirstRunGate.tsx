@@ -1,6 +1,8 @@
 import { useState, type JSX } from 'react';
-import OnboardingScreen, { type OnboardingCompleteInput } from './OnboardingScreen.js';
+
 import FoundingScreen, { type FoundingScreenBridge } from './FoundingScreen.js';
+import OnboardingScreen, { type OnboardingCompleteInput } from './OnboardingScreen.js';
+
 import styles from './RecoverScreen.module.css';
 
 /**

@@ -1,12 +1,15 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { afterEach, describe, expect, test } from 'vitest';
 import crypto from 'node:crypto';
-import http from 'node:http';
-import path from 'node:path';
 import { promises as fs } from 'node:fs';
+import http from 'node:http';
 import type { AddressInfo } from 'node:net';
+import path from 'node:path';
+
 import { AUTHED_DEVICE_HEADER } from '@centraid/app-engine';
+import { forEachSequentially } from '@centraid/test-kit/sequential';
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { queueDeviceEnrichmentRequest } from '@centraid/vault';
+import { afterEach, describe, expect, test } from 'vitest';
+
 import { EnrollmentStore } from '../serve/enrollment-store.js';
 import { openVaultPlane } from '../serve/vault-plane.js';
 import type { VaultRegistry } from '../serve/vault-registry.js';
@@ -14,7 +17,11 @@ import { makeBlobRouteHandler } from './blob-routes.js';
 import { makeDeviceWorkRouteHandler } from './device-work-routes.js';
 
 const cleanups: Array<() => Promise<void> | void> = [];
-const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
+const silentLogger = {
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+};
 const PNG_BYTES = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
   'base64',
@@ -22,7 +29,7 @@ const PNG_BYTES = Buffer.from(
 
 describe('device-work-routes', () => {
   afterEach(async () => {
-    while (cleanups.length > 0) await cleanups.pop()?.();
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
   });
 
   async function fixture(options: { capability?: 'poster' | 'transcript' } = {}): Promise<{
@@ -45,7 +52,11 @@ describe('device-work-routes', () => {
     const vaultId = plane.boot.vaultId;
     const deviceKey = 'http:worker-device';
     const enrollments = EnrollmentStore.open(path.join(dir, 'gateway.db'));
-    const enrolled = enrollments.enroll({ endpointId: deviceKey, vaultId, label: 'Worker' });
+    const enrolled = enrollments.enroll({
+      endpointId: deviceKey,
+      vaultId,
+      label: 'Worker',
+    });
     enrollments.setCompute(enrolled.enrollmentId, {
       contributeWhileCharging: true,
       capabilities: {
@@ -110,7 +121,9 @@ describe('device-work-routes', () => {
           `${base}/centraid/_vault/blobs?variant=${capability}&variant_of=${sourceSha}&media_type=${capability === 'poster' ? 'image/png' : 'text/plain'}`,
           {
             method: 'POST',
-            headers: { 'content-type': capability === 'poster' ? 'image/png' : 'text/plain' },
+            headers: {
+              'content-type': capability === 'poster' ? 'image/png' : 'text/plain',
+            },
             body:
               capability === 'poster'
                 ? new Uint8Array(PNG_BYTES)
@@ -156,7 +169,10 @@ describe('device-work-routes', () => {
     const { lease } = (await leased.json()) as {
       lease: { requestId: string; token: string; capability: string };
     };
-    expect(lease).toMatchObject({ requestId: 'poster-job', capability: 'poster' });
+    expect(lease).toMatchObject({
+      requestId: 'poster-job',
+      capability: 'poster',
+    });
 
     const status = await fetch(`${f.base}/centraid/_gateway/device-work/status`, {
       headers: { [AUTHED_DEVICE_HEADER]: f.deviceKey },
@@ -172,7 +188,9 @@ describe('device-work-routes', () => {
       token: lease.token,
     });
     expect(completed.status).toBe(200);
-    expect((await completed.json()) as unknown).toStrictEqual({ completed: true });
+    expect((await completed.json()) as unknown).toStrictEqual({
+      completed: true,
+    });
   });
 
   test('lease refuses a device that is not both charging and unmetered', async () => {
@@ -195,14 +213,18 @@ describe('device-work-routes', () => {
       charging: true,
       unmetered: true,
     });
-    const { lease } = (await leased.json()) as { lease: { requestId: string; token: string } };
+    const { lease } = (await leased.json()) as {
+      lease: { requestId: string; token: string };
+    };
     const refused = await post(f.base, 'complete', f.deviceKey, {
       vaultId: f.vaultId,
       requestId: lease.requestId,
       token: lease.token,
     });
     expect(refused.status).toBe(409);
-    expect((await refused.json()) as unknown).toStrictEqual({ completed: false });
+    expect((await refused.json()) as unknown).toStrictEqual({
+      completed: false,
+    });
 
     const retry = await post(f.base, 'lease', f.deviceKey, {
       vaultId: f.vaultId,
@@ -225,7 +247,10 @@ describe('device-work-routes', () => {
     const { lease } = (await leased.json()) as {
       lease: { requestId: string; token: string; capability: string };
     };
-    expect(lease).toMatchObject({ requestId: 'transcript-job', capability: 'transcript' });
+    expect(lease).toMatchObject({
+      requestId: 'transcript-job',
+      capability: 'transcript',
+    });
 
     expect((await f.contribute()).status).toBe(200);
     const completed = await post(f.base, 'complete', f.deviceKey, {

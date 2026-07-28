@@ -18,12 +18,12 @@
 
 import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import type { VaultDb } from '../db.js';
+
 import { releaseBatchHold } from '../blob/staging.js';
-import { nowIso, uuidv7 } from '../ids.js';
+import type { VaultDb } from '../db.js';
 import { pkColumn } from '../gateway/execution.js';
-import { writeProvenance, writeReceipt } from './../gateway/evidence.js';
-import { resolveEntity } from '../schema/tables.js';
+import type { Identity } from '../gateway/types.js';
+import { nowIso, uuidv7 } from '../ids.js';
 import {
   isSealedValue,
   sealAad,
@@ -33,7 +33,8 @@ import {
   stampSealKeyFingerprint,
   unsealValue,
 } from '../schema/sealed.js';
-import type { Identity } from '../gateway/types.js';
+import { resolveEntity } from '../schema/tables.js';
+import { writeProvenance, writeReceipt } from './../gateway/evidence.js';
 
 /** AAD of one sealed payload field in the draft band. */
 export function payloadAad(rowId: string, field: string): string {
@@ -66,7 +67,11 @@ export interface Publisher {
   probe: (
     vault: DatabaseSync,
     payload: Record<string, unknown>,
-  ) => { entityId: string; disposition: 'update' | 'skip'; note?: string } | null;
+  ) => {
+    entityId: string;
+    disposition: 'update' | 'skip';
+    note?: string;
+  } | null;
   create: (
     vault: DatabaseSync,
     ownerPartyId: string,
@@ -85,7 +90,12 @@ export interface Publisher {
 export interface StageResult {
   connectionId: string;
   batchId: string;
-  staged: { create: number; update: number; skip: number; 'merge-candidate': number };
+  staged: {
+    create: number;
+    update: number;
+    skip: number;
+    'merge-candidate': number;
+  };
   total: number;
   receiptId: string;
 }
@@ -267,9 +277,20 @@ export function stageCandidates(
     objectId: batchId,
     purpose: null,
     decision: 'allow',
-    detail: { connectionId, ...counts, total: candidates.length, by: importer.callerId },
+    detail: {
+      connectionId,
+      ...counts,
+      total: candidates.length,
+      by: importer.callerId,
+    },
   });
-  return { connectionId, batchId, staged: counts, total: candidates.length, receiptId };
+  return {
+    connectionId,
+    batchId,
+    staged: counts,
+    total: candidates.length,
+    receiptId,
+  };
 }
 
 /**
@@ -312,7 +333,11 @@ export function shredPublishedSecretPayloads(vault: DatabaseSync, batchId: strin
       `SELECT row_id, entity_type, payload_json FROM sync_import_row
         WHERE batch_id = ? AND published_entity_id IS NOT NULL`,
     )
-    .all(batchId) as { row_id: string; entity_type: string; payload_json: string }[];
+    .all(batchId) as {
+    row_id: string;
+    entity_type: string;
+    payload_json: string;
+  }[];
   let shredded = 0;
   for (const row of rows) {
     const secretFields = sealedPayloadFieldsOf(row.entity_type);
@@ -500,7 +525,13 @@ export function applyBatchTx(
     )
     .run(
       now,
-      JSON.stringify({ created, updated, skipped, failed: failed.length, total: rows.length }),
+      JSON.stringify({
+        created,
+        updated,
+        skipped,
+        failed: failed.length,
+        total: rows.length,
+      }),
       batchId,
     );
   // Publish releases the batch's blob holds (issue #296): claimed shas are

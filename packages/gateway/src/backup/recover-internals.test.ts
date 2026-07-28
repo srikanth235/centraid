@@ -1,7 +1,8 @@
 // Pure phase-helper unit tests for recover() (issue #545 B7).
 
-import { describe, expect, test } from 'vitest';
 import type { RecoveryKitTarget, SnapshotRow, WalReplayOutcome } from '@centraid/backup';
+import { describe, expect, test } from 'vitest';
+
 import {
   buildProviderFromTarget,
   currentVersions,
@@ -45,8 +46,8 @@ describe('recover-internals', () => {
     const a = target({ vaultId: 'a' });
     const b = target({ vaultId: 'b', label: 'B' });
     expect(selectTarget([a, b], 'b')).toStrictEqual(b);
-    expect(() => selectTarget([a, b], undefined)).toThrow(/choose one with --vault/);
-    expect(() => selectTarget([a, b], 'missing')).toThrow(/no vault "missing"/);
+    expect(() => selectTarget([a, b], undefined)).toThrow(/choose one with --vault/u);
+    expect(() => selectTarget([a, b], 'missing')).toThrow(/no vault "missing"/u);
   });
 
   test('pickSnapshotRow prefers newest at-or-before --at, else newest overall', () => {

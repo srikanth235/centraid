@@ -30,9 +30,25 @@
  */
 
 import crypto from 'node:crypto';
-import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import path from 'node:path';
+
+import {
+  runAutomation,
+  runPreflight,
+  runTurn,
+  CatalogWarmer,
+  deriveStatus,
+  readRunnerModels,
+  enumerateRunnerModels,
+  probeCliAvailability,
+  resolveAcpCapabilities,
+  type CatalogSurface,
+  type RunnerKind,
+  type RunnerPrefs,
+  type SurfaceStatus,
+} from '@centraid/agent-runtime';
 import {
   AnalyticsStore,
   ASSISTANT_APP_ID,
@@ -57,7 +73,6 @@ import {
   makeConversationRunnerCore,
   makeJournalDbProvider,
   makeUserStoreRouteHandler,
-  isRunnerKind,
   resolveSubsystemModel,
   resolveSubsystemRunnerLadder,
   validateTurnAttachmentRefs,
@@ -74,27 +89,10 @@ import {
   type AutomationTriggerOrigin,
   type VaultWorkspace,
 } from '@centraid/app-engine';
-import { KIT_DIR, bundledAppDir, listBundledAppTemplates } from '@centraid/blueprints';
 import * as automation from '@centraid/automation';
+import { KIT_DIR, bundledAppDir, listBundledAppTemplates } from '@centraid/blueprints';
 import { ROUTES } from '@centraid/protocol';
 import { endpointTicketFor } from '@centraid/tunnel';
-import { isExpectedPrewarmSkip } from './app-prewarm-errors.js';
-import { closeJournalConversationStores, journalConversationStore } from '../journal-stores.js';
-import {
-  runAutomation,
-  runPreflight,
-  runTurn,
-  CatalogWarmer,
-  deriveStatus,
-  readRunnerModels,
-  enumerateRunnerModels,
-  probeCliAvailability,
-  resolveAcpCapabilities,
-  type CatalogSurface,
-  type RunnerKind,
-  type RunnerPrefs,
-  type SurfaceStatus,
-} from '@centraid/agent-runtime';
 import {
   KeyStore,
   readBlobStoreSettings,
@@ -103,69 +101,32 @@ import {
   type FilterClause,
   type PreviewCodec,
 } from '@centraid/vault';
-import { createImagePreviewCodec } from '../preview/codec.js';
-import { WorktreeStore } from '../worktree-store/index.js';
-import { openVaultRegistry, type VaultRegistry } from './vault-registry.js';
-import { createDiskHealthProbe, formatBytes } from './disk-health.js';
-import { LocalUsageScanner } from './local-usage.js';
-import { StorageLimitsStore, evaluateStorageLimit } from './storage-limits.js';
-import { createBrokerHealthProbe } from './broker-health.js';
-import { createSchedulerHealthProbe } from './scheduler-health.js';
-import { createEnrichmentHealthProbe } from './enrichment-health.js';
-import { createBlobSweepHealthProbe } from './blob-sweep-health.js';
-import { createStorageQuotaHealthProbe } from './storage-quota-health.js';
-import { createVaultIntegrityHealthProbe } from './vault-integrity-health.js';
+
+import type { BackupConfig } from '../backup/backup-config.js';
+import { BackupService } from '../backup/backup-service.js';
+import { deriveBackupSourceInstanceId } from '../backup/backup-state.js';
+import { RecoveryKitStateStore } from '../backup/recovery-kit-state.js';
+import { openStorageConnectionStore } from '../backup/storage-connections.js';
+import { makeStorageCredentialsResolver } from '../backup/storage-credentials.js';
+import { StorageUsagePoller } from '../backup/storage-usage.js';
+import { closeJournalConversationStores, journalConversationStore } from '../journal-stores.js';
 import {
-  removedRunnerLadderMembers,
-  resolveGatewayRunnerPrefs,
-  resolveStrictGatewayRunnerPrefs,
-} from './runner-prefs.js';
-import { GatewayDatabase } from './gateway-db.js';
-import { ConnectionBroker } from './connection-broker.js';
-import { pollProviderEventSource } from './automation-event-sources.js';
+  resolveAutomationAgentSelection,
+  resolveAutomationRewriteModel,
+  type AutomationAgentSelection,
+} from '../lifecycle/automation-agent-selection.js';
+import {
+  resolveAutomationAnchors,
+  scopesForAutomationAnchors,
+} from '../lifecycle/automation-anchor-scopes.js';
 import { reviseAutomationInstructions } from '../lifecycle/automation-revision.js';
-import {
-  ingressElement,
-  ingressRetentionGap,
-  readIngressCursor,
-} from './trigger-ingress-cursor.js';
-import type { AssistOAuthConfig } from './assist-oauth.js';
-import { OutboxExecutor } from './outbox-executor.js';
-import type { InstallScopeBlock, VaultPlane } from './vault-plane.js';
-import { runWithVaultContext, VAULT_HEADER, type DeviceAccess } from './vault-context.js';
-import { EnrollmentStore } from './enrollment-store.js';
-import { PairingTicketStore } from './pairing-store.js';
-import { makeVaultRouteHandler } from '../routes/vault-routes.js';
-import { makeDevicesRouteHandler } from '../routes/devices-routes.js';
-import { makeMembersRouteHandler } from '../routes/members-routes.js';
-import { makeScopesRouteHandler, SCOPES_PATH } from '../routes/scopes-routes.js';
-import { makeShareRouteHandler, SHARE_PATH } from '../routes/share-routes.js';
-import { makeDeviceWorkRouteHandler } from '../routes/device-work-routes.js';
-import { companionRequestAllowed } from './companion-access.js';
-import { makeReplicaRouteHandler } from '../routes/replica-routes.js';
-import type { ReplicaIntentDispatchOutcome } from '../routes/replica-intent-route.js';
-import { makeConnectionsRouteHandler } from '../routes/connections-routes.js';
-import { makeDemoRouteHandler } from '../routes/demo-routes.js';
-import { makeImportRouteHandler } from '../routes/import-routes.js';
-import { makeBlobRouteHandler } from '../routes/blob-routes.js';
-import {
-  makeDataPlaneControlHandler,
-  type DataPlaneControlOptions,
-} from '../routes/data-plane-control.js';
-import type { DataPlaneHttpOptions } from './data-plane-handoff.js';
-import { makeAppsStoreRouteHandler } from '../routes/apps-store-routes.js';
 import { makeDraftCodeDirResolver, type ExtBandOps } from '../lifecycle/ext-band.js';
 import {
-  makeAutomationsRouteHandler,
-  turnEventsSubscriberCount,
-} from '../routes/automations-routes.js';
-import { RunEventBus } from '../runs/run-event-bus.js';
-import { defaultLogger } from './default-logger.js';
-import { GatewayLogStore } from './gateway-log-store.js';
-import { buildDiagnosticsBundle } from './gateway-diagnostics.js';
-import { makeDiagnosticsRouteHandler } from '../routes/diagnostics-routes.js';
-import { makeBackupRouteHandler } from '../routes/backup-routes.js';
-import { makeLifecycleRouteHandler } from '../routes/lifecycle-routes.js';
+  finalizeCompiledManifest,
+  recordFailedAutomationCompile,
+  runHeadlessAutomationCompile,
+} from '../lifecycle/headless-automation-compile.js';
+import { runInteractiveAutomationTurn } from '../lifecycle/interactive-automation-turn.js';
 import {
   ensureSession,
   prepareLifecycleSession,
@@ -173,47 +134,85 @@ import {
   stageAndMaybePublish,
   type LifecycleRouteOptions,
 } from '../lifecycle/lifecycle-shared.js';
-import {
-  finalizeCompiledManifest,
-  recordFailedAutomationCompile,
-  runHeadlessAutomationCompile,
-} from '../lifecycle/headless-automation-compile.js';
-import {
-  resolveAutomationAnchors,
-  scopesForAutomationAnchors,
-} from '../lifecycle/automation-anchor-scopes.js';
-import {
-  resolveAutomationAgentSelection,
-  resolveAutomationRewriteModel,
-  type AutomationAgentSelection,
-} from '../lifecycle/automation-agent-selection.js';
-import { runInteractiveAutomationTurn } from '../lifecycle/interactive-automation-turn.js';
 import { rewriteAutomationInstructions } from '../lifecycle/rewrite-automation-instructions.js';
-import { makeUnifiedConversationRunner } from '../runs/unified-conversation-runner.js';
+import type { GatewayPaths } from '../paths.js';
+import { createImagePreviewCodec } from '../preview/codec.js';
+import { makeAgentsRouteHandler, type AgentAcpCapabilities } from '../routes/agents-routes.js';
+import { makeAppsStoreRouteHandler } from '../routes/apps-store-routes.js';
+import { makeAssistantRouteHandler } from '../routes/assistant-routes.js';
+import {
+  makeAutomationsRouteHandler,
+  turnEventsSubscriberCount,
+} from '../routes/automations-routes.js';
+import { makeBackupRouteHandler } from '../routes/backup-routes.js';
+import { makeBlobRouteHandler } from '../routes/blob-routes.js';
+import { makeConnectionsRouteHandler } from '../routes/connections-routes.js';
+import {
+  makeDataPlaneControlHandler,
+  type DataPlaneControlOptions,
+} from '../routes/data-plane-control.js';
+import { makeDemoRouteHandler } from '../routes/demo-routes.js';
+import { makeDeviceWorkRouteHandler } from '../routes/device-work-routes.js';
+import { makeDevicesRouteHandler } from '../routes/devices-routes.js';
+import { makeDiagnosticsRouteHandler } from '../routes/diagnostics-routes.js';
+import { makeFoundingRouteHandler } from '../routes/founding-routes.js';
+import { makeGatewayInfoRouteHandler } from '../routes/gateway-info-routes.js';
+import { makeHealthRouteHandler } from '../routes/health-routes.js';
+import { makeImportRouteHandler } from '../routes/import-routes.js';
+import { makeLifecycleRouteHandler } from '../routes/lifecycle-routes.js';
+import { logsEventsSubscriberCount, makeLogsRouteHandler } from '../routes/logs-routes.js';
+import { makeMembersRouteHandler } from '../routes/members-routes.js';
+import { makeRemindersRouteHandler } from '../routes/reminders-routes.js';
+import type { ReplicaIntentDispatchOutcome } from '../routes/replica-intent-route.js';
+import { makeReplicaRouteHandler } from '../routes/replica-routes.js';
+import { makeResourceRouteHandler } from '../routes/resource-routes.js';
+import { isDirectHostRequest, isLoopbackRequest, sendJson } from '../routes/route-helpers.js';
+import { makeScopesRouteHandler, SCOPES_PATH } from '../routes/scopes-routes.js';
+import { makeShareRouteHandler, SHARE_PATH } from '../routes/share-routes.js';
+import { makeStorageRouteHandler } from '../routes/storage-routes.js';
+import { makeTemplatesRouteHandler } from '../routes/templates-routes.js';
+import { makeVaultRouteHandler } from '../routes/vault-routes.js';
 import {
   assistantCwd,
   makeAssistantConversationRunner,
   makeVaultToolRunners,
 } from '../runs/assistant-conversation-runner.js';
 import { buildAssistantPrompt } from '../runs/assistant-prompt.js';
-import { makeAssistantRouteHandler } from '../routes/assistant-routes.js';
-import { makeTemplatesRouteHandler } from '../routes/templates-routes.js';
-import { makeAgentsRouteHandler, type AgentAcpCapabilities } from '../routes/agents-routes.js';
-import { makeGatewayInfoRouteHandler } from '../routes/gateway-info-routes.js';
-import { makeHealthRouteHandler } from '../routes/health-routes.js';
-import { makeResourceRouteHandler } from '../routes/resource-routes.js';
-import { makeRemindersRouteHandler } from '../routes/reminders-routes.js';
-import { HealthRegistry } from './health-registry.js';
-import { PowerContextMonitor } from './power-context.js';
-import { ResourceAccounting } from './resource-accounting.js';
+import { RunEventBus } from '../runs/run-event-bus.js';
+import { makeUnifiedConversationRunner } from '../runs/unified-conversation-runner.js';
+import { WorktreeStore } from '../worktree-store/index.js';
+import { isExpectedPrewarmSkip } from './app-prewarm-errors.js';
+import type { AssistOAuthConfig } from './assist-oauth.js';
+import { pollProviderEventSource } from './automation-event-sources.js';
+import { createBlobSweepHealthProbe } from './blob-sweep-health.js';
+import { createBrokerHealthProbe } from './broker-health.js';
+import { companionRequestAllowed } from './companion-access.js';
+import { ConnectionBroker } from './connection-broker.js';
+import type { DataPlaneHttpOptions } from './data-plane-handoff.js';
+import { defaultLogger } from './default-logger.js';
+import { createDiskHealthProbe, formatBytes } from './disk-health.js';
+import { createEnrichmentHealthProbe } from './enrichment-health.js';
+import { EnrollmentStore } from './enrollment-store.js';
+import { recoverPendingVaultErases } from './erase-recovery.js';
+import { recoverPendingFoundingVaults } from './founding-recovery.js';
+import { GatewayDatabase } from './gateway-db.js';
+import { buildDiagnosticsBundle } from './gateway-diagnostics.js';
+import { GatewayLogStore } from './gateway-log-store.js';
 import { GatewayPerformanceMonitor } from './gateway-performance.js';
-import { measureStorageLatency } from './storage-latency.js';
 import {
   formatHardwareProfileDetail,
   resolveGatewayHardwareProfile,
   toStructuredResourceProfile,
 } from './hardware-profile.js';
+import { HealthRegistry } from './health-registry.js';
+import { kitlessHostIdentity } from './host-identity.js';
 import { probeHostLimits } from './host-limits.js';
+import { LocalUsageScanner } from './local-usage.js';
+import { OutboxExecutor } from './outbox-executor.js';
+import { PairingTicketStore } from './pairing-store.js';
+import { PowerContextMonitor } from './power-context.js';
+import { PricingWarmer } from './pricing-warmer.js';
+import { ResourceAccounting } from './resource-accounting.js';
 import {
   formatEventLoopDetail,
   formatPowerPostureDeferringDetail,
@@ -223,22 +222,24 @@ import {
   RESOURCE_MODE_PREF_KEY,
   type ResourceMode,
 } from './resource-mode.js';
-import { logsEventsSubscriberCount, makeLogsRouteHandler } from '../routes/logs-routes.js';
-import { isDirectHostRequest, isLoopbackRequest, sendJson } from '../routes/route-helpers.js';
-import type { GatewayPaths } from '../paths.js';
-import { BackupService } from '../backup/backup-service.js';
-import type { BackupConfig } from '../backup/backup-config.js';
-import { deriveBackupSourceInstanceId } from '../backup/backup-state.js';
-import { openStorageConnectionStore } from '../backup/storage-connections.js';
-import { StorageUsagePoller } from '../backup/storage-usage.js';
-import { PricingWarmer } from './pricing-warmer.js';
-import { RecoveryKitStateStore } from '../backup/recovery-kit-state.js';
-import { recoverPendingVaultErases } from './erase-recovery.js';
-import { recoverPendingFoundingVaults } from './founding-recovery.js';
-import { kitlessHostIdentity } from './host-identity.js';
-import { makeStorageCredentialsResolver } from '../backup/storage-credentials.js';
-import { makeStorageRouteHandler } from '../routes/storage-routes.js';
-import { makeFoundingRouteHandler } from '../routes/founding-routes.js';
+import {
+  removedRunnerLadderMembers,
+  resolveGatewayRunnerPrefs,
+  resolveStrictGatewayRunnerPrefs,
+} from './runner-prefs.js';
+import { createSchedulerHealthProbe } from './scheduler-health.js';
+import { measureStorageLatency } from './storage-latency.js';
+import { StorageLimitsStore, evaluateStorageLimit } from './storage-limits.js';
+import { createStorageQuotaHealthProbe } from './storage-quota-health.js';
+import {
+  ingressElement,
+  ingressRetentionGap,
+  readIngressCursor,
+} from './trigger-ingress-cursor.js';
+import { runWithVaultContext, VAULT_HEADER, type DeviceAccess } from './vault-context.js';
+import { createVaultIntegrityHealthProbe } from './vault-integrity-health.js';
+import type { InstallScopeBlock, VaultPlane } from './vault-plane.js';
+import { openVaultRegistry, type VaultRegistry } from './vault-registry.js';
 import { WebAppSessions } from './web-app-sessions.js';
 import { WebControlSessionStore } from './web-session-store.js';
 
@@ -396,7 +397,10 @@ export function forRoutePrefixes(
   prefixes: string | readonly string[],
   handler: RouteHandler,
 ): RoutePrefixRegistration {
-  return { prefixes: typeof prefixes === 'string' ? [prefixes] : prefixes, handler };
+  return {
+    prefixes: typeof prefixes === 'string' ? [prefixes] : prefixes,
+    handler,
+  };
 }
 
 interface RoutePrefixNode {
@@ -446,14 +450,19 @@ export function createRoutePrefixDispatch(
     }
 
     const invoked = new Set<RoutePrefixRegistration>();
-    for (let depth = matches.length - 1; depth >= 0; depth--) {
-      for (const registration of matches[depth]!) {
-        if (invoked.has(registration)) continue;
-        invoked.add(registration);
-        if (await registration.handler(req, res)) return true;
-      }
+    async function invokeNext(depth: number, index: number): Promise<boolean> {
+      if (depth < 0) return false;
+      const registrations = matches[depth]!;
+      const registration = registrations[index];
+      if (!registration) return invokeNext(depth - 1, 0);
+      if (invoked.has(registration)) return invokeNext(depth, index + 1);
+      invoked.add(registration);
+      // Prefix handlers are an ordered authority chain: the most specific
+      // match gets first refusal, and duplicate registrations run once.
+      if (await registration.handler(req, res)) return true;
+      return invokeNext(depth, index + 1);
     }
-    return false;
+    return invokeNext(matches.length - 1, 0);
   };
 }
 
@@ -499,17 +508,20 @@ export function replicaDispatchOutcome(result: ToolResult): ReplicaIntentDispatc
       return {
         status: outcome.status,
         reason: reason ?? `app action ${outcome.status}`,
-        ...(outcome.output !== undefined ? { output: outcome.output } : {}),
+        ...(outcome.output === undefined ? {} : { output: outcome.output }),
       };
     }
     if (outcome.status === 'executed' || outcome.status === 'replayed') {
       return {
         status: 'executed',
-        ...(outcome.output !== undefined ? { output: outcome.output } : {}),
+        ...(outcome.output === undefined ? {} : { output: outcome.output }),
       };
     }
   }
-  return { status: 'executed', ...(value !== undefined ? { output: value } : {}) };
+  return {
+    status: 'executed',
+    ...(value === undefined ? {} : { output: value }),
+  };
 }
 
 // Prefixes the chat-history + prefs routes answer to, mirrored from
@@ -561,8 +573,8 @@ function readRoleRequestAllowed(req: IncomingMessage): boolean {
   // read-role device may POST to `queries/<name>` but not `actions/<name>`.
   // `_describe` moved to GET and is covered by the read-method branch above.
   if (
-    /^\/centraid\/[^_/][^/]*\/queries\/[^/]+$/.test(url.pathname) ||
-    /^\/centraid\/_draft\/[^/]+\/[^_/][^/]*\/queries\/[^/]+$/.test(url.pathname)
+    /^\/centraid\/[^_/][^/]*\/queries\/[^/]+$/u.test(url.pathname) ||
+    /^\/centraid\/_draft\/[^/]+\/[^_/][^/]*\/queries\/[^/]+$/u.test(url.pathname)
   ) {
     return true;
   }
@@ -619,7 +631,7 @@ export interface BuiltGateway {
    * desktop's file IPC) drive sessions + publishes through this. Async —
    * the store materializes lazily per vault.
    */
-  appsStore(): Promise<WorktreeStore>;
+  appsStore: () => Promise<WorktreeStore>;
   /**
    * Resolves the current request's vault's live `main` worktree apps dir,
    * rotating atomically per publish/rollback. Hosts that register their own
@@ -633,7 +645,7 @@ export interface BuiltGateway {
    * mounted vault; callers that seed the store OUT OF BAND (tests, import
    * paths) call it to settle the registry without a restart.
    */
-  syncApps(vaultId?: string): Promise<void>;
+  syncApps: (vaultId?: string) => Promise<void>;
   /** Scoped cookie sessions used only by generated apps embedded in the browser PWA. */
   webAppSessions: WebAppSessions;
   /**
@@ -678,9 +690,24 @@ export interface BuiltGateway {
    * absolute `_centraid-hook` URLs. Mounts EVERY vault's workspace, then
    * starts + reconciles each vault's cron scheduler.
    */
-  start(publicBaseUrl: string): Promise<void>;
+  start: (publicBaseUrl: string) => Promise<void>;
   /** Stop every vault's cron scheduler. Idempotent. */
-  stop(): Promise<void>;
+  stop: () => Promise<void>;
+}
+
+/** Execute stateful registration work in its declared input order. */
+async function applyInOrder<T>(
+  values: Iterable<T>,
+  visit: (value: T) => Promise<void>,
+): Promise<void> {
+  const ordered = Array.from(values);
+  async function applyNext(index: number): Promise<void> {
+    const value = ordered[index];
+    if (value === undefined) return;
+    await visit(value);
+    return applyNext(index + 1);
+  }
+  return applyNext(0);
 }
 
 export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltGateway> {
@@ -876,7 +903,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // usage is MEASURED and labeled here, never throttled. Published on the health
   // metrics source below; the worker-pool counters are read live from the
   // app-engine admission gate (which must not depend on the gateway).
-  const resourceAccounting = new ResourceAccounting({ workerPoolStats: workerAdmissionStats });
+  const resourceAccounting = new ResourceAccounting({
+    workerPoolStats: workerAdmissionStats,
+  });
 
   // Host power-context posture (#528 Phase D): a third, independent "not now"
   // signal composed into the SAME safe-loop gate as the owner pause and the
@@ -888,9 +917,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     onDeferringChange: (state) => {
       health.reportOk(
         'power-posture',
-        state.reason !== null
-          ? formatPowerPostureDeferringDetail(state.reason, state.kind)
-          : formatPowerPostureNormalDetail(),
+        state.reason === null
+          ? formatPowerPostureNormalDetail()
+          : formatPowerPostureDeferringDetail(state.reason, state.kind),
       );
     },
   });
@@ -907,7 +936,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       try {
         return await base(input, config);
       } finally {
-        resourceAccounting.recordAgentRun({ durationMs: Date.now() - startedAt });
+        resourceAccounting.recordAgentRun({
+          durationMs: Date.now() - startedAt,
+        });
       }
     };
   const accountedRunTurn = accountRunTurn(runTurn);
@@ -1017,7 +1048,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       return { status: 'error', detail: `restored from backup — ${detail}` };
     }
     return planes.length > 0
-      ? { status: 'ok', detail: `${planes.length} vault${planes.length === 1 ? '' : 's'} mounted` }
+      ? {
+          status: 'ok',
+          detail: `${planes.length} vault${planes.length === 1 ? '' : 's'} mounted`,
+        }
       : { status: 'ok', detail: 'uninitialized — no vaults founded' };
   });
 
@@ -1071,7 +1105,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       `${formatBytes(evaluation.usedBytes)} of the ${formatBytes(limits.totalLimitBytes)} ` +
       `budget (${percent}%)`;
     if (evaluation.status === 'error') {
-      return { status: 'error', detail: `${detail} — over budget; nothing is being blocked` };
+      return {
+        status: 'error',
+        detail: `${detail} — over budget; nothing is being blocked`,
+      };
     }
     if (evaluation.status === 'degraded') {
       return {
@@ -1103,7 +1140,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         detail: `${needsAuth} of ${total} connection${total === 1 ? '' : 's'} need re-auth`,
       };
     }
-    return { status: 'ok', detail: `${total} connection${total === 1 ? '' : 's'} configured` };
+    return {
+      status: 'ok',
+      detail: `${total} connection${total === 1 ? '' : 's'} configured`,
+    };
   });
 
   // Broker credential health (issue #351 tier 2): narrower than `connections`
@@ -1167,14 +1207,18 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           vaultId: p.boot.vaultId,
           listAutomations: async () => {
             const { rows } = await automation.list(settledHostFor(p.boot.vaultId).codeAppsDir());
-            return rows.map((r) => ({ id: r.id, enabled: r.enabled, ref: r.ref }));
+            return rows.map((r) => ({
+              id: r.id,
+              enabled: r.enabled,
+              ref: r.ref,
+            }));
           },
           recentRuns: (automationRef, limit) =>
             journalStoreFor(p.boot.vaultId)
               .listAutomationTurns(automationRef, { limit })
               .map((t) => ({
                 ok: t.ok,
-                ...(t.endedAt !== undefined ? { endedAt: t.endedAt } : {}),
+                ...(t.endedAt === undefined ? {} : { endedAt: t.endedAt }),
               })),
         })),
     }),
@@ -1538,7 +1582,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     if (!catalogPath || !warmer) return { list: [], status: 'empty' };
     const list = await read(catalogPath, kind);
     if (refresh || list.length === 0) void warmer.warm(kind, surface);
-    return { list, status: deriveStatus(list.length, warmer.isWarming(kind, surface)) };
+    return {
+      list,
+      status: deriveStatus(list.length, warmer.isWarming(kind, surface)),
+    };
   };
 
   const resolveCatalogModels = catalogPath
@@ -1577,7 +1624,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // picker still shows "Use default".
   const askModelPrefs = {
     get: async (): Promise<AskModelInfo> => {
-      const runnerPrefs = (await prefsLoader('ask')) ?? { kind: 'codex' as const };
+      const runnerPrefs = (await prefsLoader('ask')) ?? {
+        kind: 'codex' as const,
+      };
       const allPrefs = prefs.getAllPrefs();
       const scoped = allPrefs[`model.${runnerPrefs.kind}.ask`];
       const current = typeof scoped === 'string' && scoped.length > 0 ? scoped : null;
@@ -1597,7 +1646,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       };
     },
     set: async (model: string | null): Promise<void> => {
-      const runnerPrefs = (await prefsLoader('ask')) ?? { kind: 'codex' as const };
+      const runnerPrefs = (await prefsLoader('ask')) ?? {
+        kind: 'codex' as const,
+      };
       prefs.setPrefs({
         [`model.${runnerPrefs.kind}.ask`]: model && model.length > 0 ? model : null,
       });
@@ -1765,7 +1816,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         );
       }
     }
-    resourceAccounting.recordSweepPass({ durationMs: Date.now() - outboxStartedAt });
+    resourceAccounting.recordSweepPass({
+      durationMs: Date.now() - outboxStartedAt,
+    });
     if (failed) health.reportError('outbox', 'one or more adaptive outbox sweeps failed');
     else health.reportOk('outbox');
     const nextDelay = failed
@@ -1846,7 +1899,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         runnerSelectionSource: agent.selectionSource,
         triggerKind: opts.triggerKind,
         triggerOrigin: opts.triggerOrigin,
-        ...(opts.input !== undefined ? { input: opts.input } : {}),
+        ...(opts.input === undefined ? {} : { input: opts.input }),
         ...(opts.note ? { note: opts.note } : {}),
         ...(agent.model ? { model: agent.model } : {}),
         ...(agent.configPins ? { configPins: agent.configPins } : {}),
@@ -1875,7 +1928,12 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       // Failed before the ledger opened: close off the bus or the viewer hangs.
-      runEventBus.publish(runId, { type: 'turn.end', turnId: runId, ok: false, error: message });
+      runEventBus.publish(runId, {
+        type: 'turn.end',
+        turnId: runId,
+        ok: false,
+        error: message,
+      });
       health.reportError('automation-runs', `${opts.triggerKind} ${automationRef}: ${message}`);
       logger.warn(`${opts.triggerKind} ${automationRef} failed: ` + message);
       if (opts.propagateError) throw err;
@@ -1908,22 +1966,22 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     const built = runWithVaultContext({ vaultId }, async () => {
       const host = await buildHost(plane);
       await requireRuntime().bootstrap();
-      for (const appId of await host.store.listApps()) {
+      await applyInOrder(await host.store.listApps(), async (appId) => {
         await requireRuntime().registry.ensureUploaded(appId);
         vaultRegistry.enrollApp(appId);
         await grantDeclaredAppScopes(plane, host.store, appId);
         const appDir = await host.store.resolveActiveAppDir(appId);
         if (appDir) await prewarmApp(appId, appDir);
-      }
+      });
       // Installed bundled apps (issue #434) aren't in the git store, so the
       // loop above misses them — re-register each from the enrollment record
       // so its data plane and generic compatibility route recover after a
       // gateway restart.
-      for (const appId of plane.installedAppIds()) {
+      await applyInOrder(plane.installedAppIds(), async (appId) => {
         await requireRuntime().registry.ensureUploaded(appId);
         await grantDeclaredBundledScopes(plane, appId);
         await prewarmApp(appId, bundledAppDir(appId));
-      }
+      });
       settledHosts.set(vaultId, host);
       await reconcileScheduler(vaultId);
       return host;
@@ -1945,15 +2003,15 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     const host = await hostFor(plane);
     await runWithVaultContext({ vaultId: id }, async () => {
       await requireRuntime().bootstrap();
-      for (const appId of await host.store.listApps()) {
+      await applyInOrder(await host.store.listApps(), async (appId) => {
         await requireRuntime().registry.ensureUploaded(appId);
         vaultRegistry.enrollApp(appId);
         await grantDeclaredAppScopes(plane, host.store, appId);
-      }
-      for (const appId of plane.installedAppIds()) {
+      });
+      await applyInOrder(plane.installedAppIds(), async (appId) => {
         await requireRuntime().registry.ensureUploaded(appId);
         await grantDeclaredBundledScopes(plane, appId);
-      }
+      });
     });
     await reconcileScheduler(id);
   };
@@ -2107,9 +2165,19 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     }): Promise<{ ok: boolean; error?: string }> => {
       const { automationRef, runId, enableOnSuccess } = input;
       const parsed = automation.parseRef(automationRef);
-      if (!parsed) return { ok: false, error: `invalid automation ref "${automationRef}"` };
+      if (!parsed)
+        return {
+          ok: false,
+          error: `invalid automation ref "${automationRef}"`,
+        };
       const row = await automation.readAppOwned(codeAppsDir(), parsed.appId, parsed.automationId);
-      if (!row) return { ok: false, error: `automation "${automationRef}" does not exist` };
+      if (!row)
+        return {
+          ok: false,
+          error: `automation "${automationRef}" does not exist`,
+        };
+      const compileParsed = parsed;
+      const compileRow = row;
       const agent = await resolveAutomationAgent(row.manifest.requires);
       const enabledBeforeCompile = row.enabled;
       // Resolve core_link_anchor tokens before the model runs. The token
@@ -2142,20 +2210,21 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       );
       let finalFailure: string | undefined;
       let failoverNotice: string | undefined;
-      for (let index = 0; index < compileLadder.length; index += 1) {
+      async function runCompileRung(index: number): Promise<{ ok: true } | undefined> {
+        if (index >= compileLadder.length) return undefined;
         const kind = compileLadder[index]!;
         const selection =
           index === 0
             ? agent
             : resolveAutomationAgentSelection(
-                { ...row.manifest.requires, runner: kind },
+                { ...compileRow.manifest.requires, runner: kind },
                 prefs.getAllPrefs(),
                 kind,
                 { includeManifestProviderPins: false },
               );
         const attemptRunId = index === 0 ? runId : `${runId}:failover:${index}:${kind}`;
         const runSuffix = attemptRunId.split(':').at(-1) ?? crypto.randomUUID().slice(0, 8);
-        const sessionId = `compile-${parsed.appId}-${runSuffix}-${index}`;
+        const sessionId = `compile-${compileParsed.appId}-${runSuffix}-${index}`;
         let attemptFailure: string | undefined;
         let attemptFailureClass: string | undefined;
 
@@ -2167,11 +2236,11 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           journalDbFile: workspace.journalDbFile,
           runnerSessionDir: workspace.runnerSessionDir,
           dataDir: workspace.appsDir,
-          appId: parsed.appId,
+          appId: compileParsed.appId,
           draftSessionId: sessionId,
           automationRef,
-          automationName: row.name,
-          instructions: row.manifest.prompt,
+          automationName: compileRow.name,
+          instructions: compileRow.manifest.prompt,
           runnerKind: selection.runner,
           ...(selection.model ? { model: selection.model } : {}),
           ...(selection.configPins ? { configPins: selection.configPins } : {}),
@@ -2182,17 +2251,17 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           consentSource:
             index === 0 && selection.selectionSource !== 'manifest' ? 'direct' : 'ladder',
           hydrationAttachmentPath: (hash) =>
-            conversationHistoryStore.blobPathFor(parsed.appId, hash),
+            conversationHistoryStore.blobPathFor(compileParsed.appId, hash),
           ...(failoverNotice ? { failoverNotice } : {}),
           anchors: anchorResolution.anchors,
           ...(anchorResolution.error ? { preflightError: anchorResolution.error } : {}),
           runId: attemptRunId,
           onSuccess: async () => {
-            const appDir = await store.snapshotSessionAppDir(sessionId, parsed.appId);
+            const appDir = await store.snapshotSessionAppDir(sessionId, compileParsed.appId);
             const manifestFile = path.join(
               appDir,
               'automations',
-              parsed.automationId,
+              compileParsed.automationId,
               automation.MANIFEST_FILE,
             );
             const manifest = automation.parseManifest(await fs.readFile(manifestFile, 'utf8'));
@@ -2203,13 +2272,13 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
             });
             await fs.writeFile(manifestFile, `${JSON.stringify(compiled, null, 2)}\n`);
             await publishAndReconcile(lifecycleOpts, {
-              appId: parsed.appId,
+              appId: compileParsed.appId,
               sessionId,
               appDir,
-              message: `compile ${parsed.automationId}`,
+              message: `compile ${compileParsed.automationId}`,
               ephemeralSession: true,
             });
-            health.reportOk('automation-runs', `Plan ready for ${row.name}`);
+            health.reportOk('automation-runs', `Plan ready for ${compileRow.name}`);
           },
           onFailure: async (error, failureClass) => {
             attemptFailure = error;
@@ -2225,7 +2294,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         if (!attemptFailure) return { ok: true };
         finalFailure = attemptFailure;
         const next = compileLadder[index + 1];
-        if (!attemptFailureClass || !next) break;
+        if (!attemptFailureClass || !next) return undefined;
         failoverNotice =
           `${kind} failed at the compile boundary (${attemptFailureClass}). ` +
           `Continuing with ${next}; provider-specific model and effort pins were cleared.`;
@@ -2235,7 +2304,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           from: kind,
           to: next,
         });
+        return runCompileRung(index + 1);
       }
+      const compileResult = await runCompileRung(0);
+      if (compileResult) return compileResult;
 
       const failure = finalFailure ?? 'Compile failed without a diagnostic.';
       health.reportError(
@@ -2297,10 +2369,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         await prewarmApp(templateId, bundledAppDir(templateId));
         return {
           id: templateId,
-          ...(meta.name !== undefined ? { name: meta.name } : {}),
-          ...(meta.description !== undefined ? { description: meta.description } : {}),
-          ...(meta.iconKey !== undefined ? { iconKey: meta.iconKey } : {}),
-          ...(meta.colorKey !== undefined ? { colorKey: meta.colorKey } : {}),
+          ...(meta.name === undefined ? {} : { name: meta.name }),
+          ...(meta.description === undefined ? {} : { description: meta.description }),
+          ...(meta.iconKey === undefined ? {} : { iconKey: meta.iconKey }),
+          ...(meta.colorKey === undefined ? {} : { colorKey: meta.colorKey }),
           alreadyInstalled,
         };
       },
@@ -2356,7 +2428,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
               automation.MANIFEST_FILE,
             );
             const existing = automation.parseManifest(await fs.readFile(manifestPath, 'utf8'));
-            const revised = automation.validateManifest({ ...existing, prompt });
+            const revised = automation.validateManifest({
+              ...existing,
+              prompt,
+            });
             await stageAndMaybePublish(lifecycleOpts, {
               appId: parsed.appId,
               sessionId,
@@ -2415,7 +2490,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           },
           onFailed: (message) => {
             reportCompileTurn(`Instruction revision failed: ${message}`);
-            runEventBus.publish(compileTurnId, { type: 'turn.start', turnId: compileTurnId });
+            runEventBus.publish(compileTurnId, {
+              type: 'turn.start',
+              turnId: compileTurnId,
+            });
             runEventBus.publish(compileTurnId, {
               type: 'turn.end',
               turnId: compileTurnId,
@@ -2454,11 +2532,11 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
               return {
                 id: name,
                 name: label ?? meta.name ?? name,
-                ...(meta.description !== undefined ? { description: meta.description } : {}),
+                ...(meta.description === undefined ? {} : { description: meta.description }),
                 kind: 'app' as const,
                 hasIndex: meta.hasIndex,
-                ...(meta.iconKey !== undefined ? { iconKey: meta.iconKey } : {}),
-                ...(meta.colorKey !== undefined ? { colorKey: meta.colorKey } : {}),
+                ...(meta.iconKey === undefined ? {} : { iconKey: meta.iconKey }),
+                ...(meta.colorKey === undefined ? {} : { colorKey: meta.colorKey }),
               };
             }),
           ),
@@ -2600,7 +2678,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       const row = parsed as Record<string, unknown>;
       const ingressId = Number(row.ingressId);
       return {
-        ...(row.provider !== undefined ? { provider: row.provider } : {}),
+        ...(row.provider === undefined ? {} : { provider: row.provider }),
         ingressId: Number.isSafeInteger(ingressId) && ingressId >= 0 ? ingressId : 0,
       };
     } catch {
@@ -2696,7 +2774,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       const polled = await pollProviderEventSource({
         trigger,
         connection,
-        ...(initialProvider !== undefined ? { cursor: initialProvider } : {}),
+        ...(initialProvider === undefined ? {} : { cursor: initialProvider }),
         now: input.now,
         limit: input.limit + 1,
         pollJson: (binding, url, headers) => connectionBroker.pollJson(binding, url, headers),
@@ -2777,12 +2855,20 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     let payload: unknown;
     if (trigger.kind === 'condition') {
       payload = {
-        trigger: { kind: 'condition', index: input.triggerIndex, entity: trigger.entity },
+        trigger: {
+          kind: 'condition',
+          index: input.triggerIndex,
+          entity: trigger.entity,
+        },
         rows: [input.element.payload],
       };
     } else if (trigger.kind === 'data') {
       payload = {
-        trigger: { kind: 'data', index: input.triggerIndex, entities: trigger.entities },
+        trigger: {
+          kind: 'data',
+          index: input.triggerIndex,
+          entities: trigger.entities,
+        },
         changes: [input.element.payload],
       };
     } else if (trigger.kind === 'webhook') {
@@ -2814,7 +2900,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       triggerOrigin: input.sourceKind,
       idempotent: true,
       propagateError: true,
-      ...(payload !== undefined ? { input: payload } : {}),
+      ...(payload === undefined ? {} : { input: payload }),
       ...(gapNote(input) ? { note: gapNote(input) } : {}),
     });
   };
@@ -2828,7 +2914,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         : new automation.InProcessScheduler({
             fire: (ref) =>
               runWithVaultContext({ vaultId }, () =>
-                fireAutomation(ref, { triggerKind: 'scheduled', triggerOrigin: 'cron' }),
+                fireAutomation(ref, {
+                  triggerKind: 'scheduled',
+                  triggerOrigin: 'cron',
+                }),
               ),
             store: triggerStoreFor(vaultId),
             readCursor: (input) =>
@@ -2876,7 +2965,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     }
     const settled = state;
     const work = runWithVaultContext({ vaultId }, async () => {
-      do {
+      async function reconcilePass(): Promise<void> {
         settled.dirty = false;
         const { rows } = await automation.list(settledHostFor(vaultId).codeAppsDir());
         // Every automation app acts through an enrolled agent.agent (duaility
@@ -2914,7 +3003,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
               `added=${diff.added.length} updated=${diff.updated.length} removed=${diff.removed.length}`,
           );
         }
-      } while (settled.dirty);
+        // A nudge received mid-pass requests exactly one more settled pass.
+        if (settled.dirty) return reconcilePass();
+      }
+      await reconcilePass();
     });
     settled.inFlight = work
       .then(() =>
@@ -2969,7 +3061,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       triggerStoreFor(vaultId).pruneIngress(Date.now());
       const scheduler = schedulerFor(vaultId);
       scheduler.nudgeIngress?.(input.webhookId);
-      return { accepted: true, ...(!result.inserted ? { duplicate: true } : {}) };
+      return {
+        accepted: true,
+        ...(result.inserted ? {} : { duplicate: true }),
+      };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       health.reportError('automation-runs', `webhook ingress ${input.automationRef}: ${message}`);
@@ -2993,25 +3088,31 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     const url = new URL(req.url, 'http://x');
     const slug = url.pathname
       .slice(automation.WEBHOOK_ROUTE_PREFIX.length)
-      .replace(/^\/+/, '')
-      .replace(/\/+$/, '');
+      .replace(/^\/+/u, '')
+      .replace(/\/+$/u, '');
     // Mirror `makeWebhookRouteHandler`'s own POST + slug-shape gate so a
     // malformed request short-circuits to the default vault's 404/405
     // without paying for a scan across every vault.
     const isPost = (req.method ?? 'GET').toUpperCase() === 'POST';
-    const looksLikeSlug = /^[A-Za-z0-9_-]+$/.test(slug);
+    const looksLikeSlug = /^[A-Za-z0-9_-]+$/u.test(slug);
     let targetVaultId = vaultRegistry.defaultVaultId();
     if (isPost && looksLikeSlug) {
-      for (const plane of vaultRegistry.planesList()) {
+      const planes = vaultRegistry.planesList();
+      // The first matching mounted vault is the established resolution order;
+      // scan it one plane at a time so duplicate webhook slugs retain that
+      // deterministic behavior.
+      const findWebhookVault = async (index: number): Promise<string | undefined> => {
+        const plane = planes[index];
+        if (!plane) return undefined;
         const vaultId = plane.boot.vaultId;
         const host = settledHosts.get(vaultId);
-        if (!host) continue; // not yet mounted — nothing to match there
+        if (!host) return findWebhookVault(index + 1); // not yet mounted
         const { rows } = await automation.list(host.codeAppsDir());
-        if (rows.some((r) => automation.webhookTriggerOf(r.triggers)?.id === slug)) {
-          targetVaultId = vaultId;
-          break;
-        }
-      }
+        return rows.some((r) => automation.webhookTriggerOf(r.triggers)?.id === slug)
+          ? vaultId
+          : findWebhookVault(index + 1);
+      };
+      targetVaultId = (await findWebhookVault(0)) ?? targetVaultId;
     }
     return webhookHandlerForVault(targetVaultId)(req, res);
   };
@@ -3064,7 +3165,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         // takes effect on the next turn with no restart.
         const subsystem: ModelSubsystem = input.register === 'ask' ? 'ask' : 'builder';
         const model = await resolveModel(subsystem, input.model, input.runnerKind);
-        const resolvedInput = model !== input.model ? { ...input, model } : input;
+        const resolvedInput = model === input.model ? input : { ...input, model };
         if (input.register === 'ask') return askRunner.run(resolvedInput);
         return (await currentVaultHost()).runner.run(resolvedInput);
       },
@@ -3263,7 +3364,11 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       health,
       logs: logStore,
       vaults: vaultRegistry,
-      config: { paths, backup: options.backup, deviceAccessEnabled: Boolean(options.deviceAccess) },
+      config: {
+        paths,
+        backup: options.backup,
+        deviceAccessEnabled: Boolean(options.deviceAccess),
+      },
     });
 
   // ── Route chain ───────────────────────────────────────────────────────
@@ -3584,10 +3689,14 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       ['/centraid/_apps', '/centraid/_automations', '/centraid/_insights'],
       async (req, res) => {
         const host = await currentVaultHost();
-        for (const handler of host.handlers) {
-          if (await handler(req, res)) return true;
-        }
-        return false;
+        // Handlers are an ordered chain: a handler that claims the request
+        // must prevent all later handlers from observing it.
+        const dispatchNext = async (index: number): Promise<boolean> => {
+          const handler = host.handlers[index];
+          if (!handler) return false;
+          return (await handler(req, res)) || dispatchNext(index + 1);
+        };
+        return dispatchNext(0);
       },
     ),
   ];
@@ -3627,7 +3736,11 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         for (const subsystem of runnerSubsystems) {
           if (Object.hasOwn(patch, `runner.${subsystem}`)) switches.push(subsystem);
         }
-        for (const subsystem of switches) {
+        // Runner preflights can prompt or touch an adapter, so preserve the
+        // preference order and stop at the first unsafe candidate.
+        const validateNextSwitch = async (index: number): Promise<string | undefined> => {
+          if (index >= switches.length) return undefined;
+          const subsystem = switches[index];
           const candidate = resolveStrictGatewayRunnerPrefs(next, subsystem);
           if (!candidate)
             return `Cannot switch ${subsystem ?? 'the default lane'}: no valid agent is configured.`;
@@ -3637,8 +3750,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           });
           if (!status.ok)
             return `Cannot switch ${subsystem ?? 'the default lane'} to ${candidate.kind}: ${status.reason ?? 'preflight failed'}`;
-        }
-        return undefined;
+          return validateNextSwitch(index + 1);
+        };
+        return validateNextSwitch(0);
       },
       afterPatch: (_patch, before, after) => {
         for (const { kind, subsystem } of removedRunnerLadderMembers(before, after)) {
@@ -3822,9 +3936,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         // the device binding, so everything downstream reads "who did this"
         // off the request scope instead of re-deriving it from hardware.
         ...(enrollment ? { memberId: enrollment.memberId, memberRole: enrollment.role } : {}),
-        ...(enrollment?.grantProfile !== undefined
-          ? { grantProfile: enrollment.grantProfile }
-          : {}),
+        ...(enrollment?.grantProfile === undefined
+          ? {}
+          : { grantProfile: enrollment.grantProfile }),
       },
       () => dispatchChain(req, res),
     );
@@ -3871,9 +3985,11 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // Mount EVERY vault's workspace (#289): host bundle, app registry sync
     // + enrollment, scheduler reconcile — so each vault's automations fire
     // and each client's first request finds its vault warm.
-    for (const plane of vaultRegistry.planesList()) {
+    // Host mounting mutates the shared runtime registry, so preserve vault
+    // order rather than racing registrations during gateway startup.
+    await applyInOrder(vaultRegistry.planesList(), async (plane) => {
       await hostFor(plane);
-    }
+    });
 
     // Vault standing duties on the gateway clock: a sweep now, then hourly.
     vaultRegistry.start();

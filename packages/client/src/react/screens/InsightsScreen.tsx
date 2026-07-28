@@ -1,10 +1,12 @@
 import type { JSX, ReactNode } from 'react';
-import { Icon } from '../ui/index.js';
-import type { InsightsBridgeProps } from '../screen-contracts.js';
+
 import { insK, insKindLabel, insUsd, relativeTime } from '../format.js';
-import styles from './InsightsScreen.module.css';
+import type { InsightsBridgeProps } from '../screen-contracts.js';
 import { cx } from '../ui/cx.js';
+import { Icon } from '../ui/index.js';
 import ResourceReceiptPanel from './ResourceReceiptPanel.js';
+
+import styles from './InsightsScreen.module.css';
 
 const WINDOW_OPTIONS = [7, 30, 90] as const;
 

@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
-import { Icon, Button, KindBadge } from '../ui/index.js';
 import type { IconName } from '@centraid/design-tokens';
+import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
+
 import type {
   AuOverviewData,
   AuOverviewRowDTO,
@@ -9,12 +9,14 @@ import type {
   AuStatusKind,
   AutomationsOverviewBridgeProps,
 } from '../screen-contracts.js';
+import { cx } from '../ui/cx.js';
+import { Icon, Button, KindBadge } from '../ui/index.js';
 import { groupRuns, runOrigin, sortOverviewRows } from './automationsOverviewGrouping.js';
+
+import au from '../styles/automation.module.css';
+import cardCss from '../ui/AppCard.module.css';
 import styles from './AutomationsOverviewScreen.module.css';
 import homeCss from './HomeScreen.module.css';
-import cardCss from '../ui/AppCard.module.css';
-import { cx } from '../ui/cx.js';
-import au from '../styles/automation.module.css';
 
 // Automations overview (Automations UI revamp — see
 // receipts/issue-387-automations-ui-revamp.md; chat-thread redesign,
@@ -272,10 +274,13 @@ export default function AutomationsOverviewScreen({
 
   const load = useCallback(
     (): Promise<void> =>
-      loadDataRef.current().then(setState, (err: unknown) => {
-        setErrMsg(err instanceof Error ? err.message : String(err));
-        setState('error');
-      }),
+      loadDataRef
+        .current()
+        .then(setState)
+        .catch((err: unknown) => {
+          setErrMsg(err instanceof Error ? err.message : String(err));
+          setState('error');
+        }),
     [],
   );
 

@@ -12,6 +12,7 @@ import {
 import { I } from '../icons.ts';
 import type { DriveDoc } from '../types.ts';
 import { Icon } from './Shared.tsx';
+
 import styles from './QuickLook.module.css';
 
 // The iframe (PDF) / img stage is load-bearing: content_uri is a same-origin
@@ -88,6 +89,7 @@ export function QuickLook({
         className={styles.quickFrame}
         src={doc.content_uri}
         title={doc.title ?? 'PDF'}
+        sandbox=""
       />
     );
   } else {

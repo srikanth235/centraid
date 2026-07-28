@@ -1,10 +1,12 @@
+import { randomUUID } from 'node:crypto';
+import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
+
 import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { describe, expect, it } from 'vitest';
-import { join } from 'node:path';
-import { randomUUID } from 'node:crypto';
-import { DatabaseSync } from 'node:sqlite';
-import { makeJournalDbProvider, openJournalDb } from '../stores/gateway-db.js';
+
 import { ConversationStore } from '../conversation/store.js';
+import { makeJournalDbProvider, openJournalDb } from '../stores/gateway-db.js';
 import { InsightsStore } from './insights-store.js';
 
 /**
@@ -13,7 +15,7 @@ import { InsightsStore } from './insights-store.js';
  */
 function setup(): { runs: ConversationStore; insights: InsightsStore } {
   const dir = tempDirSync('centraid-insights-');
-  const ledger = makeJournalDbProvider(join(dir, 'journal.db'));
+  const ledger = makeJournalDbProvider(path.join(dir, 'journal.db'));
   return {
     runs: new ConversationStore(ledger),
     insights: new InsightsStore(ledger),
@@ -50,14 +52,17 @@ function seedRun(
       opts.automationName,
     );
   } else {
-    conversationId = runs.createConversation({ kind: opts.kind, userId: 'u' }).id;
+    conversationId = runs.createConversation({
+      kind: opts.kind,
+      userId: 'u',
+    }).id;
   }
   runs.insertTurn({
     turnId: runId,
     conversationId,
     triggerKind: opts.kind === 'chat' ? 'interactive' : 'manual',
     ...(opts.retryOf ? { retryOf: opts.retryOf } : {}),
-    ...(opts.hydrationTokens !== undefined ? { hydrationTokens: opts.hydrationTokens } : {}),
+    ...(opts.hydrationTokens === undefined ? {} : { hydrationTokens: opts.hydrationTokens }),
     startedAt,
   });
   runs.insertItem({
@@ -69,15 +74,19 @@ function seedRun(
     ...(opts.model ? { model: opts.model } : {}),
     ...(opts.provider ? { provider: opts.provider } : {}),
     ...(opts.effort ? { effort: opts.effort } : {}),
-    ...(opts.inputTokens !== undefined ? { inputTokens: opts.inputTokens } : {}),
-    ...(opts.outputTokens !== undefined ? { outputTokens: opts.outputTokens } : {}),
-    ...(opts.costUsd !== undefined ? { costUsd: opts.costUsd } : {}),
+    ...(opts.inputTokens === undefined ? {} : { inputTokens: opts.inputTokens }),
+    ...(opts.outputTokens === undefined ? {} : { outputTokens: opts.outputTokens }),
+    ...(opts.costUsd === undefined ? {} : { costUsd: opts.costUsd }),
     ...(opts.costSource ? { costSource: opts.costSource } : {}),
     startedAt,
     endedAt: startedAt + 100,
     durationMs: 100,
   });
-  runs.finishTurn({ turnId: runId, endedAt: startedAt + 200, ok: opts.ok !== false });
+  runs.finishTurn({
+    turnId: runId,
+    endedAt: startedAt + 200,
+    ok: opts.ok !== false,
+  });
   return runId;
 }
 
@@ -95,12 +104,12 @@ describe('InsightsStore (#514)', () => {
     expect(s.kpis.unpricedRuns).toBe(0);
     expect(s.kpis.unreportedRuns).toBe(0);
     expect('quotaTokens' in s.kpis).toBe(false);
-    expect(s.daily).toEqual([]);
-    expect(s.bySource).toEqual([]);
-    expect(s.byRunner).toEqual([]);
-    expect(s.byModel).toEqual([]);
-    expect(s.byEffort).toEqual([]);
-    expect(s.recent).toEqual([]);
+    expect(s.daily).toStrictEqual([]);
+    expect(s.bySource).toStrictEqual([]);
+    expect(s.byRunner).toStrictEqual([]);
+    expect(s.byModel).toStrictEqual([]);
+    expect(s.byEffort).toStrictEqual([]);
+    expect(s.recent).toStrictEqual([]);
   });
 
   it('reports hydration estimates as an explicit subset marker, not ordinary usage', () => {
@@ -225,7 +234,7 @@ describe('InsightsStore (#514)', () => {
       costSource: 'agent',
     });
     const s = insights.summary();
-    expect(s.byEffort).toEqual([{ effort: 'high', runs: 1, tokens: 100, costUsd: 0.2 }]);
+    expect(s.byEffort).toStrictEqual([{ effort: 'high', runs: 1, tokens: 100, costUsd: 0.2 }]);
     expect(s.recent.some((r) => r.effort === 'high')).toBe(true);
     expect(s.byEffort.some((r) => r.effort === 'default')).toBe(false);
   });
@@ -341,7 +350,7 @@ function setupWithDb(): {
   db: DatabaseSync;
 } {
   const dir = tempDirSync('centraid-insights-digest-');
-  const dbPath = join(dir, 'journal.db');
+  const dbPath = path.join(dir, 'journal.db');
   const db = openJournalDb(dbPath);
   const ledger = makeJournalDbProvider(dbPath);
   return {
@@ -401,7 +410,11 @@ describe('InsightsStore digest union (#438 + #514)', () => {
       model: 'm',
       provider: 'p',
     });
-    const archConv = runs.createConversation({ kind: 'chat', userId: 'u', id: 'arch-1' });
+    const archConv = runs.createConversation({
+      kind: 'chat',
+      userId: 'u',
+      id: 'arch-1',
+    });
     seedDigest(db, {
       conversationId: archConv.id,
       lastEndedAt: now - 10 * 86_400_000,
@@ -414,7 +427,7 @@ describe('InsightsStore digest union (#438 + #514)', () => {
     const s = insights.summary({ windowDays: 365 });
     expect(s.kpis.totalTokens).toBe(300 + 1000);
     expect(s.kpis.generations).toBe(1 + 3);
-    expect(s.byEffort).toEqual([{ effort: 'medium', runs: 3, tokens: 1000, costUsd: 0.05 }]);
+    expect(s.byEffort).toStrictEqual([{ effort: 'medium', runs: 3, tokens: 1000, costUsd: 0.05 }]);
     // bySource includes live + digest
     expect(s.bySource.some((r) => r.kind === 'chat')).toBe(true);
   });

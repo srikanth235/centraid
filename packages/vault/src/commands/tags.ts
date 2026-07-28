@@ -120,7 +120,11 @@ const TAG_ITEM: CommandDefinition = {
 };
 
 function tagItem(ctx: HandlerCtx): Record<string, unknown> {
-  const input = ctx.input as { subject_type: string; subject_id: string; label: string };
+  const input = ctx.input as {
+    subject_type: string;
+    subject_id: string;
+    label: string;
+  };
   const subject = SUBJECT_PK[input.subject_type];
   if (!subject) throw new Error(`cannot tag ${input.subject_type}`);
   const table = input.subject_type.replace('.', '_');

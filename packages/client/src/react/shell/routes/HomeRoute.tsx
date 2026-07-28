@@ -1,4 +1,5 @@
 import { useState, type JSX } from 'react';
+
 import type { AppearancePrefs } from '../../../app-shell-context.js';
 import {
   deleteApp,
@@ -11,14 +12,13 @@ import type { HomeMenuAnchor } from '../../screen-contracts.js';
 import HomeScreen from '../../screens/HomeScreen.js';
 import { useShellActions } from '../actions.js';
 import { openMenu } from '../contextMenu.js';
+import PageScroll from '../PageScroll.js';
 import { openPrompt } from '../prompt.js';
 import type { ShellMenuAnchor } from '../Sidebar.js';
-import PageScroll from '../PageScroll.js';
 import { PageLoading } from '../status.js';
 import { useAsyncData } from '../useAsyncData.js';
 import AppInfoModal from './AppInfoModal.js';
 import { collectAutomationRuns, type AutomationFeedEntry } from './automationsData.js';
-import { loadAppTemplates } from './templatesData.js';
 import {
   attentionCount,
   buildHomeAppItems,
@@ -26,6 +26,7 @@ import {
   heroDateLabel,
   HERO_SUGGESTIONS,
 } from './homeData.js';
+import { loadAppTemplates } from './templatesData.js';
 
 export interface HomeRouteProps {
   userApps: readonly UserAppMeta[];
@@ -96,7 +97,11 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
     // stays) + App info app, not a Delete (wipe files) one. Anything else
     // non-draft is a code-store app (legacy clone) that keeps Delete.
     const bundled = !draft && bundledIds.has(app.id);
-    const star = { id: 'star', label: isStarred(app.id) ? 'Unstar' : 'Star', icon: 'Star' };
+    const star = {
+      id: 'star',
+      label: isStarred(app.id) ? 'Unstar' : 'Star',
+      icon: 'Star',
+    };
     // "Edit with Centraid" / "Continue editing" (and the whole draft menu) are
     // builder entry points (issue #434, Phase 3) — omitted when the builder is
     // hidden. Drafts never render in that case, so the draft branch is
@@ -117,7 +122,12 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
             { id: 'rename', label: 'Rename', icon: 'Pencil' },
             star,
             'sep' as const,
-            { id: 'uninstall', label: 'Uninstall', icon: 'Trash', danger: true },
+            {
+              id: 'uninstall',
+              label: 'Uninstall',
+              icon: 'Trash',
+              danger: true,
+            },
           ]
         : [
             { id: 'open', label: 'Open', icon: 'Eye' },
@@ -252,7 +262,11 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
   }
   const rows = feed.status === 'ready' ? feed.data.rows : [];
   const entries = feed.status === 'ready' ? feed.data.entries : [];
-  const appItems = buildHomeAppItems(apps, { userApps, isStarred, tileVariant });
+  const appItems = buildHomeAppItems(apps, {
+    userApps,
+    isStarred,
+    tileVariant,
+  });
   const automationItems = buildHomeAutoItems(rows, entries, isStarred);
 
   return (
@@ -263,7 +277,11 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
         dateLabel={heroDateLabel()}
         appItems={appItems}
         automationItems={automationItems}
-        counts={{ all: apps.length + rows.length, apps: apps.length, automations: rows.length }}
+        counts={{
+          all: apps.length + rows.length,
+          apps: apps.length,
+          automations: rows.length,
+        }}
         attention={attentionCount(rows, entries)}
         onBuild={(prompt) => enterBuilder({ initialPrompt: prompt })}
         onOpenApp={(id) => navigate({ kind: 'app', id })}

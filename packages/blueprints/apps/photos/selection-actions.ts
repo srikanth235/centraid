@@ -33,7 +33,9 @@ export async function runBatchDelete(
   let failed = 0;
   let lastBad: VaultOutcome | undefined = undefined;
   const trashedKeys: string[] = []; // what actually landed in the trash — Undo's manifest
-  for (let i = 0; i < keys.length; i += 1) {
+  // Each action updates the captured Undo manifest, so preserve selection order.
+  const deleteNext = async (i: number): Promise<void> => {
+    if (i >= keys.length) return;
     progressEl!.textContent = `Deleting ${i + 1} of ${keys.length}…`;
     const key = keys[i]!;
     const { assetId } = parseAssetKey(key);
@@ -45,7 +47,9 @@ export async function runBatchDelete(
       failed += 1;
       lastBad = outcome;
     }
-  }
+    return deleteNext(i + 1);
+  };
+  await deleteNext(0);
   setBarBusy(false);
   exitSelectMode();
   await refresh();
@@ -75,7 +79,11 @@ export async function runBatchRestore(
   let bad = 0;
   let queued = 0;
   let lastBad: VaultOutcome | undefined = undefined;
-  for (const key of keys) {
+  // Restore is deliberately serial so its final narration names the last
+  // selection failure, as the corresponding delete batch does.
+  const restoreNext = async (index: number): Promise<void> => {
+    const key = keys[index];
+    if (!key) return;
     const { assetId } = parseAssetKey(key);
     const outcome = await act('restore', { asset_id: assetId }, scopeOfKey(key));
     if (outcome?.status === 'executed') ok += 1;
@@ -84,7 +92,9 @@ export async function runBatchRestore(
       bad += 1;
       lastBad = outcome;
     }
-  }
+    return restoreNext(index + 1);
+  };
+  await restoreNext(0);
   await refresh();
   const parts: string[] = [];
   if (ok > 0) parts.push(`Restored ${ok} ${ok === 1 ? 'item' : 'items'}`);
@@ -107,7 +117,10 @@ export async function runBatchAddToAlbum(
   let parked = 0;
   let queued = 0;
   let skipped = 0;
-  for (let i = 0; i < keys.length; i += 1) {
+  // Keep progress and command dispatch in selection order; the UI contract is
+  // one visible operation at a time even when the gateway is available.
+  const addNext = async (i: number): Promise<void> => {
+    if (i >= keys.length) return;
     progressEl!.textContent = `Adding ${i + 1} of ${keys.length}…`;
     // Albums live in the member's own scope, so only the asset half travels —
     // an audience row can be filed into an own-scope album, the scope half of
@@ -121,7 +134,9 @@ export async function runBatchAddToAlbum(
     else if (outcome?.status === 'parked') parked += 1;
     else if (outcome?.status === 'queued' || outcome?.status === 'in-flight') queued += 1;
     else skipped += 1; // usually "already in the album" — a precondition, not an error
-  }
+    return addNext(i + 1);
+  };
+  await addNext(0);
   setBarBusy(false);
   exitSelectMode();
   await refresh();

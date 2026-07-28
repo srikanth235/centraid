@@ -3,6 +3,7 @@
 // artifact shape guard rejects drift the owner surface has no control for.
 
 import { describe, expect, test } from 'vitest';
+
 import {
   assertArtifactShapeUnchanged,
   outboxVerbIsEditable,
@@ -53,20 +54,32 @@ describe('outbox-edit', () => {
 
   test('rebuildGmailSend accepts a single string "to" like the desktop DTO normalizes to', () => {
     const rebuild = rebuilderForVerb('gmail.send')!;
-    const rebuilt = rebuild(stagedRequest, { to: 'solo@example.com', subject: 'Hi', body: 'x' });
+    const rebuilt = rebuild(stagedRequest, {
+      to: 'solo@example.com',
+      subject: 'Hi',
+      body: 'x',
+    });
     expect(decodeRaw(rebuilt)).toContain('To: solo@example.com');
   });
 
   test('rebuildGmailSend falls back to "(no subject)" like the handler does for an empty subject', () => {
     const rebuild = rebuilderForVerb('gmail.send')!;
-    const rebuilt = rebuild(stagedRequest, { to: 'x@example.com', subject: '', body: 'body' });
+    const rebuilt = rebuild(stagedRequest, {
+      to: 'x@example.com',
+      subject: '',
+      body: 'body',
+    });
     expect(decodeRaw(rebuilt)).toContain('Subject: (no subject)');
   });
 
   test('rebuildGmailSend refuses an empty recipient list', () => {
     const rebuild = rebuilderForVerb('gmail.send')!;
-    expect(() => rebuild(stagedRequest, { to: [], subject: 'Hi', body: 'x' })).toThrow(/recipient/);
-    expect(() => rebuild(stagedRequest, { to: '', subject: 'Hi', body: 'x' })).toThrow(/recipient/);
+    expect(() => rebuild(stagedRequest, { to: [], subject: 'Hi', body: 'x' })).toThrow(
+      /recipient/u,
+    );
+    expect(() => rebuild(stagedRequest, { to: '', subject: 'Hi', body: 'x' })).toThrow(
+      /recipient/u,
+    );
   });
 
   const stagedArtifact = {
@@ -89,37 +102,52 @@ describe('outbox-edit', () => {
 
   test('assertArtifactShapeUnchanged rejects an added field', () => {
     expect(() =>
-      assertArtifactShapeUnchanged(stagedArtifact, { ...stagedArtifact, extra: 'nope' }),
-    ).toThrow(/exactly the staged fields/);
+      assertArtifactShapeUnchanged(stagedArtifact, {
+        ...stagedArtifact,
+        extra: 'nope',
+      }),
+    ).toThrow(/exactly the staged fields/u);
   });
 
   test('assertArtifactShapeUnchanged rejects a removed field', () => {
     const { message_id: _drop, ...withoutMessageId } = stagedArtifact;
     expect(() => assertArtifactShapeUnchanged(stagedArtifact, withoutMessageId)).toThrow(
-      /exactly the staged fields/,
+      /exactly the staged fields/u,
     );
   });
 
   test('assertArtifactShapeUnchanged rejects a field changing from string to a non-string', () => {
     expect(() =>
-      assertArtifactShapeUnchanged(stagedArtifact, { ...stagedArtifact, subject: 42 }),
-    ).toThrow(/must stay a string/);
+      assertArtifactShapeUnchanged(stagedArtifact, {
+        ...stagedArtifact,
+        subject: 42,
+      }),
+    ).toThrow(/must stay a string/u);
   });
 
   test('assertArtifactShapeUnchanged rejects a string[] field turning into a non-array or mixed-type array', () => {
     expect(() =>
-      assertArtifactShapeUnchanged(stagedArtifact, { ...stagedArtifact, to: 'not-an-array' }),
-    ).toThrow(/list of strings/);
+      assertArtifactShapeUnchanged(stagedArtifact, {
+        ...stagedArtifact,
+        to: 'not-an-array',
+      }),
+    ).toThrow(/list of strings/u);
     expect(() =>
-      assertArtifactShapeUnchanged(stagedArtifact, { ...stagedArtifact, to: ['ok', 42] }),
-    ).toThrow(/list of strings/);
+      assertArtifactShapeUnchanged(stagedArtifact, {
+        ...stagedArtifact,
+        to: ['ok', 42],
+      }),
+    ).toThrow(/list of strings/u);
   });
 
   test('assertArtifactShapeUnchanged requires non-editable fields (objects/numbers/null) to stay byte-identical', () => {
     const withExtra = { ...stagedArtifact, meta: { retries: 0 } };
     expect(() => assertArtifactShapeUnchanged(withExtra, { ...withExtra })).not.toThrow();
     expect(() =>
-      assertArtifactShapeUnchanged(withExtra, { ...withExtra, meta: { retries: 1 } }),
-    ).toThrow(/isn't editable/);
+      assertArtifactShapeUnchanged(withExtra, {
+        ...withExtra,
+        meta: { retries: 1 },
+      }),
+    ).toThrow(/isn't editable/u);
   });
 });

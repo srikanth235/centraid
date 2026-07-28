@@ -7,7 +7,11 @@ const PURPOSE = 'dpv:ServiceProvision';
 
 export default async function seedHandler({ log, ctx }) {
   const invoke = async (command, args) => {
-    const out = await ctx.vault.invoke({ command, input: args, purpose: PURPOSE });
+    const out = await ctx.vault.invoke({
+      command,
+      input: args,
+      purpose: PURPOSE,
+    });
     if (out.status !== 'executed') {
       throw new Error(`${command} ${out.status}: ${out.reason ?? 'no reason'}`);
     }
@@ -15,7 +19,9 @@ export default async function seedHandler({ log, ctx }) {
   };
 
   const travel = await invoke('knowledge.create_notebook', { name: 'Travel' });
-  const recipes = await invoke('knowledge.create_notebook', { name: 'Recipes' });
+  const recipes = await invoke('knowledge.create_notebook', {
+    name: 'Recipes',
+  });
 
   await invoke('knowledge.create_note', {
     title: 'Goa long weekend — shortlist',

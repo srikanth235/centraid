@@ -1,5 +1,7 @@
 import type { JSX } from 'react';
+
 import { roleBadge, type MemberScope } from '../memberScope.js';
+
 import styles from './ScopePicker.module.css';
 
 // "Which space?" — the explicit target every creation flow names (issue #599,

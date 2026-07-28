@@ -106,7 +106,10 @@ describe('replica query evaluation', () => {
         },
       ],
     );
-    expect(result[0]?.values).toStrictEqual({ task_id: 1, title: 'Optimistic' });
+    expect(result[0]?.values).toStrictEqual({
+      task_id: 1,
+      title: 'Optimistic',
+    });
   });
 
   test('reruns an unknown column online instead of compiling caller text locally', () => {

@@ -4,8 +4,9 @@
  * 500-line cap) — this file owns the preamble module's tests.
  */
 
-import { describe, expect, it } from 'vitest';
 import { validateManifest, type Row as AutomationRow } from '@centraid/automation';
+import { describe, expect, it } from 'vitest';
+
 import { automationContextPreamble } from './automation-turn-context.js';
 
 function row(dir: string): AutomationRow {
@@ -36,7 +37,7 @@ function row(dir: string): AutomationRow {
   };
 }
 
-describe('automationContextPreamble', () => {
+describe(automationContextPreamble, () => {
   it('contains standing instructions, exact account ids, scope, history, and steering', () => {
     const text = automationContextPreamble(
       row('/tmp/automation'),

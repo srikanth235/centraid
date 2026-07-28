@@ -1,27 +1,22 @@
+import { Feather } from '@expo/vector-icons';
+import { File } from 'expo-file-system';
+import * as Haptics from 'expo-haptics';
+import { Image } from 'expo-image';
+import * as Notifications from 'expo-notifications';
 // governance: allow-repo-hygiene file-size-limit cohesive Photos cover (timeline + memory hero + four-view switch + glass bottom bar + drawer/switcher wiring); decompose the views in a follow-up (#498)
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
-import { Image } from 'expo-image';
-import * as Haptics from 'expo-haptics';
-import { File } from 'expo-file-system';
-import * as Notifications from 'expo-notifications';
 
-import { family, useTheme } from '../../kit/theme';
 import GlassBar from '../../kit/components/GlassBar';
 import HomeKey from '../../kit/components/HomeKey';
-import { useReplica } from '../../kit/replica/ReplicaProvider';
 import { useReplicaQuery } from '../../kit/hooks/useReplicaQuery';
+import { useReplica } from '../../kit/replica/ReplicaProvider';
+import { family, useTheme } from '../../kit/theme';
 import { backupDeviceMedia } from '../../lib/upload/media-producer';
-import { Store } from '../../storage';
 import type { PhotosScreenProps } from '../../navigation';
-import PhotoTimeline from './PhotoTimeline';
-import PhotosCollectionsView from './PhotosCollectionsView';
-import PhotosCreateView from './PhotosCreateView';
-import PhotosAskView from './PhotosAskView';
-import PhotosDrawer from './PhotosDrawer';
 import SpacesSwitcher from '../../screens/home/SpacesSwitcher';
+import { Store } from '../../storage';
 import {
   IN_CLOUD_MESSAGE,
   InCloudOriginalError,
@@ -30,6 +25,11 @@ import {
   type DeviceOriginal,
 } from './device-media';
 import { imageSource } from './media-source';
+import PhotosAskView from './PhotosAskView';
+import PhotosCollectionsView from './PhotosCollectionsView';
+import PhotosCreateView from './PhotosCreateView';
+import PhotosDrawer from './PhotosDrawer';
+import PhotoTimeline from './PhotoTimeline';
 import { onThisDay } from './timeline-model';
 import { usePhotoTimeline } from './timeline-source';
 
@@ -53,7 +53,12 @@ const PILL_ITEMS: Array<{
   view: PhotosView;
 }> = [
   { key: 'photos', icon: 'image', label: 'Library', view: 'photos' },
-  { key: 'collections', icon: 'layers', label: 'Collections', view: 'collections' },
+  {
+    key: 'collections',
+    icon: 'layers',
+    label: 'Collections',
+    view: 'collections',
+  },
   { key: 'ask', icon: 'message-circle', label: 'Ask', view: 'ask' },
 ];
 
@@ -92,7 +97,10 @@ export default function PhotosHome({
           body: `${memories.length} moments from years past`,
           data: { route: 'Photos' },
         },
-        trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: fireAt },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DATE,
+          date: fireAt,
+        },
       });
       Store.set(key, true);
     });
@@ -109,14 +117,18 @@ export default function PhotosHome({
     // floor: they stay selected and are named in an alert once the run ends.
     const inCloud = new Set<string>();
     try {
-      for (const asset of selected) {
+      // Device reads and paired Live Photo writes stay serial: the run is
+      // deliberately bounded for mobile memory and preserves capture order.
+      const backupNext = async (index: number): Promise<void> => {
+        const asset = selected[index];
+        if (asset === undefined) return;
         let original: DeviceOriginal;
         try {
           original = await openDeviceOriginal(asset.localId!);
         } catch (reason) {
           if (!(reason instanceof InCloudOriginalError)) throw reason;
           inCloud.add(asset.id);
-          continue;
+          return backupNext(index + 1);
         }
         // A Live Photo's paired MOV is a distinct durable upload; the canonical
         // HEIC remains the visible asset until the vault grows a compound-media
@@ -153,7 +165,9 @@ export default function PhotosHome({
             captureGroupId: `live:${asset.localId}`,
           });
         }
-      }
+        return backupNext(index + 1);
+      };
+      await backupNext(0);
       // Anything still in iCloud stays selected so a retry is one tap.
       setSelection(inCloud);
       if (inCloud.size) {
@@ -182,9 +196,10 @@ export default function PhotosHome({
         text: String(album.name ?? 'Album'),
         onPress: () =>
           void (async () => {
-            for (const asset of timeline.assets.filter(
-              (item) => selection.has(item.id) && item.assetId,
-            )) {
+            const assets = timeline.assets.filter((item) => selection.has(item.id) && item.assetId);
+            const addNext = async (index: number): Promise<void> => {
+              const asset = assets[index];
+              if (asset === undefined) return;
               await session?.write('photos', {
                 action: 'add-to-album',
                 input: {
@@ -192,7 +207,9 @@ export default function PhotosHome({
                   asset_id: asset.assetId!,
                 },
               });
-            }
+              return addNext(index + 1);
+            };
+            await addNext(0);
             setSelection(new Set());
           })(),
       })),
@@ -380,7 +397,10 @@ export default function PhotosHome({
               style={({ pressed }) => [
                 styles.fab,
                 { backgroundColor: colors.ink },
-                view === 'create' && { borderColor: NAV_ACTIVE, borderWidth: 2 },
+                view === 'create' && {
+                  borderColor: NAV_ACTIVE,
+                  borderWidth: 2,
+                },
                 pressed && styles.fabPressed,
               ]}
             >
@@ -443,7 +463,12 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 0,
   },
-  center: { alignItems: 'center', flex: 1, justifyContent: 'center', paddingHorizontal: 28 },
+  center: {
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 28,
+  },
   emptyTitle: { fontFamily: family.displayBold, fontSize: 21, marginTop: 18 },
   header: {
     alignItems: 'center',
@@ -492,8 +517,17 @@ const styles = StyleSheet.create({
     right: 12,
     top: 11,
   },
-  memoryPillText: { color: '#fff', fontFamily: family.sansMedium, fontSize: 12 },
-  menuBtn: { alignItems: 'flex-start', height: 44, justifyContent: 'center', width: 24 },
+  memoryPillText: {
+    color: '#fff',
+    fontFamily: family.sansMedium,
+    fontSize: 12,
+  },
+  menuBtn: {
+    alignItems: 'flex-start',
+    height: 44,
+    justifyContent: 'center',
+    width: 24,
+  },
   // Every item — the Home segment and the three app tabs — shares this 60pt
   // height and centres its icon+label, so all four baselines line up across the
   // pill instead of the Home segment floating at a different offset.
@@ -516,13 +550,23 @@ const styles = StyleSheet.create({
   // reads as a smaller copy of the pill nested inside it (iOS segmented-control
   // idiom), not a circle fighting the stadium. Radius 29 = half the 58pt inset
   // height, so its rounded ends carry the same full curve as the enclosure.
-  segment: { alignItems: 'center', borderRadius: 29, flex: 1, justifyContent: 'center' },
+  segment: {
+    alignItems: 'center',
+    borderRadius: 29,
+    flex: 1,
+    justifyContent: 'center',
+  },
   pill: { flex: 1 },
   // pillItem is the tap target + the even inset around the segment (3pt top/bottom
   // keeps the segment hugging the enclosure with only a hairline gap; 4pt sides give
   // the gap between segments). Stretch (not center) so the segment fills the height.
   pillItem: { flex: 1, paddingHorizontal: 4, paddingVertical: 3 },
-  pillRow: { alignItems: 'stretch', flexDirection: 'row', height: 64, paddingHorizontal: 6 },
+  pillRow: {
+    alignItems: 'stretch',
+    flexDirection: 'row',
+    height: 64,
+    paddingHorizontal: 6,
+  },
   protectedStatus: { alignItems: 'center', flexDirection: 'row', gap: 5 },
   protectedText: { fontFamily: family.sansMedium, fontSize: 11 },
   safe: { flex: 1 },
@@ -545,7 +589,12 @@ const styles = StyleSheet.create({
     paddingTop: 6,
   },
   selectionTitle: { fontFamily: family.sansBold, fontSize: 15 },
-  sparkleBtn: { alignItems: 'center', height: 44, justifyContent: 'center', width: 32 },
+  sparkleBtn: {
+    alignItems: 'center',
+    height: 44,
+    justifyContent: 'center',
+    width: 32,
+  },
   timelineHeading: {
     alignItems: 'center',
     flexDirection: 'row',

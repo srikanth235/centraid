@@ -1,5 +1,6 @@
-import sharp from 'sharp';
 import type { PreviewCodec, PreviewOutput } from '@centraid/vault';
+import sharp from 'sharp';
+
 import { rgbaToThumbHash } from './thumbhash.js';
 
 const MAX_INPUT_PIXELS = 40_000_000;
@@ -11,7 +12,10 @@ function supported(mediaType: string): boolean {
 }
 
 function input(source: Buffer) {
-  return sharp(source, { limitInputPixels: MAX_INPUT_PIXELS, sequentialRead: true }).rotate();
+  return sharp(source, {
+    limitInputPixels: MAX_INPUT_PIXELS,
+    sequentialRead: true,
+  }).rotate();
 }
 
 async function dimensionsAllowed(source: Buffer): Promise<boolean> {
@@ -37,7 +41,12 @@ export function createNativeImagePreviewCodec(): PreviewCodec {
       try {
         if (!(await dimensionsAllowed(source))) return null;
         const { data, info } = await input(source)
-          .resize({ width: maxEdge, height: maxEdge, fit: 'inside', withoutEnlargement: true })
+          .resize({
+            width: maxEdge,
+            height: maxEdge,
+            fit: 'inside',
+            withoutEnlargement: true,
+          })
           .jpeg({ quality: 80, mozjpeg: true })
           .toBuffer({ resolveWithObject: true });
         return {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import {
   ALERT_PRESETS,
   alertKindLabel,
@@ -100,8 +101,18 @@ describe(buildAlertHistoryRows, () => {
     const rows = buildAlertHistoryRows(
       snapshot({
         alertHistory: [
-          { at: T0, kind: 'down', detail: 'fetch failed', previousSession: true },
-          { at: T0 + 10_000, kind: 'recovered', durationMs: 10_000, previousSession: false },
+          {
+            at: T0,
+            kind: 'down',
+            detail: 'fetch failed',
+            previousSession: true,
+          },
+          {
+            at: T0 + 10_000,
+            kind: 'recovered',
+            durationMs: 10_000,
+            previousSession: false,
+          },
         ],
       }),
     );

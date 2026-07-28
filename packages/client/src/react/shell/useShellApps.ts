@@ -1,7 +1,8 @@
-import { Store } from './store.js';
 import { useCallback, useEffect, useState } from 'react';
+
 import { colorForIcon, tileVisualFromListing } from '../../app-format.js';
 import { listApps, listVaults } from '../../gateway-client.js';
+import { Store } from './store.js';
 
 // Pins are per-vault state: the reconcile below prunes them against the
 // active vault's listing, so pins carried across a vault switch would all
@@ -106,14 +107,14 @@ export interface ShellAppsController {
 // pin's visual identity from its app.json listing (#263), then derives the
 // draft list. Immutable throughout so React re-renders on change.
 export function useShellApps(): ShellAppsController {
-  const [userApps, setUserAppsState] = useState<UserAppMeta[]>(() =>
+  const [userApps, setUserApps] = useState<UserAppMeta[]>(() =>
     Store.get<UserAppMeta[]>('home.userApps', []),
   );
   const [drafts, setDrafts] = useState<DraftAppMeta[]>([]);
 
-  const setUserApps = useCallback((next: UserAppMeta[]) => {
+  const updateUserApps = useCallback((next: UserAppMeta[]) => {
     Store.set('home.userApps', next);
-    setUserAppsState(next);
+    setUserApps(next);
   }, []);
 
   const apply = useCallback((snapshot: ShellAppsSnapshot | null) => {
@@ -121,7 +122,7 @@ export function useShellApps(): ShellAppsController {
       setDrafts([]);
       return;
     }
-    setUserAppsState(snapshot.userApps);
+    setUserApps(snapshot.userApps);
     setDrafts(snapshot.drafts);
   }, []);
 
@@ -139,5 +140,5 @@ export function useShellApps(): ShellAppsController {
     };
   }, [apply]);
 
-  return { userApps, drafts, refresh, setUserApps };
+  return { userApps, drafts, refresh, setUserApps: updateUserApps };
 }

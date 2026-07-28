@@ -1,9 +1,11 @@
 // Small shared presentational bits used across the Sidebar, Grid, List,
 // Details and QuickLook components. Pure functions of props — no app state.
 import type { MouseEvent } from 'react';
+
 import { custodyMeta } from '../format.ts';
 import { I } from '../icons.ts';
 import type { CustodyTone } from '../types.ts';
+
 import styles from './shared.module.css';
 
 // A trusted static SVG string rendered inline, with the exact DOM shape the

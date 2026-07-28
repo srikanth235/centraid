@@ -7,10 +7,12 @@
 // column. Exercised against an in-process fake S3 endpoint (real HTTP, SigV4).
 
 import http from 'node:http';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
-import { openVaultDb, type VaultDb } from '../db.js';
+
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+
 import { bootstrapVault } from '../bootstrap.js';
+import { openVaultDb, type VaultDb } from '../db.js';
 import { updateBlobStoreSettings } from '../host.js';
 import { BLOB_CACHE_DDL } from '../schema/blob.js';
 import { ReplicaIndex } from './replica-index.js';
@@ -20,7 +22,7 @@ interface FakeS3 {
   url: string;
   objects: Map<string, Buffer>;
   requests: { method: string; key: string }[];
-  close(): Promise<void>;
+  close: () => Promise<void>;
 }
 
 function startFakeS3(): Promise<FakeS3> {
@@ -28,7 +30,7 @@ function startFakeS3(): Promise<FakeS3> {
   const requests: { method: string; key: string }[] = [];
   const server = http.createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://s3.local');
-    const key = decodeURIComponent(url.pathname).replace(/^\/test-bucket\/?/, '');
+    const key = decodeURIComponent(url.pathname).replace(/^\/test-bucket\/?/u, '');
     requests.push({ method: req.method ?? '', key });
     const chunks: Buffer[] = [];
     req.on('data', (c: Buffer) => chunks.push(c));
@@ -63,7 +65,7 @@ function startFakeS3(): Promise<FakeS3> {
         if (!found) return void res.writeHead(404).end();
         const range = req.headers.range;
         if (typeof range === 'string') {
-          const m = /bytes=(\d+)-(\d*)/.exec(range);
+          const m = /bytes=(?<start>\d+)-(?<end>\d*)/u.exec(range);
           const start = Number(m?.[1] ?? 0);
           const end = m?.[2] ? Number(m[2]) : found.length - 1;
           return void res.writeHead(206).end(found.subarray(start, end + 1));
@@ -111,7 +113,11 @@ describe('store-routing', () => {
       filename: 'photo.png',
     }).sha256;
     const derivative = (variant: 'thumb' | 'preview' | 'poster', bytes: string): string =>
-      stageBlobBytes(db, { bytes: Buffer.from(bytes), variant, variantOf: original }).sha256;
+      stageBlobBytes(db, {
+        bytes: Buffer.from(bytes),
+        variant,
+        variantOf: original,
+      }).sha256;
     return {
       original,
       thumb: derivative('thumb', 'thumb-bytes-aaa'),
@@ -225,7 +231,12 @@ describe('store-routing', () => {
     try {
       bootstrapVault(db, { ownerName: 'Legacy Owner' });
       updateBlobStoreSettings(db, {
-        blob_store: { kind: 's3', endpoint: fake.url, bucket: 'test-bucket', prefix: CAS_PREFIX },
+        blob_store: {
+          kind: 's3',
+          endpoint: fake.url,
+          bucket: 'test-bucket',
+          prefix: CAS_PREFIX,
+        },
       });
       const shas = stageOriginalWithDerivatives(db);
       await db.blobs.replicate();
@@ -235,7 +246,9 @@ describe('store-routing', () => {
         expect(fake.objects.has(derivedKey(sha))).toBe(false);
       }
       const stores = (
-        db.vault.prepare('SELECT store FROM blob_replica').all() as { store: string }[]
+        db.vault.prepare('SELECT store FROM blob_replica').all() as {
+          store: string;
+        }[]
       ).map((r) => r.store);
       expect(stores).toStrictEqual(['cas', 'cas', 'cas', 'cas']);
     } finally {

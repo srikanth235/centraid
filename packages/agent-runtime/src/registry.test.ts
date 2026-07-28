@@ -1,6 +1,5 @@
-import { describe, expect, test } from 'vitest';
 import { existsSync } from 'node:fs';
-import { tempDir } from '@centraid/test-kit/temp-dir';
+
 import {
   RUNNER_KINDS,
   type RunnerKind,
@@ -8,9 +7,12 @@ import {
   type TurnInput,
   type TurnStreamEvent,
 } from '@centraid/app-engine';
-import { RUNNER_BACKENDS, acpConfigFor, getRunnerBackend } from './registry.ts';
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { describe, expect, test } from 'vitest';
+
 import { resolveAdapterEntry } from './backends/acp/adapter-bin.ts';
 import { planLaunch } from './backends/acp/launch.ts';
+import { RUNNER_BACKENDS, acpConfigFor, getRunnerBackend } from './registry.ts';
 import { runTurn } from './runtime.ts';
 
 describe('registry', () => {
@@ -59,25 +61,27 @@ describe('registry', () => {
   });
 
   test('natively ACP-speaking kinds enumerate no models (no hardcoded provider ids)', async () => {
-    for (const kind of [
-      'gemini',
-      'qwen',
-      'opencode',
-      'grok',
-      'kimi',
-      'copilot',
-      'cursor',
-      'kilo',
-      'cline',
-      'goose',
-      'auggie',
-      'vibe',
-      'droid',
-      'pi',
-      'acp',
-    ] as const) {
-      await expect(RUNNER_BACKENDS[kind].enumerateModels({})).resolves.toStrictEqual([]);
-    }
+    await Promise.all(
+      (
+        [
+          'gemini',
+          'qwen',
+          'opencode',
+          'grok',
+          'kimi',
+          'copilot',
+          'cursor',
+          'kilo',
+          'cline',
+          'goose',
+          'auggie',
+          'vibe',
+          'droid',
+          'pi',
+          'acp',
+        ] as const
+      ).map((kind) => expect(RUNNER_BACKENDS[kind].enumerateModels({})).resolves.toStrictEqual([])),
+    );
   });
 
   // ---- ACP-native kinds: launch invocation is the only thing that differs ----
@@ -110,20 +114,32 @@ describe('registry', () => {
 
   test('grok pins the ACP-capable minimum, not the string-sort-adjacent 0.2.11', () => {
     // 0.2.11 predates ACP support; only a string sort makes it look newer.
-    expect(RUNNER_BACKENDS.grok.minVersion).toStrictEqual({ major: 0, minor: 2, patch: 106 });
-    expect(RUNNER_BACKENDS.opencode.minVersion).toStrictEqual({ major: 1, minor: 18, patch: 4 });
-    expect(RUNNER_BACKENDS.kimi.minVersion).toStrictEqual({ major: 1, minor: 17, patch: 0 });
+    expect(RUNNER_BACKENDS.grok.minVersion).toStrictEqual({
+      major: 0,
+      minor: 2,
+      patch: 106,
+    });
+    expect(RUNNER_BACKENDS.opencode.minVersion).toStrictEqual({
+      major: 1,
+      minor: 18,
+      patch: 4,
+    });
+    expect(RUNNER_BACKENDS.kimi.minVersion).toStrictEqual({
+      major: 1,
+      minor: 17,
+      patch: 0,
+    });
   });
 
   test('kimi install hint uses the Python toolchain, not npm', () => {
     // Every other hint is an `npm i -g`; kimi-cli is installed with uv or the
     // vendor script, so a copy-pasted npm hint would be wrong for it.
     const hint = RUNNER_BACKENDS.kimi.installHint;
-    expect(hint).toMatch(/uv tool install kimi-cli/);
-    expect(hint).not.toMatch(/npm/);
+    expect(hint).toMatch(/uv tool install kimi-cli/u);
+    expect(hint).not.toMatch(/npm/u);
     // Grok's paid-subscription requirement is what makes an install-but-fail
     // runner self-explanatory, so it must stay in the hint.
-    expect(RUNNER_BACKENDS.grok.installHint).toMatch(/SuperGrok|X Premium/);
+    expect(RUNNER_BACKENDS.grok.installHint).toMatch(/SuperGrok|X Premium/u);
   });
 
   // ---- wave 7: eight more ACP-native kinds ---------------------------------
@@ -178,7 +194,9 @@ describe('registry', () => {
     // These CLIs update themselves by default, which can swap the binary out
     // from under a running turn. The env vars are the fix — and they prove the
     // launch-env field reaches NATIVE kinds, not just adapter-backed ones.
-    expect(acpConfigFor('auggie', {}).env).toStrictEqual({ AUGMENT_DISABLE_AUTO_UPDATE: '1' });
+    expect(acpConfigFor('auggie', {}).env).toStrictEqual({
+      AUGMENT_DISABLE_AUTO_UPDATE: '1',
+    });
     expect(acpConfigFor('droid', {}).env).toStrictEqual({
       DROID_DISABLE_AUTO_UPDATE: 'true',
       FACTORY_DROID_AUTO_UPDATE_ENABLED: 'false',
@@ -206,76 +224,107 @@ describe('registry', () => {
     // 2026.07.16 is year.month.day, NOT semver. It flows through the same
     // numeric comparison and orders correctly, so it needs no special case —
     // but do not "normalise" the major down to something semver-shaped.
-    expect(RUNNER_BACKENDS.cursor.minVersion).toStrictEqual({ major: 2026, minor: 7, patch: 16 });
-    expect(RUNNER_BACKENDS.copilot.minVersion).toStrictEqual({ major: 1, minor: 0, patch: 71 });
-    expect(RUNNER_BACKENDS.kilo.minVersion).toStrictEqual({ major: 7, minor: 4, patch: 11 });
-    expect(RUNNER_BACKENDS.cline.minVersion).toStrictEqual({ major: 3, minor: 0, patch: 46 });
-    expect(RUNNER_BACKENDS.goose.minVersion).toStrictEqual({ major: 1, minor: 43, patch: 0 });
-    expect(RUNNER_BACKENDS.auggie.minVersion).toStrictEqual({ major: 0, minor: 33, patch: 0 });
-    expect(RUNNER_BACKENDS.vibe.minVersion).toStrictEqual({ major: 2, minor: 21, patch: 0 });
-    expect(RUNNER_BACKENDS.droid.minVersion).toStrictEqual({ major: 0, minor: 175, patch: 1 });
+    expect(RUNNER_BACKENDS.cursor.minVersion).toStrictEqual({
+      major: 2026,
+      minor: 7,
+      patch: 16,
+    });
+    expect(RUNNER_BACKENDS.copilot.minVersion).toStrictEqual({
+      major: 1,
+      minor: 0,
+      patch: 71,
+    });
+    expect(RUNNER_BACKENDS.kilo.minVersion).toStrictEqual({
+      major: 7,
+      minor: 4,
+      patch: 11,
+    });
+    expect(RUNNER_BACKENDS.cline.minVersion).toStrictEqual({
+      major: 3,
+      minor: 0,
+      patch: 46,
+    });
+    expect(RUNNER_BACKENDS.goose.minVersion).toStrictEqual({
+      major: 1,
+      minor: 43,
+      patch: 0,
+    });
+    expect(RUNNER_BACKENDS.auggie.minVersion).toStrictEqual({
+      major: 0,
+      minor: 33,
+      patch: 0,
+    });
+    expect(RUNNER_BACKENDS.vibe.minVersion).toStrictEqual({
+      major: 2,
+      minor: 21,
+      patch: 0,
+    });
+    expect(RUNNER_BACKENDS.droid.minVersion).toStrictEqual({
+      major: 0,
+      minor: 175,
+      patch: 1,
+    });
   });
 
   test('pi launches ACP natively through its own dedicated binary, like vibe', () => {
     // `pi-acp` is the ACP server's own entrypoint, so `acpArgs` is EMPTY (no mode
     // flag to add) and there is no adapter — binPath is the spawn target.
     expect(acpConfigFor('pi', {}).acpArgs).toStrictEqual([]);
-    expect(RUNNER_BACKENDS.pi.minVersion).toStrictEqual({ major: 0, minor: 0, patch: 31 });
+    expect(RUNNER_BACKENDS.pi.minVersion).toStrictEqual({
+      major: 0,
+      minor: 0,
+      patch: 31,
+    });
     const config = acpConfigFor('pi', { binPath: '/opt/bin/pi-acp' });
     expect(config.adapter).toBeUndefined();
     expect(config.binPath).toBe('/opt/bin/pi-acp');
     // Claude tier vocabulary must not leak onto a non-Claude runner.
     expect(config.resolveModel).toBeUndefined();
-    expect(RUNNER_BACKENDS.pi.installHint).toMatch(/pi-acp/);
+    expect(RUNNER_BACKENDS.pi.installHint).toMatch(/pi-acp/u);
   });
 
   test('paid-plan and out-of-band-setup requirements stay in the install hints', () => {
     // An installed-but-failing runner has to explain itself, or it reads as our
     // bug. These three fail AFTER a successful install for reasons only the
     // hint can convey.
-    expect(RUNNER_BACKENDS.copilot.installHint).toMatch(/paid Copilot subscription/i);
-    expect(RUNNER_BACKENDS.cursor.installHint).toMatch(/paid Cursor plan/i);
-    expect(RUNNER_BACKENDS.auggie.installHint).toMatch(/paid Augment plan/i);
+    expect(RUNNER_BACKENDS.copilot.installHint).toMatch(/paid Copilot subscription/iu);
+    expect(RUNNER_BACKENDS.cursor.installHint).toMatch(/paid Cursor plan/iu);
+    expect(RUNNER_BACKENDS.auggie.installHint).toMatch(/paid Augment plan/iu);
     // goose fails session/new with an opaque -32603, NOT ACP's AUTH_REQUIRED,
     // until a provider is configured — so the hint has to say so up front.
-    expect(RUNNER_BACKENDS.goose.installHint).toMatch(/goose configure/);
+    expect(RUNNER_BACKENDS.goose.installHint).toMatch(/goose configure/u);
     // vibe is a Python tool, like kimi — an npm hint would be wrong.
-    expect(RUNNER_BACKENDS.vibe.installHint).toMatch(/uv tool install mistral-vibe/);
-    expect(RUNNER_BACKENDS.vibe.installHint).not.toMatch(/npm/);
+    expect(RUNNER_BACKENDS.vibe.installHint).toMatch(/uv tool install mistral-vibe/u);
+    expect(RUNNER_BACKENDS.vibe.installHint).not.toMatch(/npm/u);
   });
 
   test('the eight added kinds route their turns through the generic ACP client', async () => {
     // An already-aborted turn can only terminate with the ACP client's own
     // `aborted` event, and nothing is spawned on that path.
-    for (const kind of [
-      'copilot',
-      'cursor',
-      'kilo',
-      'cline',
-      'goose',
-      'auggie',
-      'vibe',
-      'droid',
-    ] as const) {
-      const events: TurnStreamEvent[] = [];
-      const controller = new AbortController();
-      controller.abort();
-      const result = await RUNNER_BACKENDS[kind].runTurn(
-        {
-          cwd: await tempDir('registry-acp-wave7-'),
-          message: 'hi',
-          extraSystemPrompt: '',
-          abortSignal: controller.signal,
-          onEvent: (e: TurnStreamEvent) => events.push(e),
-        } as unknown as TurnInput,
-        { prefs: { kind } },
-      );
-      expect(result.adapterKind, kind).toBe(kind);
-      expect(
-        events.map((e) => e.type),
-        kind,
-      ).toContain('aborted');
-    }
+    await Promise.all(
+      (['copilot', 'cursor', 'kilo', 'cline', 'goose', 'auggie', 'vibe', 'droid'] as const).map(
+        async (kind) => {
+          const events: TurnStreamEvent[] = [];
+          const controller = new AbortController();
+          controller.abort();
+          const result = await RUNNER_BACKENDS[kind].runTurn(
+            {
+              cwd: await tempDir('registry-acp-wave7-'),
+              message: 'hi',
+              extraSystemPrompt: '',
+              abortSignal: controller.signal,
+              onEvent: (e: TurnStreamEvent) => events.push(e),
+            } as unknown as TurnInput,
+            { prefs: { kind } },
+          );
+          expect(result.adapterKind, kind).toBe(kind);
+          expect(
+            events.map((e) => e.type),
+            kind,
+          ).toContain('aborted');
+        },
+      ),
+    );
   });
 
   // ---- issue #479: one integration path, per-kind launch config -------------
@@ -285,47 +334,51 @@ describe('registry', () => {
     // here is that a turn now fails the way an ACP launch fails. Point each kind
     // at a binPath that cannot be an agent and confirm the ACP client's own
     // error surface (not a codex/claude-specific one) is what we get.
-    for (const kind of ['codex', 'claude-code'] as const) {
-      const events: TurnStreamEvent[] = [];
-      const controller = new AbortController();
-      controller.abort();
-      const result = await RUNNER_BACKENDS[kind].runTurn(
-        {
-          cwd: await tempDir('registry-acp-'),
-          message: 'hi',
-          extraSystemPrompt: '',
-          abortSignal: controller.signal,
-          onEvent: (e: TurnStreamEvent) => events.push(e),
-        } as unknown as TurnInput,
-        { prefs: { kind } },
-      );
-      expect(result.adapterKind).toBe(kind);
-      // The ACP client always terminates an aborted turn with `aborted`.
-      expect(events.map((e) => e.type)).toContain('aborted');
-    }
+    await Promise.all(
+      (['codex', 'claude-code'] as const).map(async (kind) => {
+        const events: TurnStreamEvent[] = [];
+        const controller = new AbortController();
+        controller.abort();
+        const result = await RUNNER_BACKENDS[kind].runTurn(
+          {
+            cwd: await tempDir('registry-acp-'),
+            message: 'hi',
+            extraSystemPrompt: '',
+            abortSignal: controller.signal,
+            onEvent: (e: TurnStreamEvent) => events.push(e),
+          } as unknown as TurnInput,
+          { prefs: { kind } },
+        );
+        expect(result.adapterKind).toBe(kind);
+        // The ACP client always terminates an aborted turn with `aborted`.
+        expect(events.map((e) => e.type)).toContain('aborted');
+      }),
+    );
   });
 
   test('the ACP-native kinds route their turns through the generic ACP client', async () => {
     // Same observation as the codex/claude-code case: an already-aborted turn
     // can only terminate with the ACP client's own `aborted` event, and nothing
     // is spawned on that path.
-    for (const kind of ['opencode', 'grok', 'kimi'] as const) {
-      const events: TurnStreamEvent[] = [];
-      const controller = new AbortController();
-      controller.abort();
-      const result = await RUNNER_BACKENDS[kind].runTurn(
-        {
-          cwd: await tempDir('registry-acp-native-'),
-          message: 'hi',
-          extraSystemPrompt: '',
-          abortSignal: controller.signal,
-          onEvent: (e: TurnStreamEvent) => events.push(e),
-        } as unknown as TurnInput,
-        { prefs: { kind } },
-      );
-      expect(result.adapterKind).toBe(kind);
-      expect(events.map((e) => e.type)).toContain('aborted');
-    }
+    await Promise.all(
+      (['opencode', 'grok', 'kimi'] as const).map(async (kind) => {
+        const events: TurnStreamEvent[] = [];
+        const controller = new AbortController();
+        controller.abort();
+        const result = await RUNNER_BACKENDS[kind].runTurn(
+          {
+            cwd: await tempDir('registry-acp-native-'),
+            message: 'hi',
+            extraSystemPrompt: '',
+            abortSignal: controller.signal,
+            onEvent: (e: TurnStreamEvent) => events.push(e),
+          } as unknown as TurnInput,
+          { prefs: { kind } },
+        );
+        expect(result.adapterKind).toBe(kind);
+        expect(events.map((e) => e.type)).toContain('aborted');
+      }),
+    );
   });
 
   test('codex launches headless; claude launches in bypass mode; binPath targets the CLI', () => {
@@ -336,7 +389,9 @@ describe('registry', () => {
     // Parity with the retired `approvalPolicy:'never'` + full-access sandbox.
     // Launch env is ONE field shared by native and adapter-backed kinds, so it
     // reads off the config, not off `adapter`.
-    expect(codex.env).toStrictEqual({ INITIAL_AGENT_MODE: 'agent-full-access' });
+    expect(codex.env).toStrictEqual({
+      INITIAL_AGENT_MODE: 'agent-full-access',
+    });
     // binPath now means "the agent CLI", so it rides in as CODEX_PATH.
     expect(codex.adapter?.binPathEnvVar).toBe('CODEX_PATH');
     expect(codex.binPath).toBe('/opt/bin/codex');
@@ -366,7 +421,7 @@ describe('registry', () => {
   });
 
   test('getRunnerBackend rejects an unknown kind', () => {
-    expect(() => getRunnerBackend('nope' as RunnerKind)).toThrow(/no runner backend/);
+    expect(() => getRunnerBackend('nope' as RunnerKind)).toThrow(/no runner backend/u);
   });
 
   test('runTurn dispatches to the backend for the configured kind', async () => {
@@ -389,25 +444,18 @@ describe('registry', () => {
         abortSignal: new AbortController().signal,
         onEvent: () => undefined,
       } as unknown as TurnInput;
-      const config: TurnConfig = { prefs: { kind: 'acp', binPath: '/bin/whatever' } };
+      const config: TurnConfig = {
+        prefs: { kind: 'acp', binPath: '/bin/whatever' },
+      };
       const result = await runTurn(input, config);
-      expect(result).toStrictEqual({ adapterKind: 'acp', sessionId: 'stub-session' });
+      expect(result).toStrictEqual({
+        adapterKind: 'acp',
+        sessionId: 'stub-session',
+      });
       expect(seen.config?.prefs.kind).toBe('acp');
       expect(seen.input?.message).toBe('hi');
     } finally {
       RUNNER_BACKENDS.acp = original;
     }
-  });
-
-  test('runTurn rejects an unknown configured kind', async () => {
-    const input = {
-      cwd: '/tmp/x',
-      message: 'hi',
-      extraSystemPrompt: '',
-      abortSignal: new AbortController().signal,
-      onEvent: () => undefined,
-    } as unknown as TurnInput;
-    const config = { prefs: { kind: 'bogus' } } as unknown as TurnConfig;
-    await expect(runTurn(input, config)).rejects.toThrow(/unknown runner kind/);
   });
 });

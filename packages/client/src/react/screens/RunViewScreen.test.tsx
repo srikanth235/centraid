@@ -1,13 +1,18 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
 import type { RunViewBridgeProps, RunViewSnapshot } from '../screen-contracts.js';
 import RunViewScreen from './RunViewScreen.js';
 
 function makeSnapshot(over: Partial<RunViewSnapshot> = {}): RunViewSnapshot {
   return {
     messages: [
-      { kind: 'user', text: 'Summarize the inbox.', createdAt: Date.now() - 4000 },
+      {
+        kind: 'user',
+        text: 'Summarize the inbox.',
+        createdAt: Date.now() - 4000,
+      },
       {
         kind: 'tools',
         label: '1 tool',
@@ -35,7 +40,11 @@ function makeSnapshot(over: Partial<RunViewSnapshot> = {}): RunViewSnapshot {
     triggersSummary: 'Every day at 8am',
     triggerHeroIcon: 'Clock',
     promptInstr: 'Summarize the inbox.',
-    final: { kind: 'ok', model: 'claude-opus-4-8', summary: 'Done — 12 emails.' },
+    final: {
+      kind: 'ok',
+      model: 'claude-opus-4-8',
+      summary: 'Done — 12 emails.',
+    },
     side: {
       outcomeKind: 'success',
       outcomeLabel: 'Completed',
@@ -57,7 +66,12 @@ function makeSnapshot(over: Partial<RunViewSnapshot> = {}): RunViewSnapshot {
       duration: '4s',
     },
     logRows: [
-      { time: '00:00.0', tone: 'trigger', label: 'Run started by cron', sub: 'Every day at 8am' },
+      {
+        time: '00:00.0',
+        tone: 'trigger',
+        label: 'Run started by cron',
+        sub: 'Every day at 8am',
+      },
       {
         time: '00:01.2',
         tone: 'ok',
@@ -65,7 +79,12 @@ function makeSnapshot(over: Partial<RunViewSnapshot> = {}): RunViewSnapshot {
         sub: 'tool',
         input: '{ "q": "is:unread" }',
       },
-      { time: '00:04.0', tone: 'ok', label: 'Run completed', sub: 'Done — 12 emails.' },
+      {
+        time: '00:04.0',
+        tone: 'ok',
+        label: 'Run completed',
+        sub: 'Done — 12 emails.',
+      },
     ],
     ...over,
   };
@@ -74,11 +93,11 @@ function makeSnapshot(over: Partial<RunViewSnapshot> = {}): RunViewSnapshot {
 function makeProps(over: Partial<RunViewBridgeProps> = {}): RunViewBridgeProps {
   return {
     initialMode: 'timeline',
-    onReady: vi.fn(),
-    onBack: vi.fn(),
-    onOpenAutomation: vi.fn(),
-    onRunAgain: vi.fn(),
-    onSetMode: vi.fn(),
+    onReady: vi.fn<RunViewBridgeProps['onReady']>(),
+    onBack: vi.fn<RunViewBridgeProps['onBack']>(),
+    onOpenAutomation: vi.fn<RunViewBridgeProps['onOpenAutomation']>(),
+    onRunAgain: vi.fn<RunViewBridgeProps['onRunAgain']>(),
+    onSetMode: vi.fn<RunViewBridgeProps['onSetMode']>(),
     ...over,
   };
 }

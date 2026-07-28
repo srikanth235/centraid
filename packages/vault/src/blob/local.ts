@@ -7,6 +7,7 @@
 // with a two-hex-char fan-out (a directory detail, not part of any key);
 // in-memory vaults (tests) get a Map with identical semantics.
 
+import { randomBytes } from 'node:crypto';
 import {
   closeSync,
   createReadStream,
@@ -25,7 +26,7 @@ import {
 } from 'node:fs';
 import path from 'node:path';
 import type { Readable } from 'node:stream';
-import { randomBytes } from 'node:crypto';
+
 import { asVaultDiskFullError } from '../errors.js';
 import { assertSha, resolveRange, type BlobRange, type BlobStat, type BlobStore } from './store.js';
 
@@ -46,20 +47,20 @@ export type BlobLinkOutcome = 'linked' | 'exists' | 'unsupported';
 
 /** The synchronous surface the command pipeline and sweeps rely on. */
 export interface LocalBlobStore extends BlobStore {
-  putSync(sha256: string, bytes: Buffer): void;
-  getSync(sha256: string, range?: BlobRange): Buffer | null;
-  hasSync(sha256: string): boolean;
-  deleteSync(sha256: string): void;
-  listSync(): string[];
-  statSync(sha256: string): BlobStat | null;
+  putSync: (sha256: string, bytes: Buffer) => void;
+  getSync: (sha256: string, range?: BlobRange) => Buffer | null;
+  hasSync: (sha256: string) => boolean;
+  deleteSync: (sha256: string) => void;
+  listSync: () => string[];
+  statSync: (sha256: string) => BlobStat | null;
   /**
    * Atomically adopt a fully-written, hash-verified ingress temp file under
    * its content address. File stores rename without materializing the body;
    * memory stores may read it for test parity. Returns false on a dedup hit.
    */
-  adoptTempSync?(sha256: string, tempPath: string): boolean;
+  adoptTempSync?: (sha256: string, tempPath: string) => boolean;
   /** Allocate a same-filesystem temp path for a bounded remote promotion. */
-  promotionTempPathSync?(sha256: string): string;
+  promotionTempPathSync?: (sha256: string) => string;
   /**
    * Open a large blob for streaming (issue #367 §C8) instead of reading it
    * whole into memory — the replication path uses this for anything over
@@ -67,12 +68,16 @@ export interface LocalBlobStore extends BlobStore {
    * (e.g. `MemoryBlobStore`) or the blob is absent; callers fall back to
    * `getSync`.
    */
-  openReadStreamSync?(
+  openReadStreamSync?: (
     sha256: string,
     range?: BlobRange,
-  ): { stream: Readable; size: number; range: { start: number; end: number } } | null;
+  ) => {
+    stream: Readable;
+    size: number;
+    range: { start: number; end: number };
+  } | null;
   /** Local path for an authorized X-Sendfile-style native handoff. */
-  localPathSync?(sha256: string): string | null;
+  localPathSync?: (sha256: string) => string | null;
   /**
    * Adopt `sourcePath`'s bytes under `sha256` by HARDLINK (issue #599 decision
    * 11) — the share-by-placement primitive. Present only on file-backed
@@ -80,7 +85,7 @@ export interface LocalBlobStore extends BlobStore {
    * instead. The two-hex fan-out stays a directory detail owned by this
    * module, so callers never compute a CAS path themselves.
    */
-  linkFromSync?(sha256: string, sourcePath: string): BlobLinkOutcome;
+  linkFromSync?: (sha256: string, sourcePath: string) => BlobLinkOutcome;
 }
 
 export class FsBlobStore implements LocalBlobStore {
@@ -167,7 +172,7 @@ export class FsBlobStore implements LocalBlobStore {
         continue;
       }
       for (const name of entries) {
-        if (/^[0-9a-f]{64}$/.test(name)) shas.push(name);
+        if (/^[0-9a-f]{64}$/u.test(name)) shas.push(name);
       }
     }
     return shas.sort();
@@ -185,7 +190,11 @@ export class FsBlobStore implements LocalBlobStore {
   openReadStreamSync(
     sha: string,
     range?: BlobRange,
-  ): { stream: Readable; size: number; range: { start: number; end: number } } | null {
+  ): {
+    stream: Readable;
+    size: number;
+    range: { start: number; end: number };
+  } | null {
     const stat = this.statSync(sha);
     if (!stat) return null;
     const resolved = resolveRange(stat.size, range);

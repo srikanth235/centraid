@@ -33,13 +33,12 @@
  */
 
 import { createHash, randomBytes } from 'node:crypto';
-import { sealAad, unsealValue, type InvokeOutcome } from '@centraid/vault';
+
 import type { RuntimeLogger } from '@centraid/app-engine';
 import type { ConnectionAuth, ConnectionBinding, ResolveConnection } from '@centraid/automation';
-import type { PollJsonResponse } from './automation-event-sources.js';
-import type { VaultPlane } from './vault-plane.js';
-import { authDeadError, ConnectionLimiter, delay } from './connection-limiter.js';
-import { timeoutSignal } from './fetch-timeout.js';
+import { sealAad, unsealValue, type InvokeOutcome } from '@centraid/vault';
+
+import { PROVIDER_PRESETS } from '../routes/connection-providers.js';
 import {
   ASSIST_GOOGLE_AUTH_URL,
   assistCallbackUrl,
@@ -47,7 +46,10 @@ import {
   validateAssistOAuthConfig,
   type AssistOAuthConfig,
 } from './assist-oauth.js';
-import { PROVIDER_PRESETS } from '../routes/connection-providers.js';
+import type { PollJsonResponse } from './automation-event-sources.js';
+import { authDeadError, ConnectionLimiter, delay } from './connection-limiter.js';
+import { timeoutSignal } from './fetch-timeout.js';
+import type { VaultPlane } from './vault-plane.js';
 
 /** Purpose stamped on the broker's own vault acts. */
 const BROKER_PURPOSE = 'dpv:ServiceProvision';
@@ -96,7 +98,11 @@ function readOnlyPostsFor(row: ConnectionCredRow): ConnectionAuth['readOnlyPosts
           path: '/2/users/get_current_account',
           body: 'json',
         },
-        { host: 'api.dropboxapi.com', path: '/2/files/list_folder', body: 'json' },
+        {
+          host: 'api.dropboxapi.com',
+          path: '/2/files/list_folder',
+          body: 'json',
+        },
         {
           host: 'api.dropboxapi.com',
           path: '/2/files/list_folder/continue',
@@ -426,10 +432,14 @@ export class ConnectionBroker {
 
     if (row.cred_kind === 'api_key') {
       if (!row.api_key) {
-        return { refused: `connection "${connector.label}" is api_key-kind but holds no key` };
+        return {
+          refused: `connection "${connector.label}" is api_key-kind but holds no key`,
+        };
       }
       return {
-        values: { api_key: this.unseal(plane, row.connection_id, 'api_key', row.api_key) },
+        values: {
+          api_key: this.unseal(plane, row.connection_id, 'api_key', row.api_key),
+        },
         allowedHosts,
         ...(readOnlyPosts ? { readOnlyPosts } : {}),
         onAuthDead,
@@ -532,7 +542,11 @@ export class ConnectionBroker {
       const value = response.headers.get(name);
       if (value) headers[name] = value;
     }
-    return { status: response.status, headers, ...(body === undefined ? {} : { body }) };
+    return {
+      status: response.status,
+      headers,
+      ...(body === undefined ? {} : { body }),
+    };
   }
 
   /**
@@ -564,10 +578,14 @@ export class ConnectionBroker {
       this.flipNeedsAuth(plane, row.connection_id, reason);
     if (row.cred_kind === 'api_key') {
       if (!row.api_key) {
-        return { refused: `connection ${connectionId} is api_key-kind but holds no key` };
+        return {
+          refused: `connection ${connectionId} is api_key-kind but holds no key`,
+        };
       }
       return {
-        values: { api_key: this.unseal(plane, row.connection_id, 'api_key', row.api_key) },
+        values: {
+          api_key: this.unseal(plane, row.connection_id, 'api_key', row.api_key),
+        },
         allowedHosts,
         onAuthDead,
         limit,
@@ -640,7 +658,10 @@ export class ConnectionBroker {
     const refreshToken = this.unseal(plane, connectionId, 'refresh_token', row.refresh_token);
     const response =
       row.oauth_mode === 'assist'
-        ? await this.postAssist('/refresh', { provider: 'google', refresh_token: refreshToken })
+        ? await this.postAssist('/refresh', {
+            provider: 'google',
+            refresh_token: refreshToken,
+          })
         : await this.postByoRefresh(row, connectionId, plane, refreshToken);
     if (!response.ok && response.authDead) {
       // Rot point 3: invalid_grant et al. — the refresh token is dead, only
@@ -700,25 +721,26 @@ export class ConnectionBroker {
    * auth-dead (4xx with an OAuth error body) from transient (network/5xx).
    */
   private async postTokenForm(tokenUrl: string, form: URLSearchParams): Promise<TokenResponse> {
-    for (let attempt = 0; ; attempt++) {
+    const { fetchImpl, tokenTimeoutMs } = this;
+    async function sendAttempt(attempt: number): Promise<TokenResponse> {
       let status: number;
       let text: string;
       try {
-        const res = await this.fetchImpl(tokenUrl, {
+        const res = await fetchImpl(tokenUrl, {
           method: 'POST',
           headers: { 'content-type': 'application/x-www-form-urlencoded' },
           body: form.toString(),
           // Never forward a code, refresh token, or client secret to a
           // token endpoint's attacker-controlled redirect target.
           redirect: 'error',
-          signal: timeoutSignal(this.tokenTimeoutMs),
+          signal: timeoutSignal(tokenTimeoutMs),
         });
         status = res.status;
         text = await readBoundedResponseText(res, MAX_TOKEN_RESPONSE_BYTES);
       } catch (err) {
         if (attempt === 0) {
           await delay(TRANSIENT_RETRY_DELAY_MS);
-          continue;
+          return sendAttempt(attempt + 1);
         }
         return {
           ok: false,
@@ -729,9 +751,13 @@ export class ConnectionBroker {
       if (status >= 500 || status === 429) {
         if (attempt === 0) {
           await delay(TRANSIENT_RETRY_DELAY_MS);
-          continue;
+          return sendAttempt(attempt + 1);
         }
-        return { ok: false, authDead: false, detail: `token endpoint answered ${status}` };
+        return {
+          ok: false,
+          authDead: false,
+          detail: `token endpoint answered ${status}`,
+        };
       }
       let body: Record<string, unknown> = {};
       try {
@@ -761,18 +787,20 @@ export class ConnectionBroker {
         ...(expiresIn ? { expiresAt: new Date(Date.now() + expiresIn * 1000).toISOString() } : {}),
       };
     }
+    return sendAttempt(0);
   }
 
   /** Stateless confidential-client hop; the gateway never receives a client secret. */
   private async postAssist(path: '/exchange' | '/refresh', body: unknown): Promise<TokenResponse> {
     const config = this.assistOAuth;
     if (!config) return { ok: false, authDead: false, detail: 'assist_not_configured' };
+    const { fetchImpl, tokenTimeoutMs } = this;
     const endpoint = new URL(path, `${config.workerBaseUrl}/`).toString();
-    for (let attempt = 0; ; attempt++) {
+    async function sendAttempt(attempt: number): Promise<TokenResponse> {
       let status: number;
       let text: string;
       try {
-        const res = await this.fetchImpl(endpoint, {
+        const res = await fetchImpl(endpoint, {
           method: 'POST',
           headers: {
             accept: 'application/json',
@@ -780,14 +808,14 @@ export class ConnectionBroker {
           },
           body: JSON.stringify(body),
           redirect: 'error',
-          signal: timeoutSignal(this.tokenTimeoutMs),
+          signal: timeoutSignal(tokenTimeoutMs),
         });
         status = res.status;
         text = await readBoundedResponseText(res, MAX_TOKEN_RESPONSE_BYTES);
       } catch (err) {
         if (attempt === 0) {
           await delay(TRANSIENT_RETRY_DELAY_MS);
-          continue;
+          return sendAttempt(attempt + 1);
         }
         return {
           ok: false,
@@ -798,15 +826,23 @@ export class ConnectionBroker {
       if (status >= 500 || status === 429) {
         if (attempt === 0) {
           await delay(TRANSIENT_RETRY_DELAY_MS);
-          continue;
+          return sendAttempt(attempt + 1);
         }
-        return { ok: false, authDead: false, detail: `assist_worker_${status}` };
+        return {
+          ok: false,
+          authDead: false,
+          detail: `assist_worker_${status}`,
+        };
       }
       let parsed: Record<string, unknown> = {};
       try {
         parsed = JSON.parse(text) as Record<string, unknown>;
       } catch {
-        return { ok: false, authDead: false, detail: 'assist_worker_invalid_response' };
+        return {
+          ok: false,
+          authDead: false,
+          detail: 'assist_worker_invalid_response',
+        };
       }
       if (status >= 400) {
         const code = typeof parsed.error === 'string' ? parsed.error : `assist_worker_${status}`;
@@ -820,7 +856,11 @@ export class ConnectionBroker {
       }
       const accessToken = parsed.access_token;
       if (typeof accessToken !== 'string' || accessToken.length === 0) {
-        return { ok: false, authDead: false, detail: 'assist_worker_missing_access_token' };
+        return {
+          ok: false,
+          authDead: false,
+          detail: 'assist_worker_missing_access_token',
+        };
       }
       const expiresIn = typeof parsed.expires_in === 'number' ? parsed.expires_in : undefined;
       return {
@@ -834,6 +874,7 @@ export class ConnectionBroker {
           : {}),
       };
     }
+    return sendAttempt(0);
   }
 
   private async persistTokens(
@@ -885,7 +926,10 @@ export class ConnectionBroker {
       'https://gmail.googleapis.com/gmail/v1/users/me/profile',
       {
         method: 'GET',
-        headers: { accept: 'application/json', authorization: `Bearer ${accessToken}` },
+        headers: {
+          accept: 'application/json',
+          authorization: `Bearer ${accessToken}`,
+        },
         redirect: 'error',
         signal: timeoutSignal(this.tokenTimeoutMs),
       },
@@ -1016,6 +1060,26 @@ function expiringSoon(expiresAt: string | null): boolean {
   return Date.parse(expiresAt) - Date.now() < EXPIRY_SLACK_MS;
 }
 
+interface BoundedResponseState {
+  text: string;
+  total: number;
+}
+
+async function readNextBoundedResponseChunk(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  decoder: TextDecoder,
+  state: BoundedResponseState,
+  limit: number,
+  label: string,
+): Promise<string> {
+  const chunk = await reader.read();
+  if (chunk.done) return state.text + decoder.decode();
+  state.total += chunk.value.byteLength;
+  if (state.total > limit) throw new Error(`${label} exceeded safety limit`);
+  state.text += decoder.decode(chunk.value, { stream: true });
+  return readNextBoundedResponseChunk(reader, decoder, state, limit, label);
+}
+
 async function readBoundedResponseText(
   response: Response,
   limit: number,
@@ -1028,17 +1092,14 @@ async function readBoundedResponseText(
   if (!response.body) return '';
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
-  let total = 0;
-  let text = '';
   try {
-    for (;;) {
-      const chunk = await reader.read();
-      if (chunk.done) break;
-      total += chunk.value.byteLength;
-      if (total > limit) throw new Error(`${label} exceeded safety limit`);
-      text += decoder.decode(chunk.value, { stream: true });
-    }
-    return text + decoder.decode();
+    return await readNextBoundedResponseChunk(
+      reader,
+      decoder,
+      { text: '', total: 0 },
+      limit,
+      label,
+    );
   } finally {
     reader.releaseLock();
   }

@@ -1,19 +1,23 @@
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
+
 import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { describe, expect, it } from 'vitest';
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
+
 import { openJournalDb, makeJournalDbProvider } from './gateway-db.js';
 
 function freshDbPath(): string {
   const dir = tempDirSync('centraid-db-');
-  return join(dir, 'db.sqlite');
+  return path.join(dir, 'db.sqlite');
 }
 
 function userVersion(path: string): number {
   const db = new DatabaseSync(path);
   try {
-    const row = db.prepare('PRAGMA user_version').get() as { user_version: number };
+    const row = db.prepare('PRAGMA user_version').get() as {
+      user_version: number;
+    };
     return row.user_version;
   } finally {
     db.close();
@@ -39,12 +43,16 @@ describe('openJournalDb (the conversation-ledger band of the vault journal)', ()
   it('uses the bounded low-end read pragmas (#456 S1)', () => {
     const db = openJournalDb(freshDbPath());
     try {
-      // node:sqlite hands back null-prototype rows; spreading compares the
-      // column data (which is the contract) without asserting the driver's
-      // choice of prototype.
-      expect({ ...db.prepare('PRAGMA cache_size').get() }).toStrictEqual({ cache_size: -16000 });
-      expect({ ...db.prepare('PRAGMA mmap_size').get() }).toStrictEqual({ mmap_size: 67_108_864 });
-      expect({ ...db.prepare('PRAGMA temp_store').get() }).toStrictEqual({ temp_store: 2 });
+      // Spread the null-prototype node:sqlite rows to compare column data only.
+      expect({ ...db.prepare('PRAGMA cache_size').get() }).toStrictEqual({
+        cache_size: -16000,
+      });
+      expect({ ...db.prepare('PRAGMA mmap_size').get() }).toStrictEqual({
+        mmap_size: 67_108_864,
+      });
+      expect({ ...db.prepare('PRAGMA temp_store').get() }).toStrictEqual({
+        temp_store: 2,
+      });
     } finally {
       db.close();
     }
@@ -58,9 +66,7 @@ describe('openJournalDb (the conversation-ledger band of the vault journal)', ()
   });
 
   it('is safe on a file the vault package already migrated (audit band intact)', () => {
-    // Simulate a journal the vault's own ladder has stamped: a foreign table
-    // plus a nonzero user_version. The ledger ensure must add its band
-    // without disturbing either.
+    // Preserve a foreign table and nonzero user_version from the vault ladder.
     const path = freshDbPath();
     const seed = new DatabaseSync(path);
     seed.exec(`CREATE TABLE consent_receipt (receipt_id TEXT PRIMARY KEY);`);
@@ -75,9 +81,7 @@ describe('openJournalDb (the conversation-ledger band of the vault journal)', ()
   it('creates the ledger tables + the run_summary VIEW in ONE file (no legacy tables)', () => {
     const path = freshDbPath();
     openJournalDb(path).close();
-    // The FTS5 conversation search plane (issue #420) adds `fts_conversation`
-    // and its internal shadow tables (`fts_conversation_data`, `_idx`, …); the
-    // ledger's own tables are everything that isn't part of that plane.
+    // Exclude FTS5's `fts_conversation` virtual table and shadow tables (#420).
     const ledgerTables = tableNames(path).filter((n) => !n.startsWith('fts_conversation'));
     expect(ledgerTables).toStrictEqual([
       'attachments',
@@ -181,7 +185,9 @@ describe('openJournalDb (the conversation-ledger band of the vault journal)', ()
 
       db.prepare(`DELETE FROM conversations WHERE id = 'c1'`).run();
       for (const table of ['turns', 'items', 'attachments']) {
-        const n = db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number };
+        const n = db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as {
+          n: number;
+        };
         expect(Number(n.n)).toBe(0);
       }
     } finally {
@@ -200,7 +206,7 @@ describe('openJournalDb (the conversation-ledger band of the vault journal)', ()
             `INSERT INTO conversations (id, kind, user_id, created_at, updated_at) VALUES ('c', 'bogus', 'u', ?, ?)`,
           )
           .run(now, now),
-      ).toThrow(/CHECK/i);
+      ).toThrow(/CHECK/iu);
       db.prepare(
         `INSERT INTO conversations (id, kind, user_id, created_at, updated_at) VALUES ('c1','chat','u',?,?)`,
       ).run(now, now);
@@ -210,7 +216,7 @@ describe('openJournalDb (the conversation-ledger band of the vault journal)', ()
             `INSERT INTO turns (id, conversation_id, seq, trigger, started_at) VALUES ('t','c1',0,'bogus',?)`,
           )
           .run(now),
-      ).toThrow(/CHECK/i);
+      ).toThrow(/CHECK/iu);
       db.prepare(
         `INSERT INTO turns (id, conversation_id, seq, trigger, started_at) VALUES ('t1','c1',0,'interactive',?)`,
       ).run(now);
@@ -220,7 +226,7 @@ describe('openJournalDb (the conversation-ledger band of the vault journal)', ()
             `INSERT INTO items (id, turn_id, ordinal, kind, started_at) VALUES ('i','t1',0,'bogus',?)`,
           )
           .run(now),
-      ).toThrow(/CHECK/i);
+      ).toThrow(/CHECK/iu);
     } finally {
       db.close();
     }
@@ -257,7 +263,9 @@ describe('openJournalDb (the conversation-ledger band of the vault journal)', ()
     const upgraded = openJournalDb(path);
     try {
       const itemColumns = (
-        upgraded.prepare('PRAGMA table_info(items)').all() as Array<{ name: string }>
+        upgraded.prepare('PRAGMA table_info(items)').all() as Array<{
+          name: string;
+        }>
       ).map((column) => column.name);
       const digestColumns = (
         upgraded.prepare('PRAGMA table_info(conversation_digest)').all() as Array<{ name: string }>
@@ -364,7 +372,9 @@ describe('openJournalDb (the conversation-ledger band of the vault journal)', ()
 
       db.prepare(`DELETE FROM conversations WHERE id = 'c1'`).run();
       for (const table of ['conversation_archive', 'conversation_digest']) {
-        const n = db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number };
+        const n = db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as {
+          n: number;
+        };
         expect(Number(n.n)).toBe(0);
       }
     } finally {
@@ -390,7 +400,7 @@ describe('openJournalDb (the conversation-ledger band of the vault journal)', ()
              VALUES ('ar1', 'c1', 0, 9, ?, ?, 10, 20, 'tooshort', 100, 200, ?)`,
           )
           .run(now, now, now),
-      ).toThrow(/CHECK/i);
+      ).toThrow(/CHECK/iu);
     } finally {
       db.close();
     }
@@ -428,7 +438,7 @@ describe('STRICT tables (issue #374 SQLite hardening)', () => {
              VALUES ('c1', 'chat', 'u1', 'not-a-number', ?, ?)`,
           )
           .run(now, now),
-      ).toThrow(/cannot store TEXT value in INTEGER column/);
+      ).toThrow(/cannot store TEXT value in INTEGER column/u);
     } finally {
       db.close();
     }

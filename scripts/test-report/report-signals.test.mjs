@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+
 import {
   cellsMissingRatchet,
   detectDefaultCiEnvGate,
@@ -9,13 +10,13 @@ import {
   reconcileJobConclusions,
   summarizeCellStates,
 } from './report-signals.mjs';
-import { validateMatrix } from './validate-matrix.mjs';
 import {
   REPORT_COMMENT_MARKER,
   coverageScopesBelowFloor,
   publicReportUrl,
   renderSummaryMarkdown,
 } from './summary-markdown.mjs';
+import { validateMatrix } from './validate-matrix.mjs';
 
 describe('extractUnhandledErrors', () => {
   test('reads explicit unhandledErrors array from vitest JSON', () => {
@@ -43,7 +44,7 @@ describe('extractUnhandledErrors', () => {
         },
       ],
     });
-    expect(messages.some((m) => /success=false|unhandled/i.test(m))).toBe(true);
+    expect(messages.some((m) => /success=false|unhandled/iu.test(m))).toBe(true);
   });
 
   test('does not invent errors when suite genuinely failed assertions', () => {
@@ -56,7 +57,7 @@ describe('extractUnhandledErrors', () => {
         },
       ],
     });
-    expect(messages.every((m) => !/zero failed tests/i.test(m))).toBe(true);
+    expect(messages.every((m) => !/zero failed tests/iu.test(m))).toBe(true);
   });
 });
 
@@ -130,7 +131,10 @@ describe('renderSummaryMarkdown', () => {
         validationErrorCount: 0,
         generatedAt: '2026-07-19T00:00:00.000Z',
       },
-      { reportUrl: 'https://example.test/report/', runUrl: 'https://example.test/run/1' },
+      {
+        reportUrl: 'https://example.test/report/',
+        runUrl: 'https://example.test/run/1',
+      },
     );
     expect(md).toContain('needs attention');
     expect(md).toContain('| Evidence failed | 1 |');
@@ -177,13 +181,22 @@ describe('findUnmappedEvidence', () => {
   test('counts orphaned e2e results and separates failed unmapped', () => {
     const matrix = {
       cellOwners: {
-        'mobile.journey': { owner: 'tests/agent-e2e-mobile/flows/home-loads.mjs', tier: 'e2e' },
+        'mobile.journey': {
+          owner: 'tests/agent-e2e-mobile/flows/home-loads.mjs',
+          tier: 'e2e',
+        },
       },
       flows: [],
     };
     const results = [
-      { owner: 'tests/agent-e2e-mobile/flows/home-loads.mjs', status: 'passed' },
-      { owner: 'tests/agent-e2e-mobile/flows/template-gate.mjs', status: 'failed' },
+      {
+        owner: 'tests/agent-e2e-mobile/flows/home-loads.mjs',
+        status: 'passed',
+      },
+      {
+        owner: 'tests/agent-e2e-mobile/flows/template-gate.mjs',
+        status: 'failed',
+      },
       { owner: 'tests/orphan/no-owner.mjs', status: 'passed' },
     ];
     const found = findUnmappedEvidence(results, matrix);
@@ -204,7 +217,12 @@ describe('findUnmappedEvidence', () => {
       ],
     };
     const found = findUnmappedEvidence(
-      [{ owner: 'tests/agent-e2e-mobile/flows/template-gate.mjs', status: 'failed' }],
+      [
+        {
+          owner: 'tests/agent-e2e-mobile/flows/template-gate.mjs',
+          status: 'failed',
+        },
+      ],
       matrix,
     );
     expect(found.unmappedEvidence).toBe(0);
@@ -224,7 +242,7 @@ describe('reconcileJobConclusions', () => {
     );
     expect(recon.silentAllClear).toBe(true);
     expect(recon.failedJobs).toEqual(['mobile-e2e', 'mobile-e2e-android']);
-    expect(recon.message).toMatch(/mobile-e2e/);
+    expect(recon.message).toMatch(/mobile-e2e/u);
   });
 
   test('is quiet when failed evidence already accounts for the red jobs', () => {
@@ -300,7 +318,9 @@ describe('validateMatrix skip notes (#535)', () => {
       surfaces: [{ id: 'mobile', label: 'Mobile', assessment: { journey: 'skip' } }],
       cellOwners: { 'mobile.journey': null },
       flows: [],
-      notes: { 'mobile.journey': 'Delegated to consuming surface; no native journey surface.' },
+      notes: {
+        'mobile.journey': 'Delegated to consuming surface; no native journey surface.',
+      },
     };
     const { errors } = await validateMatrix(matrix, { checkFiles: false });
     expect(errors.filter((e) => e.includes('matrix.notes'))).toEqual([]);

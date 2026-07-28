@@ -4,6 +4,7 @@
 // another scope happened to sort first.
 
 import { assert, beforeEach, describe, expect, test } from 'vitest';
+
 import { bootstrapVault, createGrant, enrollAgent, type BootstrapResult } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { evaluateConsent } from './consent.js';
@@ -19,7 +20,10 @@ describe('execution-clamp', () => {
   beforeEach(() => {
     db = openVaultDb();
     boot = bootstrapVault(db, { ownerName: 'Priya' });
-    agent = enrollAgent(db, { name: 'digest', modelRef: 'centraid-automation' });
+    agent = enrollAgent(db, {
+      name: 'digest',
+      modelRef: 'centraid-automation',
+    });
   });
 
   /** The owner's durable grant — the upper bound every clamp is cut against. */
@@ -145,7 +149,7 @@ describe('execution-clamp', () => {
     // A union ("t1 or t2") has to be ONE `in` filter — as two scopes it would
     // AND to nothing, so the clamp refuses instead of silently picking one.
     expect(() => readTask(caller([pin('t1'), pin('t2')]))).toThrow(GatewayError);
-    expect(() => readTask(caller([pin('t1'), pin('t2')]))).toThrow(/task_id/);
+    expect(() => readTask(caller([pin('t1'), pin('t2')]))).toThrow(/task_id/u);
     // Written as the bounded union it is, it reads both rows.
     expect(
       readTask(
@@ -158,7 +162,9 @@ describe('execution-clamp', () => {
           },
         ]),
       ),
-    ).toMatchObject({ rowFilter: [{ column: 'task_id', op: 'in', value: ['t1', 't2'] }] });
+    ).toMatchObject({
+      rowFilter: [{ column: 'task_id', op: 'in', value: ['t1', 't2'] }],
+    });
   });
 
   test('two range clauses on one column are a window, not a conflict', () => {

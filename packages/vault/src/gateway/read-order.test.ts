@@ -3,8 +3,9 @@
 // columns — caller strings never become SQL text.
 
 import { beforeEach, describe, expect, test } from 'vitest';
-import { registerKnowledgeCommands } from '../commands/knowledge.js';
+
 import { bootstrapVault, type BootstrapResult } from '../bootstrap.js';
+import { registerKnowledgeCommands } from '../commands/knowledge.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { compileFilters, compileOrderBy } from './filters.js';
 import { createGateway, Gateway } from './gateway.js';
@@ -23,7 +24,11 @@ describe('read-order', () => {
     boot = bootstrapVault(db, { ownerName: 'Priya' });
     gw = createGateway(db);
     registerKnowledgeCommands(gw);
-    owner = { kind: 'device', deviceId: boot.deviceId, deviceKey: boot.deviceKey };
+    owner = {
+      kind: 'device',
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+    };
     for (const [title, updated] of [
       ['oldest', '2026-01-01T00:00:00Z'],
       ['newest', '2026-03-01T00:00:00Z'],
@@ -74,17 +79,20 @@ describe('read-order', () => {
     expect(() =>
       gw.read(owner, {
         entity: 'knowledge.note',
-        orderBy: { column: 'updated_at; DROP TABLE knowledge_note', dir: 'desc' },
+        orderBy: {
+          column: 'updated_at; DROP TABLE knowledge_note',
+          dir: 'desc',
+        },
         purpose: PURPOSE,
       }),
-    ).toThrow(/unknown order column/);
+    ).toThrow(/unknown order column/u);
     expect(() =>
       gw.read(owner, {
         entity: 'knowledge.note',
         orderBy: { column: 'updated_at', dir: 'sideways' as 'asc' },
         purpose: PURPOSE,
       }),
-    ).toThrow(/unknown order direction/);
+    ).toThrow(/unknown order direction/u);
   });
 
   test('ordering composes with caller filters', () => {

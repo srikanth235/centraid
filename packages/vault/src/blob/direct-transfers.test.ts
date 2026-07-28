@@ -1,7 +1,9 @@
 // Direct edge-sealed upload unit tests (issue #545 B6) — mocked remote tier.
 
 import { createHash, randomBytes } from 'node:crypto';
+
 import { afterEach, assert, beforeEach, describe, expect, test } from 'vitest';
+
 import { bootstrapVault } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { VaultBlobRemoteUnavailableError } from '../errors.js';
@@ -99,7 +101,7 @@ describe('direct-transfers', () => {
         partCount: 0,
         deviceId,
       }),
-    ).rejects.toThrow(/partCount must be between 1 and 10000/);
+    ).rejects.toThrow(/partCount must be between 1 and 10000/u);
     await expect(
       transfers.begin({
         sha256: SHA,
@@ -108,7 +110,7 @@ describe('direct-transfers', () => {
         partCount: 10_001,
         deviceId,
       }),
-    ).rejects.toThrow(/partCount must be between 1 and 10000/);
+    ).rejects.toThrow(/partCount must be between 1 and 10000/u);
   });
 
   test('begin returns alreadyPresent settlement with casAck derived from custody', async () => {
@@ -166,7 +168,11 @@ describe('direct-transfers', () => {
   test('begin mints a single-part presigned put when the object is new', async () => {
     const transfers = makeTransfers({
       remote: remoteWithTransfer(),
-      preflight: { exists: false, custody: 'local-only', remoteAvailable: true },
+      preflight: {
+        exists: false,
+        custody: 'local-only',
+        remoteAvailable: true,
+      },
     });
     const result = await transfers.begin({
       sha256: SHA,
@@ -188,7 +194,11 @@ describe('direct-transfers', () => {
   test('begin mints multipart part URLs when partCount > 1', async () => {
     const transfers = makeTransfers({
       remote: remoteWithTransfer(),
-      preflight: { exists: false, custody: 'local-only', remoteAvailable: true },
+      preflight: {
+        exists: false,
+        custody: 'local-only',
+        remoteAvailable: true,
+      },
     });
     const result = await transfers.begin({
       sha256: SHA,

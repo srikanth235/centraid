@@ -38,32 +38,32 @@ export function parseServeArgsPure(args: string[]): ParseServeArgsResult {
   for (let i = 0; i < args.length; i++) {
     const flag = args[i];
     if (flag === undefined) continue;
-    const next = (): string | { error: string } => {
+    const readValue = (): string | { error: string } => {
       const v = args[++i];
       if (v === undefined) return { error: `flag "${flag}" requires a value` };
       return v;
     };
     switch (flag) {
       case '--config': {
-        const v = next();
+        const v = readValue();
         if (typeof v !== 'string') return { ok: false, message: v.error, code: 2 };
         out.configPath = v;
         break;
       }
       case '--data-dir': {
-        const v = next();
+        const v = readValue();
         if (typeof v !== 'string') return { ok: false, message: v.error, code: 2 };
         out.dataDir = v;
         break;
       }
       case '--host': {
-        const v = next();
+        const v = readValue();
         if (typeof v !== 'string') return { ok: false, message: v.error, code: 2 };
         out.host = v;
         break;
       }
       case '--port': {
-        const v = next();
+        const v = readValue();
         if (typeof v !== 'string') return { ok: false, message: v.error, code: 2 };
         const n = Number(v);
         if (!Number.isInteger(n) || n < 0 || n > 65535) {
@@ -77,18 +77,28 @@ export function parseServeArgsPure(args: string[]): ParseServeArgsResult {
         break;
       }
       case '--allowed-host': {
-        const v = next();
+        const v = readValue();
         if (typeof v !== 'string') return { ok: false, message: v.error, code: 2 };
         const name = v.trim();
-        if (!name) return { ok: false, message: '--allowed-host requires a hostname', code: 2 };
+        if (!name)
+          return {
+            ok: false,
+            message: '--allowed-host requires a hostname',
+            code: 2,
+          };
         out.allowedHosts = [...(out.allowedHosts ?? []), name];
         break;
       }
       case '--init-vault': {
-        const v = next();
+        const v = readValue();
         if (typeof v !== 'string') return { ok: false, message: v.error, code: 2 };
         const name = v.trim();
-        if (!name) return { ok: false, message: '--init-vault requires a non-empty name', code: 2 };
+        if (!name)
+          return {
+            ok: false,
+            message: '--init-vault requires a non-empty name',
+            code: 2,
+          };
         out.initVaultName = name;
         break;
       }

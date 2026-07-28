@@ -1,4 +1,4 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import { spawnSync } from 'node:child_process';
 /*
  * End-to-end smoke test for the centraid CLI bin, invoked as a subprocess
  * (using the built dist/cli/centraid-cli.js). The `sql` subcommands died
@@ -8,23 +8,15 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  * The test depends on a prior `bun run build` for this package; turbo
  * configures `test` to run after `build` so the dist file exists.
  */
-
-import { afterAll, beforeAll, describe, expect, test } from 'vitest';
-import { spawnSync } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 
 // This test lives at src/cli/; the built CLI is at <pkg>/dist/cli/ (rootDir
 // src mirrors into dist). Two levels up from src/cli reaches the package root.
-const CLI_PATH = path.join(
-  path.dirname(fileURLToPath(import.meta.url)),
-  '..',
-  '..',
-  'dist',
-  'cli',
-  'centraid-cli.js',
-);
+const CLI_PATH = path.join(import.meta.dirname, '..', '..', 'dist', 'cli', 'centraid-cli.js');
 
 let workspace: string;
 
@@ -37,7 +29,11 @@ describe('centraid-cli', () => {
     if (workspace) await fs.rm(workspace, { recursive: true, force: true });
   });
 
-  function runCli(...args: string[]): { stdout: string; stderr: string; code: number } {
+  function runCli(...args: string[]): {
+    stdout: string;
+    stderr: string;
+    code: number;
+  } {
     const result = spawnSync(process.execPath, [CLI_PATH, ...args], {
       cwd: workspace,
       encoding: 'utf8',
@@ -52,13 +48,13 @@ describe('centraid-cli', () => {
   test('the retired sql subcommand exits with usage error', () => {
     const r = runCli('sql', 'read', 'SELECT 1');
     expect(r.code).toBe(2);
-    expect(r.stderr).toMatch(/unknown command "sql"/);
+    expect(r.stderr).toMatch(/unknown command "sql"/u);
   });
 
   test('unknown command exits with usage error', () => {
     const r = runCli('gibberish');
     expect(r.code).toBe(2);
-    expect(r.stderr).toMatch(/unknown command/);
+    expect(r.stderr).toMatch(/unknown command/u);
   });
 
   test('preview snapshot reports exists:false when the file is missing', () => {
@@ -66,7 +62,7 @@ describe('centraid-cli', () => {
     expect(r.code).toBe(0);
     const parsed = JSON.parse(r.stdout) as { path: string; exists: boolean };
     expect(parsed.exists).toBe(false);
-    expect(parsed.path).toMatch(/\.preview\/snapshot\.png$/);
+    expect(parsed.path).toMatch(/\.preview\/snapshot\.png$/u);
   });
 
   test('preview snapshot returns size + age when the file exists', async () => {
@@ -93,12 +89,12 @@ describe('centraid-cli', () => {
   test('preview with no subcommand exits with usage error', () => {
     const r = runCli('preview');
     expect(r.code).toBe(2);
-    expect(r.stderr).toMatch(/unknown preview subcommand/);
+    expect(r.stderr).toMatch(/unknown preview subcommand/u);
   });
 
   test('preview snapshot rejects extra args', () => {
     const r = runCli('preview', 'snapshot', 'extra');
     expect(r.code).toBe(2);
-    expect(r.stderr).toMatch(/takes no arguments/);
+    expect(r.stderr).toMatch(/takes no arguments/u);
   });
 });

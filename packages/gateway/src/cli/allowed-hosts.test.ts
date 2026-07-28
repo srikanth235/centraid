@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+
 import { mergeAllowedHosts, parseAllowedHostsEnv } from './allowed-hosts.js';
 
 describe(parseAllowedHostsEnv, () => {
@@ -10,7 +11,9 @@ describe(parseAllowedHostsEnv, () => {
 
   test('comma-separated hostnames, trimmed and lowercased', () => {
     expect(
-      parseAllowedHostsEnv({ CENTRAID_ALLOWED_HOSTS: ' Gateway.example ,API.local' }),
+      parseAllowedHostsEnv({
+        CENTRAID_ALLOWED_HOSTS: ' Gateway.example ,API.local',
+      }),
     ).toStrictEqual(['gateway.example', 'api.local']);
   });
 });

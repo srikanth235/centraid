@@ -13,6 +13,7 @@
  * slowest promise still reads green rather than false-red on the oldest clock.
  */
 
+import type { StorageConnectionUsageDTO } from '../../gateway-client.js';
 import {
   deriveStorageMetrics,
   type StorageMetrics,
@@ -20,7 +21,6 @@ import {
   type UsageInput,
 } from '../../storage-metrics.js';
 import type { BackupStatusDTO, BackupVaultStatusDTO } from './BackupCard.js';
-import type { StorageConnectionUsageDTO } from '../../gateway-client.js';
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;

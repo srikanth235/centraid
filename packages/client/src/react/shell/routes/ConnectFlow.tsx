@@ -1,16 +1,9 @@
-import { type JSX, useEffect, useReducer, useRef } from 'react';
 import type { IconName } from '@centraid/design-tokens';
 import { tileFinish } from '@centraid/design-tokens';
-import Icon from '../../ui/Icon.js';
+import { type JSX, useEffect, useReducer, useRef } from 'react';
+
 import { cx } from '../../ui/cx.js';
-import buttonCss from '../../ui/Button.module.css';
-import a11y from '../../styles/a11y.module.css';
-import controlsCss from '../../styles/controls.module.css';
-import { PROFILE_COLORS } from './SpaceModal.js';
-import HandshakeLadder, { reportSummaryText } from './HandshakeLadder.js';
-import { GatewayDetailsStep, SshDetailsStep } from './ConnectFlowDetailsStep.js';
-import { VaultStep } from './ConnectFlowVaultStep.js';
-import { commitConnectFlow, loadLocalVaults, runConnectivityTest } from './connectFlowIO.js';
+import Icon from '../../ui/Icon.js';
 import {
   buildTestInput,
   connectFlowReducer,
@@ -19,6 +12,15 @@ import {
   type ConnectMethod,
   type VaultChoice,
 } from './connectFlow-core.js';
+import { GatewayDetailsStep, SshDetailsStep } from './ConnectFlowDetailsStep.js';
+import { commitConnectFlow, loadLocalVaults, runConnectivityTest } from './connectFlowIO.js';
+import { VaultStep } from './ConnectFlowVaultStep.js';
+import HandshakeLadder, { reportSummaryText } from './HandshakeLadder.js';
+import { PROFILE_COLORS } from './SpaceModal.js';
+
+import a11y from '../../styles/a11y.module.css';
+import controlsCss from '../../styles/controls.module.css';
+import buttonCss from '../../ui/Button.module.css';
 import styles from './ConnectFlow.module.css';
 
 // The shared connect wizard (issue #382) — three top-level methods (This
@@ -48,6 +50,8 @@ export interface ConnectFlowProps {
    *  its own back-to-identity step instead). */
   onCancel?: () => void;
 }
+
+const DEFAULT_CONNECT_METHODS: readonly ConnectMethod[] = ['local', 'gateway', 'ssh'];
 
 const METHOD_CARDS: ReadonlyArray<{
   method: ConnectMethod;
@@ -81,7 +85,7 @@ const METHOD_CARDS: ReadonlyArray<{
 
 export default function ConnectFlow({
   context,
-  methods = ['local', 'gateway', 'ssh'],
+  methods = DEFAULT_CONNECT_METHODS,
   onDone,
   onCancel,
 }: ConnectFlowProps): JSX.Element {
@@ -95,7 +99,10 @@ export default function ConnectFlow({
     let alive = true;
     const input = buildTestInput(state);
     if (!input) {
-      dispatch({ report: { error: 'invalid_input', ok: false, stages: [] }, type: 'testSettled' });
+      dispatch({
+        report: { error: 'invalid_input', ok: false, stages: [] },
+        type: 'testSettled',
+      });
       return;
     }
     void runConnectivityTest(input).then((report) => {
@@ -104,7 +111,7 @@ export default function ConnectFlow({
     return () => {
       alive = false;
     };
-  }, [state.step, state.testing]);
+  }, [state.step, state.testing, state]);
 
   // "This Mac" has no test step — load its existing vaults straight into
   // the same `report.vaults` shape the vault step already knows how to
@@ -153,11 +160,11 @@ export default function ConnectFlow({
     return () => {
       alive = false;
     };
-  }, [state.step]);
+  }, [state.step, state]);
 
   useEffect(() => {
     if (state.step === 'done' && state.result) onDone(state.result);
-  }, [state.step, state.result]);
+  }, [state.step, state.result, onDone]);
 
   useEffect(() => {
     if (state.step === 'details' && state.method === 'gateway') {

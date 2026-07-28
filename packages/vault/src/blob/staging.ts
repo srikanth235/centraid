@@ -8,6 +8,7 @@
 // receipt; unclaimed rows sweep after a TTL.
 
 import type { DatabaseSync } from 'node:sqlite';
+
 import type { VaultDb } from '../db.js';
 import { nowIso, uuidv7 } from '../ids.js';
 import {
@@ -33,7 +34,9 @@ export function mediaLocationPolicyForVault(vault: DatabaseSync): 'keep' | 'stri
       | { settings_json: string | null }
       | undefined;
     if (!row?.settings_json) return 'keep';
-    const parsed = JSON.parse(row.settings_json) as { media?: { location?: string } };
+    const parsed = JSON.parse(row.settings_json) as {
+      media?: { location?: string };
+    };
     return parsed.media?.location === 'strip' ? 'strip' : 'keep';
   } catch {
     return 'keep';
@@ -287,7 +290,11 @@ export function sweepBlobStaging(
     .prepare(
       'SELECT staging_id, sha256, variant FROM blob_staging WHERE staged_at <= ? AND held_by_batch IS NULL',
     )
-    .all(cutoff) as { staging_id: string; sha256: string; variant: DerivativeVariant | null }[];
+    .all(cutoff) as {
+    staging_id: string;
+    sha256: string;
+    variant: DerivativeVariant | null;
+  }[];
   const expired: string[] = [];
   for (const row of rows) {
     db.vault.prepare('DELETE FROM blob_staging WHERE staging_id = ?').run(row.staging_id);

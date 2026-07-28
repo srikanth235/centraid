@@ -1,7 +1,9 @@
+import path from 'node:path';
+
 import { tempDir } from '@centraid/test-kit/temp-dir';
 import { describe, expect, test } from 'vitest';
+
 import { createKeyring } from './crypto.js';
-import path from 'node:path';
 import {
   canonicalJson,
   isSafeEntryPath,
@@ -25,7 +27,7 @@ describe(canonicalJson, () => {
   });
 
   test('produces no insignificant whitespace', () => {
-    expect(canonicalJson({ a: 1, b: [1, 2] })).not.toMatch(/\s/);
+    expect(canonicalJson({ a: 1, b: [1, 2] })).not.toMatch(/\s/u);
   });
 
   test('key order in the source object does not affect output', () => {
@@ -90,7 +92,13 @@ describe('sealManifest / openManifest', () => {
     const bb = 'bb'.repeat(32);
     const cc = 'cc'.repeat(32);
     const entries: ManifestEntry[] = [
-      { path: 'vault.db', kind: 'db', size: 100, mtimeMs: 1000, chunks: [aa, bb] },
+      {
+        path: 'vault.db',
+        kind: 'db',
+        size: 100,
+        mtimeMs: 1000,
+        chunks: [aa, bb],
+      },
       { path: 'blobs/x', kind: 'blob', size: 50, mtimeMs: 2000, chunks: [cc] },
     ];
     const { bytes, manifestHash, manifest } = sealManifest({
@@ -132,7 +140,9 @@ describe('sealManifest / openManifest', () => {
     const tampered = new Uint8Array(bytes);
     tampered[0]! ^= 0xff;
     expect(verifyManifest(tampered, manifestHash)).toBe(false);
-    expect(() => openManifest(tampered, keyring, 'vault-1', manifestHash)).toThrow(/hash mismatch/);
+    expect(() => openManifest(tampered, keyring, 'vault-1', manifestHash)).toThrow(
+      /hash mismatch/u,
+    );
   });
 
   test('authenticated public envelope rejects a provider-rehashed metadata rewrite', async () => {
@@ -154,7 +164,7 @@ describe('sealManifest / openManifest', () => {
     const rewritten = new TextEncoder().encode(canonicalJson(parsed));
 
     expect(() => openManifest(rewritten, keyring, 'vault-1', sha256Hex(rewritten))).toThrow(
-      /unsupported state or unable to authenticate data/i,
+      /unsupported state or unable to authenticate data/iu,
     );
   });
 
@@ -169,10 +179,18 @@ describe('sealManifest / openManifest', () => {
       prevManifestHash: null,
       chunkIndex: [{ id: zz, size: 1 }],
       appMeta: {},
-      entries: [{ path: '../../etc/passwd', kind: 'blob', size: 1, mtimeMs: 1, chunks: [zz] }],
+      entries: [
+        {
+          path: '../../etc/passwd',
+          kind: 'blob',
+          size: 1,
+          mtimeMs: 1,
+          chunks: [zz],
+        },
+      ],
     });
     expect(() => openManifest(bytes, keyring, 'vault-1', manifestHash)).toThrow(
-      /path traversal|rejected/,
+      /path traversal|rejected/u,
     );
   });
 
@@ -189,7 +207,7 @@ describe('sealManifest / openManifest', () => {
       entries: [],
     });
     expect(() => openManifest(bytes, keyring, 'vault-OTHER', manifestHash)).toThrow(
-      /unsupported state or unable to authenticate data/i,
+      /unsupported state or unable to authenticate data/iu,
     );
   });
 

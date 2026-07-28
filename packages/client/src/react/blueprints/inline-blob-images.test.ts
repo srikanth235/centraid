@@ -1,14 +1,17 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // The inline kit is imported (transitively, via the module under test) FIRST so
 // its `./suppress-served-ask` side effect runs before the real kit module. This
 // suite exercises the generic blob-image authorizer (issue #505 Phase 4).
 import { flushMacrotasks } from '@centraid/test-kit/flush';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import { installInlineBlobImages } from './inline-blob-images.js';
 
 // gateway-client-core is the choke point authorizeBlobUrl routes through; stub
 // it and hand back a fake blob per request.
 const doFetch = vi.fn<(...args: unknown[]) => Promise<Response>>();
-vi.mock(import('../../gateway-client-core.js'), () => ({
+const readJson = vi.fn<(res: Response, op: string) => Promise<unknown>>();
+vi.mock(import('../../gateway-client-core.js'), async (importOriginal) => ({
+  ...(await importOriginal()),
   auth: vi.fn<typeof import('../../gateway-client-core.js').auth>(async () => ({
     baseUrl: 'https://gw.test',
     token: 'tok',
@@ -19,10 +22,7 @@ vi.mock(import('../../gateway-client-core.js'), () => ({
   authHeaders: (token?: string): Record<string, string> =>
     token ? { Authorization: `Bearer ${token}` } : {},
   doFetch: (...args: unknown[]) => doFetch(...args),
-  // `readJson` is generic (`<T>(res, op) => Promise<T>`); a typed mock erases the
-  // type parameter, so `Mock<...>` stops being assignable to the export.
-  // Bare `vi.fn()` is the only form that satisfies a generic signature.
-  readJson: vi.fn(),
+  readJson: <T>(...args: Parameters<typeof readJson>) => readJson(...args) as Promise<T>,
 }));
 
 function blobRes(ok = true): Response {
@@ -75,7 +75,7 @@ describe('inline-blob-images', () => {
 
       expect(doFetch).toHaveBeenCalledOnce();
       expect(doFetch.mock.calls[0]?.[1]).toBe('/centraid/_vault/blobs/abc?variant=thumb');
-      expect(img.getAttribute('src')).toMatch(/^blob:mock\//);
+      expect(img.getAttribute('src')).toMatch(/^blob:mock\//u);
       teardown();
     });
 
@@ -91,7 +91,7 @@ describe('inline-blob-images', () => {
       await flush();
 
       const staged = img.dataset.prefetchSrc;
-      expect(staged).toMatch(/^blob:mock\//);
+      expect(staged).toMatch(/^blob:mock\//u);
       // When the tile scrolls in, media-observer copies the (now authed) staged URL
       // into src — never an unauthorized /_vault/blobs URL, so no onerror.
       expect(staged?.startsWith('/centraid/_vault/blobs')).toBe(false);
@@ -109,7 +109,7 @@ describe('inline-blob-images', () => {
       await flush();
 
       expect(doFetch).toHaveBeenCalledOnce();
-      expect(cover.style.backgroundImage).toMatch(/^url\("blob:mock\//);
+      expect(cover.style.backgroundImage).toMatch(/^url\("blob:mock\//u);
       teardown();
     });
 

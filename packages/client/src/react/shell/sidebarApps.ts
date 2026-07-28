@@ -1,4 +1,5 @@
 import type { IconName } from '@centraid/design-tokens';
+
 import type { SidebarApp } from './Sidebar.js';
 
 // Map the shell's live app state (installed userApps + on-disk drafts) into the

@@ -1,7 +1,9 @@
+import { readFileSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
+
 import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { describe, expect, it } from 'vitest';
-import { readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+
 import {
   readAppSettings,
   readAppSetting,
@@ -23,7 +25,7 @@ describe(readAppSettings, () => {
 
   it('reads the JSON object', () => {
     const dir = newAppDir();
-    writeFileSync(join(dir, APP_SETTINGS_FILE), JSON.stringify({ theme: 'light', bgL: 12 }));
+    writeFileSync(path.join(dir, APP_SETTINGS_FILE), JSON.stringify({ theme: 'light', bgL: 12 }));
     const out = readAppSettings(dir);
     expect(out.theme).toBe('light');
     expect(out.bgL).toBe(12);
@@ -31,9 +33,9 @@ describe(readAppSettings, () => {
 
   it('treats malformed or non-object JSON as empty (never throws)', () => {
     const dir = newAppDir();
-    writeFileSync(join(dir, APP_SETTINGS_FILE), 'not json{');
+    writeFileSync(path.join(dir, APP_SETTINGS_FILE), 'not json{');
     expect(readAppSettings(dir)).toStrictEqual({});
-    writeFileSync(join(dir, APP_SETTINGS_FILE), JSON.stringify([1, 2]));
+    writeFileSync(path.join(dir, APP_SETTINGS_FILE), JSON.stringify([1, 2]));
     expect(readAppSettings(dir)).toStrictEqual({});
   });
 });
@@ -56,7 +58,7 @@ describe('readAppSetting / writeAppSetting / deleteAppSetting', () => {
     writeAppSetting(dir, 'first', true);
     writeAppSetting(dir, 'second', 2);
     expect(readAppSetting(dir, 'first')).toBe(true);
-    const raw = JSON.parse(readFileSync(join(dir, APP_SETTINGS_FILE), 'utf8')) as Record<
+    const raw = JSON.parse(readFileSync(path.join(dir, APP_SETTINGS_FILE), 'utf8')) as Record<
       string,
       unknown
     >;

@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, test } from 'vitest';
+
 import { openVaultDb, type VaultDb } from '../db.js';
+import { readReplicaIntentOutcome, recordReplicaIntentOutcome } from './intents.js';
 import {
   deleteDurableParkedPayload,
   deleteDurableParkedPayloadsForGrant,
@@ -8,7 +10,6 @@ import {
   saveDurableParkedPayload,
   settleDurableParkedPayload,
 } from './parked.js';
-import { readReplicaIntentOutcome, recordReplicaIntentOutcome } from './intents.js';
 
 let db: VaultDb | undefined;
 describe('parked', () => {
@@ -115,7 +116,7 @@ describe('parked', () => {
         intentId: 'intent-1',
         outcome: { status: 'executed', invocationId: 'inv-1' },
       }),
-    ).toThrow(/simulated terminal outcome failure/);
+    ).toThrow(/simulated terminal outcome failure/u);
     expect(readDurableParkedPayload(db, 'inv-1')).toBeDefined();
     expect(readReplicaIntentOutcome(db.vault, 'intent-1', 'device-1')).toMatchObject({
       status: 'parked',

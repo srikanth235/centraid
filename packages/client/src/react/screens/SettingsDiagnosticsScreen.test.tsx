@@ -1,6 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
 import SettingsDiagnosticsScreen, {
   type GatewayHealthDTO,
   type SettingsDiagnosticsBridgeProps,
@@ -12,7 +13,12 @@ function makeHealth(over: Partial<GatewayHealthDTO> = {}): GatewayHealthDTO {
     startedAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
     uptimeMs: 3 * 60 * 60 * 1000,
     components: [
-      { component: 'vaults', status: 'ok', detail: '1 vault mounted', errorCount: 0 },
+      {
+        component: 'vaults',
+        status: 'ok',
+        detail: '1 vault mounted',
+        errorCount: 0,
+      },
       {
         component: 'automations',
         status: 'ok',
@@ -71,7 +77,12 @@ describe('screens/SettingsDiagnosticsScreen', () => {
       const health = makeHealth({
         status: 'error',
         components: [
-          { component: 'vaults', status: 'ok', detail: '1 vault mounted', errorCount: 0 },
+          {
+            component: 'vaults',
+            status: 'ok',
+            detail: '1 vault mounted',
+            errorCount: 0,
+          },
           {
             component: 'outbox',
             status: 'error',
@@ -128,7 +139,12 @@ describe('screens/SettingsDiagnosticsScreen', () => {
       const health = makeHealth({
         components: [
           { component: 'vaults', status: 'ok', errorCount: 0 },
-          { component: 'outbox', status: 'error', errorCount: 2, lastError: 'ECONNREFUSED' },
+          {
+            component: 'outbox',
+            status: 'error',
+            errorCount: 2,
+            lastError: 'ECONNREFUSED',
+          },
         ],
       });
       const el = await mount({
@@ -164,7 +180,14 @@ describe('screens/SettingsDiagnosticsScreen', () => {
         'vault 019f5079-vault-two: 118.7 MB (vault.db 90.0 MB, journal.db 28.7 MB); ' +
         'disk free 12.4 GB of 500.0 GB (2.5% free) on /Users/owner/Library/Application Support/Centraid';
       const health = makeHealth({
-        components: [{ component: 'disk', status: 'ok', detail: longDetail, errorCount: 0 }],
+        components: [
+          {
+            component: 'disk',
+            status: 'ok',
+            detail: longDetail,
+            errorCount: 0,
+          },
+        ],
       });
       const el = await mount({
         loadHealth: vi.fn<SettingsDiagnosticsBridgeProps['loadHealth']>().mockResolvedValue(health),

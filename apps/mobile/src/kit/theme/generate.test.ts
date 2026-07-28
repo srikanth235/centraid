@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import {
   buildTheme,
   cssColorToRn,
@@ -92,9 +93,9 @@ describe(buildTheme, () => {
 
   it('extracts resolved light colors', () => {
     expect(theme.light.accent).toBe('#4e68dd');
-    expect(theme.light.ink).toMatch(/^#[0-9a-f]{6}$/);
+    expect(theme.light.ink).toMatch(/^#[0-9a-f]{6}$/u);
     expect(theme.light.bgElev).toBe('#ffffff'); // var(--surface)
-    expect(theme.light.line).toMatch(/^rgba\(/); // alpha → rgba
+    expect(theme.light.line).toMatch(/^rgba\(/u); // alpha → rgba
   });
 
   it('skips color-mix, swatch, and internal vars', () => {
@@ -108,7 +109,7 @@ describe(buildTheme, () => {
 
   it('resolves dark overrides, including calc and the --bg-wall fallback', () => {
     expect(theme.dark.ink).not.toBe(theme.light.ink);
-    expect(theme.dark.surface).toMatch(/^#[0-9a-f]{6}$/); // calc(10% + 5%)
+    expect(theme.dark.surface).toMatch(/^#[0-9a-f]{6}$/u); // calc(10% + 5%)
     expect(theme.dark.bg).toBe('#16181d'); // var(--bg-wall) fallback → hsl(222 12% 10%)
   });
 
@@ -141,8 +142,9 @@ describe(renderTokensModule, () => {
 
   it('sorts palette keys alphabetically', () => {
     const out = renderTokensModule(theme, 'src.css');
-    const block = /export const lightPalette = \{([\s\S]*?)\} as const;/.exec(out)?.[1] ?? '';
-    const keys = [...block.matchAll(/^\s*([A-Za-z0-9_$]+):/gm)].map((m) => m[1]);
+    const block =
+      /export const lightPalette = \{(?<body>[\s\S]*?)\} as const;/u.exec(out)?.[1] ?? '';
+    const keys = [...block.matchAll(/^\s*(?<key>[A-Za-z0-9_$]+):/gmu)].map((m) => m[1]);
     expect(keys).toStrictEqual([...keys].sort());
     expect(keys.length).toBeGreaterThan(0);
   });

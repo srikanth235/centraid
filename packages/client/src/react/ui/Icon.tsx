@@ -1,6 +1,6 @@
-import type { JSX } from 'react';
 import { icons } from '@centraid/design-tokens';
 import type { IconName } from '@centraid/design-tokens';
+import type { JSX } from 'react';
 
 export interface IconProps {
   name: IconName;

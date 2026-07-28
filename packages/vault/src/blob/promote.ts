@@ -5,6 +5,7 @@
 // core.add_document, media.add_asset) and by the import spine's publishers.
 
 import type { DatabaseSync } from 'node:sqlite';
+
 import { queueMissingDeviceEnrichmentRequests } from '../enrich/leases.js';
 import {
   isBinaryDerivative,
@@ -52,14 +53,24 @@ export function promoteStagedBlob(
       'SELECT media_type, byte_size, original_name, meta_json FROM blob_staging WHERE sha256 = ? AND variant IS NULL',
     )
     .get(sha256) as
-    | { media_type: string; byte_size: number; original_name: string | null; meta_json: string }
+    | {
+        media_type: string;
+        byte_size: number;
+        original_name: string | null;
+        meta_json: string;
+      }
     | undefined;
   const existing = vault
     .prepare(
       'SELECT content_id, media_type, byte_size, deleted_at FROM core_content_item WHERE sha256 = ?',
     )
     .get(sha256) as
-    | { content_id: string; media_type: string; byte_size: number; deleted_at: string | null }
+    | {
+        content_id: string;
+        media_type: string;
+        byte_size: number;
+        deleted_at: string | null;
+      }
     | undefined;
   if (!staged && !existing) {
     throw new Error(`no staged blob ${sha256} — upload it first (POST /_vault/blobs)`);

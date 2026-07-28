@@ -3,6 +3,7 @@
  * mergePersistedSettings is pure — concurrent patches on the same base do not share outputs.
  */
 import { describe, expect, test } from 'vitest';
+
 import { mergePersistedSettings } from './settings-merge.ts';
 
 describe('matrix-concurrency', () => {
@@ -20,7 +21,9 @@ describe('matrix-concurrency', () => {
     );
     for (let i = 0; i < results.length; i += 1) {
       expect(results[i]!.remoteTemplatesUrl).toBe(`https://example.test/${i}.json`);
-      expect(results[i]!.activeVaultByGateway).toStrictEqual({ local: `v-${i}` });
+      expect(results[i]!.activeVaultByGateway).toStrictEqual({
+        local: `v-${i}`,
+      });
     }
     // Top-level result objects are distinct; mutating one field does not rewrite siblings.
     results[0]!.remoteTemplatesUrl = 'MUTATED';

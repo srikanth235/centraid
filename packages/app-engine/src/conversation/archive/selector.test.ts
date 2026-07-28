@@ -3,6 +3,7 @@
 // fixtures in test-fixtures.ts.
 
 import { describe, expect, it } from 'vitest';
+
 import { makeJournalDbProvider } from '../../stores/gateway-db.js';
 import { ConversationStore } from '../store.js';
 import { runConversationArchival } from './index.js';
@@ -127,7 +128,12 @@ describe('selector edges', () => {
     const { journal } = openTempJournal();
     const blobSink = new MemoryBlobSink();
     // updated_at is recent even though its turns are old — an active thread.
-    seedConversation(journal, { id: 'c1', kind: 'chat', appId: 'app', updatedAt: daysAgo(1) });
+    seedConversation(journal, {
+      id: 'c1',
+      kind: 'chat',
+      appId: 'app',
+      updatedAt: daysAgo(1),
+    });
     seedTurn(journal, {
       turnId: 't0',
       conversationId: 'c1',
@@ -147,7 +153,12 @@ describe('selector edges', () => {
   it('a chat conversation containing a pinned turn does not archive', () => {
     const { journal } = openTempJournal();
     const blobSink = new MemoryBlobSink();
-    seedConversation(journal, { id: 'c1', kind: 'chat', appId: 'app', updatedAt: daysAgo(120) });
+    seedConversation(journal, {
+      id: 'c1',
+      kind: 'chat',
+      appId: 'app',
+      updatedAt: daysAgo(120),
+    });
     seedTurn(journal, {
       turnId: 't0',
       conversationId: 'c1',
@@ -278,7 +289,12 @@ describe('referencedHashes union', () => {
     const liveHash = 'l'.repeat(64);
     const archivedHash = 'r'.repeat(64);
     // A live chat thread with an attachment (stays live — recent).
-    seedConversation(journal, { id: 'live', kind: 'chat', appId: 'app', updatedAt: now });
+    seedConversation(journal, {
+      id: 'live',
+      kind: 'chat',
+      appId: 'app',
+      updatedAt: now,
+    });
     seedTurn(journal, {
       turnId: 'lt0',
       conversationId: 'live',
@@ -288,7 +304,12 @@ describe('referencedHashes union', () => {
     });
     seedAttachment(journal, 'lt0', liveHash);
     // An old chat thread whose attachment rides an archived-then-pruned turn.
-    seedConversation(journal, { id: 'old', kind: 'chat', appId: 'app', updatedAt: daysAgo(120) });
+    seedConversation(journal, {
+      id: 'old',
+      kind: 'chat',
+      appId: 'app',
+      updatedAt: daysAgo(120),
+    });
     seedTurn(journal, {
       turnId: 'ot0',
       conversationId: 'old',

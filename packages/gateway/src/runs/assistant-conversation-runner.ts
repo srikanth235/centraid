@@ -16,8 +16,9 @@
  * turn, and the injected `runTurn` drives whichever is configured.
  */
 
-import path from 'node:path';
 import { promises as fs } from 'node:fs';
+import path from 'node:path';
+
 import { runTurn } from '@centraid/agent-runtime';
 import {
   makeConversationRunnerCore,
@@ -34,6 +35,7 @@ import {
   type VaultContentRunner,
   type VaultSqlRunner,
 } from '@centraid/app-engine';
+
 import type { VaultRegistry } from '../serve/vault-registry.js';
 
 export interface AssistantConversationRunnerOptions {

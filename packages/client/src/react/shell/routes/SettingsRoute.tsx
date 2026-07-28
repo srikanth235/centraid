@@ -1,20 +1,20 @@
-import { Fragment, type JSX, useEffect, useMemo, useState } from 'react';
 import type { IconName } from '@centraid/design-tokens';
+import { Fragment, type JSX, useEffect, useMemo, useState } from 'react';
+
 import type { AccentKey, AppearancePrefs, ThemeName } from '../../../app-shell-context.js';
-import Icon from '../../ui/Icon.js';
 import ImportScreen from '../../screens/ImportScreen.js';
 import PhoneScreen from '../../screens/PhoneScreen.js';
 import SettingsAppearanceScreen from '../../screens/SettingsAppearanceScreen.js';
 import SettingsLayoutScreen from '../../screens/SettingsLayoutScreen.js';
 import SettingsProvidersScreen from '../../screens/SettingsProvidersScreen.js';
 import SettingsSpaceScreen from '../../screens/SettingsSpaceScreen.js';
-import { openPrompt } from '../prompt.js';
 import SettingsStorageScreen from '../../screens/SettingsStorageScreen.js';
+import Icon from '../../ui/Icon.js';
 import { useShellActions } from '../actions.js';
+import { openPrompt } from '../prompt.js';
 import { PageEmpty, PageLoading } from '../status.js';
 import { useAsyncData } from '../useAsyncData.js';
 import { importCallbacks, loadActiveSpaceData, phoneCallbacks } from './settingsAccountData.js';
-import { deleteSpace, saveSpace } from './spaceModals.js';
 import {
   activateRunner,
   loadProviders,
@@ -34,6 +34,8 @@ import {
   makeDeleteStorageConnection,
   testStorageConnection,
 } from './settingsStorageData.js';
+import { deleteSpace, saveSpace } from './spaceModals.js';
+
 import styles from './SettingsRoute.module.css';
 
 // React-owned Settings — the inner-sidebar shell. Replaces the vanilla

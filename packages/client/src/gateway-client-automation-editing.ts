@@ -91,7 +91,10 @@ export async function createAutomation(input: {
     row: CentraidAutomationRow | null;
     webhook?: { id: string; secret: string; url: string };
   }>(res, 'create automation');
-  return { row: out.row ?? null, ...(out.webhook ? { webhook: out.webhook } : {}) };
+  return {
+    row: out.row ?? null,
+    ...(out.webhook ? { webhook: out.webhook } : {}),
+  };
 }
 
 /**
@@ -160,7 +163,10 @@ export async function updateAutomation(input: {
     row: CentraidAutomationRow | null;
     webhook?: { id: string; secret: string; url: string };
   }>(res, 'update automation');
-  return { row: out.row ?? null, ...(out.webhook ? { webhook: out.webhook } : {}) };
+  return {
+    row: out.row ?? null,
+    ...(out.webhook ? { webhook: out.webhook } : {}),
+  };
 }
 
 /** Toggle an automation's `enabled` flag in its draft, then publish. */
@@ -177,7 +183,11 @@ export async function setAutomationEnabled(input: {
     {
       method: 'POST',
       headers: authHeaders(token, 'application/json'),
-      body: JSON.stringify({ enabled: input.enabled, sessionId, publish: true }),
+      body: JSON.stringify({
+        enabled: input.enabled,
+        sessionId,
+        publish: true,
+      }),
     },
   );
   await readJson(res, 'set automation enabled');
@@ -208,10 +218,9 @@ export async function rotateAutomationWebhookSecret(input: {
       body: JSON.stringify({ sessionId, publish: true }),
     },
   );
-  const out = await readJson<{ webhook: { id: string; secret: string; url: string } }>(
-    res,
-    'rotate automation webhook secret',
-  );
+  const out = await readJson<{
+    webhook: { id: string; secret: string; url: string };
+  }>(res, 'rotate automation webhook secret');
   return { webhook: out.webhook };
 }
 

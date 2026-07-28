@@ -17,8 +17,9 @@
  */
 
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
-import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import path from 'node:path';
+
 import { isRunnerKind, type RunnerKind } from '../conversation/turn.js';
 
 export interface PrefsPersistence {
@@ -63,7 +64,9 @@ export class PrefsStore {
     }
     mkdirSync(path.dirname(this.file!), { recursive: true });
     const tmp = `${this.file!}.tmp`;
-    writeFileSync(tmp, JSON.stringify(this.cache ?? {}, null, 2), { mode: 0o600 });
+    writeFileSync(tmp, JSON.stringify(this.cache ?? {}, null, 2), {
+      mode: 0o600,
+    });
     renameSync(tmp, this.file!);
   }
 

@@ -55,7 +55,14 @@ export function Overview() {
 /** Size scale — glyphs stay crisp because stroke width is intrinsic, not scaled. */
 export function Sizes() {
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 20, color: 'var(--ink)' }}>
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'flex-end',
+        gap: 20,
+        color: 'var(--ink)',
+      }}
+    >
       {[16, 20, 24, 32].map((s) => (
         <div key={s} style={cell}>
           <Icon name="Sparkle" size={s} />

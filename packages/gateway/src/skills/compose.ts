@@ -42,7 +42,10 @@ export function skillsDir(): string {
 }
 
 /** Split a `SKILL.md` into its frontmatter map and its markdown body. */
-export function parseSkillFile(raw: string): { meta: Record<string, string>; body: string } {
+export function parseSkillFile(raw: string): {
+  meta: Record<string, string>;
+  body: string;
+} {
   const m = FRONTMATTER_RE.exec(raw);
   if (!m) return { meta: {}, body: raw.trim() };
   const meta: Record<string, string> = {};
@@ -75,7 +78,11 @@ export function listSkills(dir: string = skillsDir()): SkillMeta[] {
       continue;
     }
     const { meta } = parseSkillFile(raw);
-    out.push({ name: meta.name ?? entry, description: meta.description ?? '', path: skillPath });
+    out.push({
+      name: meta.name ?? entry,
+      description: meta.description ?? '',
+      path: skillPath,
+    });
   }
   return out;
 }

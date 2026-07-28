@@ -26,13 +26,14 @@
 // can show it), while polymorphic pointers are swept exactly as a purge would.
 
 import type { DatabaseSync } from 'node:sqlite';
-import { packKindOf } from '../schema/atlas.js';
-import { browseDependents } from '../schema/atlas-browse-refs.js';
-import { primaryKeyColumns, resolveBrowseTable } from '../schema/atlas-browse.js';
-import { cleanupPolyRefs } from '../schema/poly-refs.js';
-import { sealedColumnsOf } from '../schema/sealed.js';
+
 import type { Gateway } from '../gateway/gateway.js';
 import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
+import { browseDependents } from '../schema/atlas-browse-refs.js';
+import { primaryKeyColumns, resolveBrowseTable } from '../schema/atlas-browse.js';
+import { packKindOf } from '../schema/atlas.js';
+import { cleanupPolyRefs } from '../schema/poly-refs.js';
+import { sealedColumnsOf } from '../schema/sealed.js';
 
 /** The owner schema all three Browse-edit commands sit under. */
 export const ATLAS_OWNER_SCHEMA = 'atlas';
@@ -214,7 +215,11 @@ function deleteRow(): CommandDefinition {
       additionalProperties: false,
     },
     handler: (ctx: HandlerCtx) => {
-      const input = ctx.input as { table: string; id: string; unlockMachinery?: boolean };
+      const input = ctx.input as {
+        table: string;
+        id: string;
+        unlockMachinery?: boolean;
+      };
       const target = guardWriteTarget(ctx.db, input.table, [], input.unlockMachinery === true);
       // Engine-FK dependents BLOCK the delete — with the full dependent payload
       // (engine + polymorphic) so the confirmation dialog is honest. SQLite's
@@ -254,7 +259,10 @@ function rowIdOf(pks: string[], values: Record<string, unknown>): string {
 /** Build the pk WHERE clause + bound params from a Browse id (single or JSON). */
 function pkWhere(table: string, pks: string[], id: string): { where: string; bind: Bindable[] } {
   if (pks.length <= 1) {
-    return { where: pks.length === 1 ? `"${pks[0]}" = ?` : `rowid = ?`, bind: [id] };
+    return {
+      where: pks.length === 1 ? `"${pks[0]}" = ?` : `rowid = ?`,
+      bind: [id],
+    };
   }
   let parts: unknown;
   try {

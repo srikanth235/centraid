@@ -48,7 +48,9 @@ export function blobAuthHeaders(token: string | undefined, scope?: string): Reco
 export async function authorizeBlobUrl(pathname: string, scope?: string): Promise<string | null> {
   try {
     const { baseUrl, token } = await auth();
-    const res = await doFetch(baseUrl, pathname, { headers: blobAuthHeaders(token, scope) });
+    const res = await doFetch(baseUrl, pathname, {
+      headers: blobAuthHeaders(token, scope),
+    });
     if (!res.ok) return null;
     return URL.createObjectURL(await res.blob());
   } catch {

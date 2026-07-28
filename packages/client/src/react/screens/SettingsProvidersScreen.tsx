@@ -1,6 +1,6 @@
 // governance: allow-repo-hygiene file-size-limit (#567) the provider settings screen coordinates one atomic runner/preflight/capability/ladder state surface whose optimistic rollback must remain centralized
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type JSX } from 'react';
-import Button from '../ui/Button.js';
+
 import type {
   AgentCardDTO,
   AgentRunnerKind,
@@ -8,12 +8,14 @@ import type {
   ModelSubsystem,
   SettingsProvidersBridgeProps,
 } from '../screen-contracts.js';
+import { openConfirm } from '../shell/confirm.js';
+import Button from '../ui/Button.js';
 import { DrawerGroup } from './settings-controls.js';
 import AgentEntry from './SettingsProvidersAgents.js';
 import { ConfigSelect, ModelSelect, Select, modelLabel } from './SettingsProvidersSelects.js';
-import styles from './SettingsProvidersScreen.module.css';
+
 import controlsCss from '../styles/controls.module.css';
-import { openConfirm } from '../shell/confirm.js';
+import styles from './SettingsProvidersScreen.module.css';
 
 const POLL_MS = 800;
 const POLL_WINDOW_MS = 30_000;
@@ -49,11 +51,23 @@ function schedulePoll(
  * a lane left unset inherits the default lane. Before per-subsystem runners
  * these were model-only overrides hanging off one globally-active agent.
  */
-const SUBSYSTEM_ROWS: ReadonlyArray<{ key: ModelSubsystem; label: string; hint: string }> = [
-  { key: 'assistant', label: 'Assistant', hint: 'Global Ask across your vault.' },
+const SUBSYSTEM_ROWS: ReadonlyArray<{
+  key: ModelSubsystem;
+  label: string;
+  hint: string;
+}> = [
+  {
+    key: 'assistant',
+    label: 'Assistant',
+    hint: 'Global Ask across your vault.',
+  },
   { key: 'ask', label: 'In-app Ask', hint: 'The Ask panel inside each app.' },
   { key: 'builder', label: 'Builder', hint: 'The app-building agent.' },
-  { key: 'automations', label: 'Automations', hint: 'Background automations & enrichers.' },
+  {
+    key: 'automations',
+    label: 'Automations',
+    hint: 'Background automations & enrichers.',
+  },
 ];
 
 /**

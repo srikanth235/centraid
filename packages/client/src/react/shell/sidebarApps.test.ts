@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'vitest';
+
 import { toSidebarApps } from './sidebarApps.js';
 
 const app = (id: string, name: string): UserAppMeta =>
-  ({ id, name, iconKey: 'Todo', color: '#123', colorKey: 'blue' }) as unknown as UserAppMeta;
+  ({
+    id,
+    name,
+    iconKey: 'Todo',
+    color: '#123',
+    colorKey: 'blue',
+  }) as unknown as UserAppMeta;
 const draft = (id: string, name: string): DraftAppMeta =>
   ({
     id,
@@ -17,10 +24,22 @@ describe(toSidebarApps, () => {
   it('maps installed apps with the `new` status and drafts with `draft`', () => {
     const { apps, drafts } = toSidebarApps([app('todos', 'Todos')], [draft('d1', 'WIP')]);
     expect(apps).toStrictEqual([
-      { id: 'todos', name: 'Todos', iconKey: 'Todo', color: '#123', status: 'new' },
+      {
+        id: 'todos',
+        name: 'Todos',
+        iconKey: 'Todo',
+        color: '#123',
+        status: 'new',
+      },
     ]);
     expect(drafts).toStrictEqual([
-      { id: 'd1', name: 'WIP', iconKey: 'Sparkle', color: '#456', status: 'draft' },
+      {
+        id: 'd1',
+        name: 'WIP',
+        iconKey: 'Sparkle',
+        color: '#456',
+        status: 'draft',
+      },
     ]);
   });
 

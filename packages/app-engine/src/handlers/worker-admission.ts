@@ -36,7 +36,7 @@ export function workerMaxConcurrentFromEnv(
   const fallback = constrained ? 2 : 8;
   const raw = env.CENTRAID_WORKER_MAX_CONCURRENT;
   if (raw === undefined || raw === '') return fallback;
-  const parsed = Number.parseInt(raw, 10);
+  const parsed = Math.trunc(Number(raw));
   return Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 32) : fallback;
 }
 

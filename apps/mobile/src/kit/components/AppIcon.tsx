@@ -1,8 +1,9 @@
+import type { IconName } from '@centraid/design-tokens';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
-import type { IconName } from '@centraid/design-tokens';
-import Icon from './Icon';
+
 import { useTheme } from '../theme/useTheme';
+import Icon from './Icon';
 
 // The "Pressed Card" launcher icon: a monochrome engraved emblem stamped into a
 // translucent glass tile. There is no per-app colour — apps are told apart by

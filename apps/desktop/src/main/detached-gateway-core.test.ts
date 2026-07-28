@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import {
   buildDetachedSpawnOptions,
   decideControl,
@@ -10,26 +11,42 @@ import {
 
 describe("decideControl (gateway.db lock-informed adopt-don't-kill)", () => {
   it('owns a held lock only when the device credential reaches the daemon', () => {
-    expect(decideControl({ lockHeld: true, credentialedProbeOk: true, publicProbeOk: true })).toBe(
-      'own',
-    );
+    expect(
+      decideControl({
+        lockHeld: true,
+        credentialedProbeOk: true,
+        publicProbeOk: true,
+      }),
+    ).toBe('own');
   });
 
   it('treats an answering daemon without our credential as foreign', () => {
-    expect(decideControl({ lockHeld: true, credentialedProbeOk: false, publicProbeOk: true })).toBe(
-      'foreign',
-    );
+    expect(
+      decideControl({
+        lockHeld: true,
+        credentialedProbeOk: false,
+        publicProbeOk: true,
+      }),
+    ).toBe('foreign');
   });
 
   it('refuses a lock holder that is not answering', () => {
     expect(
-      decideControl({ lockHeld: true, credentialedProbeOk: false, publicProbeOk: false }),
+      decideControl({
+        lockHeld: true,
+        credentialedProbeOk: false,
+        publicProbeOk: false,
+      }),
     ).toBe('probe-failed-refuse');
   });
 
   it('starts when the kernel lock is free regardless of stale probe state', () => {
     expect(
-      decideControl({ lockHeld: false, credentialedProbeOk: false, publicProbeOk: false }),
+      decideControl({
+        lockHeld: false,
+        credentialedProbeOk: false,
+        publicProbeOk: false,
+      }),
     ).toBe('stale-reclaim');
   });
 });
@@ -72,8 +89,10 @@ describe('shouldOfferServiceInstall (H5)', () => {
   it('does not re-offer after the user decides or finishes onboarding', () => {
     expect(shouldOfferServiceInstall({ offerGatewayService: false })).toBe(false);
     expect(shouldOfferServiceInstall({ offerGatewayService: true })).toBe(false);
-    expect(shouldOfferServiceInstall({ onboardingCompletedAt: '2026-07-20T00:00:00.000Z' })).toBe(
-      false,
-    );
+    expect(
+      shouldOfferServiceInstall({
+        onboardingCompletedAt: '2026-07-20T00:00:00.000Z',
+      }),
+    ).toBe(false);
   });
 });

@@ -1,5 +1,7 @@
 import { readFileSync } from 'node:fs';
+
 import { describe, expect, test } from 'vitest';
+
 import {
   decodeHeader,
   decodeTrailer,
@@ -12,7 +14,12 @@ import {
 } from './blob/seal-frames.ts';
 
 interface GoldenFixture {
-  cbsf: { keyHex: string; plainBase64: string; frameSize: number; sealedBase64: string };
+  cbsf: {
+    keyHex: string;
+    plainBase64: string;
+    frameSize: number;
+    sealedBase64: string;
+  };
   cbsfCompressed: Record<
     'zstd' | 'deflate',
     { algorithm: number; plainBase64: string; sealedBase64: string }

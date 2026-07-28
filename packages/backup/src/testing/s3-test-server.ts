@@ -145,7 +145,14 @@ export class S3TestServer {
   getObjectMetadataDirect(
     bucket: string,
     key: string,
-  ): { size: number; etagOrHash: string; storedAt: number; storageClass: string } | undefined {
+  ):
+    | {
+        size: number;
+        etagOrHash: string;
+        storedAt: number;
+        storageClass: string;
+      }
+    | undefined {
     const object = this.objects.get(S3TestServer.compositeKey(bucket, key));
     if (!object) return undefined;
     return {
@@ -313,7 +320,7 @@ export class S3TestServer {
       .sort();
     const pageSize = this.listPageSize;
     const token = url.searchParams.get('continuation-token');
-    const startIndex = token ? Number.parseInt(token, 10) : 0;
+    const startIndex = token ? Math.trunc(Number(token)) : 0;
     const page = allMatching.slice(startIndex, startIndex + pageSize);
     const isTruncated = startIndex + pageSize < allMatching.length;
     const contents = page

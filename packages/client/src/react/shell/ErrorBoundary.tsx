@@ -19,7 +19,7 @@ interface ErrorBoundaryState {
 // functional components elsewhere. (#468)
 /* eslint-disable react/display-name, react/no-set-state, react/state-in-constructor, react/jsx-handler-names -- (#468) React error boundaries require a class component */
 export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  static displayName = 'ErrorBoundary';
+  static readonly displayName = 'ErrorBoundary';
 
   override state: ErrorBoundaryState = { error: null };
 
@@ -62,7 +62,14 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
         }}
       >
         <h1 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>{title}</h1>
-        <p style={{ margin: 0, fontSize: 14, lineHeight: 1.5, color: 'var(--ink-2, #a8adb8)' }}>
+        <p
+          style={{
+            margin: 0,
+            fontSize: 14,
+            lineHeight: 1.5,
+            color: 'var(--ink-2, #a8adb8)',
+          }}
+        >
           {error.message || 'An unexpected error stopped this view.'}
         </p>
         <button

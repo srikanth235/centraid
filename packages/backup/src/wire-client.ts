@@ -82,7 +82,12 @@ function budget(
 }
 
 interface ErrorEnvelope {
-  error: { type: string; code: string; message: string; details?: Record<string, unknown> };
+  error: {
+    type: string;
+    code: string;
+    message: string;
+    details?: Record<string, unknown>;
+  };
 }
 
 const defaultSleep = (ms: number): Promise<void> =>
@@ -115,7 +120,9 @@ export async function callProviderRoute<T>(
   let serverErrorAttempts = 0;
   let rateLimitWaited = 0;
   let serverErrorWaited = 0;
-  for (;;) {
+  // Retries are a serial state machine: each attempt consumes the preceding
+  // response's budget and delay before another request may be sent.
+  const attempt = async (): Promise<T> => {
     const res = await fetchImpl(`${baseUrl}${routePath}`, {
       method,
       headers: {
@@ -168,7 +175,7 @@ export async function callProviderRoute<T>(
           serverErrorWaited += backoff;
         }
         await sleep(backoff);
-        continue;
+        return attempt();
       }
     }
 
@@ -183,5 +190,6 @@ export async function callProviderRoute<T>(
       });
     }
     return (parsed as { data: T }).data;
-  }
+  };
+  return attempt();
 }

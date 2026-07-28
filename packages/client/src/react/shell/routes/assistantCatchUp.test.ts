@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { catchUpAfterDrop } from './assistantCatchUp.js';
 
 const instantSleep = (): Promise<void> => Promise.resolve();

@@ -1,18 +1,18 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import crypto from 'node:crypto';
 /*
  * Seal-key custody CLI: status + in-place rotation only. Recovery uses the
  * password-wrapped recovery-kit path and this surface never exports raw keys.
  */
-
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
+
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { sealKeyFileFor } from '@centraid/vault';
-import { commandVault } from './vault-admin.ts';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+
 import { commandKey } from './key-admin.ts';
 import { daemonLayoutFor } from './paths.ts';
+import { commandVault } from './vault-admin.ts';
 
 // See admin.test.ts: real vault/daemon bootstrap per test, so this file is
 // fsync-bound and needs an escalation above the 30s node-project default.
@@ -58,7 +58,11 @@ describe('key-admin', () => {
     rmSync(dataDir, { recursive: true, force: true });
   });
 
-  async function createVault(): Promise<{ vaultId: string; dir: string; keyFile: string }> {
+  async function createVault(): Promise<{
+    vaultId: string;
+    dir: string;
+    keyFile: string;
+  }> {
     const out = await capture(() =>
       commandVault(['create', '--data-dir', dataDir, '--name', 'Test'], fail),
     );
@@ -83,10 +87,10 @@ describe('key-admin', () => {
     const v = await createVault();
     await expect(
       commandKey(['export', '--data-dir', dataDir, '--vault', v.vaultId], fail),
-    ).rejects.toThrow(/status, rotate/);
+    ).rejects.toThrow(/status, rotate/u);
     await expect(
       commandKey(['restore', '--data-dir', dataDir, '--vault', v.vaultId], fail),
-    ).rejects.toThrow(/status, rotate/);
+    ).rejects.toThrow(/status, rotate/u);
   });
 
   test('key rotate swaps the key file and reports fingerprints', async () => {
@@ -95,7 +99,10 @@ describe('key-admin', () => {
     const out = await capture(() =>
       commandKey(['rotate', '--data-dir', dataDir, '--vault', v.vaultId], fail),
     );
-    const result = JSON.parse(out) as { oldFingerprint: string; newFingerprint: string };
+    const result = JSON.parse(out) as {
+      oldFingerprint: string;
+      newFingerprint: string;
+    };
     expect(result.newFingerprint).not.toBe(result.oldFingerprint);
     expect(readFileSync(v.keyFile).equals(before)).toBe(false);
     expect(existsSync(`${v.keyFile}.next`)).toBe(false); // sidecar promoted
@@ -109,6 +116,6 @@ describe('key-admin', () => {
     expect((JSON.parse(out) as { vaultId: string }).vaultId).toBe(v.vaultId);
     await expect(
       capture(() => commandKey(['status', '--data-dir', dataDir, '--vault', 'nope'], fail)),
-    ).rejects.toThrow(/no vault matches/);
+    ).rejects.toThrow(/no vault matches/u);
   });
 });

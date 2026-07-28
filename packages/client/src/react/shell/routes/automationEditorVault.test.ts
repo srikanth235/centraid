@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+
 import { vaultForTriggers } from './AutomationEditorRoute.js';
 
 // The route module pulls the whole gateway-client surface in transitively; we

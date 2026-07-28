@@ -114,30 +114,32 @@ export function detectDefaultCiEnvGate(source) {
 
 /** Inventory solid/partial cell owners that are whole-file env-gated off default CI. */
 export async function collectEnvGatedOwners(manifest, { root, readFile }) {
-  const rows = [];
-  for (const [cellId, cellOwner] of Object.entries(manifest.cellOwners ?? {})) {
-    if (!cellOwner?.owner) continue;
-    const [surfaceId, dimensionId] = cellId.split('.');
-    const surface = (manifest.surfaces ?? []).find((entry) => entry.id === surfaceId);
-    const assessment = surface?.assessment?.[dimensionId];
-    if (assessment !== 'solid' && assessment !== 'partial') continue;
-    try {
-      const source = await readFile(`${root}/${cellOwner.owner}`, 'utf8');
-      const gate = detectDefaultCiEnvGate(source);
-      if (gate) {
-        rows.push({
-          cellId,
-          owner: cellOwner.owner,
-          assessment,
-          env: gate.env,
-          kind: gate.kind,
-        });
+  const rows = await Promise.all(
+    Object.entries(manifest.cellOwners ?? {}).map(async ([cellId, cellOwner]) => {
+      if (!cellOwner?.owner) return undefined;
+      const [surfaceId, dimensionId] = cellId.split('.');
+      const surface = (manifest.surfaces ?? []).find((entry) => entry.id === surfaceId);
+      const assessment = surface?.assessment?.[dimensionId];
+      if (assessment !== 'solid' && assessment !== 'partial') return undefined;
+      try {
+        const source = await readFile(`${root}/${cellOwner.owner}`, 'utf8');
+        const gate = detectDefaultCiEnvGate(source);
+        if (gate) {
+          return {
+            cellId,
+            owner: cellOwner.owner,
+            assessment,
+            env: gate.env,
+            kind: gate.kind,
+          };
+        }
+      } catch {
+        // missing file is a matrix validation error, not inventory
       }
-    } catch {
-      // missing file is a matrix validation error, not inventory
-    }
-  }
-  return rows;
+      return undefined;
+    }),
+  );
+  return rows.filter((row) => row !== undefined);
 }
 
 /**

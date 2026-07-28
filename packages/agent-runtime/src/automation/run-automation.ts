@@ -19,6 +19,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
+
 import {
   isRunnerKind,
   type AutomationTriggerKind,
@@ -30,6 +31,7 @@ import {
   type VaultBridge,
 } from '@centraid/app-engine';
 import * as automation from '@centraid/automation';
+
 import type { RunnerKind } from '../types.js';
 import { parseAutomationAgentFailure, startLiveDispatch } from './run-automation-live-dispatch.js';
 
@@ -149,9 +151,10 @@ export interface RunAutomationOptions {
  * missing automation app throws; a handler failure surfaces in
  * `outcome.ok === false`.
  */
-export async function runAutomation(
-  opts: RunAutomationOptions,
-): Promise<{ outcome: automation.HandlerOutcome; record: automation.RunRecord }> {
+export async function runAutomation(opts: RunAutomationOptions): Promise<{
+  outcome: automation.HandlerOutcome;
+  record: automation.RunRecord;
+}> {
   const primary: RunnerKind = opts.runner ?? 'codex';
   const ladder: RunnerKind[] = [];
   for (const kind of [primary, ...(opts.runnerLadder ?? [])]) {
@@ -162,7 +165,7 @@ export async function runAutomation(
   let failoverNotice: string | undefined;
   const condemned: string[] = [];
 
-  for (let index = 0; index < ladder.length; index += 1) {
+  const runRung = async (index: number): Promise<void> => {
     const runner = ladder[index]!;
     const isPrimary = index === 0;
     // A known-open breaker is decided BEFORE the handler runs. `ctx.agent`
@@ -196,8 +199,9 @@ export async function runAutomation(
             failedRunId: index === 0 ? baseRunId : `${baseRunId}:failover:${index}:${runner}`,
             nextRunId: `${baseRunId}:failover:${index + 1}:${next}`,
           });
+          return runRung(index + 1);
         }
-        continue;
+        return;
       }
     }
     const prefs = await opts.runnerPrefsFor?.(runner);
@@ -254,9 +258,9 @@ export async function runAutomation(
         // notice is additive evidence, not a replacement for it.
         ...(turnNote ? { note: turnNote } : {}),
         ...(failoverNotice ? { failoverNotice } : {}),
-        ...(opts.input !== undefined ? { input: opts.input } : {}),
+        ...(opts.input === undefined ? {} : { input: opts.input }),
         ...(opts.parentRunId ? { parentRunId: opts.parentRunId } : {}),
-        ...(opts.failureDepth !== undefined ? { failureDepth: opts.failureDepth } : {}),
+        ...(opts.failureDepth === undefined ? {} : { failureDepth: opts.failureDepth }),
         ...(opts.resolveConnection ? { resolveConnection: opts.resolveConnection } : {}),
         ...(opts.resolveNestedRuntime ? { resolveNestedRuntime: opts.resolveNestedRuntime } : {}),
         deferOnFailure: (outcome) =>
@@ -267,7 +271,7 @@ export async function runAutomation(
 
     const failure = parseAutomationAgentFailure(last.outcome.error);
     const next = ladder[index + 1];
-    if (!failure || !next) return last;
+    if (!failure || !next) return;
     const nextRunId = `${baseRunId}:failover:${index + 1}:${next}`;
     opts.onLog?.(
       'warn',
@@ -285,7 +289,9 @@ export async function runAutomation(
       failedRunId: runId,
       nextRunId,
     });
-  }
+    return runRung(index + 1);
+  };
+  await runRung(0);
 
   if (!last) {
     // Every rung was condemned before its handler could run. Surfacing this as

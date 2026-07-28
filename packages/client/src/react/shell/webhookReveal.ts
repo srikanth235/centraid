@@ -1,8 +1,9 @@
+import { cx } from '../ui/cx.js';
 import { iconSvg } from './iconSvg.js';
-import styles from './webhookReveal.module.css';
+
 import modalCss from '../styles/modal.module.css';
 import buttonCss from '../ui/Button.module.css';
-import { cx } from '../ui/cx.js';
+import styles from './webhookReveal.module.css';
 
 // One-time webhook-secret reveal — a body-portal overlay (same imperative-DOM
 // shape as `confirm.ts` / `automationTemplatePreview.ts`) shown right after a

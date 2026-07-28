@@ -30,17 +30,19 @@
  * material — with a loud "store this offline" warning.
  */
 
-import path from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
-import { openVaultRegistry, type VaultInfo, type VaultRegistry } from '../serve/vault-registry.js';
-import { HealthRegistry } from '../serve/health-registry.js';
-import { GatewayDatabase, GatewayLockError } from '../serve/gateway-db.js';
-import { BackupService } from '../backup/backup-service.js';
+import path from 'node:path';
+
 import type { BackupProvider } from '@centraid/backup';
+
+import { BackupService } from '../backup/backup-service.js';
+import { deriveBackupSourceInstanceId } from '../backup/backup-state.js';
+import { GatewayDatabase, GatewayLockError } from '../serve/gateway-db.js';
+import { HealthRegistry } from '../serve/health-registry.js';
+import { openVaultRegistry, type VaultInfo, type VaultRegistry } from '../serve/vault-registry.js';
+import { daemonKeyStore } from './key-store.js';
 import { daemonLayoutFor } from './paths.js';
 import { resolveDaemonConfig } from './resolve-config.js';
-import { daemonKeyStore } from './key-store.js';
-import { deriveBackupSourceInstanceId } from '../backup/backup-state.js';
 
 interface BackupArgs {
   configPath?: string;
@@ -56,6 +58,18 @@ interface BackupArgs {
   full?: boolean;
   /** Acknowledge a metered-egress restore's download cost — the `--yes` gate release (issue #439 R2). */
   yes?: boolean;
+}
+
+/** CLI backup actions retain deterministic vault ordering and fail-stop semantics. */
+function applyInOrder<T>(
+  values: Iterable<T>,
+  apply: (value: T, index: number) => void | PromiseLike<void>,
+): Promise<void> {
+  let index = 0;
+  return Array.from(values).reduce<Promise<void>>(
+    (sequence, value) => sequence.then(() => apply(value, index++)),
+    Promise.resolve(),
+  );
 }
 
 function parseBackupArgs(args: string[], fail: (msg: string, code?: number) => never): BackupArgs {
@@ -203,38 +217,41 @@ export async function commandBackup(
       case 'status': {
         const state = await service.status();
         for (const vaultId of vaultIds) {
-          printJson({ vaultId, ...(state[vaultId] ?? { note: 'never backed up' }) });
+          printJson({
+            vaultId,
+            ...(state[vaultId] ?? { note: 'never backed up' }),
+          });
         }
         return;
       }
       case 'run': {
-        for (const vaultId of vaultIds) {
+        await applyInOrder(vaultIds, async (vaultId) => {
           await service.runBackup(vaultId);
           const state = await service.status();
           printJson({ vaultId, ...state[vaultId] });
-        }
+        });
         return;
       }
       case 'verify': {
-        for (const vaultId of vaultIds) {
+        await applyInOrder(vaultIds, async (vaultId) => {
           const result = await service.runVerify(vaultId);
           printJson({ vaultId, result });
-        }
+        });
         return;
       }
       case 'restore-verify': {
-        for (const vaultId of vaultIds) {
+        await applyInOrder(vaultIds, async (vaultId) => {
           await service.runRestoreVerify(vaultId);
           const state = await service.status();
           printJson({
             vaultId,
             lastRestoreVerifiedAt: state[vaultId]?.lastRestoreVerifiedAt ?? null,
           });
-        }
+        });
         return;
       }
       case 'list': {
-        for (const vaultId of vaultIds) {
+        await applyInOrder(vaultIds, async (vaultId) => {
           try {
             const rows = await service.listSnapshots(vaultId);
             for (const row of rows) printJson({ vaultId, ...row });
@@ -243,7 +260,7 @@ export async function commandBackup(
               `centraid-gateway: ${err instanceof Error ? err.message : String(err)}\n`,
             );
           }
-        }
+        });
         return;
       }
       case 'restore': {

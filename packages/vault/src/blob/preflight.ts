@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
+
 import type { BlobCache } from './cache.js';
 import type { CustodyState, RemoteTier } from './custody-types.js';
 import type { LocalBlobStore } from './local.js';

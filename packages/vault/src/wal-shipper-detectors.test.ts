@@ -1,4 +1,4 @@
-import { tempDirSync } from '@centraid/test-kit/temp-dir';
+import { createHash } from 'node:crypto';
 // governance: allow-repo-hygiene file-size-limit (#408) the detector suite shares real SQLite race hooks, restore helpers, and restart fixtures whose correctness depends on one common lifecycle harness
 // WAL shipper detectors + lifecycle (issue #408): G5 foreign-actor
 // detection (in-process stand-ins — the real second-process test lives in
@@ -6,8 +6,6 @@ import { tempDirSync } from '@centraid/test-kit/temp-dir';
 // (first-run, cadence, explicit rolls, base registration, clean close +
 // reopen), and the local disk budget. Real vaults, real sqlite, no mocks;
 // capture-correctness tests live in wal-shipper.test.ts.
-
-import { createHash } from 'node:crypto';
 import {
   closeSync,
   copyFileSync,
@@ -23,7 +21,7 @@ import {
 } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+
 import {
   FsObjectStore,
   replayWalSegments,
@@ -34,6 +32,9 @@ import {
   walSalts,
   type WalDbName,
 } from '@centraid/backup';
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+
 import { bootstrapVault } from './bootstrap.js';
 import { openVaultDb, type VaultDb } from './db.js';
 import { WalShipper, type UploadableWalFile, type WalShipperOptions } from './wal-shipper.js';
@@ -154,15 +155,17 @@ describe('wal-shipper-detectors', () => {
   async function restoreCurrent(shipper: WalShipper, name: string): Promise<string> {
     const dataKey = new Uint8Array(32).fill(7);
     const store = new FsObjectStore(path.join(root, `objects-${name}`));
-    for (const item of shipper.listUploadable()) {
-      const sealed =
-        item.kind === 'segment'
-          ? sealWalSegment(dataKey, 'v1', item.addr!, readFileSync(item.file))
-          : item.kind === 'closer'
-            ? sealWalCloser(dataKey, 'v1', item.closer!)
-            : sealWalPairMarker(dataKey, 'v1', item.marker!);
-      await store.put(item.key, sealed);
-    }
+    await Promise.all(
+      shipper.listUploadable().map((item) => {
+        const sealed =
+          item.kind === 'segment'
+            ? sealWalSegment(dataKey, 'v1', item.addr!, readFileSync(item.file))
+            : item.kind === 'closer'
+              ? sealWalCloser(dataKey, 'v1', item.closer!)
+              : sealWalPairMarker(dataKey, 'v1', item.marker!);
+        return store.put(item.key, sealed);
+      }),
+    );
     const destDir = path.join(root, `restore-${name}`);
     mkdirSync(destDir, { recursive: true });
     const bases = shipper.currentBases();
@@ -182,10 +185,14 @@ describe('wal-shipper-detectors', () => {
 
   /** Rows of `_walship_jprobe` in a restored journal.db. */
   function restoredJournalRows(destDir: string): string[] {
-    const conn = new DatabaseSync(path.join(destDir, 'journal.db'), { readOnly: true });
+    const conn = new DatabaseSync(path.join(destDir, 'journal.db'), {
+      readOnly: true,
+    });
     try {
       return (
-        conn.prepare('SELECT v FROM _walship_jprobe ORDER BY id').all() as { v: string }[]
+        conn.prepare('SELECT v FROM _walship_jprobe ORDER BY id').all() as {
+          v: string;
+        }[]
       ).map((r) => r.v);
     } finally {
       conn.close();
@@ -217,11 +224,11 @@ describe('wal-shipper-detectors', () => {
     const r = shipper.tick();
     const brk = r.breaks.find((b) => b.db === 'journal');
     expect(brk).toBeDefined();
-    expect(brk!.reason).toMatch(/main-db|salt|shrank/);
+    expect(brk!.reason).toMatch(/main-db|salt|shrank/u);
 
     const after = shipper.status().dbs.journal!;
     expect(after.generation).not.toBe(before.generation);
-    expect(after.generation).toMatch(/^[0-9a-f]{32}$/);
+    expect(after.generation).toMatch(/^[0-9a-f]{32}$/u);
     expect(after.group).toBe(0);
     expect(after.offset).toBe(0);
     expect(after.basePending).toBe(true);
@@ -268,8 +275,11 @@ describe('wal-shipper-detectors', () => {
     // Counted exactly once: journal carried the foreign reason, vault re-based in
     // lockstep under a `coordinated:*` reason that must NOT be counted.
     expect(status.foreignCheckpointCount).toBe(1);
-    expect(status.lastForeignCheckpoint).toMatchObject({ atMs: clock, db: 'journal' });
-    expect(status.lastForeignCheckpoint!.reason).toMatch(/main-db|salt|shrank/);
+    expect(status.lastForeignCheckpoint).toMatchObject({
+      atMs: clock,
+      db: 'journal',
+    });
+    expect(status.lastForeignCheckpoint!.reason).toMatch(/main-db|salt|shrank/u);
 
     // Persisted on top-level state (not per-stream, which mintBase replaced): a
     // fresh shipper over the same dir reads the tally straight back.
@@ -548,7 +558,9 @@ describe('wal-shipper-detectors', () => {
     const saltsBefore = readWalSalts('journal');
     const sizeBefore = walSize('journal');
 
-    const lock = new DatabaseSync(path.join(vaultDir, 'journal.db'), { readOnly: true });
+    const lock = new DatabaseSync(path.join(vaultDir, 'journal.db'), {
+      readOnly: true,
+    });
     lock.exec('BEGIN');
     lock.prepare('SELECT 1 FROM sqlite_schema LIMIT 1').get();
 
@@ -556,7 +568,9 @@ describe('wal-shipper-detectors', () => {
     foreign.exec('PRAGMA busy_timeout = 100'); // don't block the test on the pin
     try {
       for (const mode of ['TRUNCATE', 'RESTART']) {
-        const row = foreign.prepare(`PRAGMA wal_checkpoint(${mode})`).get() as { busy: number };
+        const row = foreign.prepare(`PRAGMA wal_checkpoint(${mode})`).get() as {
+          busy: number;
+        };
         expect(row.busy).toBe(1); // pinned — the checkpoint cannot proceed
       }
       // The WAL is byte-for-byte what it was: nothing reset it under the reader.
@@ -570,7 +584,9 @@ describe('wal-shipper-detectors', () => {
     // Once the mark is released the SAME TRUNCATE succeeds and resets the WAL —
     // proving the read mark, not some unrelated lock, was what held it.
     foreign.exec('PRAGMA busy_timeout = 5000');
-    const after = foreign.prepare('PRAGMA wal_checkpoint(TRUNCATE)').get() as { busy: number };
+    const after = foreign.prepare('PRAGMA wal_checkpoint(TRUNCATE)').get() as {
+      busy: number;
+    };
     expect(after.busy).toBe(0);
     expect(walSize('journal')).toBe(0);
     foreign.close();
@@ -766,8 +782,8 @@ describe('wal-shipper-detectors', () => {
     const r = shipper.tick();
     // Journal broke for its own detected reason; the vault broke WITH it.
     expect(r.breaks.map((b) => b.db)).toStrictEqual(['journal', 'vault']);
-    expect(r.breaks.find((b) => b.db === 'journal')!.reason).toMatch(/main-db|salt|shrank/);
-    expect(r.breaks.find((b) => b.db === 'vault')!.reason).toMatch(/^coordinated:/);
+    expect(r.breaks.find((b) => b.db === 'journal')!.reason).toMatch(/main-db|salt|shrank/u);
+    expect(r.breaks.find((b) => b.db === 'vault')!.reason).toMatch(/^coordinated:/u);
     expect(shipper.status().dbs.vault!.generation).not.toBe(before.vault);
     expect(shipper.status().dbs.journal!.generation).not.toBe(before.journal);
 
@@ -908,7 +924,10 @@ describe('wal-shipper-detectors', () => {
     const newest = written.at(-1)!;
     expect(newest.key).toBe(r.markers[0]);
     expect(newest.marker!.tickMs).toBe(r.tickMs);
-    expect(newest.marker!.vault).toStrictEqual({ group: vaultAt.group, endOffset: vaultAt.offset });
+    expect(newest.marker!.vault).toStrictEqual({
+      group: vaultAt.group,
+      endOffset: vaultAt.offset,
+    });
     expect(newest.marker!.journal.endOffset).toBe(shipper.status().dbs.journal!.offset);
   });
 
@@ -1001,7 +1020,7 @@ describe('wal-shipper-detectors', () => {
     };
     expect(state.dbs['vault']!.closedClean).toBe(true);
     expect(state.dbs['journal']!.closedClean).toBe(true);
-    expect(() => shipper.tick()).toThrow(/closed/);
+    expect(() => shipper.tick()).toThrow(/closed/u);
 
     // Reopen the vault the way the gateway shutdown/startup path does.
     db.close({ skipOptimize: true });

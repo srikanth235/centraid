@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+
 // The lightbox's render orchestrator — same shape as toolbar.jsx/picker.tsx:
 // a small private slice of state (which asset id is open, the render-seq
 // PanelBody keys off) plus its one root. Pulled out of app.tsx to keep that
@@ -7,7 +9,6 @@
 import { assetKey } from './asset-key.ts';
 import { LightboxShell } from './components/Lightbox.tsx';
 import { $ } from './dom.ts';
-import type { ReactNode } from 'react';
 import type { Album, Asset, Place } from './types.ts';
 
 type Root = { render: (node: ReactNode) => void };
@@ -27,7 +28,9 @@ export function createLightbox({
   getAlbums: () => Album[];
   getPlaces: () => Place[];
   refresh: () => Promise<void>;
-  slideshow: { openSlideshow: (list: Asset[], startAssetId: string | null) => void };
+  slideshow: {
+    openSlideshow: (list: Asset[], startAssetId: string | null) => void;
+  };
 }) {
   // The COMPOSITE key of the open row (asset-key.ts), non-null while open. A
   // bare `asset_id` would be ambiguous across scopes (issue #599).

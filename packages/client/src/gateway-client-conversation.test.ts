@@ -28,7 +28,10 @@ describe('gateway-client-conversation', () => {
         controller.close();
       },
     });
-    return new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } });
+    return new Response(body, {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream' },
+    });
   }
 
   test('streamTurn threads idempotencyKey into the POST body (#420)', async () => {

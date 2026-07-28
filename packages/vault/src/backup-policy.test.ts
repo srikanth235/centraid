@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { bootstrapVault } from './bootstrap.js';
-import { openVaultDb, type VaultDb } from './db.js';
+
 import {
   DEFAULT_BACKUP_POLICY,
   MIN_RPO_SECONDS,
@@ -9,6 +8,8 @@ import {
   resolveBackupPolicy,
   updateBackupPolicy,
 } from './backup-policy.js';
+import { bootstrapVault } from './bootstrap.js';
+import { openVaultDb, type VaultDb } from './db.js';
 
 describe('BackupPolicy', () => {
   let db: VaultDb;
@@ -76,7 +77,7 @@ describe('BackupPolicy', () => {
     expect(() => resolveBackupPolicy({ rpoSeconds: MIN_RPO_SECONDS - 1 })).toThrow(
       BackupPolicyError,
     );
-    expect(() => resolveBackupPolicy({ casAck: 'strict' })).toThrow(/casAck/);
+    expect(() => resolveBackupPolicy({ casAck: 'strict' })).toThrow(/casAck/u);
   });
 
   it('treats an empty/whitespace storageClass as unset, not an explicit class', () => {
@@ -86,14 +87,18 @@ describe('BackupPolicy', () => {
     expect(resolveBackupPolicy({ storageClass: '   ' }).storageClass).toBeUndefined();
     // A real (trimmed) class is still honored, and a non-string is still rejected.
     expect(resolveBackupPolicy({ storageClass: ' GLACIER ' }).storageClass).toBe('GLACIER');
-    expect(() => resolveBackupPolicy({ storageClass: 7 })).toThrow(/storageClass/);
+    expect(() => resolveBackupPolicy({ storageClass: 7 })).toThrow(/storageClass/u);
   });
 
   it('resolves and round-trips the directToColdOriginals knob (issue #425 Wave 3)', () => {
     // Absent by default — the resolver applies its own default-ON config.
     expect(readBackupPolicy(db.vault).directToColdOriginals).toBeUndefined();
     const policy = updateBackupPolicy(db.vault, {
-      directToColdOriginals: { enabled: false, minBytes: 1024, mimePrefixes: ['video/'] },
+      directToColdOriginals: {
+        enabled: false,
+        minBytes: 1024,
+        mimePrefixes: ['video/'],
+      },
     });
     expect(policy.directToColdOriginals).toStrictEqual({
       enabled: false,
@@ -111,23 +116,25 @@ describe('BackupPolicy', () => {
 
   it('validates the directToColdOriginals shape', () => {
     expect(() => resolveBackupPolicy({ directToColdOriginals: 'on' })).toThrow(
-      /directToColdOriginals/,
+      /directToColdOriginals/u,
     );
     expect(() => resolveBackupPolicy({ directToColdOriginals: { enabled: 'yes' } })).toThrow(
-      /enabled/,
+      /enabled/u,
     );
     expect(() => resolveBackupPolicy({ directToColdOriginals: { minBytes: -1 } })).toThrow(
-      /minBytes/,
+      /minBytes/u,
     );
     expect(() => resolveBackupPolicy({ directToColdOriginals: { minBytes: 1.5 } })).toThrow(
-      /minBytes/,
+      /minBytes/u,
     );
     expect(() =>
-      resolveBackupPolicy({ directToColdOriginals: { mimePrefixes: ['video/', ''] } }),
-    ).toThrow(/mimePrefixes/);
+      resolveBackupPolicy({
+        directToColdOriginals: { mimePrefixes: ['video/', ''] },
+      }),
+    ).toThrow(/mimePrefixes/u);
     expect(() =>
       resolveBackupPolicy({ directToColdOriginals: { mimePrefixes: 'video/' } }),
-    ).toThrow(/mimePrefixes/);
+    ).toThrow(/mimePrefixes/u);
     // A partial object is accepted; unspecified sub-fields fall back at read.
     expect(
       resolveBackupPolicy({ directToColdOriginals: { minBytes: 42 } }).directToColdOriginals,

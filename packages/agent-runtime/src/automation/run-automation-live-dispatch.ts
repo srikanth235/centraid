@@ -24,10 +24,10 @@
  * owning app).
  */
 
-import { promises as fs } from 'node:fs';
 import { randomUUID } from 'node:crypto';
+import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import * as automation from '@centraid/automation';
+
 import type {
   AgentFailureClass,
   ProviderConsentSource,
@@ -43,6 +43,8 @@ import {
   hydrationMessagesFromLedger,
   makeJournalDbProvider,
 } from '@centraid/app-engine';
+import * as automation from '@centraid/automation';
+
 import { getRunnerBackend } from '../registry.js';
 
 export interface LiveDispatchOptions {
@@ -83,7 +85,12 @@ export interface LiveDispatchOptions {
 
 export interface LiveDispatch {
   agentDispatcher: automation.AgentDispatcher;
-  finalizeTurn(store: ConversationStore, conversationId: string, turnId: string, ok: boolean): void;
+  finalizeTurn: (
+    store: ConversationStore,
+    conversationId: string,
+    turnId: string,
+    ok: boolean,
+  ) => void;
   /** Tear down the scratch dir (only ever created if an attachment was
    *  staged). Safe to call once. */
   close: () => Promise<void>;
@@ -111,7 +118,7 @@ export function parseAutomationAgentFailure(
     // parse that line instead of letting a worker stack suppress failover.
     const payload = error
       .slice(at + AGENT_FAILURE_PREFIX.length)
-      .split(/\r?\n/, 1)[0]
+      .split(/\r?\n/u, 1)[0]
       ?.trim();
     const parsed = JSON.parse(payload ?? '') as {
       runner?: unknown;
@@ -186,16 +193,17 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
   const stageAttachments = async (call: automation.AgentCall): Promise<string> => {
     if (!call.attachments?.length) return call.prompt;
     await ensureScratch();
-    const lines: string[] = [];
-    for (const att of call.attachments) {
-      const file = path.join(scratchDir, `attach-${randomUUID().slice(0, 8)}-${att.name}`);
-      if (att.base64 === undefined) {
-        await fs.writeFile(file, att.text ?? '', 'utf8');
-      } else {
-        await fs.writeFile(file, Buffer.from(att.base64, 'base64'));
-      }
-      lines.push(`- ${file} (${att.mediaType})`);
-    }
+    const lines = await Promise.all(
+      call.attachments.map(async (att) => {
+        const file = path.join(scratchDir, `attach-${randomUUID().slice(0, 8)}-${att.name}`);
+        if (att.base64 === undefined) {
+          await fs.writeFile(file, att.text ?? '', 'utf8');
+        } else {
+          await fs.writeFile(file, Buffer.from(att.base64, 'base64'));
+        }
+        return `- ${file} (${att.mediaType})`;
+      }),
+    );
     return `${call.prompt}\n\nAttached files — read each from disk before answering (images are visual input):\n${lines.join('\n')}`;
   };
 
@@ -280,11 +288,15 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
         : [];
     const hydrationPlan =
       hydrationMessages.length > 0
-        ? compileHydrationPlan(hydrationMessages, { includeAttachmentReferences: true })
+        ? compileHydrationPlan(hydrationMessages, {
+            includeAttachmentReferences: true,
+          })
         : undefined;
     const recoveryHydrationPlan =
       recoveryMessages.length > 0
-        ? compileHydrationPlan(recoveryMessages, { includeAttachmentReferences: true })
+        ? compileHydrationPlan(recoveryMessages, {
+            includeAttachmentReferences: true,
+          })
         : undefined;
     let result:
       | {

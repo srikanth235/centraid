@@ -1,5 +1,6 @@
-import { defineConfig } from '@playwright/test';
 import path from 'node:path';
+
+import { defineConfig } from '@playwright/test';
 
 const here = import.meta.dirname;
 

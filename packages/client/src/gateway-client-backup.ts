@@ -95,7 +95,11 @@ export interface GatewayBackupReconciliationDTO {
   audit: {
     source: 'provider' | 'unavailable';
     eventCount: number;
-    recent: Array<{ at: number; kind: string; detail: Record<string, unknown> }>;
+    recent: Array<{
+      at: number;
+      kind: string;
+      detail: Record<string, unknown>;
+    }>;
     error?: string;
   };
 }
@@ -137,7 +141,12 @@ export interface GatewayRecoveryKitStatusDTO {
  *  Recovery-window metric's source (#436 §6). Structural subset of
  *  `@centraid/backup`'s `Retention` (drops `neverPruneNewest`, always true). */
 export type GatewayRetentionDTO =
-  | { kind: 'ladder'; keepAllDays: number; dailyDays: number; weeklyDays: number }
+  | {
+      kind: 'ladder';
+      keepAllDays: number;
+      dailyDays: number;
+      weeklyDays: number;
+    }
   | { kind: 'none' };
 
 /** The home bundle's provider-declared promises for the five-metric contract
@@ -222,19 +231,20 @@ export async function verifyGatewayBackupsNow(): Promise<GatewayBackupRunResultD
 }
 
 /** Cross-check provider-attested inventory against a raw bucket LIST for one vault. */
-export async function verifyGatewayBackupBucket(
-  vaultId: string,
-): Promise<{ vaultId: string; reconciliation: GatewayBackupReconciliationDTO }> {
+export async function verifyGatewayBackupBucket(vaultId: string): Promise<{
+  vaultId: string;
+  reconciliation: GatewayBackupReconciliationDTO;
+}> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(
     baseUrl,
     `/centraid/_gateway/backup/verify-bucket/${encodeURIComponent(vaultId)}`,
     { method: 'POST', headers: authHeaders(token) },
   );
-  return readJson<{ vaultId: string; reconciliation: GatewayBackupReconciliationDTO }>(
-    res,
-    'verify backup inventory against bucket',
-  );
+  return readJson<{
+    vaultId: string;
+    reconciliation: GatewayBackupReconciliationDTO;
+  }>(res, 'verify backup inventory against bucket');
 }
 
 /**

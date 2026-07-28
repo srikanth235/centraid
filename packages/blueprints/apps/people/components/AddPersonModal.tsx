@@ -5,7 +5,9 @@
 // as the old version. On failure/park, the draft and open state stay put so
 // nothing typed is lost.
 import { useEffect, useRef, useState } from 'react';
+
 import type { PersonList } from '../types.ts';
+
 import styles from './AddPersonModal.module.css';
 
 const CADENCE_OPTS: Array<{ d: number; l: string }> = [
@@ -51,7 +53,12 @@ export function AddPersonModal({
     const trimmed = name.trim();
     if (!trimmed) return;
     setBusy(true);
-    const ok = await onSubmit({ name: trimmed, role: role.trim(), listId, cadence });
+    const ok = await onSubmit({
+      name: trimmed,
+      role: role.trim(),
+      listId,
+      cadence,
+    });
     if (!ok) setBusy(false);
   };
 

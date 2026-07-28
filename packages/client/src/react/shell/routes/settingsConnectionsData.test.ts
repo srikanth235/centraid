@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
 import type * as AssistOAuthHandoff from '../../../assist-oauth-handoff.js';
 import type * as GatewayClient from '../../../gateway-client.js';
 import type { ConnectionFormInput } from '../../screens/SettingsConnectionsScreen.js';
@@ -34,10 +35,18 @@ const updateAutomation = vi.fn<typeof GatewayClient.updateAutomation>(() =>
   Promise.resolve({ row: null }),
 );
 const configureConnection = vi.fn<typeof GatewayClient.configureConnection>(() =>
-  Promise.resolve({ connectionId: 'c1', credKind: 'oauth2', status: 'needs-auth' }),
+  Promise.resolve({
+    connectionId: 'c1',
+    credKind: 'oauth2',
+    status: 'needs-auth',
+  }),
 );
 const configureAssistConnection = vi.fn<typeof GatewayClient.configureAssistConnection>(() =>
-  Promise.resolve({ connectionId: 'c-assist', credKind: 'oauth2', status: 'needs-auth' }),
+  Promise.resolve({
+    connectionId: 'c-assist',
+    credKind: 'oauth2',
+    status: 'needs-auth',
+  }),
 );
 const setConnectionStatus = vi.fn<typeof GatewayClient.setConnectionStatus>(() =>
   Promise.resolve({ connectionId: 'c1', status: 'paused' }),
@@ -141,7 +150,11 @@ describe('settingsConnectionsData', () => {
         connectionId: 'c2',
         health: 'needs-auth',
       });
-      expect(rows[1]).toMatchObject({ connectionId: 'c1', health: 'ok', kind: 'pull.gmail' });
+      expect(rows[1]).toMatchObject({
+        connectionId: 'c1',
+        health: 'ok',
+        kind: 'pull.gmail',
+      });
     });
 
     it('loadConnectionProvidersData passes the preset catalog through with capabilities', async () => {
@@ -242,7 +255,7 @@ describe('settingsConnectionsData', () => {
       expect(tools.every((t) => t.connectionId === 'ok1')).toBe(true);
       expect(tools.some((t) => t.toolName === 'connector.pull_github.list')).toBe(true);
       const json = JSON.stringify(tools);
-      expect(json).not.toMatch(/api_key|access_token|client_secret|refresh_token/);
+      expect(json).not.toMatch(/api_key|access_token|client_secret|refresh_token/u);
     });
 
     it('submitConnectionForm builds the configure body from the form input', async () => {
@@ -273,7 +286,10 @@ describe('settingsConnectionsData', () => {
 
     it('updateConnectionStatus pauses/resumes by connection id', async () => {
       await updateConnectionStatus('c1', 'paused');
-      expect(setConnectionStatus).toHaveBeenCalledWith({ connectionId: 'c1', status: 'paused' });
+      expect(setConnectionStatus).toHaveBeenCalledWith({
+        connectionId: 'c1',
+        status: 'paused',
+      });
     });
 
     it('beginConnectionAuthorize returns just the auth URL', async () => {
@@ -321,7 +337,7 @@ describe('settingsConnectionsData', () => {
         );
         const detach = makeDetachConnection(confirm);
         await expect(detach('c1', 'pull.gmail', 'Google · Gmail')).rejects.toThrow(
-          /awaiting a decision/,
+          /awaiting a decision/u,
         );
       });
     });

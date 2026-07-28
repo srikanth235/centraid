@@ -7,17 +7,17 @@
  */
 
 import {
-  GATEWAY_MIN_PROTOCOL_VERSION,
-  GATEWAY_PROTOCOL_VERSION,
-  GATEWAY_SCHEMA_EPOCH,
-  GATEWAY_VERSION,
-} from './version.js';
-import {
   DEFAULT_GATEWAY_CAPABILITIES,
   isGatewayCapabilities,
   type GatewayCapabilities,
 } from './capabilities.js';
 import { ROUTES } from './routes.js';
+import {
+  GATEWAY_MIN_PROTOCOL_VERSION,
+  GATEWAY_PROTOCOL_VERSION,
+  GATEWAY_SCHEMA_EPOCH,
+  GATEWAY_VERSION,
+} from './version.js';
 
 export interface GatewayInfo {
   /** Product version (display only). */
@@ -109,7 +109,11 @@ export function protocolsCompatible(opts: {
 /** Parse + judge a `/centraid/_gateway/info` payload against the local protocol floor. */
 export function judgeGatewayInfo(raw: unknown): HandshakeResult {
   if (raw === null || typeof raw !== 'object') {
-    return { ok: false, reason: 'malformed', detail: 'gateway info was not an object' };
+    return {
+      ok: false,
+      reason: 'malformed',
+      detail: 'gateway info was not an object',
+    };
   }
   const info = raw as Record<string, unknown>;
   if (typeof info.version !== 'string') {
@@ -207,7 +211,11 @@ export async function handshakeGateway(
   try {
     body = await res.json();
   } catch {
-    return { ok: false, reason: 'malformed', detail: 'gateway info was not JSON' };
+    return {
+      ok: false,
+      reason: 'malformed',
+      detail: 'gateway info was not JSON',
+    };
   }
   return judgeGatewayInfo(body);
 }

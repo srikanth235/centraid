@@ -8,9 +8,11 @@
 // the typed draft in place so nothing the owner typed is lost).
 import { useState } from 'react';
 import type { ReactNode } from 'react';
+
 import { dateInputToMonthDay } from '../format.ts';
 import { I } from '../icons.ts';
 import { Icon } from './Shared.tsx';
+
 import styles from './AddRows.module.css';
 import shared from './shared.module.css';
 
@@ -60,7 +62,11 @@ export function RelationshipAddRow({ onSubmit }: { onSubmit: SubmitFn }) {
     const n = name.trim();
     const k = kind.trim();
     if (!n || !k) return;
-    const ok = await onSubmit({ name: n, kind: k, ...(pet.trim() ? { pet: pet.trim() } : {}) });
+    const ok = await onSubmit({
+      name: n,
+      kind: k,
+      ...(pet.trim() ? { pet: pet.trim() } : {}),
+    });
     if (ok) {
       setName('');
       setKind('');
@@ -190,8 +196,8 @@ export function DebtAddRow({ onSubmit }: { onSubmit: SubmitFn }) {
   const [amount, setAmount] = useState('');
   const [reason, setReason] = useState('');
   const commit = async () => {
-    const dollars = parseFloat(amount);
-    if (!(dollars > 0)) return;
+    const dollars = Number(amount);
+    if (dollars <= 0) return;
     const ok = await onSubmit({
       direction: dir,
       amount_minor: Math.round(dollars * 100),
@@ -203,7 +209,7 @@ export function DebtAddRow({ onSubmit }: { onSubmit: SubmitFn }) {
     }
   };
   return (
-    <AddRow canCommit={parseFloat(amount) > 0} onCommit={commit}>
+    <AddRow canCommit={Number(amount) > 0} onCommit={commit}>
       <div className={`kit-seg ${styles.seg}`}>
         <button type="button" aria-pressed={dir === 'owe'} onClick={() => setDir('owe')}>
           You owe

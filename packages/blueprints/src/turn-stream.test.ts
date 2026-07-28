@@ -7,11 +7,13 @@
 // parser both chat surfaces drive their `_turn` streams through.
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+
 import { describe, expect, it } from 'vitest';
 
 const PKG = path.resolve(import.meta.dirname, '..');
 const url = pathToFileURL(path.resolve(PKG, 'kit/turn-stream.js')).href;
-const { frameData, parseFrame, parseSseText, consumeSse, isEndFrame } = await import(url);
+const { frameData, parseFrame, parseSseText, consumeSse, consumeSseFrames, isEndFrame } =
+  await import(url);
 
 // A gateway SSE frame carries both `event: <type>` and a JSON body with `type`.
 const frame = (evt: unknown) =>
@@ -105,6 +107,16 @@ describe('consumeSse', () => {
       { signal: controller.signal },
     );
     expect(res.ended).toBe(false);
+  });
+});
+
+describe('consumeSseFrames', () => {
+  it('reassembles split frames and delivers them in wire order', async () => {
+    const frames: string[] = [];
+    await consumeSseFrames(streamOf(['data: first\n\nda', 'ta: second\n\n']), (frame: string) =>
+      frames.push(frame),
+    );
+    expect(frames).toStrictEqual(['data: first', 'data: second']);
   });
 });
 

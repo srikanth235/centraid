@@ -71,14 +71,15 @@ describe('gateway-client-device-work-source', () => {
     ]);
     const frameSize = 7;
     const frameCount = Math.ceil(plain.byteLength / frameSize);
-    const frames: Bytes[] = [];
-    for (let index = 0; index < frameCount; index += 1) {
-      const body = concat([
-        Uint8Array.of(0),
-        plain.slice(index * frameSize, Math.min(plain.byteLength, (index + 1) * frameSize)),
-      ]);
-      frames.push(await gcm(key, index + 1, body, `blob:${sha256}:v2:f${index}/${frameCount}`));
-    }
+    const frames = await Promise.all(
+      Array.from({ length: frameCount }, async (_, index) => {
+        const body = concat([
+          Uint8Array.of(0),
+          plain.slice(index * frameSize, Math.min(plain.byteLength, (index + 1) * frameSize)),
+        ]);
+        return gcm(key, index + 1, body, `blob:${sha256}:v2:f${index}/${frameCount}`);
+      }),
+    );
     const directoryPlain = new Uint8Array(16 + frameCount * 4);
     const directoryView = new DataView(directoryPlain.buffer);
     directoryView.setUint32(0, frameSize, false);
@@ -157,13 +158,15 @@ describe('gateway-client-device-work-source', () => {
             start = sealed.sealed.byteLength - length;
             end = sealed.sealed.byteLength - 1;
           } else {
-            const match = value.match(/^bytes=([0-9]+)-([0-9]+)$/)!;
+            const match = value.match(/^bytes=(?<start>[0-9]+)-(?<end>[0-9]+)$/u)!;
             start = Number(match[1]);
             end = Number(match[2]);
           }
           return new Response(sealed.sealed.slice(start, end + 1), {
             status: 206,
-            headers: { 'Content-Range': `bytes ${start}-${end}/${sealed.sealed.byteLength}` },
+            headers: {
+              'Content-Range': `bytes ${start}-${end}/${sealed.sealed.byteLength}`,
+            },
           });
         }
         throw new Error(`unexpected fetch ${url}`);
@@ -205,7 +208,9 @@ describe('gateway-client-device-work-source', () => {
           return Response.json({ error: 'remote_unavailable' }, { status: 503 });
         }
         if (url.endsWith('/centraid/_vault/blobs/content-local')) {
-          return new Response(plain, { headers: { 'content-type': 'application/pdf' } });
+          return new Response(plain, {
+            headers: { 'content-type': 'application/pdf' },
+          });
         }
         throw new Error(`unexpected fetch ${url}`);
       }),

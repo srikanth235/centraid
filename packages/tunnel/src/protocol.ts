@@ -153,13 +153,17 @@ export async function readBody(
   maxBytes = Number.POSITIVE_INFINITY,
 ): Promise<void> {
   let total = 0;
-  for (;;) {
+  // Frame delivery is an ordered stream: backpressure from `onChunk` must
+  // settle before asking the transport for the next bytes.
+  const readNext = async (): Promise<void> => {
     const chunk = await recv.read(READ_CHUNK_BYTES);
     if (!chunk || chunk.length === 0) return;
     total += chunk.length;
     if (total > maxBytes) throw new Error('tunnel: body exceeds limit');
     await onChunk(Buffer.from(chunk));
-  }
+    return readNext();
+  };
+  return readNext();
 }
 
 /** Read an entire body into one buffer (request side; bounded). */

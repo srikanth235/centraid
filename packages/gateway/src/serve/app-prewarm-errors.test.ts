@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+
 import { isExpectedPrewarmSkip } from './app-prewarm-errors.js';
 
 describe(isExpectedPrewarmSkip, () => {

@@ -1,8 +1,26 @@
+// governance: allow-repo-hygiene file-size-limit the kit is the single canonical bundle every app loads verbatim (UX primitives + charts + the folded Ask-your-vault controller); it is served as one file, so splitting it would fracture that one-request contract without reducing surface
+import { richAnswerHtml, hydrateRefs, wireCodeCopy } from './assistant-rich.js';
+import {
+  outcomeOf,
+  fetchParkedEntry,
+  describeParked,
+  confirmParked as confirmParkedShared,
+  normalizeApproveOutcome,
+} from './consent-cards.js';
+import {
+  conversationsPath,
+  conversationPath,
+  blobsPath,
+  vaultStatusPath,
+  vaultAppsPath,
+  normalizeModelState,
+  modelLabel,
+} from './conversation-client.js';
+import { sha256FileStream, stageDirectFile, stageFallbackFile } from './edge-upload.js';
 /* oxlint-disable typescript-eslint/ban-ts-comment -- this source-consolidation
    makes the implementation the public type source; the legacy Ask controller
    still needs a follow-up strictness pass after it is split from the DOM primitives. */
 // @ts-nocheck
-// governance: allow-repo-hygiene file-size-limit the kit is the single canonical bundle every app loads verbatim (UX primitives + charts + the folded Ask-your-vault controller); it is served as one file, so splitting it would fracture that one-request contract without reducing surface
 // Centraid blueprint kit — the shared UX substrate for template apps.
 //
 // Canonical (and ONLY) copy: packages/blueprints/kit/kit.ts. Apps don't
@@ -24,28 +42,24 @@
 // live-network controllers (Ask driver, @-mention popover/field) stay as the
 // imperative controllers they always were — see the excluded set in issue #327.
 import { entityKindLabel } from './elements.js';
-import { sha256FileStream, stageDirectFile, stageFallbackFile } from './edge-upload.js';
 // Shared chat-client core (issue #420) — the same parser/renderer/consent-flow
 // the React shell uses, so the Ask panel renders ref-chips + typed blocks and
 // gains stop/cancel from one canonical source.
 import { consumeSse } from './turn-stream.js';
-import { richAnswerHtml, hydrateRefs, wireCodeCopy } from './assistant-rich.js';
-import {
-  outcomeOf,
-  fetchParkedEntry,
-  describeParked,
-  confirmParked as confirmParkedShared,
-  normalizeApproveOutcome,
-} from './consent-cards.js';
-import {
-  conversationsPath,
-  conversationPath,
-  blobsPath,
-  vaultStatusPath,
-  vaultAppsPath,
-  normalizeModelState,
-  modelLabel,
-} from './conversation-client.js';
+
+export { entityKindLabel } from './elements.js';
+
+/** Apply side effects in source order when later work must not start early. */
+function applyInOrder<T>(
+  values: Iterable<T>,
+  apply: (value: T, index: number) => void | PromiseLike<void>,
+): Promise<void> {
+  let index = 0;
+  return Array.from(values).reduce<Promise<void>>(
+    (sequence, value) => sequence.then(() => apply(value, index++)),
+    Promise.resolve(),
+  );
+}
 
 export type VaultOutcomeStatus =
   | 'executed'
@@ -134,7 +148,6 @@ export interface Reference {
 
 // Re-export the shared kind-label helper (its definition moved to elements.js,
 // where the mention-chip and reference-strip components also need it).
-export { entityKindLabel };
 
 // ---------- Tiny DOM builders (the h()/el() every app copied from Docs) -----
 
@@ -309,15 +322,14 @@ export function subscribeReadUpdates<T = unknown>(
     }
     onUpdate(value);
   });
-  Promise.resolve(read).then(
-    (initial) => {
+  Promise.resolve(read)
+    .then((initial) => {
       settled = true;
       if (buffered && latest !== initial) queueMicrotask(() => onUpdate(latest));
-    },
-    () => {
+    })
+    .catch(() => {
       settled = true;
-    },
-  );
+    });
   return { managed: true, unsubscribe };
 }
 
@@ -356,7 +368,10 @@ export function armConfirm(
 export function fmtMoney(minor: number | null | undefined, currency?: string): string {
   const value = Number(minor ?? 0) / 100;
   try {
-    return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(value);
+    return new Intl.NumberFormat(undefined, {
+      style: 'currency',
+      currency,
+    }).format(value);
   } catch {
     return `${value.toFixed(2)} ${currency ?? ''}`.trim();
   }
@@ -384,7 +399,10 @@ export function relTime(iso: string): string {
   if (mins < 60) return `${mins}m`;
   if (mins < 60 * 24) return `${Math.round(mins / 60)}h`;
   if (mins < 60 * 24 * 7) return `${Math.round(mins / (60 * 24))}d`;
-  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  return new Date(iso).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+  });
 }
 
 export function debounce<Args extends unknown[]>(
@@ -421,7 +439,7 @@ export function onDataChange(
   cb: (detail: CentraidChangeDetail) => void,
   { debounceMs = 200 }: { debounceMs?: number } = {},
 ): () => void {
-  const want = new Set(tables ?? []);
+  const want = new Set(tables);
   let timer = 0;
   const pending = new Map();
   const unsub = window.centraid?.onChange?.((detail) => {
@@ -436,7 +454,7 @@ export function onDataChange(
     timer = setTimeout(() => {
       const details = [...pending.values()];
       pending.clear();
-      for (const value of details) cb(value);
+      details.forEach(cb);
     }, debounceMs);
   });
   return () => {
@@ -599,8 +617,10 @@ export const INLINE_ATTACH_BYTES = 256 * 1024;
 export function fileToDataUri(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const r = new FileReader();
-    r.onload = () => resolve(String(r.result));
-    r.onerror = () => reject(r.error);
+    r.addEventListener('load', () => resolve(String(r.result)), {
+      once: true,
+    });
+    r.addEventListener('error', () => reject(r.error), { once: true });
     r.readAsDataURL(file);
   });
 }
@@ -622,7 +642,11 @@ export async function stageDerivative(
   body: BodyInit,
   mediaType = 'application/octet-stream',
 ): Promise<StagedBlob> {
-  const q = new URLSearchParams({ variant, variant_of: parentSha, media_type: mediaType });
+  const q = new URLSearchParams({
+    variant,
+    variant_of: parentSha,
+    media_type: mediaType,
+  });
   const res = await fetch(`${BLOB_ROUTE}?${q}`, {
     method: 'POST',
     headers: { 'content-type': mediaType },
@@ -834,28 +858,38 @@ export function wireAttachInput(
   inputEl.addEventListener('change', async () => {
     const subjectId = getSubjectId();
     if (!subjectId) return;
-    for (const file of [...inputEl.files]) {
+    let narrating = true;
+    await applyInOrder([...inputEl.files], async (file) => {
+      if (!narrating) return;
       let input;
       let custodyReceipt;
       try {
         if (file.size > INLINE_ATTACH_BYTES) {
           const staged = await stageFileBytes(file);
           custodyReceipt = staged;
-          input = { subject_id: subjectId, staged_sha: staged.sha256, title: file.name };
+          input = {
+            subject_id: subjectId,
+            staged_sha: staged.sha256,
+            title: file.name,
+          };
         } else {
           const dataUri = await fileToDataUri(file);
-          input = { subject_id: subjectId, data_uri: dataUri, title: file.name };
+          input = {
+            subject_id: subjectId,
+            data_uri: dataUri,
+            title: file.name,
+          };
         }
       } catch {
         notice?.('Could not read that file.');
-        continue;
+        return;
       }
       const outcome = await act('attach', input);
       if (outcome?.status === 'executed' && isPendingOffsite(custodyReceipt)) {
         notice?.('Attached locally · waiting for offsite custody.');
       }
-      if (!narrate(outcome)) break;
-    }
+      narrating = narrate(outcome);
+    });
     inputEl.value = '';
     await refresh?.();
   });
@@ -899,10 +933,18 @@ export function openPopover(
     className,
     role = 'menu',
     onClose,
-  }: { focus?: boolean; className?: string; role?: string; onClose?: () => void } = {},
+  }: {
+    focus?: boolean;
+    className?: string;
+    role?: string;
+    onClose?: () => void;
+  } = {},
 ): void {
   closePopover();
-  const box = h('div', { class: className ? `kit-popover ${className}` : 'kit-popover', role });
+  const box = h('div', {
+    class: className ? `kit-popover ${className}` : 'kit-popover',
+    role,
+  });
   build(box);
   box.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
@@ -1048,13 +1090,13 @@ export async function runBulk(
   let ok = 0;
   let parked = 0;
   const failures = [];
-  for (let i = 0; i < n; i += 1) {
+  await applyInOrder(Array.from({ length: n }), async (_, i) => {
     notice(`${progress} ${i + 1} of ${n}…`);
     const outcome = await run(ids[i]);
     if (outcome?.status === 'executed') ok += 1;
     else if (outcome?.status === 'parked') parked += 1;
     else failures.push(friendly?.(outcome) ?? 'The write failed.');
-  }
+  });
   notice(
     failures.length > 0 ? `${failures.length} of ${n} didn’t go through — ${failures[0]}` : '',
   );
@@ -1158,7 +1200,7 @@ export function wireThemeToggle(
   function panelHTML() {
     const scope = esc(cfg.scope || 'this app');
     const sugg = (cfg.suggest || [])
-      .map(function (s) {
+      .map((s) => {
         return '<button type="button" class="kit-ask-chip">' + esc(s) + '</button>';
       })
       .join('');
@@ -1230,7 +1272,9 @@ export function wireThemeToggle(
         if (cached) return cached;
         try {
           cached = sessionStorage.getItem(key);
-        } catch (_) {}
+        } catch {
+          // Session storage is unavailable in privacy-restricted contexts.
+        }
         return cached;
       },
       set(v) {
@@ -1238,7 +1282,9 @@ export function wireThemeToggle(
         try {
           if (cached) sessionStorage.setItem(key, cached);
           else sessionStorage.removeItem(key);
-        } catch (_) {}
+        } catch {
+          // Keeping the in-memory value is sufficient when storage is blocked.
+        }
       },
       clear() {
         this.set(null);
@@ -1330,7 +1376,7 @@ export function wireThemeToggle(
       maybeAutoLoadStoredConversation();
       if (modelPicker) modelPicker.load();
       setTimeout(() => {
-        input && input.focus();
+        if (input) input.focus();
       }, 60);
     }
     function close() {
@@ -1346,7 +1392,7 @@ export function wireThemeToggle(
       if (e.key === 'Escape' && !ov.hidden) close();
     });
     ov.querySelectorAll('.kit-ask-chip').forEach((c) => {
-      c.addEventListener('click', function () {
+      c.addEventListener('click', () => {
         input.value = c.textContent;
         input.focus();
       });
@@ -1367,7 +1413,12 @@ export function wireThemeToggle(
       const labelEl = form.querySelector('.kit-ask-model-label');
       const menu = form.querySelector('.kit-ask-model-menu');
       if (!wrap || !modelBtn || !menu) return null;
-      const state = { loaded: false, current: null, defaultModel: '', catalog: [] };
+      const state = {
+        loaded: false,
+        current: null,
+        defaultModel: '',
+        catalog: [],
+      };
 
       function renderLabel() {
         labelEl.textContent = modelLabel(state);
@@ -1415,7 +1466,7 @@ export function wireThemeToggle(
         menu.innerHTML = '';
         const useDefault = el(
           '<button type="button" role="menuitemradio" class="kit-ask-model-item' +
-            (!state.current ? ' is-active' : '') +
+            (state.current ? '' : ' is-active') +
             '" aria-checked="' +
             !state.current +
             '"><span>Use default</span><span class="kit-ask-model-hint">' +
@@ -1438,7 +1489,7 @@ export function wireThemeToggle(
               esc(m.label || m.id) +
               '</span></button>',
           );
-          item.addEventListener('click', function () {
+          item.addEventListener('click', () => {
             choose(m.id);
           });
           menu.appendChild(item);
@@ -1462,7 +1513,7 @@ export function wireThemeToggle(
       return {
         /** Re-fetch the picker state (called on every panel `open()`). */
         load() {
-          return fetchJson(appBase() + '_turn/model').then(function (r) {
+          return fetchJson(appBase() + '_turn/model').then((r) => {
             if (r.ok && r.body) Object.assign(state, normalizeModelState(r.body));
             renderLabel();
           }, renderLabel);
@@ -1500,23 +1551,23 @@ export function wireThemeToggle(
     }
 
     const api = {
-      open: open,
-      close: close,
+      open,
+      close,
       /** append a user bubble (escaped); `atts` optionally renders attachment chips beneath it */
-      user: function (t, atts) {
+      user(t, atts) {
         return bubble('user', esc(t) + attachmentChipsHtml(atts));
       },
       /** append an assistant bubble (HTML allowed — caller sanitises) */
-      ai: function (html) {
+      ai(html) {
         return bubble('ai', html);
       },
       /** show a typing indicator; returns { done() } */
-      typing: function () {
+      typing() {
         let t = el('<div class="kit-ask-typing"><i></i><i></i><i></i></div>');
         log.appendChild(t);
         log.scrollTop = log.scrollHeight;
         return {
-          done: function () {
+          done() {
             if (t.parentNode) t.remove();
           },
         };
@@ -1527,10 +1578,9 @@ export function wireThemeToggle(
        * `.kit-ask-compose` and disables Send + the model picker. A custom
        * `onAsk` driver should call this too so double-sends stay guarded.
        */
-      setBusy: setBusy,
+      setBusy,
       /** a completed, receipted action (with optional Undo) */
-      applied: function (o) {
-        o = o || {};
+      applied(o = {}) {
         let a = el(
           '<div class="kit-ask-applied"><span class="ck">✓</span><span class="ac-t">' +
             esc(o.title) +
@@ -1543,7 +1593,7 @@ export function wireThemeToggle(
         log.appendChild(a);
         let u = a.querySelector('.ac-undo');
         if (u)
-          u.addEventListener('click', function () {
+          u.addEventListener('click', () => {
             o.onUndo();
             a.remove();
           });
@@ -1560,8 +1610,7 @@ export function wireThemeToggle(
        * refusal honestly. A sync/void `onApprove` keeps the legacy
        * immediate-swap behavior.
        */
-      propose: function (o) {
-        o = o || {};
+      propose(o = {}) {
         let diff = o.diff
           ? '<div class="kit-aa-diff"><span class="d1">' +
             esc(o.diff[0]) +
@@ -1583,7 +1632,7 @@ export function wireThemeToggle(
         );
         log.appendChild(card);
         function setBusy(busy) {
-          card.querySelectorAll('button').forEach(function (b) {
+          card.querySelectorAll('button').forEach((b) => {
             b.disabled = busy;
           });
           card.classList.toggle('aa-busy', busy);
@@ -1606,43 +1655,41 @@ export function wireThemeToggle(
           );
           log.scrollTop = log.scrollHeight;
         }
-        card.querySelector('.kit-aa-approve').addEventListener('click', function () {
+        card.querySelector('.kit-aa-approve').addEventListener('click', () => {
           let settled = o.onApprove ? o.onApprove() : undefined;
           if (!settled || typeof settled.then !== 'function') return swapApplied();
           setBusy(true);
-          settled.then(
-            function (r) {
+          settled
+            .then((r) => {
               if (r && r.ok === false) {
                 setBusy(false);
                 note(r.note || 'The vault refused this write.');
                 return;
               }
               swapApplied(r && r.receipt);
-            },
-            function (err) {
+            })
+            .catch((err) => {
               setBusy(false);
               note(String((err && err.message) || err || 'Approval failed.'));
-            },
-          );
+            });
         });
         let edit = card.querySelector('.aa-edit');
         if (edit)
-          edit.addEventListener('click', function () {
+          edit.addEventListener('click', () => {
             o.onEdit();
           });
-        card.querySelector('.aa-discard').addEventListener('click', function () {
+        card.querySelector('.aa-discard').addEventListener('click', () => {
           let settled = o.onDiscard ? o.onDiscard() : undefined;
           if (!settled || typeof settled.then !== 'function') return card.remove();
           setBusy(true);
-          settled.then(
-            function () {
+          settled
+            .then(() => {
               card.remove();
-            },
-            function (err) {
+            })
+            .catch((err) => {
               setBusy(false);
               note(String((err && err.message) || err || 'Discard failed.'));
-            },
-          );
+            });
         });
         log.scrollTop = log.scrollHeight;
         return card;
@@ -1652,7 +1699,7 @@ export function wireThemeToggle(
        * panel drives the app's own `_turn` agent (declared handlers +
        * vault consent gates) — see `makeVaultDriver`.
        */
-      onAsk: function (fn) {
+      onAsk(fn) {
         handler = fn;
       },
     };
@@ -1684,8 +1731,8 @@ export function wireThemeToggle(
             esc(p.file.name) +
             '">✕</button></span>',
         );
-        chip.querySelector('.kit-ask-pending-remove').addEventListener('click', function () {
-          pending = pending.filter(function (x) {
+        chip.querySelector('.kit-ask-pending-remove').addEventListener('click', () => {
+          pending = pending.filter((x) => {
             return x.cid !== p.cid;
           });
           renderPending();
@@ -1701,7 +1748,7 @@ export function wireThemeToggle(
 
     function addFiles(files) {
       Array.prototype.slice.call(files || []).forEach((file) => {
-        let p = { cid: ++pendingSeq, file: file, status: 'uploading' };
+        let p = { cid: ++pendingSeq, file, status: 'uploading' };
         pending.push(p);
         renderPending();
         if (file.size > MAX_UPLOAD_BYTES) {
@@ -1711,8 +1758,8 @@ export function wireThemeToggle(
           return;
         }
         uploadBlob(file)
-          .then(function (r) {
-            if (pending.indexOf(p) === -1) return; // removed mid-upload
+          .then((r) => {
+            if (!pending.includes(p)) return; // removed mid-upload
             p.status = 'done';
             p.hash = r.hash;
             p.mime = r.mime;
@@ -1720,8 +1767,8 @@ export function wireThemeToggle(
             p.filename = file.name;
             renderPending();
           })
-          .catch(function (err) {
-            if (pending.indexOf(p) === -1) return;
+          .catch((err) => {
+            if (!pending.includes(p)) return;
             p.status = 'error';
             p.error = String((err && err.message) || err || 'upload failed');
             renderPending();
@@ -1731,9 +1778,7 @@ export function wireThemeToggle(
 
     function typesHasFiles(dt) {
       if (!dt || !dt.types) return false;
-      for (let i = 0; i < dt.types.length; i++) {
-        if (dt.types[i] === 'Files') return true;
-      }
+      for (const type of dt.types) if (type === 'Files') return true;
       return false;
     }
 
@@ -1898,7 +1943,7 @@ export function wireThemeToggle(
       resetLogToIntro();
       clearPending();
       setViewMode('chat');
-      input && input.focus();
+      if (input) input.focus();
     });
     historyList.addEventListener('click', (e) => {
       let del = e.target.closest('.kit-ask-history-del');
@@ -1906,11 +1951,11 @@ export function wireThemeToggle(
         // Same two-click "arm then confirm" idiom as every other destructive
         // control in the kit — no native confirm() dialog.
         if (!armConfirm(del, { armedLabel: '✕?' })) return;
-        deleteConversationRow(del.getAttribute('data-id'));
+        deleteConversationRow(del.dataset.id);
         return;
       }
       let item = e.target.closest('.kit-ask-history-item');
-      if (item) openConversation(item.getAttribute('data-id'));
+      if (item) openConversation(item.dataset.id);
     });
 
     /** On first open, resume a stored conversation whose transcript hasn't rendered yet (e.g. after a page reload). */
@@ -1934,11 +1979,16 @@ export function wireThemeToggle(
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       if (busy) return; // a turn is already in flight — guard double-sends
-      let uploaded = pending.filter(function (p) {
+      let uploaded = pending.filter((p) => {
         return p.status === 'done';
       });
-      let refs = uploaded.map(function (p) {
-        return { hash: p.hash, mime: p.mime, filename: p.filename, sizeBytes: p.sizeBytes };
+      let refs = uploaded.map((p) => {
+        return {
+          hash: p.hash,
+          mime: p.mime,
+          filename: p.filename,
+          sizeBytes: p.sizeBytes,
+        };
       });
       let v = input.value.trim() || (refs.length ? '(attachment)' : '');
       if (!v) return;
@@ -1986,11 +2036,13 @@ export function wireThemeToggle(
 
   function fetchJson(url, opts) {
     return fetch(url, opts).then((r) => {
-      return r.text().then(function (t) {
+      return r.text().then((t) => {
         let j = null;
         try {
           j = t ? JSON.parse(t) : null;
-        } catch (_) {}
+        } catch {
+          // A non-JSON response is represented as an empty response body.
+        }
         return { ok: r.ok, status: r.status, body: j };
       });
     });
@@ -2003,11 +2055,13 @@ export function wireThemeToggle(
       headers: { 'content-type': file.type || 'application/octet-stream' },
       body: file,
     }).then((r) => {
-      return r.text().then(function (t) {
+      return r.text().then((t) => {
         let j = null;
         try {
           j = t ? JSON.parse(t) : null;
-        } catch (_) {}
+        } catch {
+          // The caller receives the HTTP failure below with no parsed body.
+        }
         if (!r.ok) {
           throw new Error((j && (j.message || j.error)) || 'upload failed (' + r.status + ')');
         }
@@ -2034,14 +2088,12 @@ export function wireThemeToggle(
           chip.textContent = 'no vault connected';
           return;
         }
-        return fetchJson(vaultAppsPath()).then(function (a) {
+        return fetchJson(vaultAppsPath()).then((a) => {
           let apps = (a.ok && a.body && a.body.apps) || [];
           // `apps[].appId` is the internal consent_app UUID minted at
           // enrollment, not the manifest id `appId()` reads off the runtime
           // bridge — `name` is the field that carries the manifest id.
-          let mine = apps.filter(function (x) {
-            return x.name === appId();
-          })[0];
+          let mine = apps.find((x) => x.name === appId());
           if (!mine) {
             chip.textContent = 'not enrolled — vault calls deny';
             return;
@@ -2052,11 +2104,11 @@ export function wireThemeToggle(
             return;
           }
           let verbs = {};
-          grants.forEach(function (g) {
-            (g.scopes || []).forEach(function (sc) {
+          grants.forEach((g) => {
+            (g.scopes || []).forEach((sc) => {
               String(sc.verbs || '')
                 .split(',')
-                .forEach(function (v) {
+                .forEach((v) => {
                   if (v.trim()) verbs[v.trim()] = 1;
                 });
             });
@@ -2143,13 +2195,13 @@ export function wireThemeToggle(
         api.propose({
           title: d.title,
           detail: d.detail,
-          onApprove: function () {
-            return confirmParkedShared(invocationId, true, { fetchJson: fetchJson }).then(
+          onApprove() {
+            return confirmParkedShared(invocationId, true, { fetchJson }).then(
               normalizeApproveOutcome,
             );
           },
-          onDiscard: function () {
-            return confirmParkedShared(invocationId, false, { fetchJson: fetchJson });
+          onDiscard() {
+            return confirmParkedShared(invocationId, false, { fetchJson });
           },
         });
       });
@@ -2228,9 +2280,9 @@ export function wireThemeToggle(
             return;
           case 'aborted':
             say('The turn was aborted before it finished.');
-            return;
+          // falls through
           default:
-            return;
+            break;
         }
       }
       /**
@@ -2246,7 +2298,7 @@ export function wireThemeToggle(
           conversationId: id,
           message: text,
           register: 'ask',
-          idempotencyKey: idempotencyKey,
+          idempotencyKey,
         };
         if (attachments && attachments.length) body.attachments = attachments;
         return fetch(appBase() + '_turn', {
@@ -2256,14 +2308,16 @@ export function wireThemeToggle(
           signal,
         }).then((res) => {
           if (!res.ok) {
-            return res.text().then(function (t) {
+            return res.text().then((t) => {
               let j = null;
               try {
                 j = t ? JSON.parse(t) : null;
-              } catch (_) {}
+              } catch {
+                // A non-JSON error body has no structured retry detail.
+              }
               if (res.status === 404 && j && j.error === 'not_found' && !isRetry) {
                 forgetConversation();
-                return createConversation().then(function (freshId) {
+                return createConversation().then((freshId) => {
                   return runTurn(freshId, true);
                 });
               }
@@ -2285,7 +2339,7 @@ export function wireThemeToggle(
               }
             });
           }
-          return consumeSse(res.body, handleEvent, { signal: signal });
+          return consumeSse(res.body, handleEvent, { signal });
         });
       }
       ensureConversationId()
@@ -2548,7 +2602,7 @@ export function assignAnchors(body: string, anchors: unknown): unknown {
       normalized: 0,
     }));
     if (spans.length === 0) {
-      norm = norm ?? normalizeWithMap(body);
+      norm ??= normalizeWithMap(body);
       const needle = normalizeWithMap(sel.exact).text;
       if (needle.length > 0) {
         spans = occurrencesOf(norm.text, needle).map((at) => ({
@@ -2629,7 +2683,7 @@ function caretRect(textarea, index) {
   document.body.appendChild(mirror);
   const top = marker.offsetTop;
   const left = marker.offsetLeft;
-  const lineHeight = marker.offsetHeight || parseFloat(style.lineHeight) || 20;
+  const lineHeight = marker.offsetHeight || Number(style.lineHeight) || 20;
   mirror.remove();
   const box = textarea.getBoundingClientRect();
   return {
@@ -2873,7 +2927,11 @@ export function resolveInlineSpans(body: string, refs: Reference[]): unknown {
   const assigned = assignAnchors(String(body ?? ''), anchored);
   return anchored
     .filter((r) => assigned.has(r.link_id))
-    .map((r) => ({ ...assigned.get(r.link_id), link_id: r.link_id, card: r.card }));
+    .map((r) => ({
+      ...assigned.get(r.link_id),
+      link_id: r.link_id,
+      card: r.card,
+    }));
 }
 
 /** The set of link_ids currently resolved inline in `body` (strip flagging). */
@@ -3016,11 +3074,11 @@ export function attachMentionField(
     if (anchored.length === 0) return;
     const assigned = assignAnchors(body, anchored);
     const orphans = [];
-    for (const ref of anchored) {
+    await applyInOrder(anchored, async (ref) => {
       const span = assigned.get(ref.link_id);
       if (!span) {
         orphans.push(ref);
-        continue;
+        return;
       }
       // Re-baseline: keep the stored selector current with the saved body so
       // drift never accumulates and resolution needs no fuzzy rung.
@@ -3035,13 +3093,13 @@ export function attachMentionField(
         const outcome = await reanchorReference(ref.link_id, fresh);
         if (outcome?.status === 'executed') ref.selector = fresh;
       }
-    }
+    });
     if (orphans.length === 0) return;
     const retracted = [];
-    for (const ref of orphans) {
+    await applyInOrder(orphans, async (ref) => {
       const outcome = await removeReference(ref.link_id);
       if (outcome?.status === 'executed') retracted.push(ref);
-    }
+    });
     if (retracted.length === 0) return;
     for (const ref of retracted) {
       const i = refs.indexOf(ref);
@@ -3060,12 +3118,16 @@ export function attachMentionField(
         // so it can't oscillate against the still-missing words).
         onUndo: async () => {
           if (!from) return;
-          for (const ref of retracted) {
+          await applyInOrder(retracted, async (ref) => {
             const outcome = await createReference(from, ref.card, relation);
             if (outcome?.status === 'executed') {
-              refs.push({ link_id: outcome.output?.link_id, selector: null, card: ref.card });
+              refs.push({
+                link_id: outcome.output?.link_id,
+                selector: null,
+                card: ref.card,
+              });
             }
-          }
+          });
           changed();
         },
       },

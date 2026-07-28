@@ -10,10 +10,10 @@
 // nearest real screen or surfaces an "on desktop" note, matching how the rest
 // of the Photos port handles desktop-only affordances.
 
+import { Feather } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
 import { Animated, Easing, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
 
 import { useAnimatedValue } from '../../kit/hooks/useAnimatedValue';
 import { family, useTheme } from '../../kit/theme';
@@ -279,9 +279,19 @@ const styles = StyleSheet.create({
   storageActions: { flexDirection: 'row', gap: 18 },
   storageCard: { borderRadius: 12, marginBottom: 12, padding: 13 },
   storageFill: { borderRadius: 4, height: '100%', width: '6%' },
-  storageHead: { alignItems: 'center', flexDirection: 'row', gap: 9, marginBottom: 11 },
+  storageHead: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 9,
+    marginBottom: 11,
+  },
   storageText: { flex: 1, fontFamily: family.sansBold, fontSize: 15 },
-  storageTrack: { borderRadius: 4, height: 7, marginBottom: 11, overflow: 'hidden' },
+  storageTrack: {
+    borderRadius: 4,
+    height: 7,
+    marginBottom: 11,
+    overflow: 'hidden',
+  },
   switchEyebrow: {
     fontFamily: family.monoMedium,
     fontSize: 10,

@@ -1,4 +1,5 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import { type ChildProcess, spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 // governance: allow-repo-hygiene file-size-limit (#363) single cross-repo interop suite against a real Clawgnition gateway (wrangler dev); the scenario is one coherent conformance run, not independently splittable cases
 /*
  * Cross-repo interop: `RemoteBackupProvider` (this package's real client)
@@ -35,15 +36,16 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  * registration test data) build prefixed keys; PROTOCOL.md's example was
  * corrected to match.
  */
-
-import { type ChildProcess, spawn } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, promises as fs } from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { setTimeout as sleep } from 'node:timers/promises';
+
+import { forEachSequentially } from '@centraid/test-kit/sequential';
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+
 import { providerConformanceCases, type ConformanceHarness } from './conformance.js';
 import { createKeyring, type Keyring } from './crypto.js';
 import { createSnapshot, restoreSnapshot, verifySnapshot, type SourceEntry } from './engine.js';
@@ -69,9 +71,11 @@ function makeSqliteDbFile(filePath: string, vals: string[]): void {
 function readSqliteRows(filePath: string): string[] {
   const conn = new DatabaseSync(filePath);
   try {
-    return (conn.prepare('SELECT val FROM rows ORDER BY id').all() as { val: string }[]).map(
-      (r) => r.val,
-    );
+    return (
+      conn.prepare('SELECT val FROM rows ORDER BY id').all() as {
+        val: string;
+      }[]
+    ).map((r) => r.val);
   } finally {
     conn.close();
   }
@@ -104,7 +108,7 @@ function computeSkipReason(): string | null {
     return `Clawgnition gateway .dev.vars not found at "${DEV_VARS_FILE}" — see its docs/LOCAL_DEV_BACKUP.md`;
   }
   const vars = readFileSync(DEV_VARS_FILE, 'utf8');
-  if (!/^DEV_BACKUP_S3_ENDPOINT=.+$/m.test(vars)) {
+  if (!/^DEV_BACKUP_S3_ENDPOINT=.+$/mu.test(vars)) {
     return `DEV_BACKUP_S3_ENDPOINT is not set in "${DEV_VARS_FILE}" — the dev credentials fallback won't engage`;
   }
   return null;
@@ -132,7 +136,11 @@ const BUCKET = 'clawgnition-vault-backups-dev';
 // (`POST /v1/keys`) in beforeAll — the same path the dashboard takes.
 const OPERATOR_EMAIL = 'operator@clawgnition.local';
 const OPERATOR_PASSWORD = 'Operator123!';
-const CURRENT = { gatewayVersion: '0.1.0', vaultUserVersion: '1', ontologyVersion: '1.2' };
+const CURRENT = {
+  gatewayVersion: '0.1.0',
+  vaultUserVersion: '1',
+  ontologyVersion: '1.2',
+};
 const APP_META = {
   gatewayVersion: '0.1.0',
   vaultUserVersion: '1',
@@ -251,7 +259,13 @@ async function waitForGatewayUp(
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   let lastErr = 'no attempt made';
-  while (Date.now() < deadline) {
+  const poll = async (): Promise<void> => {
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `clawgnition gateway did not come up at ${url} within ${timeoutMs}ms (last: ${lastErr})\n` +
+          `--- recent wrangler output ---\n${recentLog().slice(-4000)}`,
+      );
+    }
     try {
       const res = await fetch(url, { signal: AbortSignal.timeout(3000) });
       if (res.status === 401 || res.status === 200) return;
@@ -260,11 +274,9 @@ async function waitForGatewayUp(
       lastErr = err instanceof Error ? err.message : String(err);
     }
     await sleep(1000);
-  }
-  throw new Error(
-    `clawgnition gateway did not come up at ${url} within ${timeoutMs}ms (last: ${lastErr})\n` +
-      `--- recent wrangler output ---\n${recentLog().slice(-4000)}`,
-  );
+    return poll();
+  };
+  return poll();
 }
 
 /**
@@ -277,13 +289,16 @@ async function mintRoutedApiKey(): Promise<string> {
   const signIn = await fetch(`${GATEWAY_URL}/api/auth/sign-in/email`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ email: OPERATOR_EMAIL, password: OPERATOR_PASSWORD }),
+    body: JSON.stringify({
+      email: OPERATOR_EMAIL,
+      password: OPERATOR_PASSWORD,
+    }),
   });
   if (!signIn.ok) {
     throw new Error(`operator sign-in failed (${signIn.status}): ${await signIn.text()}`);
   }
   const setCookie = signIn.headers.get('set-cookie') ?? '';
-  const session = /better-auth\.session_token=[^;]+/.exec(setCookie)?.[0];
+  const session = /better-auth\.session_token=[^;]+/u.exec(setCookie)?.[0];
   if (!session) {
     throw new Error(`operator sign-in returned no session cookie (set-cookie: ${setCookie})`);
   }
@@ -291,7 +306,10 @@ async function mintRoutedApiKey(): Promise<string> {
   // isn't warm yet, so the first mint can 503 with `key_delivery_pending`
   // ("Retry shortly."). Retry with backoff, exactly as the contract asks.
   let lastText = '';
-  for (let attempt = 0; attempt < 10; attempt++) {
+  const mintAfterVerifierWarmup = async (attempt: number): Promise<string> => {
+    if (attempt >= 10) {
+      throw new Error(`POST /v1/keys never became available: ${lastText}`);
+    }
     const minted = await fetch(`${GATEWAY_URL}/v1/keys`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie: session },
@@ -306,11 +324,11 @@ async function mintRoutedApiKey(): Promise<string> {
     lastText = await minted.text();
     if (minted.status === 503 && lastText.includes('key_delivery_pending')) {
       await sleep(500 * (attempt + 1));
-      continue;
+      return mintAfterVerifierWarmup(attempt + 1);
     }
     throw new Error(`POST /v1/keys failed (${minted.status}): ${lastText}`);
-  }
-  throw new Error(`POST /v1/keys never became available: ${lastText}`);
+  };
+  return mintAfterVerifierWarmup(0);
 }
 
 // ---------------------------------------------------------------------------
@@ -333,15 +351,12 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
     // Boot the real gateway, with one retry that wipes local D1 state — a
     // known trap (a partially-applied migration 0012) leaves `wrangler dev`
     // unable to come up; `rm -rf .wrangler/state && pnpm predev` recovers.
-    let attempt = 0;
-    for (;;) {
-      attempt++;
+    const bootGateway = async (attempt: number): Promise<void> => {
       try {
         await runPredev();
         const spawned = spawnWranglerDev();
         gatewayProc = spawned.child;
         await waitForGatewayUp(`${GATEWAY_URL}/v1/storage/provider`, 90_000, spawned.recentLog);
-        break;
       } catch (err) {
         if (gatewayProc) {
           await killProcessTree(gatewayProc);
@@ -352,9 +367,14 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
           `[interop] gateway boot attempt ${attempt} failed (${err instanceof Error ? err.message : String(err)}); ` +
             `wiping .wrangler/state (known migration-0012 trap) and retrying once`,
         );
-        await fs.rm(path.join(GATEWAY_DIR, '.wrangler', 'state'), { recursive: true, force: true });
+        await fs.rm(path.join(GATEWAY_DIR, '.wrangler', 'state'), {
+          recursive: true,
+          force: true,
+        });
+        return bootGateway(attempt + 1);
       }
-    }
+    };
+    await bootGateway(1);
 
     apiKey = await mintRoutedApiKey();
     provider = new RemoteBackupProvider({ baseUrl: GATEWAY_URL, apiKey });
@@ -366,11 +386,11 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
     // "purge (tier-gated)"). Local D1 state itself is disposable
     // (`rm -rf apps/gateway/.wrangler/state`), so this is just hygiene, not
     // a correctness requirement for the next run.
-    for (const id of createdTargetIds) {
+    await forEachSequentially(createdTargetIds, async (id) => {
       await provider.deleteTarget(id).catch((err: unknown) => {
         console.warn(`[interop] cleanup: deleteTarget(${id}) failed: ${String(err)}`);
       });
-    }
+    });
     if (gatewayProc) await killProcessTree(gatewayProc);
     if (s3) await s3.close();
   }, 120_000);
@@ -537,14 +557,23 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
       // the opaque blobs restore byte-identical.
       expect(readSqliteRows(path.join(destDir, 'vault.db'))).toStrictEqual(['v1', 'v2', 'v3']);
       expect(readSqliteRows(path.join(destDir, 'journal.db'))).toStrictEqual(['j1']);
-      for (const entry of entries.filter((e) => e.kind === 'blob')) {
-        const original = await fs.readFile(entry.absolutePath);
-        const restored = await fs.readFile(path.join(destDir, ...entry.path.split('/')));
-        expect(restored.equals(original)).toBe(true);
-      }
+      await Promise.all(
+        entries
+          .filter((e) => e.kind === 'blob')
+          .map(async (entry) => {
+            const original = await fs.readFile(entry.absolutePath);
+            const restored = await fs.readFile(path.join(destDir, ...entry.path.split('/')));
+            expect(restored.equals(original)).toBe(true);
+          }),
+      );
       await fs.rm(destDir, { recursive: true, force: true });
 
-      const verified = await verifySnapshot({ provider, targetId, keyring, vaultId: VAULT_ID });
+      const verified = await verifySnapshot({
+        provider,
+        targetId,
+        keyring,
+        vaultId: VAULT_ID,
+      });
       expect(verified.missing).toStrictEqual([]);
       expect(verified.corrupt).toStrictEqual([]);
     }, 90_000);
@@ -656,7 +685,7 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
     // policy). `S3ObjectStore.put` refuses locally based on `grant.mode`
     // before ever making the request — that's what this asserts.
     const readStore = await provider.openDataPlane(targetId, 'backup', 'read');
-    await expect(readStore.put('chunks/nope', new Uint8Array([1]))).rejects.toThrow(/read.*mode/i);
+    await expect(readStore.put('chunks/nope', new Uint8Array([1]))).rejects.toThrow(/read.*mode/iu);
   }, 90_000);
 
   // -------------------------------------------------------------------------

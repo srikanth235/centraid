@@ -71,7 +71,13 @@ export async function captureVideoFrames(source: Blob): Promise<CapturedVideoFra
       canvasBlob(video, VIDEO_POSTER_EDGE),
       canvasBlob(video, VIDEO_THUMB_EDGE),
     ]);
-    return { width: video.videoWidth, height: video.videoHeight, duration, poster, thumb };
+    return {
+      width: video.videoWidth,
+      height: video.videoHeight,
+      duration,
+      poster,
+      thumb,
+    };
   } catch {
     return null;
   } finally {

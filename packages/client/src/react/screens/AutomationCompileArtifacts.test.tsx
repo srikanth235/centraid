@@ -1,6 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
 import AutomationCompileArtifacts, {
   type AutomationCompileArtifactsProps,
 } from './AutomationCompileArtifacts.js';
@@ -48,7 +49,10 @@ describe('screens/AutomationCompileArtifacts', () => {
 
   describe(AutomationCompileArtifacts, () => {
     it('renders the selected file with one gutter-numbered row per line', async () => {
-      const el = await mount({ handler: 'const a = 1;\nexport default a;', manifest: '{}' });
+      const el = await mount({
+        handler: 'const a = 1;\nexport default a;',
+        manifest: '{}',
+      });
       const code = el.querySelector('[data-testid="compile-artifact"]');
       expect(code?.textContent).toContain('const a = 1;');
       expect(code?.textContent).toContain('export default a;');

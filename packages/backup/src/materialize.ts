@@ -16,6 +16,7 @@
 import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+
 import { unframeChunkPayload } from './compress.js';
 import {
   chunkId as computeChunkId,
@@ -27,6 +28,7 @@ import {
 } from './crypto.js';
 import type { EngineLogger } from './engine-log.js';
 import { isSafeEntryPath, type ManifestEntry, openManifest } from './manifest.js';
+import { applyInOrder } from './ordered-work.js';
 import type { BackupProvider } from './provider.js';
 
 export interface MaterializeSnapshotBlobsOptions {
@@ -87,11 +89,11 @@ export async function materializeSnapshotBlobs(
 
   const materialized: string[] = [];
   const absent: string[] = [];
-  for (const sha of wanted) {
+  await applyInOrder(wanted, async (sha) => {
     const entry = bySha.get(sha);
     if (!entry) {
       absent.push(sha);
-      continue;
+      return;
     }
     // Same defensive re-check `restoreSnapshot` applies at the point it touches disk.
     if (!isSafeEntryPath(entry.path)) {
@@ -102,7 +104,7 @@ export async function materializeSnapshotBlobs(
     const hash = createHash('sha256');
     const handle = await fs.open(dest, 'w');
     try {
-      for (const id of entry.chunks) {
+      await applyInOrder(entry.chunks, async (id) => {
         // Unseal → unframe → recompute the keyed id: decompression happens
         // BEFORE the integrity check, exactly as in the restore loop.
         const plain = unframeChunkPayload(decrypt(dataKey, await store.get(`chunks/${id}`)));
@@ -114,7 +116,7 @@ export async function materializeSnapshotBlobs(
         const buf = Buffer.from(plain.buffer, plain.byteOffset, plain.byteLength);
         hash.update(buf);
         await handle.write(buf);
-      }
+      });
       await handle.sync();
     } finally {
       await handle.close();
@@ -127,6 +129,6 @@ export async function materializeSnapshotBlobs(
     }
     opts.log?.info?.(`recover: re-pinned blob ${sha} from the snapshot`);
     materialized.push(sha);
-  }
+  });
   return { materialized, absent };
 }

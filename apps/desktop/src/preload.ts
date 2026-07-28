@@ -5,14 +5,15 @@
 // This file is bundled to CJS by `bun build` (Electron `sandbox: true` requires
 // CJS preload). Renderer typings live in `renderer/centraid-api.d.ts`.
 
-import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import * as tokens from '@centraid/design-tokens';
+import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
+
 import { Channel, hostCapabilities } from './main/ipc-core.js';
 import { createDeepLinkBuffer } from './main/oauth-deep-link.js';
 
 const deepLinkBuffer = createDeepLinkBuffer();
 ipcRenderer.on(Channel.DEEP_LINK, (_event: IpcRendererEvent, url: unknown) => {
-  if (typeof url === 'string') deepLinkBuffer.push(url);
+  if (typeof url === 'string') deepLinkBuffer.enqueue(url);
 });
 
 // `tokens.toCss()` is pure and stable for the lifetime of the package

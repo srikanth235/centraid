@@ -9,6 +9,7 @@
  */
 
 import { createHash, createHmac } from 'node:crypto';
+
 import type { ObjectListEntry, ObjectStore } from './object-store.js';
 import { assertSafeKey } from './object-store.js';
 import type { S3Grant } from './provider.js';
@@ -127,8 +128,20 @@ function signRequest(opts: {
 async function collectBody(data: Uint8Array | AsyncIterable<Uint8Array>): Promise<Buffer> {
   if (data instanceof Uint8Array) return Buffer.from(data.buffer, data.byteOffset, data.byteLength);
   const parts: Buffer[] = [];
-  for await (const chunk of data)
+  const iterator = data[Symbol.asyncIterator]();
+  const collectNextChunk = async (): Promise<void> => {
+    const next = await iterator.next();
+    if (next.done) return;
+    const chunk = next.value;
     parts.push(Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength));
+    return collectNextChunk();
+  };
+  try {
+    await collectNextChunk();
+  } catch (error) {
+    await iterator.return?.();
+    throw error;
+  }
   return Buffer.concat(parts);
 }
 
@@ -144,12 +157,14 @@ function unescapeXml(s: string): string {
 async function* streamResponseBody(res: Response): AsyncGenerator<Uint8Array> {
   if (!res.body) return;
   const reader = res.body.getReader();
+  async function* readNextChunk(): AsyncGenerator<Uint8Array> {
+    const { done, value } = await reader.read();
+    if (done) return;
+    if (value) yield value;
+    yield* readNextChunk();
+  }
   try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (value) yield value;
-    }
+    yield* readNextChunk();
   } finally {
     reader.releaseLock();
   }
@@ -213,7 +228,11 @@ export class S3ObjectStore implements ObjectStore {
       ...(pathAndKey.query ? { query: pathAndKey.query } : {}),
       ...(body ? { body } : {}),
     });
-    return fetch(signed.url, { method, headers: signed.headers, ...(body ? { body } : {}) });
+    return fetch(signed.url, {
+      method,
+      headers: signed.headers,
+      ...(body ? { body } : {}),
+    });
   }
 
   async put(key: string, data: Uint8Array | AsyncIterable<Uint8Array>): Promise<void> {
@@ -237,7 +256,7 @@ export class S3ObjectStore implements ObjectStore {
   }
 
   getStream(key: string): AsyncIterable<Uint8Array> {
-    /** @yields Successive byte ranges of the response body, in order. */
+    /** @yields {Uint8Array} Successive byte ranges of the response body, in order. */
     const gen = async function* (this: S3ObjectStore): AsyncGenerator<Uint8Array> {
       const res = await this.request('GET', { path: this.objectPath(key) });
       if (res.status === 404) throw new Error(`object not found: ${key}`);
@@ -256,17 +275,25 @@ export class S3ObjectStore implements ObjectStore {
       throw new Error(`S3 HEAD ${key} failed: ${res.status}`);
     }
     const len = res.headers.get('content-length');
-    return { size: len ? Number.parseInt(len, 10) : 0 };
+    return { size: len ? Math.trunc(Number(len)) : 0 };
   }
 
   async *list(prefix: string): AsyncIterable<ObjectListEntry> {
     if (prefix.length > 0) assertSafeKey(prefix.endsWith('/') ? `${prefix}x` : prefix);
     const fullPrefix = `${this.grant.prefix}${prefix}`;
-    let continuationToken: string | undefined;
-    do {
-      const query: Record<string, string> = { 'list-type': '2', prefix: fullPrefix };
+    const listPage = async function* (
+      this: S3ObjectStore,
+      continuationToken: string | undefined,
+    ): AsyncGenerator<ObjectListEntry> {
+      const query: Record<string, string> = {
+        'list-type': '2',
+        prefix: fullPrefix,
+      };
       if (continuationToken) query['continuation-token'] = continuationToken;
-      const res = await this.request('GET', { path: `/${this.grant.bucket}`, query });
+      const res = await this.request('GET', {
+        path: `/${this.grant.bucket}`,
+        query,
+      });
       if (!res.ok) {
         throw new Error(
           `S3 ListObjectsV2 failed: ${res.status} ${await res.text().catch(() => '')}`,
@@ -294,11 +321,13 @@ export class S3ObjectStore implements ObjectStore {
           : NaN;
         yield {
           key: fullKey.slice(this.grant.prefix.length),
-          size: sizeMatch ? Number.parseInt(sizeMatch.groups?.size ?? '0', 10) : 0,
+          size: sizeMatch ? Math.trunc(Number(sizeMatch.groups?.size ?? '0')) : 0,
           ...(etag ? { etagOrHash: etag } : {}),
           ...(Number.isFinite(modifiedMs) ? { storedAt: Math.floor(modifiedMs / 1000) } : {}),
           ...(storageClassMatch
-            ? { storageClass: unescapeXml(storageClassMatch.groups?.storageClass ?? '') }
+            ? {
+                storageClass: unescapeXml(storageClassMatch.groups?.storageClass ?? ''),
+              }
             : {}),
         };
       }
@@ -306,9 +335,11 @@ export class S3ObjectStore implements ObjectStore {
       const tokenMatch = /<NextContinuationToken>(?<token>[\s\S]*?)<\/NextContinuationToken>/u.exec(
         xml,
       );
-      continuationToken =
+      const nextContinuationToken =
         truncated && tokenMatch ? unescapeXml(tokenMatch.groups?.token ?? '') : undefined;
-    } while (continuationToken);
+      if (nextContinuationToken) yield* listPage.call(this, nextContinuationToken);
+    }.bind(this);
+    yield* listPage(undefined);
   }
 
   async delete(key: string): Promise<void> {

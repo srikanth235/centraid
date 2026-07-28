@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { cronMatches } from './cron-match.js';
+
 import { resolveCronTimezone, wallClockFields } from '../cron-timezone.js';
+import { cronMatches } from './cron-match.js';
 
 // Local-time dates (the matcher reads the local wall clock when no zone is
 // set). 2026-01-01 is a Thursday; 2026-01-04 a Sunday; 2026-01-05 a Monday.

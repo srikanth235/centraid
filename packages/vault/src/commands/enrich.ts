@@ -16,9 +16,9 @@
 //   - `enrich.request_enrichment` / `enrich.upsert_embedding`: the
 //     on-demand queue and the additive vector index (issue #299 phase 5).
 
+import { encodeVector } from '../enrich/similarity.js';
 import type { Gateway } from '../gateway/gateway.js';
 import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
-import { encodeVector } from '../enrich/similarity.js';
 
 /** Embedding dimension ceiling — bounds one row at ~16 KiB of float32. */
 const MAX_EMBEDDING_DIM = 4096;
@@ -39,7 +39,10 @@ const SET_EXTRACTED_TEXT: CommandDefinition = {
   outputSchema: {
     type: 'object',
     required: ['content_id'],
-    properties: { content_id: { type: 'string' }, replaced: { type: 'integer' } },
+    properties: {
+      content_id: { type: 'string' },
+      replaced: { type: 'integer' },
+    },
   },
   preconditions: [
     {
@@ -232,14 +235,20 @@ const SET_CONNECTION_TRUST: CommandDefinition = {
       // an array narrows it — everything else stages for review.
       enrich_classes: {
         type: 'array',
-        items: { type: 'string', enum: ['caption', 'tag', 'face', 'collection', 'filing'] },
+        items: {
+          type: 'string',
+          enum: ['caption', 'tag', 'face', 'collection', 'filing'],
+        },
       },
     },
   },
   outputSchema: {
     type: 'object',
     required: ['connection_id', 'trust'],
-    properties: { connection_id: { type: 'string' }, trust: { type: 'string' } },
+    properties: {
+      connection_id: { type: 'string' },
+      trust: { type: 'string' },
+    },
   },
   preconditions: [
     {

@@ -3,6 +3,7 @@
 // `useColorScheme()`; everything dark-mode actually needs is here.
 
 import type { Theme as NavigationTheme } from '@react-navigation/native';
+
 import { lightPalette, darkPalette, radii, spacing, fonts } from './tokens.generated';
 
 export type Scheme = 'light' | 'dark';
@@ -10,7 +11,9 @@ export type Scheme = 'light' | 'dark';
 // The generated palettes plus a derived `ink4` — the source has no `--ink-4`,
 // but the app uses a fourth, fainter ink (e.g. the home pager dots), so we
 // derive it here as a low-alpha ink rather than snapping to ink3.
-export type ThemeColors = Record<keyof typeof lightPalette, string> & { ink4: string };
+export type ThemeColors = Record<keyof typeof lightPalette, string> & {
+  ink4: string;
+};
 
 export interface ThemeValue {
   scheme: Scheme;
@@ -64,8 +67,20 @@ const DARK_COLORS: ThemeColors = {
 
 // Frozen singletons per scheme so `colors` keeps a stable identity across
 // renders — lets screens `useMemo(makeStyles, [colors])` without thrash.
-const LIGHT: ThemeValue = { scheme: 'light', colors: LIGHT_COLORS, radii, spacing, fonts };
-const DARK: ThemeValue = { scheme: 'dark', colors: DARK_COLORS, radii, spacing, fonts };
+const LIGHT: ThemeValue = {
+  scheme: 'light',
+  colors: LIGHT_COLORS,
+  radii,
+  spacing,
+  fonts,
+};
+const DARK: ThemeValue = {
+  scheme: 'dark',
+  colors: DARK_COLORS,
+  radii,
+  spacing,
+  fonts,
+};
 
 export function resolveTheme(scheme: Scheme | null | undefined): ThemeValue {
   return scheme === 'dark' ? DARK : LIGHT;

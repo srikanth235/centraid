@@ -1,8 +1,10 @@
 // Grid view row (#grid root's mapped children).
 import type { MouseEvent } from 'react';
+
 import { fmtBytes, fmtDate, isImage, isVideo, tintBg, typeMeta } from '../format.ts';
 import type { DriveDoc } from '../types.ts';
 import { Checkbox, CustodyDot } from './Shared.tsx';
+
 import styles from './Grid.module.css';
 import shared from './shared.module.css';
 
@@ -65,9 +67,27 @@ export function GridCard({
                 content model is phrasing content. `.thumbLines` already sets
                 `display: flex`, so the box is unchanged. */}
             <span className={styles.thumbLines}>
-              <i style={{ width: '70%', background: `var(${m.cv})`, opacity: 0.18 }} />
-              <i style={{ width: '90%', background: `var(${m.cv})`, opacity: 0.14 }} />
-              <i style={{ width: '55%', background: `var(${m.cv})`, opacity: 0.14 }} />
+              <i
+                style={{
+                  width: '70%',
+                  background: `var(${m.cv})`,
+                  opacity: 0.18,
+                }}
+              />
+              <i
+                style={{
+                  width: '90%',
+                  background: `var(${m.cv})`,
+                  opacity: 0.14,
+                }}
+              />
+              <i
+                style={{
+                  width: '55%',
+                  background: `var(${m.cv})`,
+                  opacity: 0.14,
+                }}
+              />
             </span>
           </>
         )}

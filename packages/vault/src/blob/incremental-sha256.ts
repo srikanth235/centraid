@@ -38,7 +38,10 @@ export class IncrementalSha256 {
   }
 
   exportState(): SerializableSha256State {
-    return { version: 2, wasmBase64: Buffer.from(this.hasher.save()).toString('base64') };
+    return {
+      version: 2,
+      wasmBase64: Buffer.from(this.hasher.save()).toString('base64'),
+    };
   }
 
   /** Digest a state clone so callers may continue appending after verification. */

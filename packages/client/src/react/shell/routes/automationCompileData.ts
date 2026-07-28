@@ -165,7 +165,12 @@ export async function watchTurnSteps(
       const prev = items.get(event.itemId);
       const startedAt = prev?.startedAt ?? Date.now() - event.durationMs;
       items.set(event.itemId, {
-        ...(prev ?? { itemId: event.itemId, turnId, ordinal: event.ordinal, kind: 'tool' }),
+        ...(prev ?? {
+          itemId: event.itemId,
+          turnId,
+          ordinal: event.ordinal,
+          kind: 'tool',
+        }),
         itemId: event.itemId,
         turnId,
         ordinal: event.ordinal,

@@ -19,12 +19,13 @@
 // have a real CAS object.
 
 import type { DatabaseSync } from 'node:sqlite';
+
 import type { BackupPolicy } from '../backup-policy.js';
-import { BINARY_DERIVATIVE_SQL } from './derivatives.js';
 import type { RemoteTier } from './custody-types.js';
 import { storeForClass } from './custody-types.js';
-import type { BlobStore } from './store.js';
+import { BINARY_DERIVATIVE_SQL } from './derivatives.js';
 import type { ReplicaStore } from './replica-index.js';
+import type { BlobStore } from './store.js';
 
 /**
  * Binary derivatives that never take the multipart/streaming path stay under

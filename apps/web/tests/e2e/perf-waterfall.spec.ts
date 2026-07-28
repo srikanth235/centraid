@@ -1,8 +1,9 @@
 // governance: allow-repo-hygiene file-size-limit (#404) one performance-waterfall suite sharing a single timing vocabulary and browser fixture; splitting the assertions would obscure the cross-flow budget comparison
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+
 import { expect, test, type Frame, type Page } from '@playwright/test';
+
 import { installHarnessControlTransport } from './control-transport.js';
 import { enforceTiming, perfBudgets } from './perf-budgets.js';
 
@@ -25,7 +26,7 @@ const APP_ID = 'web-e2e';
 const GATEWAY_ENDPOINT_ID = 'web-e2e-gateway';
 const GATEWAY_ENDPOINT_TICKET = 'web-e2e-control-transport';
 
-const here = path.dirname(fileURLToPath(import.meta.url));
+const here = import.meta.dirname;
 const REPORT_PATH = path.resolve(here, '../../test-results/perf-waterfall-report.json');
 const QUALITY_REPORT_PATH = path.resolve(
   here,
@@ -111,7 +112,7 @@ async function waitForShellBundle(page: Page): Promise<void> {
         page.evaluate(() =>
           performance
             .getEntriesByType('resource')
-            .some((e) => /\/assets\/(boot|index)-.*\.js$/.test(e.name)),
+            .some((e) => /\/assets\/(?:boot|index)-.*\.js$/u.test(e.name)),
         ),
       { timeout: 20_000 },
     )
@@ -204,7 +205,7 @@ async function ensureInstalled(page: Page): Promise<void> {
   const preview = page.frameLocator('iframe[title="App preview"]');
   await expect(preview.locator('#ready')).toHaveText('generated app ready');
   await page.getByRole('button', { name: 'Publish', exact: true }).click();
-  await expect(page.getByText(/added to Home/i).first()).toBeVisible();
+  await expect(page.getByText(/added to Home/iu).first()).toBeVisible();
   await page.getByRole('button', { name: 'Home', exact: true }).click();
   await expect(page.locator(`[data-app-id="${APP_ID}"]`).first()).toBeVisible();
 }
@@ -403,7 +404,10 @@ test('sw tunnel cache — warm re-open collapses relay round trips and bytes', a
       calls: number;
       bytes: number;
     }
-    (window as unknown as { __tunnel: Tally }).__tunnel = { calls: 0, bytes: 0 };
+    (window as unknown as { __tunnel: Tally }).__tunnel = {
+      calls: 0,
+      bytes: 0,
+    };
     const ASSET_BODY = 'a'.repeat(4096);
     const BLOB_BODY = 'b'.repeat(8192);
     navigator.serviceWorker.addEventListener('message', (event) => {
@@ -558,15 +562,20 @@ test('iroh pool — connects stay far below streams (or contract is present)', a
 
   const REQUESTS = 4;
   await page.evaluate(async (count) => {
-    for (let i = 0; i < count; i += 1) {
+    const probeNext = async (index: number): Promise<void> => {
+      if (index >= count) return;
       try {
         await (
-          window as unknown as { CentraidIroh: { fetch: (p: string) => Promise<Response> } }
-        ).CentraidIroh.fetch(`/centraid/perf-probe/${i}`);
+          window as unknown as {
+            CentraidIroh: { fetch: (p: string) => Promise<Response> };
+          }
+        ).CentraidIroh.fetch(`/centraid/perf-probe/${index}`);
       } catch {
         /* expected: no live gateway. The stream was still opened + counted. */
       }
-    }
+      return probeNext(index + 1);
+    };
+    return probeNext(0);
   }, REQUESTS);
 
   const stats = (await page.evaluate(

@@ -1,4 +1,5 @@
 import { assert, beforeEach, describe, expect, test } from 'vitest';
+
 import { bootstrapVault, type BootstrapResult } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { createGateway, Gateway } from '../gateway/gateway.js';
@@ -16,11 +17,19 @@ describe('parties', () => {
     boot = bootstrapVault(db, { ownerName: 'Priya' });
     gw = createGateway(db);
     registerPartyCommands(gw);
-    owner = { kind: 'device', deviceId: boot.deviceId, deviceKey: boot.deviceKey };
+    owner = {
+      kind: 'device',
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+    };
   });
 
   function invoke(command: string, input: Record<string, unknown>) {
-    return gw.invoke(owner, { command, input, purpose: 'dpv:ServiceProvision' });
+    return gw.invoke(owner, {
+      command,
+      input,
+      purpose: 'dpv:ServiceProvision',
+    });
   }
 
   function addParty(input: Record<string, unknown>): string {
@@ -97,7 +106,11 @@ describe('parties', () => {
     expect(outcome.status).toBe('executed');
     const party = db.vault
       .prepare('SELECT display_name, birth_date, updated_at FROM core_party WHERE party_id = ?')
-      .get(partyId) as { display_name: string; birth_date: string; updated_at: string };
+      .get(partyId) as {
+      display_name: string;
+      birth_date: string;
+      updated_at: string;
+    };
     expect(party.display_name).toBe('Ravi Kumar');
     expect(party.birth_date).toBe('1988-04-12');
     // updated_at is an ISO-8601 string; toBeGreaterThanOrEqual asserts its

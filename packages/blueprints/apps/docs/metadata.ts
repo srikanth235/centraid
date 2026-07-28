@@ -25,7 +25,10 @@ export function createMetadata({ refresh, act, narrate }: MetadataDeps) {
   async function addTag(doc: DriveDoc, label: string) {
     const trimmed = label.trim();
     if (!trimmed) return;
-    const outcome = await act('tag', { document_id: doc.document_id, label: trimmed });
+    const outcome = await act('tag', {
+      document_id: doc.document_id,
+      label: trimmed,
+    });
     if (narrate(outcome)) {
       toast(`Tagged “${trimmed}” · receipted.`);
       await refresh();

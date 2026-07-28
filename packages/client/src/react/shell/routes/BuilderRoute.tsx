@@ -1,10 +1,11 @@
 import { type JSX, type ReactNode, useState } from 'react';
+
 import type { AppearancePrefs, ShellRoute } from '../../../app-shell-context.js';
 import { useShellActions } from '../actions.js';
 import type { ShellNav } from '../ShellApp.js';
+import { useMemberScopes } from '../useMemberScopes.js';
 import BuilderShell from './builder/BuilderShell.js';
 import BuilderTargetGate from './BuilderTargetGate.js';
-import { useMemberScopes } from '../useMemberScopes.js';
 
 // React-owned builder route — the full-bleed conversational app/automation
 // builder (issue #325, R5-B). Replaces the vanilla `window.openBuilder`
@@ -53,7 +54,12 @@ export default function BuilderRoute({
       setUserApps(
         userApps.map((a) =>
           a.id === input.appId
-            ? { ...a, name: input.name || a.name, centraidAppId: input.appId, updatedAt: now }
+            ? {
+                ...a,
+                name: input.name || a.name,
+                centraidAppId: input.appId,
+                updatedAt: now,
+              }
             : a,
         ),
       );
@@ -138,7 +144,10 @@ export default function BuilderRoute({
             // pane is stuck on the "Building…" skeleton forever — appContext
             // alone (name/color/icon) isn't enough.
             ...(route.appContext
-              ? { appContext: route.appContext, initialAppId: route.appContext.id }
+              ? {
+                  appContext: route.appContext,
+                  initialAppId: route.appContext.id,
+                }
               : {}),
             ...(route.initialPrompt ? { initialPrompt: route.initialPrompt } : {}),
           })}

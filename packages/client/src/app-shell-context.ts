@@ -88,11 +88,20 @@ export type ShellRoute =
   // the initial DTO and is excluded from `routeKey`, so it never persists past
   // the first paint. Reached inside normal chrome, NOT full-bleed — unlike the
   // builder chat it replaces as the primary edit surface.
-  | { kind: 'automation-editor'; automationId?: string; templateId?: string; watchEntity?: string }
+  | {
+      kind: 'automation-editor';
+      automationId?: string;
+      templateId?: string;
+      watchEntity?: string;
+    }
   | { automationId: string; kind: 'automation-view' }
   | { automationId: string; kind: 'run-view'; runId: string }
   | { id: string; kind: 'app' }
-  | { appContext?: AppMetaResolvedType; initialPrompt?: string; kind: 'builder' }
+  | {
+      appContext?: AppMetaResolvedType;
+      initialPrompt?: string;
+      kind: 'builder';
+    }
   // `seedMessage`, when set, is the editor's "compile" handoff — a first
   // message posted into the builder chat on open (mirrors `builder`'s
   // `initialPrompt`). Optional because most automation-builder entries
@@ -151,7 +160,13 @@ export interface TemplateVaultBlock {
 // Per-automation run state, keyed by `${appId}:${name}`.
 export type AutomationRunState =
   | { kind: 'running' }
-  | { kind: 'done'; ok: boolean; durationMs: number; error?: string; finishedAt: number };
+  | {
+      kind: 'done';
+      ok: boolean;
+      durationMs: number;
+      error?: string;
+      finishedAt: number;
+    };
 
 // ── Late-bound render registry ──────────────────────────────────────────────
 // Populated by app.ts (for routes still living there) and by each module

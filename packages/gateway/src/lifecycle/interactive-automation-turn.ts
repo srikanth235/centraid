@@ -13,9 +13,10 @@
  */
 
 import { createHash, randomUUID } from 'node:crypto';
-import { fileURLToPath } from 'node:url';
-import path from 'node:path';
 import { promises as fs } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import {
   compileHydrationPlan,
   hydrationMessagesFromLedger,
@@ -29,6 +30,7 @@ import {
   type TurnStreamEvent,
 } from '@centraid/app-engine';
 import type { Row as AutomationRow } from '@centraid/automation';
+
 import { journalConversationStore } from '../journal-stores.js';
 import {
   automationContextPreamble,
@@ -74,15 +76,15 @@ function usageFields(usage: UsageEvent | undefined): {
 } {
   if (!usage) return {};
   return {
-    ...(usage.model !== undefined ? { model: usage.model } : {}),
-    ...(usage.provider !== undefined ? { provider: usage.provider } : {}),
-    ...(usage.inputTokens !== undefined ? { inputTokens: usage.inputTokens } : {}),
-    ...(usage.outputTokens !== undefined ? { outputTokens: usage.outputTokens } : {}),
-    ...(usage.cacheReadTokens !== undefined ? { cacheReadTokens: usage.cacheReadTokens } : {}),
-    ...(usage.cacheWriteTokens !== undefined ? { cacheWriteTokens: usage.cacheWriteTokens } : {}),
-    ...(usage.costUsd !== undefined ? { costUsd: usage.costUsd } : {}),
-    ...(usage.costSource !== undefined ? { costSource: usage.costSource } : {}),
-    ...(usage.effort !== undefined ? { effort: usage.effort } : {}),
+    ...(usage.model === undefined ? {} : { model: usage.model }),
+    ...(usage.provider === undefined ? {} : { provider: usage.provider }),
+    ...(usage.inputTokens === undefined ? {} : { inputTokens: usage.inputTokens }),
+    ...(usage.outputTokens === undefined ? {} : { outputTokens: usage.outputTokens }),
+    ...(usage.cacheReadTokens === undefined ? {} : { cacheReadTokens: usage.cacheReadTokens }),
+    ...(usage.cacheWriteTokens === undefined ? {} : { cacheWriteTokens: usage.cacheWriteTokens }),
+    ...(usage.costUsd === undefined ? {} : { costUsd: usage.costUsd }),
+    ...(usage.costSource === undefined ? {} : { costSource: usage.costSource }),
+    ...(usage.effort === undefined ? {} : { effort: usage.effort }),
   };
 }
 
@@ -254,11 +256,15 @@ export async function runInteractiveAutomationTurn(
         : [];
       const hydrationPlan =
         hydrationMessages.length > 0
-          ? compileHydrationPlan(hydrationMessages, { includeAttachmentReferences: true })
+          ? compileHydrationPlan(hydrationMessages, {
+              includeAttachmentReferences: true,
+            })
           : undefined;
       const recoveryHydrationPlan =
         recoveryMessages.length > 0
-          ? compileHydrationPlan(recoveryMessages, { includeAttachmentReferences: true })
+          ? compileHydrationPlan(recoveryMessages, {
+              includeAttachmentReferences: true,
+            })
           : undefined;
 
       const recentTurns = store.listTurns(conversationId).toReversed().slice(0, RECENT_TURN_LIMIT);
@@ -341,12 +347,21 @@ export async function runInteractiveAutomationTurn(
       const artifactCandidates: Array<{
         itemId: string;
         locations: Array<{ path: string; line?: number }>;
-        inline: Array<{ dataBase64: string; mime: string; filename?: string }>;
+        inline: Array<{
+          dataBase64: string;
+          mime: string;
+          filename?: string;
+        }>;
       }> = [];
 
       const closeTool = (
         callId: string,
-        open: { itemId: string; ordinal: number; startedAt: number; name: string },
+        open: {
+          itemId: string;
+          ordinal: number;
+          startedAt: number;
+          name: string;
+        },
         event: Extract<TurnStreamEvent, { type: 'tool.result' }> | { ok: false; errorText: string },
       ): void => {
         const endedAt = Date.now();
@@ -366,9 +381,9 @@ export async function runInteractiveAutomationTurn(
         store.closeItem({
           itemId: open.itemId,
           ok: event.ok,
-          ...(result !== undefined ? { outputJson: safeJson(result) } : {}),
-          ...(rawJson !== undefined ? { rawJson } : {}),
-          ...(error !== undefined ? { error } : {}),
+          ...(result === undefined ? {} : { outputJson: safeJson(result) }),
+          ...(rawJson === undefined ? {} : { rawJson }),
+          ...(error === undefined ? {} : { error }),
           endedAt,
           durationMs: endedAt - open.startedAt,
         });
@@ -378,10 +393,10 @@ export async function runInteractiveAutomationTurn(
           ordinal: open.ordinal,
           callId,
           ok: event.ok,
-          ...(result !== undefined ? { result } : {}),
-          ...(error !== undefined ? { error } : {}),
+          ...(result === undefined ? {} : { result }),
+          ...(error === undefined ? {} : { error }),
           durationMs: endedAt - open.startedAt,
-          ...(rawJson !== undefined ? { rawJson } : {}),
+          ...(rawJson === undefined ? {} : { rawJson }),
         });
         toolItems.delete(callId);
       };
@@ -424,8 +439,8 @@ export async function runInteractiveAutomationTurn(
             callId: event.toolCallId,
             kind: 'tool',
             name: event.toolName,
-            ...(event.args !== undefined ? { argsJson: safeJson(event.args) } : {}),
-            ...(rawStartJson !== undefined ? { rawJson: rawStartJson } : {}),
+            ...(event.args === undefined ? {} : { argsJson: safeJson(event.args) }),
+            ...(rawStartJson === undefined ? {} : { rawJson: rawStartJson }),
             startedAt: openedAt,
           });
           toolItems.set(event.toolCallId, {
@@ -441,8 +456,8 @@ export async function runInteractiveAutomationTurn(
             callId: event.toolCallId,
             kind: 'tool',
             name: event.toolName,
-            ...(event.args !== undefined ? { args: event.args } : {}),
-            ...(rawStartJson !== undefined ? { rawJson: rawStartJson } : {}),
+            ...(event.args === undefined ? {} : { args: event.args }),
+            ...(rawStartJson === undefined ? {} : { rawJson: rawStartJson }),
           });
           emitTurn({
             type: 'item.delta',
@@ -463,10 +478,20 @@ export async function runInteractiveAutomationTurn(
             });
             closeTool(event.toolCallId, open, event);
           } else {
-            emitTurn({ type: 'item.delta', itemId: agentItemId, ordinal: agentOrdinal, event });
+            emitTurn({
+              type: 'item.delta',
+              itemId: agentItemId,
+              ordinal: agentOrdinal,
+              event,
+            });
           }
         } else {
-          emitTurn({ type: 'item.delta', itemId: agentItemId, ordinal: agentOrdinal, event });
+          emitTurn({
+            type: 'item.delta',
+            itemId: agentItemId,
+            ordinal: agentOrdinal,
+            event,
+          });
         }
         try {
           opts.onEvent(event);
@@ -506,7 +531,10 @@ export async function runInteractiveAutomationTurn(
           permissionPolicy: 'deny',
           abortSignal: opts.abortSignal,
           ...(binding?.acpSessionId
-            ? { prevAdapterSessionId: binding.acpSessionId, prevBindingId: binding.id }
+            ? {
+                prevAdapterSessionId: binding.acpSessionId,
+                prevBindingId: binding.id,
+              }
             : {}),
           ...(binding ? { prevAdapterKind: binding.kind } : {}),
           ...(binding?.usageSnapshot ? { prevAdapterUsageSnapshot: binding.usageSnapshot } : {}),
@@ -596,7 +624,12 @@ export async function runInteractiveAutomationTurn(
           error: 'consent_required',
           durationMs: consentEndedAt - startedAt,
         });
-        emitTurn({ type: 'turn.end', turnId: opts.turnId, ok: false, error: 'consent_required' });
+        emitTurn({
+          type: 'turn.end',
+          turnId: opts.turnId,
+          ok: false,
+          error: 'consent_required',
+        });
         return { turnId: opts.turnId, ok: false, error: 'consent_required' };
       }
 
@@ -612,6 +645,7 @@ export async function runInteractiveAutomationTurn(
       const answer = finalText ?? text;
       const ok = failure === undefined && !opts.abortSignal.aborted;
       const artifactsByItem = new Map<string, ConversationTurnAttachment[]>();
+      const uploadInlineArtifact = opts.uploadInlineArtifact;
       // An artifact that could not be persisted is user-visible evidence, not
       // a silent drop (docs/coding-standards.md — fallible-action contract).
       const noteArtifactProblem = (message: string): void => {
@@ -624,7 +658,11 @@ export async function runInteractiveAutomationTurn(
           at: Date.now(),
         });
       };
-      for (const candidate of artifactCandidates) {
+      // Ledger nodes and their notices are ordered; attach each candidate
+      // before advancing so optional inline uploads stay attributable.
+      const attachNextCandidate = async (index: number): Promise<void> => {
+        const candidate = artifactCandidates[index];
+        if (!candidate) return;
         const artifacts: ConversationTurnAttachment[] = (
           await Promise.all(
             candidate.locations.map((location) =>
@@ -632,12 +670,15 @@ export async function runInteractiveAutomationTurn(
             ),
           )
         ).filter((artifact) => artifact !== undefined);
-        if (opts.uploadInlineArtifact) {
-          for (const inline of candidate.inline) {
+        if (uploadInlineArtifact) {
+          const uploadNextInline = async (inlineIndex: number): Promise<void> => {
+            const inline = candidate.inline[inlineIndex];
+            if (!inline) return;
             try {
               const bytes = Buffer.from(inline.dataBase64, 'base64');
-              if (bytes.byteLength === 0 || bytes.byteLength > MAX_ARTIFACT_BYTES) continue;
-              const stored = await opts.uploadInlineArtifact(bytes);
+              if (bytes.byteLength === 0 || bytes.byteLength > MAX_ARTIFACT_BYTES)
+                return uploadNextInline(inlineIndex + 1);
+              const stored = await uploadInlineArtifact(bytes);
               artifacts.push({
                 hash: stored.hash,
                 mime: inline.mime,
@@ -648,10 +689,14 @@ export async function runInteractiveAutomationTurn(
             } catch {
               // A malformed optional ACP artifact never fails the turn.
             }
-          }
+            return uploadNextInline(inlineIndex + 1);
+          };
+          await uploadNextInline(0);
         }
         if (artifacts.length > 0) artifactsByItem.set(candidate.itemId, artifacts);
-      }
+        return attachNextCandidate(index + 1);
+      };
+      await attachNextCandidate(0);
       const output = {
         ...(answer ? { text: answer } : {}),
         ...(stopReason ? { stopReason } : {}),
@@ -688,8 +733,8 @@ export async function runInteractiveAutomationTurn(
           itemId: agentItemId,
           ok,
           ...(Object.keys(output).length > 0 ? { outputJson: safeJson(output) } : {}),
-          ...(finalRawJson !== undefined ? { rawJson: finalRawJson } : {}),
-          ...(failure !== undefined ? { error: failure } : {}),
+          ...(finalRawJson === undefined ? {} : { rawJson: finalRawJson }),
+          ...(failure === undefined ? {} : { error: failure }),
           endedAt,
           durationMs: endedAt - startedAt,
           ...usageFields(usage),
@@ -698,7 +743,7 @@ export async function runInteractiveAutomationTurn(
           turnId: opts.turnId,
           endedAt,
           ok,
-          ...(failure !== undefined ? { error: failure } : {}),
+          ...(failure === undefined ? {} : { error: failure }),
           ...(answer ? { summary: answer.slice(0, 240) } : {}),
           ...(Object.keys(output).length > 0 ? { outputJson: safeJson(output) } : {}),
         });
@@ -724,20 +769,20 @@ export async function runInteractiveAutomationTurn(
         ordinal: agentOrdinal,
         ok,
         ...(Object.keys(output).length > 0 ? { result: output } : {}),
-        ...(failure !== undefined ? { error: failure } : {}),
+        ...(failure === undefined ? {} : { error: failure }),
         durationMs: endedAt - startedAt,
-        ...(finalRawJson !== undefined ? { rawJson: finalRawJson } : {}),
+        ...(finalRawJson === undefined ? {} : { rawJson: finalRawJson }),
       });
       emitTurn({
         type: 'turn.end',
         turnId: opts.turnId,
         ok,
-        ...(failure !== undefined ? { error: failure } : {}),
+        ...(failure === undefined ? {} : { error: failure }),
       });
       return {
         turnId: opts.turnId,
         ok,
-        ...(failure !== undefined ? { error: failure } : {}),
+        ...(failure === undefined ? {} : { error: failure }),
       };
     } finally {
       clearInterval(lockLeaseHeartbeat);

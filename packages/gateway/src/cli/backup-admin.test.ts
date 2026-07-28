@@ -1,4 +1,4 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import crypto from 'node:crypto';
 /*
  * `centraid-gateway backup …` (PROTOCOL.md/FORMAT.md CLI surface): status,
  * run, list, verify, restore, kit — constructed from the same `--config`
@@ -6,21 +6,21 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  * real explicitly-created vault dir, so this is closer to an integration test
  * than the unit-level `backup-service.test.ts`.
  */
-
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-
 import { promises as fs, existsSync } from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
+
 import {
   SNAPSHOT_FORMAT_V2,
   openLocalBackupProvider,
   parseRecoveryKit,
   type BackupProvider,
 } from '@centraid/backup';
-import { openVaultRegistry } from '../serve/vault-registry.js';
-import { GatewayDatabase } from '../serve/gateway-db.js';
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { KeyStore } from '@centraid/vault';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+
+import { GatewayDatabase } from '../serve/gateway-db.js';
+import { openVaultRegistry } from '../serve/vault-registry.js';
 import { commandBackup } from './backup-admin.js';
 import { daemonLayoutFor } from './paths.js';
 
@@ -43,7 +43,11 @@ const fail = (message: string, code = 1): never => {
   throw new CliFailError(message, code);
 };
 
-const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
+const silentLogger = {
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+};
 
 let dataDir: string;
 let providerDir: string;
@@ -160,7 +164,9 @@ describe('backup-admin', () => {
     await capture(() => commandBackup(['run', '--config', configPath], fail));
     const kitFile = path.join(dataDir, 'kit.json');
     const passwordFile = path.join(dataDir, 'kit-password.txt');
-    await fs.writeFile(passwordFile, 'correct horse battery staple\n', { mode: 0o600 });
+    await fs.writeFile(passwordFile, 'correct horse battery staple\n', {
+      mode: 0o600,
+    });
     const originalErr = process.stderr.write.bind(process.stderr);
     const errChunks: string[] = [];
     process.stderr.write = ((chunk: unknown): boolean => {
@@ -186,7 +192,7 @@ describe('backup-admin', () => {
     expect(kit.kind).toBe('centraid-recovery-kit');
     expect(kit.keyring.epochs.length).toBeGreaterThan(0);
     expect(kit.targets.some((t) => t.vaultId === vaultId)).toBe(true);
-    expect(errChunks.join('')).toMatch(/store it offline/);
+    expect(errChunks.join('')).toMatch(/store it offline/u);
   });
 
   test('backup CLI refuses when the config has no "backup" block', async () => {
@@ -194,7 +200,7 @@ describe('backup-admin', () => {
     await fs.writeFile(bareConfig, JSON.stringify({ dataDir }));
     await expect(
       capture(() => commandBackup(['status', '--config', bareConfig], fail)),
-    ).rejects.toThrow(/not configured/);
+    ).rejects.toThrow(/not configured/u);
   });
 
   // ── Issue #439 R2/R3 — lazy-by-default, --full, metered gate, restore-to-side ──
@@ -210,7 +216,10 @@ describe('backup-admin', () => {
       capabilities: async () => {
         const caps = await real.capabilities();
         return caps.backup
-          ? { ...caps, backup: { ...caps.backup, restoreCostClass: 'metered-egress' } }
+          ? {
+              ...caps,
+              backup: { ...caps.backup, restoreCostClass: 'metered-egress' },
+            }
           : caps;
       },
       createTarget: (...a) => real.createTarget(...a),
@@ -271,7 +280,7 @@ describe('backup-admin', () => {
           { provider },
         ),
       ),
-    ).rejects.toThrow(/metered-egress/);
+    ).rejects.toThrow(/metered-egress/u);
     expect(existsSync(destDir)).toBe(false);
     // With --yes: the acknowledged restore runs to completion.
     const out = await capture(() =>
@@ -301,7 +310,7 @@ describe('backup-admin', () => {
           fail,
         ),
       ),
-    ).rejects.toThrow(/not empty|refusing to restore over/);
+    ).rejects.toThrow(/not empty|refusing to restore over/u);
     // The pre-existing vault.db is untouched — nothing was overwritten.
     await expect(fs.readFile(path.join(destDir, 'vault.db'), 'utf8')).resolves.toBe('live-bytes');
   });

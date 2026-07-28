@@ -1,5 +1,7 @@
 import { type JSX } from 'react';
+
 import { Icon } from '../ui/index.js';
+
 import styles from './AutomationCompilePane.module.css';
 
 /*

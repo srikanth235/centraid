@@ -3,11 +3,12 @@
 // consent.app_view: no SQL functions, no registered logical entity).
 
 import { beforeEach, describe, expect, test } from 'vitest';
+
 import { bootstrapVault, type BootstrapResult } from '../bootstrap.js';
+import { registerMediaCommands } from '../commands/media.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { createGateway, Gateway } from '../gateway/gateway.js';
 import type { Credential } from '../gateway/types.js';
-import { registerMediaCommands } from '../commands/media.js';
 import { recomputeDuplicateClusters } from './clusters.js';
 
 let db: VaultDb;
@@ -21,7 +22,11 @@ describe('clusters', () => {
     boot = bootstrapVault(db, { ownerName: 'Priya' });
     gw = createGateway(db);
     registerMediaCommands(gw);
-    owner = { kind: 'device', deviceId: boot.deviceId, deviceKey: boot.deviceKey };
+    owner = {
+      kind: 'device',
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+    };
   });
 
   /** Distinct pixel data URIs so each mints its OWN asset (sha256 differs). */

@@ -23,7 +23,12 @@ vi.mock(import('./routes/inlineApps.js'), () => ({
     appId === 'tasks'
       ? () =>
           Promise.resolve({
-            default: { appId: 'tasks', changeTables: [], queries: {}, Root: () => null },
+            default: {
+              appId: 'tasks',
+              changeTables: [],
+              queries: {},
+              Root: () => null,
+            },
           })
       : undefined,
   isInlineApp: (appId: string) => appId === 'tasks',
@@ -39,7 +44,13 @@ vi.mock(import('../../gateway-client.js'), () => ({
     ]),
   listAutomations: () => Promise.resolve([]),
   listAutomationTurns: () => Promise.resolve([]),
-  getBlocking: () => Promise.resolve({ outbox: [], needsAuth: [], parked: [], scopeRequests: [] }),
+  getBlocking: () =>
+    Promise.resolve({
+      outbox: [],
+      needsAuth: [],
+      parked: [],
+      scopeRequests: [],
+    }),
 }));
 
 const store = vi.hoisted(() => new Map<string, unknown>());
@@ -66,15 +77,24 @@ describe('App.inline-branch', () => {
         { id: 'tasks', name: 'Tasks', iconKey: 'Todo', color: '#123' },
         { id: 'todos', name: 'Todos', iconKey: 'Todo', color: '#456' },
       ]);
-      (globalThis as unknown as { Icon: unknown }).Icon = { Todo: () => '', Sparkle: () => '' };
-      (globalThis as unknown as { ICON_PALETTE: unknown }).ICON_PALETTE = { violet: '#7C5BD9' };
+      (globalThis as unknown as { Icon: unknown }).Icon = {
+        Todo: () => '',
+        Sparkle: () => '',
+      };
+      (globalThis as unknown as { ICON_PALETTE: unknown }).ICON_PALETTE = {
+        violet: '#7C5BD9',
+      };
       (globalThis as unknown as { CentraidApi: unknown }).CentraidApi = {
         onGatewayChanged: () => {},
         onVaultChanged: () => {},
         getSettings: () => Promise.resolve({}),
       };
       (globalThis as unknown as { CentraidTokens: unknown }).CentraidTokens = {
-        tileFinish: () => ({ background: '#111', boxShadow: 'none', glyphColor: '#fff' }),
+        tileFinish: () => ({
+          background: '#111',
+          boxShadow: 'none',
+          glyphColor: '#fff',
+        }),
       };
       ({ default: App } = await import('./App.js'));
     },

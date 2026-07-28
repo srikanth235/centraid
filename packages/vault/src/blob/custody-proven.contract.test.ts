@@ -3,8 +3,9 @@
 // replica evidence AND no pending outbox obligation. Fail closed on every gap.
 
 import { describe, expect, test } from 'vitest';
-import { openVaultDb, type VaultDb } from '../db.js';
+
 import { bootstrapVault } from '../bootstrap.js';
+import { openVaultDb, type VaultDb } from '../db.js';
 import { updateBlobStoreSettings } from '../host.js';
 import { blobCustodyProven } from './custody-proven.js';
 import { sha256OfBytes } from './store.js';
@@ -18,7 +19,12 @@ function newVault(): VaultDb {
 
 function setS3(db: VaultDb): void {
   updateBlobStoreSettings(db, {
-    blob_store: { kind: 's3', endpoint: 'https://x', bucket: 'b', encrypt: true },
+    blob_store: {
+      kind: 's3',
+      endpoint: 'https://x',
+      bucket: 'b',
+      encrypt: true,
+    },
   });
 }
 

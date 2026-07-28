@@ -1,10 +1,12 @@
+import { spawnSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
-import { createTestVault } from '../helpers/factories.js';
+
 import { recordQualityResult } from '@centraid/test-kit/quality-result';
 import { tempDir } from '@centraid/test-kit/temp-dir';
 import { describe, expect, test } from 'vitest';
+
+import { createTestVault } from '../helpers/factories.js';
 
 const OWNER = 'tests/perf/vault-write.perf.test.ts';
 
@@ -57,7 +59,12 @@ describe('vault-write.perf', () => {
       name: 'Vault write p95 and fsync budget',
       status: passed ? 'passed' : 'failed',
       measurements: [
-        { name: 'p95 transaction latency', value: p95Ms, unit: 'ms', budget: LATENCY_BUDGET_MS },
+        {
+          name: 'p95 transaction latency',
+          value: p95Ms,
+          unit: 'ms',
+          budget: LATENCY_BUDGET_MS,
+        },
         ...(fsyncsPerWrite === undefined
           ? []
           : [
@@ -71,7 +78,7 @@ describe('vault-write.perf', () => {
       ],
     });
     expect(p95Ms).toBeLessThan(LATENCY_BUDGET_MS);
-    if (fsyncsPerWrite !== undefined) expect(fsyncsPerWrite).toBeLessThanOrEqual(FSYNC_BUDGET);
+    expect(fsyncsPerWrite === undefined || fsyncsPerWrite <= FSYNC_BUDGET).toBe(true);
   });
 });
 
@@ -125,6 +132,6 @@ async function traceFsyncsPerWrite(): Promise<number | undefined> {
     throw new Error(`strace fsync probe failed: ${result.stderr || result.stdout}`);
   }
   const trace = await readFile(tracePath, 'utf8');
-  const syncs = trace.match(/\b(?:fsync|fdatasync)\(/g)?.length ?? 0;
+  const syncs = trace.match(/\b(?:fsync|fdatasync)\(/gu)?.length ?? 0;
   return syncs / FSYNC_TRACE_WRITES;
 }

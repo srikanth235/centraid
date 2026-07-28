@@ -1,5 +1,5 @@
 import type { ServerResponse } from 'node:http';
-import { describe, expect, it, vi } from 'vitest';
+
 import {
   VaultBlobAuthorizationError,
   VaultBlobBackpressureError,
@@ -8,6 +8,8 @@ import {
   VaultBlobSessionError,
   VaultDiskFullError,
 } from '@centraid/vault';
+import { describe, expect, it, vi } from 'vitest';
+
 import { sendBlobRouteError } from './blob-route-errors.js';
 
 interface MockRes {
@@ -121,11 +123,16 @@ describe(sendBlobRouteError, () => {
       const res = mockRes();
       expect(sendBlobRouteError(asServerRes(res), c.err)).toBe(true);
       expect(res.statusCode).toBe(c.status);
-      const body = JSON.parse(res.body ?? '{}') as { error?: string; expectedOffset?: number };
-      if (c.error) expect(body.error).toBe(c.error);
-      if (c.err instanceof VaultBlobSessionError && c.err.expectedOffset !== undefined) {
-        expect(body.expectedOffset).toBe(12);
-      }
+      const body = JSON.parse(res.body ?? '{}') as {
+        error?: string;
+        expectedOffset?: number;
+      };
+      expect(body.error).toBe(c.error ?? c.err.message);
+      expect(body.expectedOffset).toBe(
+        c.err instanceof VaultBlobSessionError && c.err.expectedOffset !== undefined
+          ? 12
+          : undefined,
+      );
     }
   });
 

@@ -55,7 +55,10 @@ async function fetchJsonText(
       },
     });
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
   if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
   let body: unknown;
@@ -99,7 +102,10 @@ export async function exportGatewayDiagnostics(
 ): Promise<ExportDiagnosticsResult> {
   const settings = await deps.loadSettings();
   if (!settings.gatewayUrl) {
-    return { ok: false, error: 'No active gateway to export diagnostics from.' };
+    return {
+      ok: false,
+      error: 'No active gateway to export diagnostics from.',
+    };
   }
   const fetched = await fetchDiagnosticsText(
     settings.gatewayUrl,
@@ -116,7 +122,10 @@ export async function exportGatewayDiagnostics(
     await deps.writeFile(filePath, fetched.text);
     return { ok: true, path: filePath };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 
@@ -147,6 +156,9 @@ export async function exportGatewayRecoveryKit(
     await deps.writeFile(filePath, fetched.text);
     return { ok: true, path: filePath };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
 }

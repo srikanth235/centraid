@@ -3,9 +3,10 @@
 // top (folded-in content consent, indexed-column field masks).
 
 import { beforeEach, describe, expect, test } from 'vitest';
+
+import { bootstrapVault, createGrant, enrollApp, type BootstrapResult } from '../bootstrap.js';
 import { registerKnowledgeCommands } from '../commands/knowledge.js';
 import { registerPeopleCommands } from '../commands/people.js';
-import { bootstrapVault, createGrant, enrollApp, type BootstrapResult } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { createGateway, Gateway } from './gateway.js';
 import { ftsMatchExpression } from './search.js';
@@ -35,7 +36,9 @@ function execOut<T>(command: string, input: Record<string, unknown>): T {
 }
 
 function appCred(scopes: Parameters<typeof createGrant>[1]['scopes']): Credential {
-  const app = enrollApp(db, { name: `app-${Math.random().toString(36).slice(2, 8)}` });
+  const app = enrollApp(db, {
+    name: `app-${Math.random().toString(36).slice(2, 8)}`,
+  });
   createGrant(db, {
     appId: app.appId,
     purposeConceptId: boot.concepts[PURPOSE] as string,
@@ -52,7 +55,11 @@ describe('search', () => {
     gw = createGateway(db);
     registerKnowledgeCommands(gw);
     registerPeopleCommands(gw);
-    owner = { kind: 'device', deviceId: boot.deviceId, deviceKey: boot.deviceKey };
+    owner = {
+      kind: 'device',
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+    };
   });
 
   describe('match expression', () => {
@@ -165,7 +172,11 @@ describe('search', () => {
       });
       expect(
         gw
-          .search(owner, { entity: 'schedule.task', query: 'ceramic mug', purpose: PURPOSE })
+          .search(owner, {
+            entity: 'schedule.task',
+            query: 'ceramic mug',
+            purpose: PURPOSE,
+          })
           .rows.map((r) => r.task_id),
       ).toContain(gift_id);
 
@@ -176,7 +187,11 @@ describe('search', () => {
       });
       expect(
         gw
-          .search(owner, { entity: 'knowledge.note', query: 'quiet morning', purpose: PURPOSE })
+          .search(owner, {
+            entity: 'knowledge.note',
+            query: 'quiet morning',
+            purpose: PURPOSE,
+          })
           .rows.map((r) => r.note_id),
       ).toContain(entry_id);
     });
@@ -255,24 +270,40 @@ describe('search', () => {
   describe('contract clamps', () => {
     test('non-indexed entity is a contract error, not a scan', () => {
       expect(() =>
-        gw.search(owner, { entity: 'health.vital', query: 'x', purpose: PURPOSE }),
-      ).toThrow(/not text-searchable/);
+        gw.search(owner, {
+          entity: 'health.vital',
+          query: 'x',
+          purpose: PURPOSE,
+        }),
+      ).toThrow(/not text-searchable/u);
     });
 
     test('empty query is a contract error', () => {
       expect(() =>
-        gw.search(owner, { entity: 'knowledge.note', query: '  ', purpose: PURPOSE }),
-      ).toThrow(/no searchable words/);
+        gw.search(owner, {
+          entity: 'knowledge.note',
+          query: '  ',
+          purpose: PURPOSE,
+        }),
+      ).toThrow(/no searchable words/u);
     });
   });
 
   describe('consent clamps', () => {
     test('ungranted app is denied with a receipt', () => {
       const app = enrollApp(db, { name: 'nosy-app' });
-      const cred: Credential = { kind: 'app', appId: app.appId, signingKey: app.signingKey };
+      const cred: Credential = {
+        kind: 'app',
+        appId: app.appId,
+        signingKey: app.signingKey,
+      };
       expect(() =>
-        gw.search(cred, { entity: 'knowledge.note', query: 'budget', purpose: PURPOSE }),
-      ).toThrow(/deny/);
+        gw.search(cred, {
+          entity: 'knowledge.note',
+          query: 'budget',
+          purpose: PURPOSE,
+        }),
+      ).toThrow(/deny/u);
       const deny = db.journal
         .prepare(
           `SELECT count(*) AS n FROM consent_receipt WHERE decision='deny' AND action='search'`,
@@ -285,14 +316,22 @@ describe('search', () => {
       createNote('Money things', 'the quarterly budget plan');
       const cred = appCred([{ schema: 'knowledge', verbs: 'read' }]);
       expect(() =>
-        gw.search(cred, { entity: 'knowledge.note', query: 'budget', purpose: PURPOSE }),
-      ).toThrow(/core\.content_item/);
+        gw.search(cred, {
+          entity: 'knowledge.note',
+          query: 'budget',
+          purpose: PURPOSE,
+        }),
+      ).toThrow(/core\.content_item/u);
       const granted = appCred([
         { schema: 'knowledge', verbs: 'read' },
         { schema: 'core', table: 'content_item', verbs: 'read' },
       ]);
       expect(
-        gw.search(granted, { entity: 'knowledge.note', query: 'budget', purpose: PURPOSE }).rows,
+        gw.search(granted, {
+          entity: 'knowledge.note',
+          query: 'budget',
+          purpose: PURPOSE,
+        }).rows,
       ).toHaveLength(1);
     });
 
@@ -307,19 +346,31 @@ describe('search', () => {
         { schema: 'core', table: 'content_item', verbs: 'read' },
       ]);
       expect(
-        gw.search(cred, { entity: 'knowledge.note', query: 'budget', purpose: PURPOSE }).rows,
+        gw.search(cred, {
+          entity: 'knowledge.note',
+          query: 'budget',
+          purpose: PURPOSE,
+        }).rows,
       ).toHaveLength(0);
     });
 
     test('a field mask hiding an indexed column fails the search closed', () => {
       createNote('Money things', 'the quarterly budget plan');
       const cred = appCred([
-        { schema: 'knowledge', verbs: 'read', fieldMask: ['note_id', 'body_content_id'] },
+        {
+          schema: 'knowledge',
+          verbs: 'read',
+          fieldMask: ['note_id', 'body_content_id'],
+        },
         { schema: 'core', table: 'content_item', verbs: 'read' },
       ]);
       expect(() =>
-        gw.search(cred, { entity: 'knowledge.note', query: 'budget', purpose: PURPOSE }),
-      ).toThrow(/field mask hides indexed column/);
+        gw.search(cred, {
+          entity: 'knowledge.note',
+          query: 'budget',
+          purpose: PURPOSE,
+        }),
+      ).toThrow(/field mask hides indexed column/u);
     });
   });
 
@@ -354,7 +405,11 @@ describe('search', () => {
       createNote('Old note', 'archaeology of budgets');
       db.vault.exec(`DELETE FROM fts_knowledge_note`);
       expect(
-        gw.search(owner, { entity: 'knowledge.note', query: 'archaeology', purpose: PURPOSE }).rows,
+        gw.search(owner, {
+          entity: 'knowledge.note',
+          query: 'archaeology',
+          purpose: PURPOSE,
+        }).rows,
       ).toHaveLength(0);
       db.vault.exec(
         `INSERT INTO fts_knowledge_note(rowid, note_id, title, body)
@@ -364,7 +419,11 @@ describe('search', () => {
          FROM knowledge_note b`,
       );
       expect(
-        gw.search(owner, { entity: 'knowledge.note', query: 'archaeology', purpose: PURPOSE }).rows,
+        gw.search(owner, {
+          entity: 'knowledge.note',
+          query: 'archaeology',
+          purpose: PURPOSE,
+        }).rows,
       ).toHaveLength(1);
     });
   });

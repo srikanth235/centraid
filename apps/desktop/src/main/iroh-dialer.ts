@@ -16,6 +16,7 @@ import {
   type LocalProxyHandle,
   type TunnelClient,
 } from '@centraid/tunnel';
+
 import { deviceIrohKeyPersistence } from './gateway-secrets.js';
 
 interface IrohConnection {
@@ -66,7 +67,9 @@ export async function ensureIrohProxy(
   const inFlight = starting.get(connectionId);
   if (inFlight) return (await inFlight).baseUrl;
   const p = (async (): Promise<IrohConnection> => {
-    const client = await createTunnelClient({ secretKey: ensureIrohDeviceKey(connectionId) });
+    const client = await createTunnelClient({
+      secretKey: ensureIrohDeviceKey(connectionId),
+    });
     const proxy = await startLocalProxy(() =>
       client.connect(endpointTicketFor(endpointId, relayHint)),
     );

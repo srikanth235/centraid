@@ -5,11 +5,13 @@
 
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
+
 import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { expect } from 'vitest';
-import { bootstrapVault, type BootstrapResult } from '../bootstrap.js';
+
 import { sweepLocalOrphans } from '../blob/local-orphan-sweep.js';
 import { blobUriFor } from '../blob/store.js';
+import { bootstrapVault, type BootstrapResult } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { nowIso, uuidv7 } from '../ids.js';
 
@@ -40,9 +42,15 @@ export function household(): Household {
   return {
     root,
     origin,
-    originBoot: bootstrapVault(origin, { ownerName: 'Priya', vaultId: 'vault-priya' }),
+    originBoot: bootstrapVault(origin, {
+      ownerName: 'Priya',
+      vaultId: 'vault-priya',
+    }),
     audience,
-    audienceBoot: bootstrapVault(audience, { ownerName: 'Family', vaultId: 'vault-family' }),
+    audienceBoot: bootstrapVault(audience, {
+      ownerName: 'Family',
+      vaultId: 'vault-family',
+    }),
   };
 }
 

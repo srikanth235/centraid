@@ -1,8 +1,11 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { SpawnSyncReturns } from 'node:child_process';
 import { promises as fs, statSync } from 'node:fs';
 import path from 'node:path';
+
+import { forEachSequentially } from '@centraid/test-kit/sequential';
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+
 import { daemonKeyStore, headlessCredentialFile } from './key-store.js';
 
 /**
@@ -53,7 +56,9 @@ describe('key-store', () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
-    while (roots.length > 0) await fs.rm(roots.pop()!, { recursive: true, force: true });
+    await forEachSequentially(roots.splice(0).toReversed(), (root) =>
+      fs.rm(root, { recursive: true, force: true }),
+    );
   });
 
   test('headless fallback wraps every data-dir key with an external 0600 credential', async () => {
@@ -63,7 +68,10 @@ describe('key-store', () => {
     const keysDir = path.join(root, 'keys');
     const env = { CENTRAID_KEYSTORE_CREDENTIAL_ROOT: credentialRoot };
     const warnings: string[] = [];
-    const store = daemonKeyStore(keysDir, { env, warn: (message) => warnings.push(message) });
+    const store = daemonKeyStore(keysDir, {
+      env,
+      warn: (message) => warnings.push(message),
+    });
     const secrets = [
       ['endpoint-key.bin', Buffer.alloc(32, 0x11)],
       ['vault-a.sealkey', Buffer.alloc(32, 0x22)],
@@ -75,14 +83,16 @@ describe('key-store', () => {
     const credential = headlessCredentialFile(keysDir, env);
     expect(credential.startsWith(`${root}${path.sep}`)).toBe(false);
     expect(statSync(credential).mode & 0o777).toBe(0o600);
-    expect(warnings).toContainEqual(expect.stringMatching(/external 0600 host credential/i));
-    for (const [name, secret] of secrets) {
+    expect(warnings).toContainEqual(expect.stringMatching(/external 0600 host credential/iu));
+    await forEachSequentially(secrets, async ([name, secret]) => {
       const raw = await fs.readFile(path.join(keysDir, name), 'utf8');
       expect(raw).toContain('"scheme":"aes-256-gcm-v1"');
-      const payload = JSON.parse(raw.slice(raw.indexOf('{'))) as { payload: string };
+      const payload = JSON.parse(raw.slice(raw.indexOf('{'))) as {
+        payload: string;
+      };
       expect(Buffer.from(payload.payload, 'base64')).not.toStrictEqual(secret);
       expect(store.load(name)).toStrictEqual(secret);
-    }
+    });
   });
 
   test('copying only the data dir cannot open headless sealed envelopes', async () => {
@@ -97,7 +107,7 @@ describe('key-store', () => {
 
     expect(() =>
       daemonKeyStore(path.join(copied, 'keys'), { env }).load('endpoint-key.bin'),
-    ).toThrow(/authentication failed/i);
+    ).toThrow(/authentication failed/iu);
   });
 
   test('explicit environment and service-manager credentials wrap the key store', async () => {
@@ -148,7 +158,7 @@ describe('key-store', () => {
       daemonKeyStore(path.join(root, 'systemd'), {
         env: { CENTRAID_KEYSTORE_CREDENTIAL_ENCRYPTED: encryptedCredential },
       }),
-    ).toThrow(/decrypt failed/);
+    ).toThrow(/decrypt failed/u);
 
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin');
     mocked.spawnSync.mockReturnValue(spawnResult({ status: 1, stderr: 'keychain locked' }));
@@ -156,13 +166,15 @@ describe('key-store', () => {
       daemonKeyStore(path.join(root, 'keychain'), {
         env: { CENTRAID_KEYSTORE_KEYCHAIN_SERVICE: 'test.service' },
       }),
-    ).toThrow(/keychain locked/);
+    ).toThrow(/keychain locked/u);
 
     expect(() =>
       daemonKeyStore(path.join(root, 'bad-master'), {
-        env: { CENTRAID_KEYSTORE_MASTER_KEY: Buffer.alloc(4).toString('base64') },
+        env: {
+          CENTRAID_KEYSTORE_MASTER_KEY: Buffer.alloc(4).toString('base64'),
+        },
       }),
-    ).toThrow(/one base64-encoded 32-byte key/);
+    ).toThrow(/one base64-encoded 32-byte key/u);
   });
 
   test('fallback credentials enforce 0600 mode and reject malformed key material', async () => {
@@ -182,7 +194,7 @@ describe('key-store', () => {
 
     await fs.writeFile(credentialFile, 'not-a-32-byte-key\n');
     expect(() => store.store('another.bin', Buffer.alloc(32, 5))).toThrow(
-      /not a base64-encoded 32-byte key/,
+      /not a base64-encoded 32-byte key/u,
     );
   });
 });

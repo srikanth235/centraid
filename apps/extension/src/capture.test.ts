@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { anchoredCaptureText, documentCaptureTitle } from './capture.js';
 
 describe('capture provenance', () => {

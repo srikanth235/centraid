@@ -1,5 +1,6 @@
-import { Store } from './store.js';
 import { useCallback, useState } from 'react';
+
+import { Store } from './store.js';
 
 // Starred apps/automations, ported from the vanilla app.ts star helpers. Backed
 // by the local Store ('home.starred' — an id→true map); reactive so toggling a

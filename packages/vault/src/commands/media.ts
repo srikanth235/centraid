@@ -11,12 +11,12 @@
 // an avatar) still rents them — content items are canonical and shared, so
 // the last reference decides, not the first delete.
 
+import { validateDerivativeContribution } from '../blob/derivatives.js';
+import { MAX_INLINE_DATA_URI_CHARS, mintContentFromDataUri } from '../blob/mint.js';
 import type { Gateway } from '../gateway/gateway.js';
 import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
-import { MAX_INLINE_DATA_URI_CHARS, mintContentFromDataUri } from '../blob/mint.js';
-import { validateDerivativeContribution } from '../blob/derivatives.js';
-import { assertInlineDataUriWithinBudget } from './inline-body-guard.js';
 import { setStarred, starredExistsSql } from './flags.js';
+import { assertInlineDataUriWithinBudget } from './inline-body-guard.js';
 
 // The starred flag rides the CANONICAL content item, not the asset row (issue
 // #274 kink 1 / #441 A2.1): favoriting a photo must surface it in every "what
@@ -104,19 +104,31 @@ function findOrCreatePlace(ctx: HandlerCtx, lat: number, lng: number): string {
  * Every canonical table that can rent a content item besides the media
  * asset itself. The last reference decides whether bytes soft-delete.
  */
-const CONTENT_REFERENCES: { table: string; column: string; onlyLive?: string }[] = [
+const CONTENT_REFERENCES: {
+  table: string;
+  column: string;
+  onlyLive?: string;
+}[] = [
   { table: 'core_attachment', column: 'content_id' },
   { table: 'core_party', column: 'avatar_content_id' },
   // A trashed note is not a rental (issue #308 A6) — its body releases with
   // it, and knowledge.restore_note un-trashes both.
-  { table: 'knowledge_note', column: 'body_content_id', onlyLive: 'deleted_at IS NULL' },
+  {
+    table: 'knowledge_note',
+    column: 'body_content_id',
+    onlyLive: 'deleted_at IS NULL',
+  },
   { table: 'social_message', column: 'body_content_id' },
   { table: 'business_invoice', column: 'pdf_content_id' },
   { table: 'home_warranty', column: 'terms_content_id' },
   { table: 'home_maintenance_plan', column: 'instructions_content_id' },
   // A trashed asset is not a rental — it must not keep its bytes alive, or
   // trash could never release anything.
-  { table: 'media_media_asset', column: 'content_id', onlyLive: 'deleted_at IS NULL' },
+  {
+    table: 'media_media_asset',
+    column: 'content_id',
+    onlyLive: 'deleted_at IS NULL',
+  },
   // A document's CURRENT content is a rental like any other (issue #352).
   // Superseded revisions are NOT covered here — they are protected by the
   // dedicated chain-aware check the document purge pass runs instead
@@ -171,10 +183,20 @@ const ADD_ASSET: CommandDefinition = {
       duration_s: { type: 'number', minimum: 0 },
       // Perceptual hash (issue #299 §2, Tier 0) — hex, producer-agnostic:
       // the client canvas computes a dHash beside its thumb today.
-      phash: { type: 'string', minLength: 4, maxLength: 64, pattern: '^[0-9a-f]+$' },
+      phash: {
+        type: 'string',
+        minLength: 4,
+        maxLength: 64,
+        pattern: '^[0-9a-f]+$',
+      },
       // ThumbHash placeholder (issue #419) — unpadded base64, produced beside
       // the client's thumb from the same decode; lands as an inline derivative.
-      thumbhash: { type: 'string', minLength: 6, maxLength: 100, pattern: '^[A-Za-z0-9+/]+$' },
+      thumbhash: {
+        type: 'string',
+        minLength: 6,
+        maxLength: 100,
+        pattern: '^[A-Za-z0-9+/]+$',
+      },
     },
   },
   outputSchema: {
@@ -267,7 +289,11 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
       'SELECT asset_id, deleted_at, capture_group_id FROM media_media_asset WHERE content_id = ?',
     )
     .get(contentId) as
-    | { asset_id: string; deleted_at: string | null; capture_group_id: string | null }
+    | {
+        asset_id: string;
+        deleted_at: string | null;
+        capture_group_id: string | null;
+      }
     | undefined;
   if (existingAsset) {
     if (
@@ -285,7 +311,11 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
         .run(input.capture_group_id ?? null, existingAsset.asset_id);
       ctx.wrote('media.media_asset', existingAsset.asset_id);
     }
-    return { asset_id: existingAsset.asset_id, content_id: contentId, deduped: 1 };
+    return {
+      asset_id: existingAsset.asset_id,
+      content_id: contentId,
+      deduped: 1,
+    };
   }
   const meta = spoolMeta as {
     width?: number;

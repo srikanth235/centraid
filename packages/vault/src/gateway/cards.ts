@@ -14,6 +14,7 @@
 // and the whole batch is receipted either way.
 
 import type { DatabaseSync } from 'node:sqlite';
+
 import { resolveEntity } from '../schema/tables.js';
 import { evaluateConsent } from './consent.js';
 import { writeReceipt } from './evidence.js';
@@ -168,12 +169,24 @@ function linkedAndVisible(
 function cardFor(vault: DatabaseSync, type: string, id: string): RefCard {
   const ref = resolveEntity(type, vault);
   if (!ref || ref.file !== 'vault') {
-    return { type, id, status: 'unknown', title: null, subtitle: null, thumbnail_content_id: null };
+    return {
+      type,
+      id,
+      status: 'unknown',
+      title: null,
+      subtitle: null,
+      thumbnail_content_id: null,
+    };
   }
   const sql = CARD_SQL[type];
   if (sql) {
     const row = vault.prepare(sql).get(id) as
-      | { title: string | null; subtitle: string | null; thumb: string | null; trashed: number }
+      | {
+          title: string | null;
+          subtitle: string | null;
+          thumb: string | null;
+          trashed: number;
+        }
       | undefined;
     if (!row) {
       return {

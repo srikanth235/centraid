@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import {
   createPaletteConversationSearch,
   type PaletteConversationSearchOptions,
@@ -14,7 +15,11 @@ describe('paletteConversationSearch', () => {
         { id: `${q}-1`, title: q, snippet: '⟦x⟧' },
       ]);
       const onResults = vi.fn<NonNullable<PaletteConversationSearchOptions['onResults']>>();
-      const src = createPaletteConversationSearch({ search, onResults, debounceMs: 100 });
+      const src = createPaletteConversationSearch({
+        search,
+        onResults,
+        debounceMs: 100,
+      });
 
       // Nothing cached yet.
       expect(src.results('budget')).toStrictEqual([]);
@@ -37,7 +42,10 @@ describe('paletteConversationSearch', () => {
 
     it('ignores queries shorter than two characters', () => {
       const search = vi.fn<PaletteConversationSearchOptions['search']>();
-      const src = createPaletteConversationSearch({ search, onResults: () => undefined });
+      const src = createPaletteConversationSearch({
+        search,
+        onResults: () => undefined,
+      });
       src.ensure('b');
       vi.advanceTimersByTime(500);
       expect(search).not.toHaveBeenCalled();
@@ -49,7 +57,11 @@ describe('paletteConversationSearch', () => {
         throw new Error('nope');
       });
       const onResults = vi.fn<NonNullable<PaletteConversationSearchOptions['onResults']>>();
-      const src = createPaletteConversationSearch({ search, onResults, debounceMs: 50 });
+      const src = createPaletteConversationSearch({
+        search,
+        onResults,
+        debounceMs: 50,
+      });
       src.ensure('trip');
       await vi.advanceTimersByTimeAsync(50);
       expect(src.results('trip')).toStrictEqual([]);

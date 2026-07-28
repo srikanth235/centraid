@@ -1,5 +1,3 @@
-import { open, type DB } from '@op-engineering/op-sqlite';
-
 import {
   replicaDatabaseName,
   type ReplicaBindValue,
@@ -7,6 +5,7 @@ import {
   type ReplicaIdentity,
   type ReplicaSqliteDriver,
 } from '@centraid/client/replica/native';
+import { open, type DB } from '@op-engineering/op-sqlite';
 
 import { ReplicaFts5UnavailableError } from './replica-fts5-error';
 

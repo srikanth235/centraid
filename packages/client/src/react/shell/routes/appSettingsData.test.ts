@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+
 import { knobsManifestFrom, manifestVaultBlock, pushKnobToAppFrame } from './appSettingsData.js';
 
 // `vi.mock` is hoisted above the import by vitest, so gateway-client-core's
@@ -8,7 +9,11 @@ vi.mock(import('../../../gateway-client.js'), () => ({}));
 describe(manifestVaultBlock, () => {
   it('parses a sound vault block', () => {
     const block = manifestVaultBlock({
-      vault: { purpose: 'Read tasks', why: 'to summarise', scopes: [{ table: 'tasks' }] },
+      vault: {
+        purpose: 'Read tasks',
+        why: 'to summarise',
+        scopes: [{ table: 'tasks' }],
+      },
     });
     expect(block).toStrictEqual({
       purpose: 'Read tasks',
@@ -32,12 +37,18 @@ describe(manifestVaultBlock, () => {
 
 describe(knobsManifestFrom, () => {
   it('reads the knobs array + manifest version', () => {
-    const m = knobsManifestFrom({ manifestVersion: 3, knobs: [{ key: 'appFont' }] });
+    const m = knobsManifestFrom({
+      manifestVersion: 3,
+      knobs: [{ key: 'appFont' }],
+    });
     expect(m).toStrictEqual({ version: 3, knobs: [{ key: 'appFont' }] });
   });
 
   it('defaults version to 1 and returns null without a knobs array', () => {
-    expect(knobsManifestFrom({ knobs: [] })).toStrictEqual({ version: 1, knobs: [] });
+    expect(knobsManifestFrom({ knobs: [] })).toStrictEqual({
+      version: 1,
+      knobs: [],
+    });
     expect(knobsManifestFrom({})).toBeNull();
     expect(knobsManifestFrom(null)).toBeNull();
   });
@@ -48,20 +59,31 @@ describe(pushKnobToAppFrame, () => {
     const frame = document.createElement('iframe');
     frame.dataset.centraidApp = '1';
     document.body.append(frame);
-    const post = vi.fn();
-    Object.defineProperty(frame, 'contentWindow', { value: { postMessage: post }, writable: true });
+    const post = vi.fn<(message: unknown, targetOrigin: string) => void>();
+    Object.defineProperty(frame, 'contentWindow', {
+      value: { postMessage: post },
+      writable: true,
+    });
 
     pushKnobToAppFrame('appAccent', '#f00');
     pushKnobToAppFrame('appDensity', 'compact');
 
     expect(post).toHaveBeenNthCalledWith(
       1,
-      { type: 'centraid:settings', dataAttrs: {}, cssVars: { 'app-accent': '#f00' } },
+      {
+        type: 'centraid:settings',
+        dataAttrs: {},
+        cssVars: { 'app-accent': '#f00' },
+      },
       '*',
     );
     expect(post).toHaveBeenNthCalledWith(
       2,
-      { type: 'centraid:settings', dataAttrs: { 'app-density': 'compact' }, cssVars: {} },
+      {
+        type: 'centraid:settings',
+        dataAttrs: { 'app-density': 'compact' },
+        cssVars: {},
+      },
       '*',
     );
     frame.remove();

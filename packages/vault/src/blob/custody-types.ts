@@ -3,9 +3,9 @@
 // them without a runtime import cycle, and so custody.ts (the facade) stays
 // under the governance line-cap.
 
-import type { BlobStore } from './store.js';
 import type { RemoteBlobTransfer } from './remote-transfer.js';
 import type { ReplicaStore } from './replica-index.js';
+import type { BlobStore } from './store.js';
 
 /**
  * Per-content custody state: whether a piece of content's ORIGINAL bytes sit

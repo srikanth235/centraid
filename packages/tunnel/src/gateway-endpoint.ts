@@ -21,8 +21,10 @@
  * forwarding — never vaults or tickets.
  */
 
-import http from 'node:http';
 import { once } from 'node:events';
+import http from 'node:http';
+
+import type { TunnelUpstream } from './desktop-tunnel.js';
 import type { Accepting, Connection, Endpoint, RecvStream, SendStream } from './iroh.js';
 import { iroh } from './iroh.js';
 import type { TunnelRequestHeader, TunnelResponseHeader } from './protocol.js';
@@ -38,7 +40,6 @@ import {
   TUNNEL_AUTH_WEB_SESSION,
   TUNNEL_ALPN,
 } from './protocol.js';
-import type { TunnelUpstream } from './desktop-tunnel.js';
 
 export const GW_PAIR_ALPN = 'centraid/gw-pair/1';
 const DATA_PLANE_RELAY_HEADER = 'x-centraid-data-plane-relay';
@@ -185,24 +186,24 @@ class GatewayEndpoint {
   }
 
   runAcceptLoop(): void {
-    void (async () => {
-      for (;;) {
-        let incoming;
-        try {
-          incoming = await this.endpoint.acceptNext();
-        } catch {
-          if (this.closed || this.endpoint.isClosed()) return;
-          continue;
-        }
-        if (!incoming) return;
-        void incoming
-          .accept()
-          .then((accepting) => this.routeConnection(accepting))
-          .catch(() => {
-            // Handshake failures are the remote's problem; keep accepting.
-          });
+    const acceptNext = async (): Promise<void> => {
+      let incoming;
+      try {
+        incoming = await this.endpoint.acceptNext();
+      } catch {
+        if (this.closed || this.endpoint.isClosed()) return;
+        return acceptNext();
       }
-    })();
+      if (!incoming) return;
+      void incoming
+        .accept()
+        .then((accepting) => this.routeConnection(accepting))
+        .catch(() => {
+          // Handshake failures are the remote's problem; keep accepting.
+        });
+      return acceptNext();
+    };
+    void acceptNext();
   }
 
   private async routeConnection(accepting: Accepting): Promise<void> {
@@ -243,7 +244,7 @@ class GatewayEndpoint {
     live.add(connection);
     this.liveConnections.set(endpointId, live);
     try {
-      for (;;) {
+      const serveNextStream = async (): Promise<void> => {
         const bi = await connection.acceptBi();
         // Revocation guard: enrollment is consulted per stream, so a
         // revoked device loses access even on a connection that predates it.
@@ -254,7 +255,9 @@ class GatewayEndpoint {
         void this.serveStream(endpointId, bi.send, bi.recv).catch(() => {
           // Per-request failures already answered with an error frame when possible.
         });
-      }
+        return serveNextStream();
+      };
+      await serveNextStream();
     } catch {
       // Connection closed (by peer, revocation, or shutdown).
     } finally {
@@ -363,7 +366,10 @@ class GatewayEndpoint {
       await send.writeAll(
         encodeHeaderFrame({
           status,
-          headers: { 'content-type': 'application/json', 'content-length': String(body.length) },
+          headers: {
+            'content-type': 'application/json',
+            'content-length': String(body.length),
+          },
         } satisfies TunnelResponseHeader),
       );
       await send.writeAll(bytesToArray(body));

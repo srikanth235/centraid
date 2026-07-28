@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
+
 import Logo from './Logo.js';
 
 describe(Logo, () => {
@@ -9,7 +10,7 @@ describe(Logo, () => {
     expect(html).toContain('width="48"');
     expect(html).toContain('<circle');
     // three arcs
-    expect(html.match(/<path/g)?.length).toBe(3);
+    expect(html.match(/<path/gu)?.length).toBe(3);
   });
 
   it('defaults to size 32', () => {

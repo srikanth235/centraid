@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitest/config';
+
 import coverageFloors from './tests/coverage-floors.json';
 
 // Every package that participates in the repo-wide vitest run. `vitest.diff-

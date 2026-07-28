@@ -2,10 +2,11 @@
 // (today progress meter + the trust line). Chrome owns the shared nav/footer
 // containers; this component supplies only their app-specific contents.
 import { I } from '../icons.ts';
-import { Icon } from './Shared.tsx';
 import type { SidebarCountsShape, TodayProgress, View } from '../types.ts';
-import styles from './Sidebar.module.css';
+import { Icon } from './Shared.tsx';
+
 import shared from './shared.module.css';
+import styles from './Sidebar.module.css';
 
 const VIEWS: Array<{ key: View; label: string; icon: string }> = [
   { key: 'today', label: 'Today', icon: I.today },

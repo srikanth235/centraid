@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+
 import { assertSafeConnectorSvg } from './sanitize-connector-svg.mjs';
 
 test('accepts inert SVG paths and fragment-only paint references', () => {
@@ -16,6 +17,6 @@ for (const [name, svg] of [
   ['inline CSS', '<svg><path style="background:url(https://evil.example)"/></svg>'],
 ]) {
   test(`rejects ${name}`, () => {
-    assert.throws(() => assertSafeConnectorSvg(svg, name), /Unsafe active SVG markup/);
+    assert.throws(() => assertSafeConnectorSvg(svg, name), /Unsafe active SVG markup/u);
   });
 }

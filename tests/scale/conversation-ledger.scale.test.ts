@@ -1,6 +1,9 @@
 import { rm } from 'node:fs/promises';
 import path from 'node:path';
+
 import { recordQualityResult } from '@centraid/test-kit/quality-result';
+import { describe, expect, onTestFinished, test } from 'vitest';
+
 import { runConversationArchival } from '../../packages/app-engine/src/conversation/archive/index.js';
 import {
   countTurns,
@@ -11,7 +14,6 @@ import {
   seedConversation,
   seedTurn,
 } from '../../packages/app-engine/src/conversation/archive/test-fixtures.js';
-import { describe, expect, onTestFinished, test } from 'vitest';
 
 const OWNER = 'tests/scale/conversation-ledger.scale.test.ts';
 
@@ -49,7 +51,11 @@ describe('conversation-ledger.scale', () => {
     const started = performance.now();
     const result = runConversationArchival(
       { journal, blobSink: new MemoryBlobSink(), custodyProven: () => true },
-      { nowMs: now, maxConversations: conversations, maxPruneSegments: conversations },
+      {
+        nowMs: now,
+        maxConversations: conversations,
+        maxPruneSegments: conversations,
+      },
     );
     const durationMs = performance.now() - started;
     const remaining = Array.from({ length: conversations }, (_, index) =>
@@ -70,7 +76,12 @@ describe('conversation-ledger.scale', () => {
       name: 'Conversation archival over 7.3k turns',
       status: passed ? 'passed' : 'failed',
       measurements: [
-        { name: 'wall clock', value: durationMs, unit: 'ms', budget: DURATION_BUDGET_MS },
+        {
+          name: 'wall clock',
+          value: durationMs,
+          unit: 'ms',
+          budget: DURATION_BUDGET_MS,
+        },
         { name: 'turns pruned', value: result.turnsPruned, unit: 'turns' },
       ],
     });

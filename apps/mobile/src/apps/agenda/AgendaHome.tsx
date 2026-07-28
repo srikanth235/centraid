@@ -1,15 +1,15 @@
+import { Feather } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import React, { useMemo, useState } from 'react';
 import { Alert, FlatList, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
 
-import { useTheme } from '../../kit/theme';
-import { useReplica } from '../../kit/replica/ReplicaProvider';
 import HomeKey from '../../kit/components/HomeKey';
+import { useReplica } from '../../kit/replica/ReplicaProvider';
+import { useTheme } from '../../kit/theme';
 import type { AgendaScreenProps } from '../../navigation';
-import type { AgendaEventModel } from './recurrence';
 import { styles } from './AgendaHome.styles';
+import type { AgendaEventModel } from './recurrence';
 import { useAgenda } from './useAgenda';
 
 type ViewMode = 'month' | 'week' | 'agenda';
@@ -212,7 +212,10 @@ export default function AgendaHome({
         </View>
         <Text style={[styles.rangeTitle, { color: colors.ink }]}>
           {mode === 'month'
-            ? new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' }).format(cursor)
+            ? new Intl.DateTimeFormat(undefined, {
+                month: 'long',
+                year: 'numeric',
+              }).format(cursor)
             : mode === 'week'
               ? `${range[0].toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${addDays(range[1], -1).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
               : 'Upcoming'}
@@ -237,7 +240,10 @@ export default function AgendaHome({
                 onPress={() => toggleCalendar(id)}
                 style={[
                   styles.calendarChip,
-                  { backgroundColor: colors.bgSunken, opacity: shown ? 1 : 0.5 },
+                  {
+                    backgroundColor: colors.bgSunken,
+                    opacity: shown ? 1 : 0.5,
+                  },
                 ]}
               >
                 <View style={[styles.calendarDot, { backgroundColor: swatch }]} />
@@ -321,7 +327,9 @@ export default function AgendaHome({
                 onPress={() => setStartPreset(key)}
                 style={[
                   styles.startPreset,
-                  { backgroundColor: startPreset === key ? colors.ink : colors.bgSunken },
+                  {
+                    backgroundColor: startPreset === key ? colors.ink : colors.bgSunken,
+                  },
                 ]}
               >
                 <Text
@@ -360,15 +368,17 @@ function EventRow({
     <Pressable onPress={onPress} style={[styles.event, { borderBottomColor: colors.line }]}>
       <View style={styles.time}>
         <Text style={[styles.timeText, { color: colors.ink }]}>
-          {new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(
-            new Date(event.start),
-          )}
+          {new Intl.DateTimeFormat(undefined, {
+            hour: 'numeric',
+            minute: '2-digit',
+          }).format(new Date(event.start))}
         </Text>
         <Text style={[styles.dayText, { color: colors.ink2 }]}>
           –{' '}
-          {new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(
-            new Date(event.end),
-          )}
+          {new Intl.DateTimeFormat(undefined, {
+            hour: 'numeric',
+            minute: '2-digit',
+          }).format(new Date(event.end))}
         </Text>
       </View>
       <View style={[styles.eventLine, { backgroundColor: colors.accent }]} />
@@ -408,7 +418,9 @@ function MonthGrid({
             <Text
               style={[
                 styles.dayNumber,
-                { color: day.getMonth() === cursor.getMonth() ? colors.ink : colors.ink3 },
+                {
+                  color: day.getMonth() === cursor.getMonth() ? colors.ink : colors.ink3,
+                },
               ]}
             >
               {day.getDate()}

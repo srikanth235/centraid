@@ -1,18 +1,23 @@
 // @vitest-environment node
 
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
+
 import { serve } from '@centraid/gateway';
+import { forEachSequentially } from '@centraid/test-kit/sequential';
 import { tempDir } from '@centraid/test-kit/temp-dir';
 import { aesGcmKeyProtector, KeyStore } from '@centraid/vault';
 import { afterEach, describe, expect, test } from 'vitest';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
+
 import { startDesktopEmbeddedGateway } from './embedded-gateway.js';
 
 const roots: string[] = [];
 
 describe('embedded-gateway-layout', () => {
   afterEach(async () => {
-    while (roots.length > 0) await fs.rm(roots.pop()!, { recursive: true, force: true });
+    await forEachSequentially(roots.splice(0).toReversed(), (root) =>
+      fs.rm(root, { recursive: true, force: true }),
+    );
   });
 
   function pathsFor(root: string) {
@@ -48,13 +53,18 @@ describe('embedded-gateway-layout', () => {
   }
 
   async function treeShape(root: string, relative = ''): Promise<string[]> {
-    const entries = await fs.readdir(path.join(root, relative), { withFileTypes: true });
-    const result: string[] = [];
-    for (const entry of entries) {
-      const child = path.join(relative, entry.name);
-      result.push(`${entry.isDirectory() ? 'd' : 'f'}:${child}`);
-      if (entry.isDirectory()) result.push(...(await treeShape(root, child)));
-    }
+    const entries = await fs.readdir(path.join(root, relative), {
+      withFileTypes: true,
+    });
+    const result = (
+      await Promise.all(
+        entries.map(async (entry) => {
+          const child = path.join(relative, entry.name);
+          const row = `${entry.isDirectory() ? 'd' : 'f'}:${child}`;
+          return entry.isDirectory() ? [row, ...(await treeShape(root, child))] : [row];
+        }),
+      )
+    ).flat();
     return result.sort();
   }
 
@@ -63,14 +73,14 @@ describe('embedded-gateway-layout', () => {
       ...new Set(
         entries.map((entry) =>
           entry
-            .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g, '<vault-id>')
-            .replace(/[0-9a-f]{40}/g, '<git-object>')
-            .replace(/(apps\.git\/objects\/)[0-9a-f]{2}(?=\/|$)/, '$1<git-prefix>')
-            .replace(/(apps\.git\/objects\/<git-prefix>\/)[0-9a-f]{38}$/, '$1<git-rest>')
-            .replace(/[0-9a-f]{32}/g, '<wal-generation>')
-            .replace(/\d{13}(?=\.(?:tick|seg)$)/g, '<tick-ms>')
-            .replace(/\d{12}-\d{12}-<tick-ms>\.seg$/, '<wal-segment>.seg')
-            .replace(/closed-\d{12}\.mrk$/, 'closed.mrk'),
+            .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gu, '<vault-id>')
+            .replace(/[0-9a-f]{40}/gu, '<git-object>')
+            .replace(/(?:apps\.git\/objects\/)[0-9a-f]{2}(?=\/|$)/u, '$1<git-prefix>')
+            .replace(/(?:apps\.git\/objects\/<git-prefix>\/)[0-9a-f]{38}$/u, '$1<git-rest>')
+            .replace(/[0-9a-f]{32}/gu, '<wal-generation>')
+            .replace(/\d{13}(?=\.(?:tick|seg)$)/gu, '<tick-ms>')
+            .replace(/\d{12}-\d{12}-<tick-ms>\.seg$/u, '<wal-segment>.seg')
+            .replace(/closed-\d{12}\.mrk$/u, 'closed.mrk'),
         ),
       ),
     ].sort();
@@ -155,7 +165,9 @@ describe('embedded-gateway-layout', () => {
           platform: 'desktop',
         }),
       });
-      const initialized = (await initializedResponse.json()) as { kit?: unknown };
+      const initialized = (await initializedResponse.json()) as {
+        kit?: unknown;
+      };
       expect(initializedResponse.status).toBe(201);
 
       const verified = await fetch(`${gateway.url}/centraid/_vault/vaults:initialize/verify`, {

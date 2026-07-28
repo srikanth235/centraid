@@ -18,11 +18,13 @@
 // `fetch()`-ing a data: URI is blocked by the app's own CSP (`connect-src`
 // inherits `default-src 'self'`, and data: isn't 'self'), so that branch is
 // load-bearing, not an optimization.
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+
 import { decodeDataUri, fmtFull } from '../format.ts';
 import { I } from '../icons.ts';
 import type { DriveDoc } from '../types.ts';
 import { Icon } from './Shared.tsx';
+
 import styles from './Editor.module.css';
 
 type LoadState = 'loading' | 'ready' | 'error';
@@ -41,15 +43,15 @@ export function Editor({
 }) {
   // The inline data: branch is synchronous, so it is decoded during the first
   // render instead of in an effect — the effect below then only owns the async
-  // blob: fetch. Lazy useState reads content_uri exactly once at mount, which is
-  // the same "read once at open time" contract the file header describes (#573).
-  const [inline] = useState<{ state: LoadState; text: string } | null>(() => {
+  // blob: fetch. This derived inline value follows the keyed document's URI;
+  // the editor component itself is remounted for a different document.
+  const inline = useMemo<{ state: LoadState; text: string } | null>(() => {
     const uri = doc.content_uri;
     if (typeof uri !== 'string' || !uri.startsWith('data:')) return null;
     const text = decodeDataUri(uri);
     return text == null ? { state: 'error', text: '' } : { state: 'ready', text };
-  });
-  const [body, setBodyState] = useState(inline?.text ?? '');
+  }, [doc.content_uri]);
+  const [body, setBody] = useState(inline?.text ?? '');
   const [loadState, setLoadState] = useState<LoadState>(inline?.state ?? 'loading');
   const [saveState, setSaveState] = useState<SaveState>('');
   const bodyRef = useRef(inline?.text ?? '');
@@ -65,7 +67,7 @@ export function Editor({
     function loaded(text: string) {
       bodyRef.current = text;
       lastSavedRef.current = text;
-      setBodyState(text);
+      setBody(text);
       setLoadState('ready');
     }
     let cancelled = false;
@@ -84,7 +86,7 @@ export function Editor({
       cancelled = true;
     };
     // (#360) doc is read once at mount by design (see file header): app.tsx keys this component by document_id, so re-firing when doc's content_uri changes mid-edit would reload over an in-flight draft instead of leaving the autosave in control
-  }, []);
+  }, [inline, doc.content_uri]);
 
   useEffect(() => {
     if (loadState === 'ready') textareaRef.current?.focus();
@@ -139,11 +141,11 @@ export function Editor({
     registerFlush?.(flush);
     return () => clearTimeout(saveTimerRef.current);
     // (#360) registered once; this component remounts on document_id change (see file header), so the closed-over doc/onSave props flush() reads can never go stale without a fresh registration
-  }, []);
+  }, [flush, registerFlush]);
 
-  const setBody = (v: string): void => {
+  const updateBody = (v: string): void => {
     bodyRef.current = v;
-    setBodyState(v);
+    setBody(v);
     scheduleSave();
   };
 
@@ -192,7 +194,7 @@ export function Editor({
               aria-label="Document body"
               spellCheck={true}
               value={body}
-              onChange={(e) => setBody(e.target.value)}
+              onChange={(e) => updateBody(e.target.value)}
               onBlur={flush}
             />
           )}

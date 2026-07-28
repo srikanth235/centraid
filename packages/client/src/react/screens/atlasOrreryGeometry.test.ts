@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+
+import type { AtlasFkEdge } from '../../gateway-client.js';
 import {
   ZOOM_MAX,
   ZOOM_MIN,
@@ -16,7 +18,6 @@ import {
   zoomView,
 } from './atlasOrreryGeometry.js';
 import { edge, makeGraph, node } from './atlasRelationsTestKit.js';
-import type { AtlasFkEdge } from '../../gateway-client.js';
 
 // ── Geometry (pure functions) ───────────────────────────────────────────────
 describe('atlasOrreryGeometry', () => {
@@ -91,7 +92,11 @@ describe('atlasOrreryGeometry', () => {
   });
 
   it('panView translates without touching k', () => {
-    expect(panView({ x: 5, y: 7, k: 2 }, 3, -4)).toStrictEqual({ x: 8, y: 3, k: 2 });
+    expect(panView({ x: 5, y: 7, k: 2 }, 3, -4)).toStrictEqual({
+      x: 8,
+      y: 3,
+      k: 2,
+    });
   });
 
   it('clientToViewBox maps by ratio and returns null on a degenerate rect', () => {
@@ -125,7 +130,11 @@ describe('detail-dial filter predicates', () => {
       // b_zero has no rows of its own but a live edge leaves it → carries data
       edge('b_zero', 'target_id', 'c_target', { childRows: 0, fill: 5 }),
       // d_lonely's only edge is a ghost (fill 0) → no proof of data
-      edge('d_lonely', 'x_id', 'e_dead', { notnull: false, fill: 0, ghost: true }),
+      edge('d_lonely', 'x_id', 'e_dead', {
+        notnull: false,
+        fill: 0,
+        ghost: true,
+      }),
     ];
     expect(kindCarriesData('a_full', rows, edges)).toBe(true); // own rows > 0
     expect(kindCarriesData('b_zero', rows, edges)).toBe(true); // 0 rows, but a live edge
@@ -182,14 +191,21 @@ describe('detail-dial filter predicates', () => {
 
   it('edgeVisibleAtLevel: needs both endpoints; drops self-refs; hides ghosts only at simple', () => {
     const visible = new Set(['core_observation', 'core_party', 'consent_device']);
-    const live = edge('core_observation', 'subject_party_id', 'core_party', { fill: 10 });
+    const live = edge('core_observation', 'subject_party_id', 'core_party', {
+      fill: 10,
+    });
     const ghost = edge('core_observation', 'cover_id', 'core_party', {
       notnull: false,
       fill: 0,
       ghost: true,
     });
-    const hidden = edge('core_observation', 'note_id', 'knowledge_note', { fill: 3 });
-    const self = edge('core_concept', 'broader_id', 'core_concept', { fill: 2, selfRef: true });
+    const hidden = edge('core_observation', 'note_id', 'knowledge_note', {
+      fill: 3,
+    });
+    const self = edge('core_concept', 'broader_id', 'core_concept', {
+      fill: 2,
+      selfRef: true,
+    });
     expect(edgeVisibleAtLevel('simple', live, visible)).toBe(true);
     expect(edgeVisibleAtLevel('simple', ghost, visible)).toBe(false); // ghost hidden at simple
     expect(edgeVisibleAtLevel('standard', ghost, visible)).toBe(true); // …but shown at standard

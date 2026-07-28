@@ -11,6 +11,7 @@
  * drives the gateway's own search / read / resolve with the owner credential.
  */
 
+import type { RuntimeLogger } from '@centraid/app-engine';
 import {
   CARD_PK,
   CARDED_ENTITIES,
@@ -19,7 +20,7 @@ import {
   type Gateway as VaultGateway,
   type RefCard,
 } from '@centraid/vault';
-import type { RuntimeLogger } from '@centraid/app-engine';
+
 import {
   AUTOMATION_ANCHOR_ENTITY,
   AUTOMATION_ANCHOR_PURPOSE,
@@ -156,7 +157,12 @@ export function pickEntities(
       } else {
         const searchable = SEARCHABLE[kind];
         if (!searchable) continue; // a term can only match text-indexed kinds
-        const result = gateway.search(cred, { entity: kind, query: term, limit: perKind, purpose });
+        const result = gateway.search(cred, {
+          entity: kind,
+          query: term,
+          limit: perKind,
+          purpose,
+        });
         for (const row of result.rows) {
           refs.push({
             type: kind,

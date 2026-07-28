@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useState, type JSX } from 'react';
-import { Icon } from '../ui/index.js';
+
 import { relativeTime } from '../format.js';
 import { cx } from '../ui/cx.js';
-import styles from './SettingsDiagnosticsScreen.module.css';
-import buttonCss from '../ui/Button.module.css';
-import controlsCss from '../styles/controls.module.css';
+import { Icon } from '../ui/index.js';
 import type {
   BackgroundPauseDTO,
   PowerContextState,
   ResourceProfileDTO,
 } from './resource-summary.js';
+
+import controlsCss from '../styles/controls.module.css';
+import buttonCss from '../ui/Button.module.css';
+import styles from './SettingsDiagnosticsScreen.module.css';
 
 // Gateway → Components: the owner surface over the gateway's
 // component-level health (`GET /centraid/_gateway/health`). Uptime says
@@ -173,7 +175,11 @@ function hardwareClassWord(cls: string | undefined): string {
 function eventClock(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  return d.toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
 }
 
 function ComponentRow({

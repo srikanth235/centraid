@@ -21,6 +21,7 @@
  */
 
 import type { DatabaseSync } from 'node:sqlite';
+
 import type { ComponentStatus, HealthProbe } from './health-registry.js';
 
 export interface VaultIntegrityEntry {
@@ -58,12 +59,20 @@ function runQuickCheck(
   maxLines: number,
 ): { ok: boolean; lines: string[] } {
   try {
-    const rows = db.prepare('PRAGMA quick_check').all() as { quick_check: string }[];
+    const rows = db.prepare('PRAGMA quick_check').all() as {
+      quick_check: string;
+    }[];
     const ok = rows.length === 1 && rows[0]?.quick_check === 'ok';
     if (ok) return { ok: true, lines: [] };
-    return { ok: false, lines: rows.slice(0, maxLines).map((r) => `${file}: ${r.quick_check}`) };
+    return {
+      ok: false,
+      lines: rows.slice(0, maxLines).map((r) => `${file}: ${r.quick_check}`),
+    };
   } catch (err) {
-    return { ok: false, lines: [`${file}: ${err instanceof Error ? err.message : String(err)}`] };
+    return {
+      ok: false,
+      lines: [`${file}: ${err instanceof Error ? err.message : String(err)}`],
+    };
   }
 }
 

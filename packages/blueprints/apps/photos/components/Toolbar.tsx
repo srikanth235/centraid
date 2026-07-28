@@ -7,8 +7,9 @@
 // mount actually spans scopes: a member with one library must see the toolbar
 // exactly as it was, so `scopes` arriving with a single entry renders nothing.
 import { ScopeChips } from '../../_shared/ScopeChips.tsx';
-import { ChevronLeftIcon, PlusIcon } from '../icons.tsx';
 import type { InlineScope } from '../../inline-types.ts';
+import { ChevronLeftIcon, PlusIcon } from '../icons.tsx';
+
 import styles from './Toolbar.module.css';
 
 export function ToolbarView({

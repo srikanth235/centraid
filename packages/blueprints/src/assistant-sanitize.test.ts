@@ -12,6 +12,7 @@
 // asserts that no live script or dangerous scheme survives into the output.
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+
 import { describe, expect, it } from 'vitest';
 
 const PKG = path.resolve(import.meta.dirname, '..');
@@ -28,10 +29,10 @@ function assertInert(html: string): Document {
   expect(host.querySelector('script')).toBeNull();
   // No anchor/image points at a javascript:/data:/vbscript: destination.
   for (const a of host.querySelectorAll('a')) {
-    expect(a.getAttribute('href') ?? '').not.toMatch(/^\s*(javascript|data|vbscript):/i);
+    expect(a.getAttribute('href') ?? '').not.toMatch(/^\s*(?:javascript|data|vbscript):/iu);
   }
   for (const img of host.querySelectorAll('img')) {
-    expect(img.getAttribute('src') ?? '').not.toMatch(/^\s*(javascript|data|vbscript):/i);
+    expect(img.getAttribute('src') ?? '').not.toMatch(/^\s*(?:javascript|data|vbscript):/iu);
   }
   return host;
 }
@@ -94,7 +95,10 @@ describe('renderer sanitization — tables & ref chips & code', () => {
   });
 
   it('escapes HTML injected through a typed block:table cell', () => {
-    const spec = JSON.stringify({ columns: ['<b>c</b>'], rows: [['<script>x</script>']] });
+    const spec = JSON.stringify({
+      columns: ['<b>c</b>'],
+      rows: [['<script>x</script>']],
+    });
     const html = richAnswerHtml('```block:table\n' + spec + '\n```');
     assertInert(html);
     expect(html).not.toContain('<script>x');

@@ -5,6 +5,7 @@
 import { curSymbolFor, first, money, toCents } from '../format.ts';
 import type { Member, Person, SettleModel } from '../types.ts';
 import { ModalBackdrop } from './Shared.tsx';
+
 import shared from './shared.module.css';
 
 function SettleSelect({

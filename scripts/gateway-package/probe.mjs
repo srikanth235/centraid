@@ -49,10 +49,14 @@ export async function waitForGatewayInfo(baseUrl, opts = {}) {
   const intervalMs = opts.intervalMs ?? 200;
   const deadline = Date.now() + deadlineMs;
   let last = { ok: false, detail: 'not attempted' };
-  while (Date.now() < deadline) {
+  // Poll attempts must stay serial: each timeout-bounded probe represents one
+  // observation before the next retry interval starts.
+  const poll = async () => {
+    if (Date.now() >= deadline) return last;
     last = await probeGatewayInfo(baseUrl, { timeoutMs: 2_000 });
     if (last.ok) return last;
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
-  }
-  return last;
+    return poll();
+  };
+  return poll();
 }

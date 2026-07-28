@@ -11,6 +11,7 @@
 // import sites.
 
 import type { TileVariant } from '@centraid/design-tokens';
+
 import type { ResourceUsageDTO } from './screens/resource-summary.js';
 
 // The bridge is intentionally self-contained — it must not import the vanilla
@@ -737,9 +738,14 @@ export interface AutomationEditorBridgeProps {
   /** Fire a test execution of the compiled plan and return its turn id. Stays
    *  on this screen; `onOpenRun` is the explicit way out to the run viewer. */
   onTestRun: () => Promise<string | null>;
-  onSearchEntities: (
-    term: string,
-  ) => Promise<Array<{ type: string; id: string; title: string | null; subtitle: string | null }>>;
+  onSearchEntities: (term: string) => Promise<
+    Array<{
+      type: string;
+      id: string;
+      title: string | null;
+      subtitle: string | null;
+    }>
+  >;
   /** Canonical vault entity-type names (e.g. `core.transaction`) for the
    *  data/condition trigger editors' `<datalist>` autocomplete. Fetched
    *  lazily the first time a data/condition trigger is present. Optional so a
@@ -758,7 +764,10 @@ export interface AutomationEditorBridgeProps {
   beginAuthorize?: (connectionId: string) => Promise<string>;
   showToast?: (message: string) => void;
   /** The compiled plan (automation.json + handler.js) for the read-only viewer. */
-  onReadSource: () => Promise<{ manifest: string | null; handler: string | null }>;
+  onReadSource: () => Promise<{
+    manifest: string | null;
+    handler: string | null;
+  }>;
   onToggleEnabled: (next: boolean) => Promise<boolean>;
   /** Standing-grant consent review (edit mode) — same decision surface the
    *  thread uses. Kept on the bridge for future surfaces; not shown as a
@@ -1271,7 +1280,13 @@ export type AsstMsgDTO =
   /** A non-fatal runner notice (issue #420) — e.g. "this model can't read PDF
    *  attachments". Persisted as a notice step and replayed on reload. */
   | { kind: 'notice'; level: 'warn' | 'info'; text: string; msgId?: string }
-  | { kind: 'ai'; streaming: true; text: string; catchingUp?: boolean; msgId?: string }
+  | {
+      kind: 'ai';
+      streaming: true;
+      text: string;
+      catchingUp?: boolean;
+      msgId?: string;
+    }
   | {
       kind: 'ai';
       streaming: false;
@@ -1515,7 +1530,11 @@ export type BuilderMsgDTO =
       open: boolean;
       running: boolean;
       error: boolean;
-      rows: { state: 'running' | 'ok' | 'error'; verb: string; target: string }[];
+      rows: {
+        state: 'running' | 'ok' | 'error';
+        verb: string;
+        target: string;
+      }[];
       change: { count: number; subtitle: string; version: string } | null;
     };
 export interface BuilderProgressDTO {

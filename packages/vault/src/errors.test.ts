@@ -1,4 +1,4 @@
-import { tempDirSync } from '@centraid/test-kit/temp-dir';
+import { existsSync, readdirSync } from 'node:fs';
 // Disk-full classification units (issue #351 wave 4). `PRAGMA max_page_count`
 // gives a deterministic, REAL SQLITE_FULL condition — no mocking node:sqlite
 // — so the classifier is verified against what node:sqlite actually throws,
@@ -10,11 +10,13 @@ import { tempDirSync } from '@centraid/test-kit/temp-dir';
 // reliably filling a real filesystem inside the fast unit suite would need
 // the same disk-image dance as that e2e (see its header for why that's
 // gated instead of always-on).
-
-import { DatabaseSync } from 'node:sqlite';
-import { existsSync, readdirSync } from 'node:fs';
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
+
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { afterEach, describe, expect, test, vi } from 'vitest';
+
+import { FsBlobStore } from './blob/local.js';
 import {
   asVaultDiskFullError,
   DiskFullTracker,
@@ -22,7 +24,6 @@ import {
   sharedDiskFullTracker,
   VaultDiskFullError,
 } from './errors.js';
-import { FsBlobStore } from './blob/local.js';
 
 // ESM's `node:fs` module namespace isn't configurable, so `vi.spyOn` can't
 // stub a single export directly (vitest#limitation) — this mocks the whole
@@ -43,7 +44,9 @@ vi.mock(import('node:fs'), async (importOriginal) => {
     // this one property rather than widen the whole module.
     writeSync: ((...args: Parameters<typeof actual.writeSync>) => {
       if (writeSyncShouldFail) {
-        throw Object.assign(new Error('no space left on device'), { code: 'ENOSPC' });
+        throw Object.assign(new Error('no space left on device'), {
+          code: 'ENOSPC',
+        });
       }
       return actual.writeSync(...args);
     }) as typeof actual.writeSync,
@@ -84,7 +87,9 @@ describe('errors', () => {
   });
 
   test('isDiskFullError: recognizes ENOSPC from fs errors', () => {
-    const enospc = Object.assign(new Error('no space left on device'), { code: 'ENOSPC' });
+    const enospc = Object.assign(new Error('no space left on device'), {
+      code: 'ENOSPC',
+    });
     expect(isDiskFullError(enospc)).toBe(true);
   });
 
@@ -127,7 +132,9 @@ describe('errors', () => {
 
   test('asVaultDiskFullError: reports disk-full into sharedDiskFullTracker so the gateway health probe sees it without extra wiring', () => {
     sharedDiskFullTracker.clear();
-    const enospc = Object.assign(new Error('no space left on device'), { code: 'ENOSPC' });
+    const enospc = Object.assign(new Error('no space left on device'), {
+      code: 'ENOSPC',
+    });
     asVaultDiskFullError('unit test shared-tracker write', enospc);
     const event = sharedDiskFullTracker.current();
     expect(event?.context).toBe('unit test shared-tracker write');
@@ -143,7 +150,9 @@ describe('errors', () => {
     expect(tracker.current()).toBeNull();
     tracker.report(new Error('unrelated'), 'ctx-a');
     expect(tracker.current()).toBeNull();
-    const enospc = Object.assign(new Error('no space left on device'), { code: 'ENOSPC' });
+    const enospc = Object.assign(new Error('no space left on device'), {
+      code: 'ENOSPC',
+    });
     tracker.report(enospc, 'ctx-b');
     const event = tracker.current();
     expect(event?.context).toBe('ctx-b');

@@ -7,8 +7,8 @@
 // table. Unlink is temporal, not destructive: history is never rewritten
 // (rule R3); the gateway's dangling-link sweep end-dates the rest.
 
-import type { Gateway } from '../gateway/gateway.js';
 import { evaluateConsent } from '../gateway/consent.js';
+import type { Gateway } from '../gateway/gateway.js';
 import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
 import { resolveEntity } from '../schema/tables.js';
 

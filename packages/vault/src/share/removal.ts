@@ -13,6 +13,7 @@
 // added later is covered without anyone having to update a sweep clause here.
 
 import type { DatabaseSync } from 'node:sqlite';
+
 import { isBlobUri } from '../blob/store.js';
 import type { ShareableItemType } from './closure.js';
 
@@ -67,7 +68,11 @@ export interface RemovalResult {
   shas: string[];
 }
 
-const ABSENT: RemovalResult = { removed: false, contentItemRemoved: false, shas: [] };
+const ABSENT: RemovalResult = {
+  removed: false,
+  contentItemRemoved: false,
+  shas: [],
+};
 
 /**
  * Delete a projected closure from the audience vault. The caller owns the

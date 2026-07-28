@@ -13,10 +13,10 @@
 import type { Gateway } from '../gateway/gateway.js';
 import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
 import { sha256Hex } from '../ids.js';
+import { cleanupPolyRefs } from '../schema/poly-refs.js';
 import { assertTextBodyWithinBudget } from './inline-body-guard.js';
 import { releaseContentIfUnreferenced } from './media.js';
 import { recordRevision } from './revisions.js';
-import { cleanupPolyRefs } from '../schema/poly-refs.js';
 
 /** The acting party: the caller's own party, else the vault owner (apps). */
 function actorPartyId(ctx: HandlerCtx): string {
@@ -83,7 +83,10 @@ const CREATE_NOTE: CommandDefinition = {
   outputSchema: {
     type: 'object',
     required: ['note_id', 'body_content_id'],
-    properties: { note_id: { type: 'string' }, body_content_id: { type: 'string' } },
+    properties: {
+      note_id: { type: 'string' },
+      body_content_id: { type: 'string' },
+    },
   },
   preconditions: [
     {
@@ -176,7 +179,10 @@ const EDIT_NOTE: CommandDefinition = {
   outputSchema: {
     type: 'object',
     required: ['note_id'],
-    properties: { note_id: { type: 'string' }, body_content_id: { type: 'string' } },
+    properties: {
+      note_id: { type: 'string' },
+      body_content_id: { type: 'string' },
+    },
   },
   preconditions: [
     {
@@ -255,7 +261,10 @@ function editNote(ctx: HandlerCtx): Record<string, unknown> {
     .prepare(`UPDATE knowledge_note SET ${sets.join(', ')} WHERE note_id = ?`)
     .run(...values, input.note_id);
   ctx.wrote('knowledge.note', input.note_id);
-  return { note_id: input.note_id, ...(contentId ? { body_content_id: contentId } : {}) };
+  return {
+    note_id: input.note_id,
+    ...(contentId ? { body_content_id: contentId } : {}),
+  };
 }
 
 const MOVE_NOTE: CommandDefinition = {
@@ -631,7 +640,11 @@ function deleteNote(ctx: HandlerCtx): Record<string, unknown> {
     entityType: 'knowledge.note',
     entityId: input.note_id,
   });
-  return { note_id: input.note_id, purge_at: until, body_released: released ? 1 : 0 };
+  return {
+    note_id: input.note_id,
+    purge_at: until,
+    body_released: released ? 1 : 0,
+  };
 }
 
 // The undo half (issue #308 A6): a trashed note comes back whole — row,

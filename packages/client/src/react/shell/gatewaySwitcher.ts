@@ -1,6 +1,7 @@
-import { iconSvg } from './iconSvg.js';
 import { openMenu, type CtxItem } from './contextMenu.js';
 import type { GatewayRow } from './gatewayRegistry.js';
+import { iconSvg } from './iconSvg.js';
+
 import styles from './gatewaySwitcher.module.css';
 
 // Gateway switcher popover (issue #599, Decision 14) — what survives of the
@@ -130,7 +131,12 @@ function buildRow(row: GatewayRow, o: GatewaySwitcherOpts): HTMLElement {
       { icon: 'Pencil', id: 'rename', label: 'Rename…' },
     ];
     if (row.canRemove) {
-      items.push('sep', { danger: true, icon: 'Trash', id: 'remove', label: 'Remove' });
+      items.push('sep', {
+        danger: true,
+        icon: 'Trash',
+        id: 'remove',
+        label: 'Remove',
+      });
     }
     // Close this popover FIRST: its scrim sits at z-index 1100 and the context
     // menu at 70/71, so leaving it open would swallow every click (found live
@@ -198,7 +204,11 @@ export function openGatewaySwitcher(o: GatewaySwitcherOpts): void {
   popEl.append(listEl);
   renderRows();
 
-  popEl.append(Object.assign(document.createElement('div'), { className: styles.divider ?? '' }));
+  popEl.append(
+    Object.assign(document.createElement('div'), {
+      className: styles.divider ?? '',
+    }),
+  );
 
   const add = document.createElement('button');
   add.type = 'button';

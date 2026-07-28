@@ -1,6 +1,8 @@
-import { afterEach, describe, expect, it } from 'vitest';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
+
+import { afterEach, describe, expect, it } from 'vitest';
+
 import type { RouteHandler } from '../serve/build-gateway.js';
 import { HealthRegistry, MAX_BACKGROUND_PAUSE_MS } from '../serve/health-registry.js';
 import { PowerContextMonitor } from '../serve/power-context.js';
@@ -34,7 +36,12 @@ async function readyMonitor(): Promise<PowerContextMonitor> {
   const m = new PowerContextMonitor({
     platform: 'darwin',
     now: () => 0,
-    probeBattery: async () => ({ present: true, percent: 90, charging: true, discharging: false }),
+    probeBattery: async () => ({
+      present: true,
+      percent: 90,
+      charging: true,
+      discharging: false,
+    }),
   });
   await m.ready;
   return m;
@@ -52,7 +59,10 @@ describe('resource-routes', () => {
 
       const res = await fetch(`${url}${PAUSE}`, { method: 'POST' });
       expect(res.status).toBe(200);
-      await expect(res.json()).resolves.toStrictEqual({ paused: true, until: null });
+      await expect(res.json()).resolves.toStrictEqual({
+        paused: true,
+        until: null,
+      });
       expect(registry.shouldPauseBackgroundWork()).toBe(true);
     });
 
@@ -76,14 +86,16 @@ describe('resource-routes', () => {
       const registry = new HealthRegistry();
       const url = await startHandlerServer(makeResourceRouteHandler(registry));
 
-      for (const durationMs of [0, -1, 1.5, MAX_BACKGROUND_PAUSE_MS + 1, 'soon']) {
-        const res = await fetch(`${url}${PAUSE}`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ durationMs }),
-        });
-        expect(res.status, `durationMs=${durationMs}`).toBe(400);
-      }
+      await Promise.all(
+        [0, -1, 1.5, MAX_BACKGROUND_PAUSE_MS + 1, 'soon'].map(async (durationMs) => {
+          const res = await fetch(`${url}${PAUSE}`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ durationMs }),
+          });
+          expect(res.status, `durationMs=${durationMs}`).toBe(400);
+        }),
+      );
       // A rejected request never pauses.
       expect(registry.shouldPauseBackgroundWork()).toBe(false);
     });
@@ -174,14 +186,16 @@ describe('resource-routes', () => {
         { onBattery: true, charging: 'no' }, // wrong type
         { onBattery: true, thermalPressure: 'melting' }, // not an enum member
       ];
-      for (const body of bad) {
-        const res = await fetch(`${url}${POWER}`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(body),
-        });
-        expect(res.status, JSON.stringify(body)).toBe(400);
-      }
+      await Promise.all(
+        bad.map(async (body) => {
+          const res = await fetch(`${url}${POWER}`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+          expect(res.status, JSON.stringify(body)).toBe(400);
+        }),
+      );
       expect(monitor.isDeferringBackgroundWork()).toBe(false);
     });
 

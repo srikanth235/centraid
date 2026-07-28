@@ -1,4 +1,6 @@
 import type { JSX, ReactNode } from 'react';
+
+import { cx } from '../ui/cx.js';
 import {
   ArrowLeftGlyph,
   ArrowRightGlyph,
@@ -8,7 +10,7 @@ import {
   SidebarClosedGlyph,
   SidebarOpenGlyph,
 } from './glyphs.js';
-import { cx } from '../ui/cx.js';
+
 import chrome from './chrome.module.css';
 
 // The window chrome — a `.window` grid with a sidebar column (tlSide titlebar

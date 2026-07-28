@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+
 import {
   assertFloorsSubsetOfSeeds,
   buildScoresArtifact,
@@ -77,7 +78,7 @@ describe('buildScoresArtifact', () => {
     ]);
     expect(artifact.lane).toBe('mutation');
     expect(artifact.packages).toHaveLength(1);
-    expect(artifact.generatedAt).toMatch(/^\d{4}-/);
+    expect(artifact.generatedAt).toMatch(/^\d{4}-/u);
   });
 });
 

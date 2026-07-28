@@ -24,6 +24,7 @@
  */
 
 import type { DatabaseSync } from 'node:sqlite';
+
 import { costForUsage } from '../model-pricing.js';
 
 export interface RepriceOptions {

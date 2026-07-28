@@ -1,4 +1,5 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import crypto, { randomBytes } from 'node:crypto';
+import { existsSync, promises as fs } from 'node:fs';
 // governance: allow-repo-hygiene file-size-limit (#363) the full-story end-to-end test built exactly the way build-gateway.ts constructs BackupService (no injected provider/assembleEntries); splitting the story would break the point of an end-to-end test
 /*
  * The full-story end-to-end test for the offsite backup feature
@@ -13,12 +14,9 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  * runtime sane; tests that mutate provider state in ways that would affect
  * siblings (corruption, generation fencing) are deliberately ordered last.
  */
-
-import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest';
-import { existsSync, promises as fs } from 'node:fs';
-import crypto, { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+
 import {
   openLocalBackupProvider,
   openManifest,
@@ -27,43 +25,45 @@ import {
   verifySnapshot,
   type BackupProvider,
 } from '@centraid/backup';
+import { forEachSequentially } from '@centraid/test-kit/sequential';
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { currentReplicaLogState, sealAad, unsealValue, updateBackupPolicy } from '@centraid/vault';
-import { openVaultRegistry, type VaultRegistry } from '../serve/vault-registry.js';
-import type { VaultPlane } from '../serve/vault-plane.js';
-import { HealthRegistry } from '../serve/health-registry.js';
-import { BackupService } from './backup-service.js';
-import type { BackupConfig } from './backup-config.js';
-import { WorktreeStore } from '../worktree-store/worktree-store.js';
-import { run } from '../worktree-store/git.js';
+import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest';
+
 import { commandBackup } from '../cli/backup-admin.js';
 import { daemonKeyStore } from '../cli/key-store.js';
 import { daemonLayoutFor } from '../cli/paths.js';
-import { loadBackupState, saveBackupState } from './backup-state.js';
 import { GatewayDatabase } from '../serve/gateway-db.js';
+import { HealthRegistry } from '../serve/health-registry.js';
+import type { VaultPlane } from '../serve/vault-plane.js';
+import { openVaultRegistry, type VaultRegistry } from '../serve/vault-registry.js';
+import { run } from '../worktree-store/git.js';
+import { WorktreeStore } from '../worktree-store/worktree-store.js';
+import type { BackupConfig } from './backup-config.js';
+import { BackupService } from './backup-service.js';
+import { loadBackupState, saveBackupState } from './backup-state.js';
 
 vi.setConfig({ testTimeout: 30_000 });
 
-const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
+const silentLogger = {
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+};
 
 const cleanups: Array<() => Promise<void> | void> = [];
 describe('backup', () => {
-  afterAll(async () => {
-    while (cleanups.length > 0) await cleanups.pop()?.();
-  });
   async function countFiles(dir: string): Promise<number> {
-    let n = 0;
     let entries: import('node:fs').Dirent[];
     try {
       entries = await fs.readdir(dir, { withFileTypes: true });
     } catch {
       return 0;
     }
-    for (const entry of entries) {
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) n += await countFiles(full);
-      else n += 1;
-    }
-    return n;
+    const counts = await Promise.all(
+      entries.map((entry) => (entry.isDirectory() ? countFiles(path.join(dir, entry.name)) : 1)),
+    );
+    return counts.reduce((total, count) => total + count, 0);
   }
 
   /** Real command invocation, throwing loudly on refusal — mirrors every other real-vault test in this suite. */
@@ -93,7 +93,10 @@ describe('backup', () => {
   }
 
   /** Stage + approve one outbox item (mirrors vault-quarantine.test.ts's helper) — quarantine needs something real to park. */
-  function seedApprovedOutboxItem(plane: VaultPlane): { itemId: string; grantId: string } {
+  function seedApprovedOutboxItem(plane: VaultPlane): {
+    itemId: string;
+    grantId: string;
+  } {
     invoke(plane, 'sync.configure_credential', {
       kind: 'pull.gmail',
       label: 'personal',
@@ -272,7 +275,10 @@ describe('backup', () => {
       seeded: undefined as unknown as Seeded,
     };
     reopen();
-    updateBackupPolicy(h.plane.db.vault, { snapshotIntervalHours: 1, verifyEveryDays: 1 });
+    updateBackupPolicy(h.plane.db.vault, {
+      snapshotIntervalHours: 1,
+      verifyEveryDays: 1,
+    });
     cleanups.push(async () => {
       await h.service.stop();
       h.registry.stop();
@@ -333,8 +339,12 @@ describe('backup', () => {
     // 2. First real backup — REAL assembleSourceEntries → REAL LocalBackupProvider.
     await h.service.runBackup(h.vaultId);
     const first = (await h.service.status())[h.vaultId];
-    expect(first?.lastSeq).toBe(1);
+    if (first?.lastSeq !== 1) throw new Error('initial backup did not register sequence 1');
   }, 30_000);
+
+  afterAll(async () => {
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
+  });
 
   test('no-change semantics: an idle vault registers NO new snapshot; a code publish does', async () => {
     // OBSERVED CONTRACT (verified against engine.ts + backup-sources.ts): the db
@@ -368,9 +378,9 @@ describe('backup', () => {
     const chunksDir = path.join(objectsDir, targetId, 'backup', 'chunks');
     const before = await countFiles(chunksDir);
 
-    const taskId = invoke(h.plane, 'schedule.add_task', { title: 'Renew passport' })[
-      'task_id'
-    ] as string;
+    const taskId = invoke(h.plane, 'schedule.add_task', {
+      title: 'Renew passport',
+    })['task_id'] as string;
     const newBlobBytes = randomBytes(700_000); // ~1-2 chunks worth
     stageAndAttach(h.plane, taskId, newBlobBytes);
 
@@ -430,7 +440,9 @@ describe('backup', () => {
     await fs.mkdir(adoptedDir, { recursive: true });
     await fs.copyFile(path.join(destDir, 'vault.db'), path.join(adoptedDir, 'vault.db'));
     await fs.copyFile(path.join(destDir, 'journal.db'), path.join(adoptedDir, 'journal.db'));
-    await fs.cp(path.join(destDir, 'blobs'), path.join(adoptedDir, 'blobs'), { recursive: true });
+    await fs.cp(path.join(destDir, 'blobs'), path.join(adoptedDir, 'blobs'), {
+      recursive: true,
+    });
     await fs.copyFile(
       path.join(destDir, 'RESTORE_QUARANTINE.json'),
       path.join(adoptedDir, 'RESTORE_QUARANTINE.json'),
@@ -477,7 +489,10 @@ describe('backup', () => {
       expect(plane.quarantine?.outboxParked).toBeGreaterThanOrEqual(1);
       const outboxRow = plane.db.vault
         .prepare('SELECT status, grant_id FROM outbox_item WHERE item_id = ?')
-        .get(h.seeded.outboxItemId) as { status: string; grant_id: string | null };
+        .get(h.seeded.outboxItemId) as {
+        status: string;
+        grant_id: string | null;
+      };
       expect(outboxRow.status).toBe('pending');
       expect(outboxRow.grant_id).toBeNull();
 
@@ -514,7 +529,9 @@ describe('backup', () => {
     // The git bundle restores independently, too — clone + verify.
     const bareRepo = path.join(adoptedDir, 'code', 'apps.git');
     await expect(
-      run(['bundle', 'verify', path.join(destDir, 'apps.bundle')], { cwd: bareRepo }),
+      run(['bundle', 'verify', path.join(destDir, 'apps.bundle')], {
+        cwd: bareRepo,
+      }),
     ).resolves.toBeTruthy();
     const clone2 = await tempDir('e2e-bundle-clone');
     await run(['clone', '--quiet', bareRepo, clone2], { cwd: freshRoot });
@@ -529,7 +546,9 @@ describe('backup', () => {
 
   test('fencing for real: a second BackupService registers gen+1; the first service fences on its next run', async () => {
     const targetId = (await h.service.status())[h.vaultId]!.targetId;
-    const provider: BackupProvider = openLocalBackupProvider({ rootDir: h.providerDir });
+    const provider: BackupProvider = openLocalBackupProvider({
+      rootDir: h.providerDir,
+    });
     const beforeGen = (await provider.getTarget(targetId)).currentGeneration;
 
     // Simulate a second gateway's restore-takeover (PROTOCOL.md § Generation
@@ -576,7 +595,7 @@ describe('backup', () => {
     const after = (await h.service.status())[h.vaultId];
     expect(after?.fenced).toBe(true);
     expect(after?.generation).toBe(before?.generation); // never bumped automatically
-    expect(after?.lastError).toMatch(/another machine has taken over/);
+    expect(after?.lastError).toMatch(/another machine has taken over/u);
 
     const snap = await h.health.snapshot();
     expect(snap.components.find((c) => c.component === 'backups')?.status).toBe('error');
@@ -677,7 +696,7 @@ describe('backup', () => {
       });
       const destDir = path.join(await tempDir('e2e-refusal-dest-parent'), 'refusal-dest');
       await expect(service.restore({ vaultId, destDir })).rejects.toThrow(
-        /vaultUserVersion.*newer/,
+        /vaultUserVersion.*newer/u,
       );
       // Never attempted to materialize anything — the compat gate ran before
       // any directory creation or data-plane read.
@@ -702,7 +721,7 @@ describe('backup', () => {
           },
         ),
       ),
-    ).rejects.toThrow(/not empty/);
+    ).rejects.toThrow(/not empty/u);
     reopen();
   });
 });

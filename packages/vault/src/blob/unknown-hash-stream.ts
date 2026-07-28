@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { Readable, Transform } from 'node:stream';
 import type { DatabaseSync } from 'node:sqlite';
+import { Readable, Transform } from 'node:stream';
+
 import type { BackupPolicy } from '../backup-policy.js';
 import { VaultBlobSessionError } from '../errors.js';
 import { uuidv7 } from '../ids.js';
@@ -10,7 +11,6 @@ import { extractBlobMetaFromProbes, sniffMediaType } from './pipeline.js';
 import { INGRESS_PREVIEW_MAX_BYTES, type IngressPreviewInput } from './preview.js';
 import type { RemoteBlobTransfer } from './remote-transfer.js';
 import { verifyRemoteSealedObject } from './remote-verify.js';
-import { sealBlobStream } from './seal.js';
 import {
   decodeHeader,
   decodeTrailer,
@@ -19,6 +19,7 @@ import {
   TRAILER_BYTES,
   unsealFrame,
 } from './seal-frames.js';
+import { sealBlobStream } from './seal.js';
 import { recordKnownStagedBlob } from './staging-record.js';
 import { mediaLocationPolicyForVault } from './staging.js';
 import { sha256OfBytes } from './store.js';
@@ -40,26 +41,26 @@ async function* temporaryPlaintext(input: {
   sealId: string;
   expectedSize: number;
 }): AsyncGenerator<Buffer> {
-  if (!input.transfer.getTemporary)
-    throw new Error('remote tier cannot read encrypted temp ranges');
+  const getTemporary = input.transfer.getTemporary;
+  if (!getTemporary) throw new Error('remote tier cannot read encrypted temp ranges');
   const stat = await input.transfer.statTemporary(input.tempId);
   if (!stat || stat.size < HEADER_BYTES + TRAILER_BYTES) {
     throw new Error('provider returned a truncated hash-pending object');
   }
-  const header = await input.transfer.getTemporary(input.tempId, {
+  const header = await getTemporary(input.tempId, {
     start: 0,
     end: HEADER_BYTES - 1,
   });
   if (!header) throw new Error('provider lost the hash-pending header');
   decodeHeader(header, input.sealId);
-  const trailerBytes = await input.transfer.getTemporary(input.tempId, {
+  const trailerBytes = await getTemporary(input.tempId, {
     start: stat.size - TRAILER_BYTES,
     end: stat.size - 1,
   });
   if (!trailerBytes) throw new Error('provider lost the hash-pending trailer');
   const trailer = decodeTrailer(trailerBytes);
   const directoryStart = stat.size - TRAILER_BYTES - trailer.directoryLength;
-  const sealedDirectory = await input.transfer.getTemporary(input.tempId, {
+  const sealedDirectory = await getTemporary(input.tempId, {
     start: directoryStart,
     end: stat.size - TRAILER_BYTES - 1,
   });
@@ -68,14 +69,19 @@ async function* temporaryPlaintext(input: {
   if (directory.totalSize !== input.expectedSize) {
     throw new Error('hash-pending plaintext size does not match its session');
   }
-  for (let index = 0; index < directory.frameCount; index += 1) {
-    const sealed = await input.transfer.getTemporary(input.tempId, {
+  // Frames are authenticated and emitted in plaintext order; do not fetch a
+  // later frame before the preceding one has been validated and yielded.
+  const readNextFrame = async function* (index: number): AsyncGenerator<Buffer> {
+    if (index >= directory.frameCount) return;
+    const sealed = await getTemporary(input.tempId, {
       start: directory.offsets[index]!,
       end: directory.offsets[index]! + directory.sealedLens[index]! - 1,
     });
     if (!sealed) throw new Error(`provider lost hash-pending frame ${index}`);
     yield unsealFrame(input.key, input.sealId, index, directory.frameCount, sealed);
-  }
+    yield* readNextFrame(index + 1);
+  };
+  yield* readNextFrame(0);
 }
 
 /**
@@ -176,7 +182,11 @@ export async function streamThroughUnknownHash(
         }
       }
       deps.emit();
-      return { ...staged, casAck: deps.policy().casAck, custody: 'remote-only' };
+      return {
+        ...staged,
+        casAck: deps.policy().casAck,
+        custody: 'remote-only',
+      };
     };
     const existing = await remote.store.stat(sha);
     if (existing) {
@@ -211,7 +221,10 @@ export async function streamThroughUnknownHash(
     // the final CAS object carries STANDARD_IA for an eligible large original.
     // The sha is only known post-stream and the staging row is written after
     // custody, so the media type + size are handed in directly for the resolver.
-    const storageClass = remote.storageClassFor?.(sha, 'cas', { mediaType, byteSize: received });
+    const storageClass = remote.storageClassFor?.(sha, 'cas', {
+      mediaType,
+      byteSize: received,
+    });
     await remote.transfer.copyTemporaryToSha(finalTempId, sha, storageClass);
     const final = await remote.store.stat(sha);
     if (!final) throw new Error(`provider did not HEAD-confirm ${sha}`);

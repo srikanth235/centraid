@@ -1,10 +1,10 @@
+import { Feather } from '@expo/vector-icons';
 import React, { useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Feather } from '@expo/vector-icons';
 
+import { useReplicaQuery } from '../../kit/hooks/useReplicaQuery';
 import { family, useTheme } from '../../kit/theme';
 import type { ThemeColors } from '../../kit/theme/resolve';
-import { useReplicaQuery } from '../../kit/hooks/useReplicaQuery';
 import type { PhotosScreenProps } from '../../navigation';
 
 // The design paints each tile with a linear-gradient; RN has no gradient
@@ -42,7 +42,10 @@ function CollectionRow({
   onPress,
   styles,
   colors,
-}: CollectionRowProps & { styles: Styles; colors: ThemeColors }): React.JSX.Element {
+}: CollectionRowProps & {
+  styles: Styles;
+  colors: ThemeColors;
+}): React.JSX.Element {
   return (
     <Pressable
       onPress={onPress}
@@ -195,7 +198,9 @@ export default function PhotosCollectionsView({
               key={album.__rowId}
               style={styles.album}
               onPress={() =>
-                navigation.navigate('AlbumDetail', { albumId: String(album.collection_id) })
+                navigation.navigate('AlbumDetail', {
+                  albumId: String(album.collection_id),
+                })
               }
             >
               <View
@@ -292,7 +297,12 @@ const makeStyles = (_colors: ThemeColors): ReturnType<typeof StyleSheet.create> 
     peopleRow: { gap: 14, paddingHorizontal: 16, paddingVertical: 2 },
     person: { alignItems: 'center', gap: 7, width: 66 },
     personName: { fontFamily: family.sansMedium, fontSize: 11 },
-    row: { alignItems: 'center', flexDirection: 'row', gap: 13, paddingVertical: 10 },
+    row: {
+      alignItems: 'center',
+      flexDirection: 'row',
+      gap: 13,
+      paddingVertical: 10,
+    },
     rowList: { paddingHorizontal: 16 },
     rowMeta: { fontFamily: family.sansRegular, fontSize: 13, marginTop: 1 },
     rowText: { flex: 1, minWidth: 0 },

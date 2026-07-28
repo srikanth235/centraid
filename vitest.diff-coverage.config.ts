@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitest/config';
+
 import { coverageExclude, coverageInclude, coverageProjects } from './vitest.config';
 
 // Scoped coverage lane for the local diff-coverage gate (#576).

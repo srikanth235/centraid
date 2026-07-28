@@ -20,8 +20,8 @@
  * it never imports a backend.
  */
 
-import type { RunTurnFn, RunnerPrefs, TurnInput } from './turn.js';
 import type { TurnStreamEvent } from './runner.js';
+import type { RunTurnFn, RunnerPrefs, TurnInput } from './turn.js';
 
 /** Longest title we keep — matches the ledger's derived-title budget. */
 const MAX_TITLE_CHARS = 60;
@@ -110,7 +110,7 @@ export async function generateConversationTitle(
   let text = '';
   const onEvent = (event: TurnStreamEvent): void => {
     if (event.type === 'assistant.delta') text += event.delta;
-    else if (event.type === 'final') text = text || event.text;
+    else if (event.type === 'final') text ||= event.text;
   };
 
   const input: TurnInput = {

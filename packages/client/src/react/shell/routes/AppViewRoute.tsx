@@ -1,4 +1,5 @@
 import { type JSX, type ReactNode, useState } from 'react';
+
 import type { AppearancePrefs } from '../../../app-shell-context.js';
 import { deleteApp, updateAppMeta } from '../../../gateway-client.js';
 import { useShellActions } from '../actions.js';
@@ -10,8 +11,9 @@ import { useAsyncData } from '../useAsyncData.js';
 import AppFrame from './AppFrame.js';
 import AppSettingsController from './AppSettingsController.js';
 import { loadAppTemplates } from './templatesData.js';
-import styles from './AppViewRoute.module.css';
+
 import chrome from '../chrome.module.css';
+import styles from './AppViewRoute.module.css';
 
 // React-owned app view — the full-bleed running-app runtime. Replaces the
 // vanilla openApp (app-appview.ts): a brand-chip lead + Use/Build switch, the

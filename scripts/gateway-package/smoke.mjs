@@ -20,6 +20,7 @@ import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
+
 import { waitForGatewayInfo } from './probe.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
@@ -83,20 +84,28 @@ async function hostMode() {
 
   let baseUrl = `http://${host}:${port || 18787}`;
   const deadline = Date.now() + 20_000;
-  while (Date.now() < deadline) {
+  // Read the child output and probe one interval at a time; concurrent probes
+  // would only blur which observation selected the smoke target URL.
+  const waitForListener = async () => {
+    if (Date.now() >= deadline) return;
     const m = output.match(/https?:\/\/127\.0\.0\.1:\d+/u);
     if (m) {
       baseUrl = m[0];
-      break;
+      return;
     }
     try {
-      const early = await waitForGatewayInfo(baseUrl, { deadlineMs: 200, intervalMs: 50 });
-      if (early.ok) break;
+      const early = await waitForGatewayInfo(baseUrl, {
+        deadlineMs: 200,
+        intervalMs: 50,
+      });
+      if (early.ok) return;
     } catch {
       // not up
     }
     await sleep(200);
-  }
+    return waitForListener();
+  };
+  await waitForListener();
 
   const result = await waitForGatewayInfo(baseUrl, { deadlineMs: 10_000 });
 

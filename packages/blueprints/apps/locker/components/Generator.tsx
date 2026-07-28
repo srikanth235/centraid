@@ -6,6 +6,7 @@
 // `openGenerator`/`closeGen`.
 import { strength } from '../totp.ts';
 import { Icon, KitMeter } from './Shared.tsx';
+
 import styles from './Generator.module.css';
 import shared from './shared.module.css';
 
@@ -101,7 +102,7 @@ export function Generator({
             min="8"
             max="40"
             value={genLen}
-            onChange={(e) => onSetLen(parseInt(e.target.value, 10))}
+            onChange={(e) => onSetLen(Math.trunc(Number(e.target.value)))}
           />
         </div>
 

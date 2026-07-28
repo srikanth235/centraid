@@ -19,6 +19,19 @@
  * the clock down, WAL-checkpoints, and closes the files.
  */
 
+import { existsSync, statSync } from 'node:fs';
+import path from 'node:path';
+import type { DatabaseSync } from 'node:sqlite';
+
+import {
+  ensureConversationLedger,
+  runConversationArchival,
+  repriceLedger,
+  type RuntimeLogger,
+  type VaultBridge,
+  type VaultCallResult,
+  type VaultWorkspace,
+} from '@centraid/app-engine';
 import {
   assertExtSchemaOwnership,
   buildAssistantContext,
@@ -118,18 +131,12 @@ import {
   scopeCovers,
   sweepLocalOrphans,
 } from '@centraid/vault';
-import { existsSync, statSync } from 'node:fs';
-import path from 'node:path';
-import type { DatabaseSync } from 'node:sqlite';
-import {
-  ensureConversationLedger,
-  runConversationArchival,
-  repriceLedger,
-  type RuntimeLogger,
-  type VaultBridge,
-  type VaultCallResult,
-  type VaultWorkspace,
-} from '@centraid/app-engine';
+
+import { canWrite } from './enrollment-store.js';
+import { GroupCommitQueue } from './group-commit-queue.js';
+import { decideJournalArchive } from './journal-limit.js';
+import { replicaIntentContext } from './replica-intent-context.js';
+import { vaultContext } from './vault-context.js';
 import {
   pickAnchors,
   pickEntities,
@@ -140,11 +147,6 @@ import {
   type PickerRequest,
 } from './vault-picker.js';
 import { applyRestoreQuarantine, type QuarantineStatus } from './vault-quarantine.js';
-import { replicaIntentContext } from './replica-intent-context.js';
-import { vaultContext } from './vault-context.js';
-import { canWrite } from './enrollment-store.js';
-import { GroupCommitQueue } from './group-commit-queue.js';
-import { decideJournalArchive } from './journal-limit.js';
 
 /** Blob-sweep failure backoff (issue #367 §C5) — one step per consecutive failure, flat-capped. */
 /**
@@ -361,7 +363,11 @@ function asVaultCallResult(fn: () => unknown): VaultCallResult {
     return { ok: true, result: fn() };
   } catch (err) {
     if (err instanceof GatewayError) {
-      return { ok: false, code: `VAULT_${err.stage.toUpperCase()}`, error: err.message };
+      return {
+        ok: false,
+        code: `VAULT_${err.stage.toUpperCase()}`,
+        error: err.message,
+      };
     }
     return {
       ok: false,
@@ -397,7 +403,7 @@ function missingScopes(
     )
     .map((s) => ({
       schema: s.schema,
-      ...(s.table !== undefined ? { table: s.table } : {}),
+      ...(s.table === undefined ? {} : { table: s.table }),
       verbs: s.verbs,
       ...(s.rowFilter ? { rowFilter: [...s.rowFilter] } : {}),
       ...(s.fieldMask ? { fieldMask: [...s.fieldMask] } : {}),
@@ -418,7 +424,11 @@ async function asVaultCallResultAsync(fn: () => Promise<unknown>): Promise<Vault
     return { ok: true, result: await fn() };
   } catch (err) {
     if (err instanceof GatewayError) {
-      return { ok: false, code: `VAULT_${err.stage.toUpperCase()}`, error: err.message };
+      return {
+        ok: false,
+        code: `VAULT_${err.stage.toUpperCase()}`,
+        error: err.message,
+      };
     }
     return {
       ok: false,
@@ -572,9 +582,9 @@ export class VaultPlane {
       // wired one; a codec-less open just never runs the backstop.
       ...(options.previewCodec ? { previewCodec: options.previewCodec } : {}),
       shouldDeferBackgroundWork: this.shouldDeferBackgroundWork,
-      ...(options.replicationConcurrency !== undefined
-        ? { replicationConcurrency: options.replicationConcurrency }
-        : {}),
+      ...(options.replicationConcurrency === undefined
+        ? {}
+        : { replicationConcurrency: options.replicationConcurrency }),
       ...(options.synchronous ? { synchronous: options.synchronous } : {}),
     });
     const recovered = recoverVaultBootstrap(this.db);
@@ -696,7 +706,11 @@ export class VaultPlane {
 
   /** The owner-device credential the host acts with (confirm/revoke/sweep). */
   get ownerCredential(): Credential {
-    return { kind: 'device', deviceId: this.boot.deviceId, deviceKey: this.boot.deviceKey };
+    return {
+      kind: 'device',
+      deviceId: this.boot.deviceId,
+      deviceKey: this.boot.deviceKey,
+    };
   }
 
   /** The vault's owner-facing name (`core_vault.display_name`). */
@@ -977,7 +991,9 @@ export class VaultPlane {
 
   /** The agent-plane mirror: an automation's declared scopes, granted at install. */
   ensureAgentInstallGrant(appId: string, block: InstallScopeBlock): void {
-    const agent = ensureAgentEnrolled(this.db, appId, { modelRef: 'centraid-automation' });
+    const agent = ensureAgentEnrolled(this.db, appId, {
+      modelRef: 'centraid-automation',
+    });
     this.ensureInstallGrant({
       plane: 'agent',
       appId,
@@ -1021,7 +1037,7 @@ export class VaultPlane {
       purpose,
       scopes: missing.map((s) => ({
         schema: s.schema,
-        ...(s.table !== undefined ? { table: s.table } : {}),
+        ...(s.table === undefined ? {} : { table: s.table }),
         verbs: s.verbs,
         ...(s.rowFilter ? { rowFilter: [...s.rowFilter] } : {}),
         ...(s.fieldMask ? { fieldMask: [...s.fieldMask] } : {}),
@@ -1053,7 +1069,7 @@ export class VaultPlane {
         purpose: request.purpose,
         scopes: request.scopes.map((s) => ({
           schema: s.schema,
-          ...(s.table !== undefined ? { table: s.table } : {}),
+          ...(s.table === undefined ? {} : { table: s.table }),
           verbs: s.verbs,
           ...(s.rowFilter ? { rowFilter: [...s.rowFilter] } : {}),
           ...(s.fieldMask ? { fieldMask: [...s.fieldMask] } : {}),
@@ -1077,7 +1093,9 @@ export class VaultPlane {
     granteePartyId?: string;
   } {
     if (request.plane === 'app') {
-      const app = ensureAppEnrolled(this.db, request.appId, { origin: 'generated' });
+      const app = ensureAppEnrolled(this.db, request.appId, {
+        origin: 'generated',
+      });
       return { appId: app.appId };
     }
     const agent = ensureAgentEnrolled(this.db, request.appId, {
@@ -1241,10 +1259,12 @@ export class VaultPlane {
    * this to rebuild a wire request from an owner-edited artifact without
    * ever handing the raw request to the owner surface.
    */
-  rawOutboxItem(
-    itemId: string,
-  ):
-    | { verb: string; artifact: Record<string, unknown>; request: Record<string, unknown> }
+  rawOutboxItem(itemId: string):
+    | {
+        verb: string;
+        artifact: Record<string, unknown>;
+        request: Record<string, unknown>;
+      }
     | undefined {
     const row = this.db.vault
       .prepare('SELECT verb, artifact_json, request_json FROM outbox_item WHERE item_id = ?')
@@ -1273,8 +1293,8 @@ export class VaultPlane {
         decision: input.decision,
         ...(input.artifact ? { artifact: input.artifact } : {}),
         ...(input.request ? { request: input.request } : {}),
-        ...(input.alwaysAllow !== undefined ? { always_allow: input.alwaysAllow } : {}),
-        ...(input.note !== undefined ? { note: input.note } : {}),
+        ...(input.alwaysAllow === undefined ? {} : { always_allow: input.alwaysAllow }),
+        ...(input.note === undefined ? {} : { note: input.note }),
       },
     });
   }
@@ -1328,7 +1348,12 @@ export class VaultPlane {
    */
   blocking(): {
     outbox: OutboxItemSummary[];
-    needsAuth: Array<{ connectionId: string; kind: string; label: string; note: string | null }>;
+    needsAuth: Array<{
+      connectionId: string;
+      kind: string;
+      label: string;
+      note: string | null;
+    }>;
     parked: ParkedSummary[];
     /** Manifest scope-widening asks awaiting the owner (issue #308 A3). */
     scopeRequests: ScopeRequestSummary[];
@@ -1340,7 +1365,12 @@ export class VaultPlane {
            LEFT JOIN sync_connection_health h ON h.connection_id = c.connection_id
           WHERE c.status = 'needs-auth' ORDER BY c.kind, c.label`,
       )
-      .all() as { connection_id: string; kind: string; label: string; auth_note: string | null }[];
+      .all() as {
+      connection_id: string;
+      kind: string;
+      label: string;
+      auth_note: string | null;
+    }[];
     return {
       outbox: this.listOutbox(['pending']),
       needsAuth: needsAuth.map((r) => ({
@@ -1489,7 +1519,12 @@ export class VaultPlane {
       rowFilter?: ScopeSpec['rowFilter'];
       fieldMask?: ScopeSpec['fieldMask'];
     }>;
-    highlights: Array<{ command: string; schema: string; risk: string; confirm: boolean }>;
+    highlights: Array<{
+      command: string;
+      schema: string;
+      risk: string;
+      confirm: boolean;
+    }>;
   } {
     const scopes: Array<{
       plane: 'app' | 'agent';
@@ -1656,7 +1691,9 @@ export class VaultPlane {
       ).map((r) => r.schema_name),
     );
     // The owner's "no" binds the assistant too (issue #308 A4/B3).
-    for (const t of listScopeTombstones(this.db, { granteePartyId: agent.partyId })) {
+    for (const t of listScopeTombstones(this.db, {
+      granteePartyId: agent.partyId,
+    })) {
       if (t.verbs === 'act') covered.add(t.schema);
     }
     const missing = schemas.filter((s) => !covered.has(s.owner_schema));
@@ -1667,7 +1704,10 @@ export class VaultPlane {
         granteePartyId: agent.partyId,
         purposeConceptId: purpose,
         grantedByPartyId: this.boot.ownerPartyId,
-        scopes: missing.map((s) => ({ schema: s.owner_schema, verbs: 'act' as const })),
+        scopes: missing.map((s) => ({
+          schema: s.owner_schema,
+          verbs: 'act' as const,
+        })),
       });
       this.logger.info(
         `vault plane: extended the _assistant standing act grant (+${missing.length} schema(s))`,
@@ -1691,7 +1731,7 @@ export class VaultPlane {
   sqlAsOwner(sql: string, maxRows?: number): VaultSqlResult {
     return this.gateway.sql(this.ownerCredential, {
       sql,
-      ...(maxRows !== undefined ? { maxRows } : {}),
+      ...(maxRows === undefined ? {} : { maxRows }),
       purpose: 'owner-assistant',
     });
   }
@@ -1859,7 +1899,11 @@ export class VaultPlane {
           error: `app "${appId}" is not enrolled in the vault`,
         };
       }
-      const cred: Credential = { kind: 'app', appId: app.appId, signingKey: app.signingKey };
+      const cred: Credential = {
+        kind: 'app',
+        appId: app.appId,
+        signingKey: app.signingKey,
+      };
       if (call.op === 'content') {
         // Derivative fetch (issue #299) — async custody I/O, receipted read.
         return asVaultCallResultAsync(() =>
@@ -1870,11 +1914,14 @@ export class VaultPlane {
         return this.invokeQueued(cred, {
           ...withoutForgedIdentity(call.payload as unknown as InvokeRequest),
           ...(replicaIntent?.appId === appId
-            ? { intentId: replicaIntent.intentId, intentDeviceId: replicaIntent.deviceId }
+            ? {
+                intentId: replicaIntent.intentId,
+                intentDeviceId: replicaIntent.deviceId,
+              }
             : requestDeviceId
               ? { intentDeviceId: requestDeviceId }
               : {}),
-          ...(actingMemberId !== undefined ? { actingMemberId } : {}),
+          ...(actingMemberId === undefined ? {} : { actingMemberId }),
         });
       }
       return asVaultCallResult(() => {
@@ -1941,9 +1988,12 @@ export class VaultPlane {
     // has no human behind it to be capped at.
     const scope = vaultContext();
     const onBehalfOfMember =
-      scope?.memberId !== undefined
-        ? { memberId: scope.memberId, mayAct: canWrite(scope.memberRole ?? 'revoked') }
-        : undefined;
+      scope?.memberId === undefined
+        ? undefined
+        : {
+            memberId: scope.memberId,
+            mayAct: canWrite(scope.memberRole ?? 'revoked'),
+          };
     return async (call): Promise<VaultCallResult> => {
       const agent = lookupAgentByName(this.db, appId);
       if (!agent) {
@@ -1962,7 +2012,7 @@ export class VaultPlane {
           ? {
               scopeClamp: block.scopes.map((scope) => ({
                 schema: scope.schema,
-                ...(scope.table !== undefined ? { table: scope.table } : {}),
+                ...(scope.table === undefined ? {} : { table: scope.table }),
                 verbs: scope.verbs,
                 ...(scope.rowFilter ? { rowFilter: [...scope.rowFilter] } : {}),
                 ...(scope.fieldMask ? { fieldMask: [...scope.fieldMask] } : {}),
@@ -2313,7 +2363,9 @@ export class VaultPlane {
           // and re-derives the affected turn totals before those rows may be
           // archived. Idempotent: a clean row recomputes unchanged and writes
           // nothing. Runs BEFORE archival so live rows get honest costs first.
-          const repriced = repriceLedger(this.db.journal, { cursor: this.repriceCursor });
+          const repriced = repriceLedger(this.db.journal, {
+            cursor: this.repriceCursor,
+          });
           this.repriceCursor = repriced.nextCursor;
           if (repriced.itemsRepriced > 0) {
             this.logger.info(
@@ -2351,7 +2403,9 @@ export class VaultPlane {
             convArchival.segmentsWritten > 0 ||
             convArchival.segmentsPruned > 0
           ) {
-            this.walShipper?.rollGeneration('journal', 'journal-archival', { captureFirst: false });
+            this.walShipper?.rollGeneration('journal', 'journal-archival', {
+              captureFirst: false,
+            });
           }
         } catch (err) {
           this.logger.warn(
@@ -2386,9 +2440,13 @@ export class VaultPlane {
         const swept = await this.gateway.sweepBlobs(this.ownerCredential, {
           skipOrphanDelete,
           ...(extraLiveRoots ? { extraLiveRoots } : {}),
-          ...(graceWindowMs !== undefined ? { graceWindowMs } : {}),
+          ...(graceWindowMs === undefined ? {} : { graceWindowMs }),
         });
-        this.runLocalOrphanSweep({ skipOrphanDelete, extraLiveRoots, graceWindowMs });
+        this.runLocalOrphanSweep({
+          skipOrphanDelete,
+          extraLiveRoots,
+          graceWindowMs,
+        });
         return swept;
       })
       .then((blobs) => {

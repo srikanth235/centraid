@@ -1,11 +1,13 @@
 import { useRef, useState, type JSX } from 'react';
+
 import { formatClock } from '../shell/routes/gatewayData.js';
-import buttonCss from '../ui/Button.module.css';
-import Icon from '../ui/Icon.js';
 import { cx } from '../ui/cx.js';
-import controlsCss from '../styles/controls.module.css';
-import styles from './BackupCard.module.css';
+import Icon from '../ui/Icon.js';
 import type { BackupCardProps, RecoveryKitStatusDTO } from './BackupCard.js';
+
+import controlsCss from '../styles/controls.module.css';
+import buttonCss from '../ui/Button.module.css';
+import styles from './BackupCard.module.css';
 
 export default function RecoveryKitGate({
   configured,
@@ -75,7 +77,11 @@ export default function RecoveryKitGate({
     setConfirming(true);
     setError(null);
     try {
-      const result = await onConfirm({ kit: selectedKit, password, lossConsent: true });
+      const result = await onConfirm({
+        kit: selectedKit,
+        password,
+        lossConsent: true,
+      });
       setConfirmedAt(result.confirmedAt);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));

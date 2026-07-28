@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { spawnSync } from 'node:child_process';
 /**
  * Resolve the immutable report slot for an Actions run (#557).
  *
@@ -19,7 +20,6 @@
  * Writes `date=` and `slug=` to $GITHUB_OUTPUT, and prints them to stdout.
  */
 import { appendFileSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
 
 /** GitHub returns an ISO-8601 timestamp; we key the slot on the UTC date. */
 export function toRunDate(createdAt, fallbackNow) {

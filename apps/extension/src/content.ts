@@ -1,11 +1,11 @@
-import type { CompanionRequest, FillMaterial, LockerCandidate, PageCapture } from './types.js';
+import { randomPassword, unwrapCompanionEnvelope, type CompanionEnvelope } from './content-core.js';
 import {
   clearFillMaterial,
   isTrustedCredentialGesture,
   passwordForSave,
 } from './credential-gesture.js';
-import { randomPassword, unwrapCompanionEnvelope, type CompanionEnvelope } from './content-core.js';
 import { applyFillToLiveFields, findFields, isLiveFillTarget } from './page-fields.js';
+import type { CompanionRequest, FillMaterial, LockerCandidate, PageCapture } from './types.js';
 
 if (window.top === window.self && window.isSecureContext) installCompanion();
 
@@ -196,7 +196,10 @@ function installCompanion(): void {
   });
 
   const observer = new MutationObserver(() => void mount());
-  observer.observe(document.documentElement, { childList: true, subtree: true });
+  observer.observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+  });
   document.addEventListener('focusin', () => void mount());
   void send({ type: 'warm' }).catch(() => undefined);
   void mount();

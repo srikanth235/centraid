@@ -7,8 +7,9 @@
  *    published prompt ahead of the compiled handler with nothing to reconcile.
  */
 
-import { describe, expect, test } from 'vitest';
 import { validateManifest, type Row as AutomationRow } from '@centraid/automation';
+import { describe, expect, test } from 'vitest';
+
 import { reviseAutomationInstructions } from './automation-revision.js';
 
 function row(prompt = 'Summarize account changes.'): AutomationRow {
@@ -74,7 +75,10 @@ describe('automation-revision', () => {
 
   test('a failed compile restores the previous instructions and says so in the thread', async () => {
     const { deps: input, out } = deps({
-      compile: async () => ({ ok: false, error: 'handler.js did not validate' }),
+      compile: async () => ({
+        ok: false,
+        error: 'handler.js did not validate',
+      }),
     });
     await reviseAutomationInstructions(input);
     // Publish new, then publish the ORIGINAL back — the enabled automation is

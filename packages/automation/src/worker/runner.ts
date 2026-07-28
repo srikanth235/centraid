@@ -1,30 +1,8 @@
-/**
- * Worker entry that executes an *automation* handler.
- *
- * Issue #91: an automation is a standalone app, so the handler arg
- * is `{ automation, log, ctx }` — there is no app `db`. `ctx` exposes
- * `agent` / `fetch` / `state` / `runs` / `vault`. The runner forwards each
- * call back to the parent via message-passing and awaits the matching reply.
- *
- * Two rails, one honest cost story:
- *   - `ctx.agent` is the ONLY billed path — a bounded model turn against the
- *     user's real provider, driven through the runner registry (ACP).
- *   - everything else (`ctx.vault`, `ctx.fetch`, `ctx.state`, `ctx.runs`) is
- *     deterministic, in-process work the parent services directly against
- *     SQLite / the vault bridge. A fire whose handler never calls `ctx.agent`
- *     starts zero child processes and zero HTTP servers.
- *
- * There is no runtime retry: a failed `ctx.*` call rejects the handler's
- * Promise, and the handler (plain JS) owns retry / backoff / error
- * classification via `try/catch`. Each call is an ordering barrier — it
- * flushes to the parent and awaits its reply before the next line runs.
- *
- * Trust model: same as `runner.ts`. App code is trusted; the worker is
- * for crash + timeout isolation, not security sandboxing.
- */
+/** Automation worker: isolates crashes/timeouts, not trusted app code. `ctx.agent`
+ * is the only billed rail; every `ctx.*` call is an ordered parent RPC barrier. */
 
-import { parentPort, workerData } from 'node:worker_threads';
 import { pathToFileURL } from 'node:url';
+import { parentPort, workerData } from 'node:worker_threads';
 
 interface WorkerRequest {
   handlerFile: string;
@@ -35,26 +13,12 @@ interface WorkerRequest {
   input?: unknown;
 }
 
+type ParentReply = { id: number; ok: boolean; result?: unknown; error?: string };
 type ParentMessage =
-  | { type: 'agent-reply'; id: number; ok: boolean; result?: unknown; error?: string }
-  | { type: 'state-reply'; id: number; ok: boolean; result?: unknown; error?: string }
-  | { type: 'runs-reply'; id: number; ok: boolean; result?: unknown; error?: string }
-  | { type: 'fetch-reply'; id: number; ok: boolean; result?: unknown; error?: string }
-  | {
-      type: 'vault-reply';
-      id: number;
-      ok: boolean;
-      result?: unknown;
-      error?: string;
-      code?: string;
-    }
-  | {
-      type: 'connector-open-reply';
-      id: number;
-      ok: boolean;
-      result?: unknown;
-      error?: string;
-    }
+  | ({
+      type: 'agent-reply' | 'state-reply' | 'runs-reply' | 'fetch-reply' | 'connector-open-reply';
+    } & ParentReply)
+  | ({ type: 'vault-reply'; code?: string } & ParentReply)
   | { type: 'abort'; reason?: string }
   | { type: 'run'; request: WorkerRequest };
 
@@ -79,12 +43,23 @@ type WorkerMessage =
       json?: unknown;
       content?: { contentId: string; variant: string; maxBytes?: number }[];
     }
-  | { type: 'state'; id: number; method: 'get' | 'set' | 'delete'; key: string; value?: unknown }
+  | {
+      type: 'state';
+      id: number;
+      method: 'get' | 'set' | 'delete';
+      key: string;
+      value?: unknown;
+    }
   | {
       type: 'runs';
       id: number;
       method: 'last' | 'list';
-      filter: { automationId?: string; status?: 'ok' | 'error'; since?: number; limit?: number };
+      filter: {
+        automationId?: string;
+        status?: 'ok' | 'error';
+        since?: number;
+        limit?: number;
+      };
     }
   | {
       type: 'vault';
@@ -183,11 +158,23 @@ port.on('message', (msg: ParentMessage) => {
 
 const log = {
   info: (msg: string) =>
-    port.postMessage({ type: 'log', level: 'info', msg } satisfies WorkerMessage),
+    port.postMessage({
+      type: 'log',
+      level: 'info',
+      msg,
+    } satisfies WorkerMessage),
   warn: (msg: string) =>
-    port.postMessage({ type: 'log', level: 'warn', msg } satisfies WorkerMessage),
+    port.postMessage({
+      type: 'log',
+      level: 'warn',
+      msg,
+    } satisfies WorkerMessage),
   error: (msg: string) =>
-    port.postMessage({ type: 'log', level: 'error', msg } satisfies WorkerMessage),
+    port.postMessage({
+      type: 'log',
+      level: 'error',
+      msg,
+    } satisfies WorkerMessage),
 };
 
 const state = {
@@ -291,9 +278,11 @@ const ctx = {
    * substitutes and performs the request; the secret never enters this
    * worker. Non-connector runs are refused host-side.
    */
-  fetch(
-    spec: FetchSpec,
-  ): Promise<{ status: number; headers: Record<string, string>; text: string }> {
+  fetch(spec: FetchSpec): Promise<{
+    status: number;
+    headers: Record<string, string>;
+    text: string;
+  }> {
     return rpcCall({ type: 'fetch', spec }) as Promise<{
       status: number;
       headers: Record<string, string>;
@@ -406,7 +395,10 @@ async function executePullSpec(spec: PullSpec): Promise<unknown> {
   if (typeof principal !== 'string' || principal.trim().length === 0) {
     throw new Error('pull connector principal probe returned no identity');
   }
-  const openedRaw = await rpcCall({ type: 'connector-open', principal: principal.trim() });
+  const openedRaw = await rpcCall({
+    type: 'connector-open',
+    principal: principal.trim(),
+  });
   const opened =
     openedRaw && typeof openedRaw === 'object' && 'output' in openedRaw
       ? (openedRaw as { output: Record<string, unknown> }).output
@@ -456,7 +448,11 @@ function execute(request: WorkerRequest): void {
         typeof mod.default === 'function'
           ? await mod.default(fullArgs)
           : await executePullSpec(mod.default);
-      port.postMessage({ type: 'result', ok: true, value } satisfies WorkerMessage);
+      port.postMessage({
+        type: 'result',
+        ok: true,
+        value,
+      } satisfies WorkerMessage);
     } catch (err) {
       port.postMessage({
         type: 'result',

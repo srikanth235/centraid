@@ -11,7 +11,7 @@ const MAX_SCOPED_DIRECTORIES = 8;
 /** True for a POSIX (`/x`), Windows (`C:\x`), or UNC (`\\host\share`) root. */
 function isAbsolutePath(directory: string): boolean {
   return (
-    directory.startsWith('/') || /^[A-Za-z]:[\\/]/.test(directory) || directory.startsWith('\\\\')
+    directory.startsWith('/') || /^[A-Za-z]:[\\/]/u.test(directory) || directory.startsWith('\\\\')
   );
 }
 

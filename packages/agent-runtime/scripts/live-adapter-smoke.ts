@@ -10,11 +10,12 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import type { TurnInput, TurnStreamEvent } from '@centraid/app-engine';
-import type { RunnerKind } from '../src/types.js';
+
 import { probeAcpCapabilities } from '../src/backends/acp/probe-capabilities.js';
 import { clearWarmPool } from '../src/backends/acp/session-warm.js';
 import { acpConfigFor, RUNNER_BACKENDS } from '../src/registry.js';
 import { runTurn } from '../src/runtime.js';
+import type { RunnerKind } from '../src/types.js';
 
 const isRunnerKind = (kind: string): kind is RunnerKind => Object.hasOwn(RUNNER_BACKENDS, kind);
 
@@ -96,7 +97,9 @@ async function runLive(
 }
 
 let failed = false;
-for (const kind of requested) {
+const runNextAdapter = async (index: number): Promise<void> => {
+  const kind = requested[index];
+  if (kind === undefined) return;
   const cwd = await mkdtemp(path.join(tmpdir(), `centraid-live-${kind}-`));
   try {
     const caps = await probeAcpCapabilities(
@@ -135,7 +138,10 @@ for (const kind of requested) {
           locationsObserved: caps.locationsObserved,
         },
         ...(requestedEffort
-          ? { effortRequested: requestedEffort, effortConfirmed: usage?.effort ?? null }
+          ? {
+              effortRequested: requestedEffort,
+              effortConfirmed: usage?.effort ?? null,
+            }
           : {}),
         eventTypes: attempt.events.map((event) => event.type),
         ...(attempt.error ? { error: attempt.error.message } : {}),
@@ -155,7 +161,9 @@ for (const kind of requested) {
   } finally {
     await rm(cwd, { recursive: true, force: true });
   }
-}
+  return runNextAdapter(index + 1);
+};
+await runNextAdapter(0);
 
 if (requested.length >= 2) {
   const [first, second] = requested as [RunnerKind, RunnerKind, ...RunnerKind[]];

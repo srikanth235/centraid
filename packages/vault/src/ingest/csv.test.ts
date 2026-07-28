@@ -1,6 +1,7 @@
 // Bank-statement CSV parser unit tests (issue #545 B6).
 
 import { describe, expect, test } from 'vitest';
+
 import { parseCsvRows, parseTransactionsCsv } from './csv.js';
 
 describe('csv', () => {
@@ -60,8 +61,8 @@ describe('csv', () => {
   });
 
   test('parseTransactionsCsv throws when header lacks date or amount', () => {
-    expect(() => parseTransactionsCsv('foo,bar\n1,2\n')).toThrow(/date and an amount/);
-    expect(() => parseTransactionsCsv('Date,Amount\n')).toThrow(/no data rows/);
+    expect(() => parseTransactionsCsv('foo,bar\n1,2\n')).toThrow(/date and an amount/u);
+    expect(() => parseTransactionsCsv('Date,Amount\n')).toThrow(/no data rows/u);
   });
 
   test('parseTransactionsCsv skips unparseable noise rows', () => {

@@ -7,6 +7,7 @@
 import { catOf, monoOf, subOf, warnColor } from '../format.ts';
 import type { LockerRow } from '../types.ts';
 import { Icon } from './Shared.tsx';
+
 import styles from './List.module.css';
 import shared from './shared.module.css';
 

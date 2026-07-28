@@ -4,20 +4,21 @@
 import { mkdirSync, statfsSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { BlobCustody, type RemoteTier } from './blob/custody.js';
+
+import { readBackupPolicy } from './backup-policy.js';
 import { BlobCache, readBlobCacheSettings } from './blob/cache.js';
 import { BlobContentKeyRegistry } from './blob/content-keys.js';
+import { BlobCustody, type RemoteTier } from './blob/custody.js';
 import { FsBlobStore, MemoryBlobStore, type LocalBlobStore } from './blob/local.js';
 import {
   contributeIngressPreviews,
   type IngressPreviewInput,
   type PreviewCodec,
 } from './blob/preview.js';
-import { S3BlobStore, type S3BlobStoreOptions, type S3Credentials } from './blob/s3.js';
 import { S3TransferStore } from './blob/s3-transfer.js';
+import { S3BlobStore, type S3BlobStoreOptions, type S3Credentials } from './blob/s3.js';
 import { desiredStoreForSha, storageClassForShaWrite } from './blob/store-routing.js';
 import { BlobTransferCoordinator } from './blob/transfers.js';
-import { readBackupPolicy } from './backup-policy.js';
 import { registerHammingFn } from './enrich/similarity.js';
 import { asVaultDiskFullError } from './errors.js';
 import { initializeReplicaProtocol } from './replica/change-log.js';

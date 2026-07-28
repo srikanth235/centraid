@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import {
   JOURNAL_ARCHIVE_DEFAULT_WINDOW_DAYS,
   JOURNAL_ARCHIVE_FLOOR_WINDOW_DAYS,

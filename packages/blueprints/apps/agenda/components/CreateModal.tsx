@@ -5,12 +5,14 @@
 // needs-action schedule_attendee rows. Opening from a day/slot click
 // prefills the time via `prefill`.
 import { useEffect, useRef, useState } from 'react';
-import { outcomeMessage } from '../kit.ts';
+import type { ChangeEvent } from 'react';
+
 import { colorForCalendar, initials, nextHalfHour, toIsoUtc, toLocalInput } from '../format.ts';
 import { I } from '../icons.ts';
-import { CalDot, Icon } from './Shared.tsx';
-import type { ChangeEvent } from 'react';
+import { outcomeMessage } from '../kit.ts';
 import type { Calendar, CreatePayload, PartyOption, Prefill } from '../types.ts';
+import { CalDot, Icon } from './Shared.tsx';
+
 import styles from './CreateModal.module.css';
 import shared from './shared.module.css';
 

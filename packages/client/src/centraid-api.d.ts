@@ -357,7 +357,12 @@ export interface CentraidConnectivityReport {
     instanceId: string;
     compatible: boolean;
   };
-  vaults?: Array<{ vaultId: string; name: string; color?: string; icon?: string }>;
+  vaults?: Array<{
+    vaultId: string;
+    name: string;
+    color?: string;
+    icon?: string;
+  }>;
   ticket?: { vaultName: string; expiresAt: string; gatewayEndpointId: string };
   /** Stable code for the FIRST failing stage — absent when `ok`. */
   error?: string;
@@ -636,7 +641,7 @@ export interface CentraidTemplateMeta {
   /** Gallery section header (e.g. 'Daily rhythm'). */
   category?: string;
   /** Trigger-style glyph picker on the card. */
-  triggerKind?: 'cron' | 'webhook';
+  triggerKind?: 'cron' | 'webhook' | 'data' | 'condition';
   /** Human-readable trigger label (e.g. 'Weekdays · 6:00 PM'). */
   triggerLabel?: string;
   /** Integration chip labels (e.g. ['Gmail', 'Slack']). */
@@ -1401,7 +1406,11 @@ export type CentraidResourceKnobKey =
 export interface CentraidResourceProfile {
   class: 'constrained' | 'standard';
   mode: 'auto' | 'conserve' | 'balanced' | 'performance';
-  host: { cores: number; totalMemoryBytes: number; storageFsyncMs: number | null };
+  host: {
+    cores: number;
+    totalMemoryBytes: number;
+    storageFsyncMs: number | null;
+  };
   resolved: {
     workerMaxConcurrent: number;
     workerMaxOldGenerationMb: number;

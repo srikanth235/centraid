@@ -66,7 +66,14 @@ export async function reconcileCustody(
       listed: Set<string>;
       surviving: Set<string>;
       store: NonNullable<RemoteTier['derivedStore']>;
-    }[] = [{ class: 'cas', listed: casShas, surviving: survivingCas, store: remote.store }];
+    }[] = [
+      {
+        class: 'cas',
+        listed: casShas,
+        surviving: survivingCas,
+        store: remote.store,
+      },
+    ];
     if (remote.derivedStore) {
       stores.push({
         class: 'derived',
@@ -75,14 +82,19 @@ export async function reconcileCustody(
         store: remote.derivedStore,
       });
     }
-    for (const tier of stores) {
-      for (const sha of tier.listed) {
+    const reconcileTier = async (tierIndex: number): Promise<void> => {
+      const tier = stores[tierIndex];
+      if (tier === undefined) return;
+      const listed = [...tier.listed];
+      const reconcileSha = async (shaIndex: number): Promise<void> => {
+        const sha = listed[shaIndex];
+        if (sha === undefined) return reconcileTier(tierIndex + 1);
         // A live sha is re-referenced: it can carry no orphan tombstone. Clear
         // any stale one (issue #439 R4 — a sha that becomes live again before
         // its grace elapses must lose its tombstone) and skip.
         if (liveShas.has(sha)) {
           ctx.orphans?.clear(sha);
-          continue;
+          return reconcileSha(shaIndex + 1);
         }
         // GC-pins-snapshots invariant (issue #436 §6): a blob referenced by any
         // retained snapshot manifest is a live GC root and MUST NOT be deleted,
@@ -92,10 +104,10 @@ export async function reconcileCustody(
         // the one place a client-owned CAS delete can happen. A pinned root is by
         // definition not orphaned, so it never earns a tombstone — the check
         // precedes the grace gate, keeping pinned objects out of blob_orphan.
-        if (options.extraLiveRoots?.has(sha)) continue;
+        if (options.extraLiveRoots?.has(sha)) return reconcileSha(shaIndex + 1);
         if (options.skipOrphanDelete) {
           result.orphansSkipped.push(sha);
-          continue;
+          return reconcileSha(shaIndex + 1);
         }
         // Orphan-grace gate (issue #439 R4). With a grace window in force, a
         // freshly-found orphan is tombstoned and HELD, not deleted: PITR makes
@@ -107,12 +119,12 @@ export async function reconcileCustody(
         if (options.graceWindowMs !== undefined) {
           if (!ctx.orphans) {
             result.orphansGraceHeld.push(sha);
-            continue;
+            return reconcileSha(shaIndex + 1);
           }
           const firstOrphanedAt = ctx.orphans.markFirstSeen(sha, now());
           if (now() - firstOrphanedAt <= options.graceWindowMs) {
             result.orphansGraceHeld.push(sha);
-            continue;
+            return reconcileSha(shaIndex + 1);
           }
           // Grace elapsed — fall through to delete and forget the tombstone.
         }
@@ -121,8 +133,11 @@ export async function reconcileCustody(
         tier.surviving.delete(sha);
         cache?.replica.unmark(sha);
         result.orphansDeleted.push(sha);
-      }
-    }
+        return reconcileSha(shaIndex + 1);
+      };
+      return reconcileSha(0);
+    };
+    await reconcileTier(0);
   }
 
   // Heal each store's rows against ITS listing (issue #425 Wave 2) — the
@@ -133,7 +148,9 @@ export async function reconcileCustody(
     if (remote.derivedStore) cache.replica.heal('derived', survivingDerived, sizeOf);
   }
 
-  for (const sha of liveShas) {
+  const reconcileLiveSha = async (shas: readonly string[], index: number): Promise<void> => {
+    const sha = shas[index];
+    if (sha === undefined) return;
     const localHas = local.hasSync(sha);
     const belongs = ctx.desiredStore(sha);
     const listing = belongs === 'derived' && remote?.derivedStore ? survivingDerived : survivingCas;
@@ -141,13 +158,15 @@ export async function reconcileCustody(
     if (!localHas && remoteHas) {
       await ctx.open(sha); // re-cache from the store it belongs in
       result.replicated.push(sha);
-      continue;
+      return reconcileLiveSha(shas, index + 1);
     }
     if (localHas && remote && !remoteHas) {
       result.replicated.push(...(await ctx.replicate([sha])));
-      continue;
+      return reconcileLiveSha(shas, index + 1);
     }
     if (!localHas && !remoteHas) result.missing.push(sha);
-  }
+    return reconcileLiveSha(shas, index + 1);
+  };
+  await reconcileLiveSha([...liveShas], 0);
   return result;
 }

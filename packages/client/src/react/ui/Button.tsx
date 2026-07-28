@@ -1,7 +1,9 @@
-import type { JSX, MouseEvent, ReactNode } from 'react';
-import { cx } from './cx.js';
 import type { IconName } from '@centraid/design-tokens';
+import type { JSX, MouseEvent, ReactNode } from 'react';
+
+import { cx } from './cx.js';
 import Icon from './Icon.js';
+
 import styles from './Button.module.css';
 
 export type ButtonVariant = 'solid' | 'primary' | 'soft' | 'ghost';

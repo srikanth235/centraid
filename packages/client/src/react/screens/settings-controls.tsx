@@ -1,8 +1,10 @@
 import type { JSX, ReactNode } from 'react';
-import styles from './settings-controls.module.css';
+
 import { cx } from '../ui/cx.js';
-import segCss from '../styles/seg.module.css';
+
 import drawerGroupCss from '../styles/drawerGroup.module.css';
+import segCss from '../styles/seg.module.css';
+import styles from './settings-controls.module.css';
 
 // Shared Settings control primitives — React ports of the vanilla
 // drawerGroup / drawerRowH / makeSwitch / makeSegmented (app-settings.ts),

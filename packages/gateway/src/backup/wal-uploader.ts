@@ -8,6 +8,8 @@
  */
 
 import { promises as fs } from 'node:fs';
+
+import type { RuntimeLogger } from '@centraid/app-engine';
 import {
   deriveDataKey,
   masterKeyForEpoch,
@@ -24,7 +26,7 @@ import {
   type BackupProvider,
   type Keyring,
 } from '@centraid/backup';
-import type { RuntimeLogger } from '@centraid/app-engine';
+
 import type { VaultPlane } from '../serve/vault-plane.js';
 
 export interface DrainResult {
@@ -39,6 +41,38 @@ export interface DrainResult {
    * is held to, so it must never name an object that did not land.
    */
   markerTips: Record<string, number>;
+}
+
+/** Ordered I/O is explicit at WAL durability boundaries. */
+function applyInOrder<T>(
+  values: Iterable<T>,
+  apply: (value: T, index: number) => void | PromiseLike<void>,
+): Promise<void> {
+  let index = 0;
+  return Array.from(values).reduce<Promise<void>>(
+    (sequence, value) => sequence.then(() => apply(value, index++)),
+    Promise.resolve(),
+  );
+}
+
+/** Consume remote object listings in source order without a raw await loop. */
+async function applyAvailableInOrder<T>(
+  values: AsyncIterable<T>,
+  apply: (value: T, index: number) => void | PromiseLike<void>,
+): Promise<void> {
+  const iterator = values[Symbol.asyncIterator]();
+  async function applyNext(index: number): Promise<void> {
+    const next = await iterator.next();
+    if (next.done) return;
+    await apply(next.value, index);
+    return applyNext(index + 1);
+  }
+  try {
+    await applyNext(0);
+  } catch (error) {
+    await iterator.return?.();
+    throw error;
+  }
 }
 
 /** The state/manifest key for one base pair — a generation break mints a new one. */
@@ -127,7 +161,7 @@ export async function drainWalFiles(opts: {
   // Sequential and ordered (listUploadable sorts old generations/groups
   // first; within a group, numeric segment names sort before `closed-…`):
   // a failure mid-pass leaves a clean prefix uploaded and the rest local.
-  for (const item of items) {
+  await applyInOrder(items, async (item) => {
     let sealed: Uint8Array;
     if (item.kind === 'segment') {
       sealed = sealWalSegment(
@@ -173,7 +207,7 @@ export async function drainWalFiles(opts: {
     shipper.noteUploaded(item);
     uploaded++;
     bytes += sealed.length;
-  }
+  });
   return { uploaded, bytes, discarded: 0, markerTips };
 }
 
@@ -208,11 +242,11 @@ export async function pruneWalGenerations(opts: {
   const cache = opts.manifestGenerationCache;
   const rows = await opts.provider.listSnapshots(opts.targetId);
   const store = await opts.provider.openDataPlane(opts.targetId, 'backup', 'read-write');
-  for (const row of rows) {
+  await applyInOrder(rows, async (row) => {
     const cached = cache?.get(row.manifestHash);
     if (cached) {
       for (const gen of cached) keep.add(gen);
-      continue;
+      return;
     }
     try {
       const bytes = await store.get(row.manifestKey);
@@ -234,36 +268,36 @@ export async function pruneWalGenerations(opts: {
         { cause: err },
       );
     }
-  }
+  });
 
   let deletedObjects = 0;
-  for (const db of WAL_DB_NAMES) {
+  await applyInOrder(WAL_DB_NAMES, async (db) => {
     const doomed: string[] = [];
-    for await (const obj of store.list(walDbPrefix(db))) {
+    await applyAvailableInOrder(store.list(walDbPrefix(db)), (obj) => {
       const gen = parseWalSegmentKey(obj.key)?.generation ?? parseWalCloserKey(obj.key)?.generation;
       if (gen !== undefined && !keep.has(gen)) doomed.push(obj.key);
-    }
-    for (const key of doomed) {
+    });
+    await applyInOrder(doomed, async (key) => {
       await store.delete(key);
       deletedObjects++;
-    }
-  }
+    });
+  });
   // Pair markers live outside the per-db prefixes (their key names BOTH
   // generations) — a separate pass, or they would accumulate forever. A marker
   // is dead the moment EITHER of its generations is: it can only ever be used
   // by a restore of exactly that pair.
   const doomedMarkers: string[] = [];
-  for await (const obj of store.list(walPairMarkerRootPrefix())) {
+  await applyAvailableInOrder(store.list(walPairMarkerRootPrefix()), (obj) => {
     const addr = parseWalPairMarkerKey(obj.key);
-    if (!addr) continue;
+    if (!addr) return;
     if (!keep.has(addr.vaultGeneration) || !keep.has(addr.journalGeneration)) {
       doomedMarkers.push(obj.key);
     }
-  }
-  for (const key of doomedMarkers) {
+  });
+  await applyInOrder(doomedMarkers, async (key) => {
     await store.delete(key);
     deletedObjects++;
-  }
+  });
   if (deletedObjects > 0) {
     opts.logger.info(
       `backup: pruned ${deletedObjects} wal object(s) from unreferenced generations`,

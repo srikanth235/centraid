@@ -40,9 +40,9 @@
 // cannot rot into always-passing.
 
 import { readFileSync, existsSync } from 'node:fs';
-import { resolve, relative } from 'node:path';
+import path from 'node:path';
 
-const ROOT = resolve(import.meta.dirname, '..');
+const ROOT = path.resolve(import.meta.dirname, '..');
 
 // Every file that embeds Maestro YAML in a template literal. The flows plus the
 // harness helpers (configureGateway/restart) that emit YAML on their behalf.
@@ -284,7 +284,7 @@ function main() {
   let filesScanned = 0;
   const findings = [];
   for (const rel of FILES) {
-    const abs = resolve(ROOT, rel);
+    const abs = path.resolve(ROOT, rel);
     if (!existsSync(abs)) {
       console.error(`FAIL — listed flow file is missing: ${rel}. Update FILES in this linter.`);
       process.exit(1);
@@ -309,7 +309,7 @@ function main() {
       `\nFAIL — ${findings.length} agent-e2e flow assertion(s) observe the wrong thing:\n`,
     );
     for (const f of findings) {
-      console.error(`  ${relative(ROOT, resolve(ROOT, f.file))}:${f.line} [${f.rule}]`);
+      console.error(`  ${path.relative(ROOT, path.resolve(ROOT, f.file))}:${f.line} [${f.rule}]`);
       console.error(`    ${f.message}\n`);
     }
     console.error(`See tests/agent-e2e-mobile/AGENTS.md "Flow authoring rules" and issue #483.\n`);

@@ -5,6 +5,7 @@
 // cache.ts stays the policy loop and this stays the model read.
 
 import type { DatabaseSync } from 'node:sqlite';
+
 import { BINARY_DERIVATIVE_SQL } from './derivatives.js';
 
 /**
@@ -62,6 +63,8 @@ export function stagingShas(vault: DatabaseSync): Set<string> {
  * until the transfer runner deletes the obligation after remote verification.
  */
 export function pendingOutboxShas(vault: DatabaseSync): Set<string> {
-  const rows = vault.prepare('SELECT sha256 FROM blob_outbox').all() as { sha256: string }[];
+  const rows = vault.prepare('SELECT sha256 FROM blob_outbox').all() as {
+    sha256: string;
+  }[];
   return new Set(rows.map((row) => row.sha256));
 }

@@ -1,11 +1,7 @@
 import { afterEach, describe, expect, test } from 'vitest';
+
 import { openVaultDb, type VaultDb } from '../db.js';
 import { currentReplicaLogState, readReplicaChanges } from './change-log.js';
-import {
-  readReplicaInvocationCommit,
-  recordReplicaInvocationCommitInTransaction,
-  type ReplicaInvocationAudit,
-} from './invocation-commits.js';
 import {
   deleteReplicaIntentOutcomesForDevice,
   listReplicaIntentOutcomes,
@@ -14,6 +10,11 @@ import {
   recordReplicaIntentOutcomeInTransaction,
   transitionReplicaIntentOutcome,
 } from './intents.js';
+import {
+  readReplicaInvocationCommit,
+  recordReplicaInvocationCommitInTransaction,
+  type ReplicaInvocationAudit,
+} from './invocation-commits.js';
 
 let db: VaultDb | undefined;
 describe('intents', () => {
@@ -41,7 +42,10 @@ describe('intents', () => {
       postChecks: [],
       writes: [],
       citations: [],
-      provenance: { activity: 'command.test.command', used: { invocation: invocationId } },
+      provenance: {
+        activity: 'command.test.command',
+        used: { invocation: invocationId },
+      },
       receiptDetail: { writes: [], risk: 'low' },
     };
   }
@@ -68,7 +72,11 @@ describe('intents', () => {
     });
     expect(readReplicaIntentOutcome(db.vault, identity.intentId, 'another-device')).toBeUndefined();
     expect(
-      readReplicaChanges(db.vault).changes.map(({ entity, rowId, op }) => ({ entity, rowId, op })),
+      readReplicaChanges(db.vault).changes.map(({ entity, rowId, op }) => ({
+        entity,
+        rowId,
+        op,
+      })),
     ).toStrictEqual([
       { entity: 'replica.intent', rowId: 'intent-1', op: 'insert' },
       { entity: 'replica.intent', rowId: 'intent-1', op: 'update' },
@@ -99,9 +107,9 @@ describe('intents', () => {
         payloadHash: 'sha256:different-payload',
         status: 'executed',
       }),
-    ).toThrow(/different immutable fields/);
+    ).toThrow(/different immutable fields/u);
     expect(() => recordReplicaIntentOutcome(vault, { ...identity, status: 'failed' })).toThrow(
-      /already terminal/,
+      /already terminal/u,
     );
     expect(
       readReplicaIntentOutcome(vault, identity.intentId, identity.deviceId),
@@ -135,15 +143,25 @@ describe('intents', () => {
       status: 'executed',
     });
     expect(
-      listReplicaIntentOutcomes(db.vault, identity.deviceId, { status: 'parked' }),
+      listReplicaIntentOutcomes(db.vault, identity.deviceId, {
+        status: 'parked',
+      }),
     ).toStrictEqual([expect.objectContaining({ intentId: 'intent-1', status: 'parked' })]);
     const beforeDelete = currentReplicaLogState(db.vault).watermark;
     expect(deleteReplicaIntentOutcomesForDevice(db.vault, identity.deviceId)).toBe(2);
     expect(readReplicaInvocationCommit(db.vault, 'invocation-1')).toBeDefined();
     expect(listReplicaIntentOutcomes(db.vault, identity.deviceId)).toStrictEqual([]);
     expect(readReplicaChanges(db.vault, { since: beforeDelete }).changes).toStrictEqual([
-      expect.objectContaining({ entity: 'replica.intent', rowId: 'intent-1', op: 'delete' }),
-      expect.objectContaining({ entity: 'replica.intent', rowId: 'intent-2', op: 'delete' }),
+      expect.objectContaining({
+        entity: 'replica.intent',
+        rowId: 'intent-1',
+        op: 'delete',
+      }),
+      expect.objectContaining({
+        entity: 'replica.intent',
+        rowId: 'intent-2',
+        op: 'delete',
+      }),
     ]);
   });
 });

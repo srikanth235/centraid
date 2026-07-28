@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import {
   buildRemoteArgv,
   buildSshArgv,
@@ -14,9 +15,13 @@ import {
 
 describe(validateSshDestination, () => {
   it('accepts user@host, bare host, and ssh config aliases', () => {
-    expect(validateSshDestination('pi@raspberrypi.local')).toStrictEqual({ ok: true });
+    expect(validateSshDestination('pi@raspberrypi.local')).toStrictEqual({
+      ok: true,
+    });
     expect(validateSshDestination('192.168.1.42')).toStrictEqual({ ok: true });
-    expect(validateSshDestination('my-homelab-box')).toStrictEqual({ ok: true });
+    expect(validateSshDestination('my-homelab-box')).toStrictEqual({
+      ok: true,
+    });
   });
 
   it('rejects empty and whitespace-padded destinations', () => {
@@ -88,7 +93,10 @@ describe(buildRemoteArgv, () => {
       '--json',
     ]);
     expect(
-      buildRemoteArgv('centraid-gateway', '/data', { kind: 'vault-create', name: 'Family' }),
+      buildRemoteArgv('centraid-gateway', '/data', {
+        kind: 'vault-create',
+        name: 'Family',
+      }),
     ).toStrictEqual([
       'centraid-gateway',
       'vault',
@@ -100,7 +108,11 @@ describe(buildRemoteArgv, () => {
       '--json',
     ]);
     expect(
-      buildRemoteArgv('centraid-gateway', '/data', { kind: 'pair', vaultId: 'v1', ttlMinutes: 15 }),
+      buildRemoteArgv('centraid-gateway', '/data', {
+        kind: 'pair',
+        vaultId: 'v1',
+        ttlMinutes: 15,
+      }),
     ).toStrictEqual([
       'centraid-gateway',
       'pair',
@@ -125,7 +137,9 @@ describe(buildRemoteArgv, () => {
 
   it('honors a custom remote CLI path', () => {
     expect(
-      buildRemoteArgv('/opt/homebrew/bin/centraid-gateway', undefined, { kind: 'status' }),
+      buildRemoteArgv('/opt/homebrew/bin/centraid-gateway', undefined, {
+        kind: 'status',
+      }),
     ).toStrictEqual(['/opt/homebrew/bin/centraid-gateway', 'status', '--json']);
   });
 });
@@ -209,7 +223,12 @@ describe(parseSshVersionOutput, () => {
 });
 
 describe(mapSshFailure, () => {
-  const base: SshRunResult = { code: 0, stdout: '', stderr: '', timedOut: false };
+  const base: SshRunResult = {
+    code: 0,
+    stdout: '',
+    stderr: '',
+    timedOut: false,
+  };
 
   it('maps a local spawn failure (ssh binary missing) to ssh_unreachable', () => {
     expect(mapSshFailure({ ...base, spawnError: 'spawn ssh ENOENT' })).toStrictEqual({
@@ -257,7 +276,11 @@ describe(mapSshFailure, () => {
   });
 
   it('falls back to daemon_error for any other non-zero exit', () => {
-    const result = mapSshFailure({ ...base, code: 1, stderr: 'some unexpected remote failure' });
+    const result = mapSshFailure({
+      ...base,
+      code: 1,
+      stderr: 'some unexpected remote failure',
+    });
     expect(result.code).toBe('daemon_error');
     expect(result.detail).toContain('some unexpected remote failure');
   });

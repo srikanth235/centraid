@@ -1,11 +1,13 @@
 import { type JSX, useEffect, useState } from 'react';
-import { activateVersion, listVersions } from '../../../../gateway-client.js';
+
 import { relativeWhen, shortVersionTitle } from '../../../../format.js';
-import styles from './BuilderHistory.module.css';
+import { activateVersion, listVersions } from '../../../../gateway-client.js';
+import { cx } from '../../../ui/cx.js';
+
+import atomsCss from '../../../styles/atoms.module.css';
 import controlsCss from '../../../styles/controls.module.css';
 import buttonCss from '../../../ui/Button.module.css';
-import atomsCss from '../../../styles/atoms.module.css';
-import { cx } from '../../../ui/cx.js';
+import styles from './BuilderHistory.module.css';
 
 // Version-history list inside the builder chat pane's History view (React port
 // of builder.ts renderHistoryInto). Newest first; each row can Restore a prior
@@ -30,7 +32,10 @@ export default function BuilderHistory({
   // The settled listing carries the (app, nonce) it was fetched for, so a
   // switch or a restore-triggered refetch reads as "loading" during render
   // instead of needing the effect to clear the previous result first.
-  const [settled, setSettled] = useState<{ key: string; result: Versions | 'error' } | null>(null);
+  const [settled, setSettled] = useState<{
+    key: string;
+    result: Versions | 'error';
+  } | null>(null);
   const key = `${appId}\u0000${nonce}`;
   const current = settled !== null && settled.key === key ? settled.result : null;
   const data = current === 'error' ? null : current;

@@ -1,5 +1,5 @@
-import { fetch as expoFetch } from 'expo/fetch';
 import * as DocumentPicker from 'expo-document-picker';
+import { fetch as expoFetch } from 'expo/fetch';
 
 import { apiHeaders, fetchJson, requireGatewayBase } from './gateway';
 
@@ -311,9 +311,9 @@ export async function streamAssistantTurn(
   let buffer = '';
   let consent: { provider: string; message: string } | undefined;
   let error: string | undefined;
-  for (;;) {
+  const readNext = async (): Promise<void> => {
     const { done, value } = await reader.read();
-    if (done) break;
+    if (done) return;
     buffer += decoder.decode(value, { stream: true }).replaceAll('\r\n', '\n');
     let boundary = buffer.indexOf('\n\n');
     while (boundary >= 0) {
@@ -340,7 +340,9 @@ export async function streamAssistantTurn(
       }
       boundary = buffer.indexOf('\n\n');
     }
-  }
+    return readNext();
+  };
+  await readNext();
   return {
     ...(consent ? { consent } : {}),
     ...(error ? { error } : {}),

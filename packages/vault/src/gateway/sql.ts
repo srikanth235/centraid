@@ -7,8 +7,9 @@
 // and every run is still receipted so "what did my assistant look at" has
 // an answer.
 
-import { DatabaseSync } from 'node:sqlite';
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
+
 import type { VaultDb } from '../db.js';
 import { registerContentTextFn } from '../schema/fts.js';
 import { isSealedValue, SEALED_PLACEHOLDER } from '../schema/sealed.js';

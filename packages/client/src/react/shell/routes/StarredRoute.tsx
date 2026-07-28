@@ -1,11 +1,12 @@
 import { type JSX } from 'react';
+
 import type { AppearancePrefs } from '../../../app-shell-context.js';
 import type { HomeMenuAnchor } from '../../screen-contracts.js';
 import StarredScreen from '../../screens/StarredScreen.js';
 import { useShellActions } from '../actions.js';
 import { openMenu } from '../contextMenu.js';
-import type { ShellMenuAnchor } from '../Sidebar.js';
 import PageScroll from '../PageScroll.js';
+import type { ShellMenuAnchor } from '../Sidebar.js';
 import { PageEmpty } from '../status.js';
 import { useAsyncData } from '../useAsyncData.js';
 import { collectAutomationRuns, type AutomationFeedEntry } from './automationsData.js';
@@ -40,9 +41,11 @@ export default function StarredRoute(props: StarredRouteProps): JSX.Element {
   const apps: AppMetaResolvedType[] = [...userApps, ...drafts];
   const rows = feed.status === 'ready' ? feed.data.rows : [];
   const entries = feed.status === 'ready' ? feed.data.entries : [];
-  const appItems = buildHomeAppItems(apps, { userApps, isStarred, tileVariant }).filter(
-    (a) => a.starred,
-  );
+  const appItems = buildHomeAppItems(apps, {
+    userApps,
+    isStarred,
+    tileVariant,
+  }).filter((a) => a.starred);
   const automationItems = buildHomeAutoItems(rows, entries, isStarred).filter((r) => r.starred);
 
   const toAnchor = (a: HomeMenuAnchor): ShellMenuAnchor =>

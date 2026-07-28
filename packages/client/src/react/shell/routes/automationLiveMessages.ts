@@ -1,4 +1,5 @@
 import type { TurnStreamEvent } from '@centraid/blueprints/kit/turn-stream.js';
+
 import type { AsstMsgDTO, AsstToolCallDTO, AsstUsageDTO } from '../../screen-contracts.js';
 import { richAnswerHtml } from './assistantRich.js';
 import {
@@ -118,9 +119,9 @@ export function createAutomationLiveTraceFromItems(
             item.endedAt === undefined
               ? 'running…'
               : item.ok
-                ? item.durationMs !== undefined
-                  ? `${item.durationMs}ms`
-                  : 'completed'
+                ? item.durationMs === undefined
+                  ? 'completed'
+                  : `${item.durationMs}ms`
                 : (item.error ?? 'failed'),
         },
       ];
@@ -181,11 +182,11 @@ function reduceLiveItem(
     return {
       ...state,
       usage: {
-        ...(event.inputTokens !== undefined ? { inputTokens: event.inputTokens } : {}),
-        ...(event.outputTokens !== undefined ? { outputTokens: event.outputTokens } : {}),
-        ...(event.costUsd !== undefined ? { costUsd: event.costUsd } : {}),
+        ...(event.inputTokens === undefined ? {} : { inputTokens: event.inputTokens }),
+        ...(event.outputTokens === undefined ? {} : { outputTokens: event.outputTokens }),
+        ...(event.costUsd === undefined ? {} : { costUsd: event.costUsd }),
         ...(event.costSource === 'estimated' ? { estimated: true } : {}),
-        ...(event.model !== undefined ? { model: event.model } : {}),
+        ...(event.model === undefined ? {} : { model: event.model }),
       },
     };
   }
@@ -322,7 +323,11 @@ export function reduceAutomationTurnEvent(
     ordinal: 0,
     kind: 'agent',
   });
-  return reduceAutomationItemEvent(started, { itemId: 'direct', ordinal: 0, event });
+  return reduceAutomationItemEvent(started, {
+    itemId: 'direct',
+    ordinal: 0,
+    event,
+  });
 }
 
 /** Settle an outer native turn when its ledger reread is briefly unavailable. */
@@ -373,13 +378,15 @@ function liveItemMessages(
     });
   }
   for (const [index, notice] of state.notices.entries()) {
-    messages.push({ kind: 'notice', ...notice, msgId: `${state.itemId}:notice:${index}` });
+    messages.push({
+      kind: 'notice',
+      ...notice,
+      msgId: `${state.itemId}:notice:${index}`,
+    });
   }
   const answer = state.error ?? state.finalText ?? state.assistantText;
   if (!answer && (state.kind === 'tool' || state.notices.length > 0)) return messages;
-  if (!state.done) {
-    messages.push({ kind: 'ai', streaming: true, text: answer, msgId: `${state.itemId}:ai` });
-  } else {
+  if (state.done) {
     const text = answer || 'The automation completed.';
     messages.push({
       kind: 'ai',
@@ -390,6 +397,13 @@ function liveItemMessages(
       feedback: null,
       msgId: `${state.itemId}:ai`,
       ...(state.usage ? { usage: state.usage } : {}),
+    });
+  } else {
+    messages.push({
+      kind: 'ai',
+      streaming: true,
+      text: answer,
+      msgId: `${state.itemId}:ai`,
     });
   }
   const stop = stopReasonBubble(state.stopReason);

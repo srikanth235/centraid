@@ -58,6 +58,9 @@ export default async function noteHandler({ input, ctx }: HandlerArgs) {
     return { note_id: noteId, body, format: note.format };
   } catch (err) {
     const e = err as { code?: string; message?: string };
-    return { note_id: noteId, vaultDenied: { code: e.code, message: e.message } };
+    return {
+      note_id: noteId,
+      vaultDenied: { code: e.code, message: e.message },
+    };
   }
 }

@@ -24,6 +24,7 @@
 // users actually see comes from the blueprint index, not from there.
 import fs from 'node:fs';
 import path from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 const PHOTOS_DIR = path.resolve(import.meta.dirname, '../apps/photos');
@@ -41,7 +42,7 @@ function sourceFiles(dir: string, acc: string[] = []): string[] {
 
 /** Drop `<!-- -->`, `/* *\/` and `//` comments; keep string contents intact. */
 function stripComments(source: string): string {
-  const withoutHtml = source.replace(/<!--[\s\S]*?-->/g, ' ');
+  const withoutHtml = source.replace(/<!--[\s\S]*?-->/gu, ' ');
   let out = '';
   let quote: string | null = null;
   for (let i = 0; i < withoutHtml.length; i += 1) {
@@ -82,7 +83,7 @@ function stripComments(source: string): string {
 }
 
 /** The word as a user would read it: whitespace/edge bounded, not `x.vault`. */
-const OFFENCE = /(^|[\s>({[])vault(?=[\s.,!;:?'’"”)\]}<-]|$)/gim;
+const OFFENCE = /(?:^|[\s>({[])vault(?=[\s.,!;:?'’"”)\]}<-]|$)/gimu;
 
 function offences(source: string): string[] {
   const stripped = stripComments(source);
@@ -106,18 +107,18 @@ describe('Photos app vocabulary (#599)', () => {
         found.push(`${path.relative(PHOTOS_DIR, file)}: ${line}`);
       }
     }
-    expect(found).toEqual([]);
+    expect(found).toStrictEqual([]);
   });
 
   it('distinguishes code and comments from prose', () => {
     // Code: the read API is a dotted member expression, never prose.
-    expect(offences("await ctx.vault.read({ entity: 'media.media_asset' })")).toEqual([]);
-    expect(offences('const denied = data?.vaultDenied;')).toEqual([]);
-    expect(offences("if (e.code === 'VAULT_CONSENT') return;")).toEqual([]);
+    expect(offences("await ctx.vault.read({ entity: 'media.media_asset' })")).toStrictEqual([]);
+    expect(offences('const denied = data?.vaultDenied;')).toStrictEqual([]);
+    expect(offences("if (e.code === 'VAULT_CONSENT') return;")).toStrictEqual([]);
     // Comments: stripped before the scan, in both comment forms.
-    expect(offences('// the vault owns the meaning here')).toEqual([]);
-    expect(offences('/* a projection of your vault */')).toEqual([]);
-    expect(offences('<!-- your vault, rendered -->')).toEqual([]);
+    expect(offences('// the vault owns the meaning here')).toStrictEqual([]);
+    expect(offences('/* a projection of your vault */')).toStrictEqual([]);
+    expect(offences('<!-- your vault, rendered -->')).toStrictEqual([]);
     // A `//` inside a string is not a comment, so the prose after it is scanned.
     expect(offences("const help = 'https://x/y — see your vault';")).toHaveLength(1);
     // Prose: string literal and JSX text alike.

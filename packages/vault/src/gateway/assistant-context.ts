@@ -5,11 +5,11 @@
 // doc does. Built per turn from the live file so it never drifts from the
 // schema, and kept prose-light: it is model context, not documentation.
 
-import type { VaultDb } from '../db.js';
-import { RELATIONS_SCHEME_URI } from '../commands/links.js';
-import { FLAGS_SCHEME_URI, STARRED_NOTATION } from '../commands/flags.js';
 import { FOLDER_SCHEME_URI } from '../commands/documents.js';
+import { FLAGS_SCHEME_URI, STARRED_NOTATION } from '../commands/flags.js';
+import { RELATIONS_SCHEME_URI } from '../commands/links.js';
 import { LIST_SCHEME_URI } from '../commands/people.js';
+import type { VaultDb } from '../db.js';
 import { SEARCHABLE } from '../schema/fts.js';
 import { VAULT_TABLES } from '../schema/tables.js';
 import { extPhysicalNames } from './ext.js';

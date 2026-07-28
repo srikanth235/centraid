@@ -4,10 +4,11 @@
 // that imports them from `./custody.js` (index.ts, gateway.ts) is untouched.
 
 import type { DatabaseSync } from 'node:sqlite';
+
 import type { VaultDb } from '../db.js';
 import { nowIso } from '../ids.js';
-import { shaOfBlobUri } from './store.js';
 import type { CustodyState } from './custody-types.js';
+import { shaOfBlobUri } from './store.js';
 
 /**
  * Persist a custody-state snapshot into `blob_custody_state` (issue #352
@@ -42,9 +43,11 @@ export async function refreshCustodyState(db: VaultDb): Promise<{ updated: numbe
   // and the drainer removes it; this avoids showing a stale replica-index hit
   // as durable while a replacement upload is still outstanding.
   const pending = new Set(
-    (db.vault.prepare('SELECT sha256 FROM blob_outbox').all() as { sha256: string }[]).map(
-      (row) => row.sha256,
-    ),
+    (
+      db.vault.prepare('SELECT sha256 FROM blob_outbox').all() as {
+        sha256: string;
+      }[]
+    ).map((row) => row.sha256),
   );
   const now = nowIso();
   db.vault.exec('BEGIN');

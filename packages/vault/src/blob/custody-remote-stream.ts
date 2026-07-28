@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import { Readable } from 'node:stream';
+
 import type { BlobCache } from './cache.js';
 import { fetchFrameDirectory, fetchRemoteRange } from './custody-read.js';
 import { remoteEncryptionKey, type RemoteTier } from './custody-types.js';
@@ -42,7 +43,13 @@ export function createRemoteBlobStream(
       const directory = key ? await fetchFrameDirectory(store, key, sha) : undefined;
       if (key && !directory) throw new Error(`remote blob ${sha} disappeared`);
       const digest = fullRead ? createHash('sha256') : undefined;
-      for (let start = firstByte; start <= lastByte; start += REMOTE_STREAM_CHUNK_BYTES) {
+      const writeAll = async (bytes: Buffer, offset = 0): Promise<void> => {
+        if (!tempFile || offset >= bytes.length) return;
+        const { bytesWritten } = await tempFile.write(bytes, offset);
+        return writeAll(bytes, offset + bytesWritten);
+      };
+      const readNext = async function* (start: number): AsyncGenerator<Buffer> {
+        if (start > lastByte) return;
         const end = Math.min(lastByte, start + REMOTE_STREAM_CHUNK_BYTES - 1);
         const bytes = key
           ? await fetchRemoteRange(store, key, sha, { start, end }, directory!)
@@ -52,15 +59,12 @@ export function createRemoteBlobStream(
           throw new Error(`remote blob ${sha} returned a short range`);
         }
         digest?.update(bytes);
-        if (tempFile) {
-          let written = 0;
-          while (written < bytes.length) {
-            written += (await tempFile.write(bytes, written)).bytesWritten;
-          }
-        }
+        await writeAll(bytes);
         if (!fullRead) cache?.onRangedRemote(bytes.length);
         yield bytes;
-      }
+        yield* readNext(start + REMOTE_STREAM_CHUNK_BYTES);
+      };
+      yield* readNext(firstByte);
       if (digest && digest.digest('hex') !== sha) {
         throw new Error(`remote blob ${sha} failed content verification`);
       }

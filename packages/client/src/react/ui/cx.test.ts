@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { cx } from './cx.js';
 
 describe(cx, () => {

@@ -7,13 +7,15 @@
 
 import http from 'node:http';
 import { Readable } from 'node:stream';
+
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+
+import { updateBackupPolicy } from '../backup-policy.js';
+import { bootstrapVault } from '../bootstrap.js';
+import { openVaultDb } from '../db.js';
+import { updateBlobStoreSettings } from '../host.js';
 import { MULTIPART_THRESHOLD_BYTES, S3BlobStore } from './s3.js';
 import { sha256OfBytes } from './store.js';
-import { openVaultDb } from '../db.js';
-import { bootstrapVault } from '../bootstrap.js';
-import { updateBlobStoreSettings } from '../host.js';
-import { updateBackupPolicy } from '../backup-policy.js';
 
 // ---------- the fake S3 endpoint ----------
 
@@ -32,12 +34,12 @@ interface FakeS3 {
   /** Answer the next `failNext` requests with `failStatus` before behaving normally. */
   failNext: number;
   failStatus: number;
-  close(): Promise<void>;
+  close: () => Promise<void>;
 }
 
 /** The signed-headers list embedded in an `Authorization: AWS4-HMAC-SHA256 …` line. */
 function signedHeadersOf(authorization: string): string[] {
-  const m = /SignedHeaders=([^,]+)/.exec(authorization);
+  const m = /SignedHeaders=(?<headers>[^,]+)/u.exec(authorization);
   return m ? (m[1] ?? '').split(';') : [];
 }
 
@@ -47,7 +49,7 @@ function startFakeS3(): Promise<FakeS3> {
   const state = { failNext: 0, failStatus: 503 };
   const server = http.createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://s3.local');
-    const key = decodeURIComponent(url.pathname).replace(/^\/test-bucket\/?/, '');
+    const key = decodeURIComponent(url.pathname).replace(/^\/test-bucket\/?/u, '');
     requests.push({
       method: req.method ?? '',
       key,
@@ -234,7 +236,7 @@ describe('s3', () => {
       sleepImpl: NO_SLEEP,
     });
     const bytes = Buffer.from('rejected upload');
-    await expect(store.put(sha256OfBytes(bytes), bytes)).rejects.toThrow(/s3 put .*: 400/);
+    await expect(store.put(sha256OfBytes(bytes), bytes)).rejects.toThrow(/s3 put .*: 400/u);
     expect(fake.requests.filter((r) => r.method === 'PUT')).toHaveLength(1);
   });
 
@@ -285,7 +287,7 @@ describe('s3', () => {
       sleepImpl: NO_SLEEP,
     });
     const bytes = Buffer.from('down for good');
-    await expect(store.put(sha256OfBytes(bytes), bytes)).rejects.toThrow(/s3 put .*: 500/);
+    await expect(store.put(sha256OfBytes(bytes), bytes)).rejects.toThrow(/s3 put .*: 500/u);
     expect(fake.requests.filter((r) => r.method === 'PUT')).toHaveLength(3);
   });
 

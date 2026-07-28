@@ -1,16 +1,17 @@
-import { tempDirSync } from '@centraid/test-kit/temp-dir';
+import fs from 'node:fs';
 /*
  * GatewayLogStore: ring buffer + fan-out + the RuntimeLogger tee that
  * feeds the realtime Logs surface, plus the optional JSONL persistence
  * (issue #351): rotation, boot-tail reload, and the dropped-writes
  * counter for an unwritable dir.
  */
-
-import fs from 'node:fs';
 import path from 'node:path';
-import { afterEach, describe, expect, test, vi } from 'vitest';
+
 import type { RuntimeLogger } from '@centraid/app-engine';
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { DiskFullTracker } from '@centraid/vault';
+import { afterEach, describe, expect, test, vi } from 'vitest';
+
 import { GatewayLogStore, type GatewayLogEntry } from './gateway-log-store.ts';
 
 // ESM's `node:fs` module namespace isn't configurable, so `vi.spyOn` can't
@@ -27,7 +28,9 @@ vi.mock(import('node:fs'), async (importOriginal) => {
   const actual = await importOriginal();
   const appendFileSync: typeof actual.appendFileSync = (...args) => {
     if (appendFileSyncShouldFail) {
-      throw Object.assign(new Error('no space left on device'), { code: 'ENOSPC' });
+      throw Object.assign(new Error('no space left on device'), {
+        code: 'ENOSPC',
+      });
     }
     return (actual.appendFileSync as (...a: typeof args) => void)(...args);
   };
@@ -141,8 +144,14 @@ describe('gateway-log-store', () => {
     const raw = fs.readFileSync(path.join(dir, 'gateway.jsonl'), 'utf8');
     const lines = raw.split('\n').filter(Boolean);
     expect(lines).toHaveLength(2);
-    expect(JSON.parse(lines[0]!)).toMatchObject({ level: 'info', message: 'one' });
-    expect(JSON.parse(lines[1]!)).toMatchObject({ level: 'warn', message: 'two' });
+    expect(JSON.parse(lines[0]!)).toMatchObject({
+      level: 'info',
+      message: 'one',
+    });
+    expect(JSON.parse(lines[1]!)).toMatchObject({
+      level: 'warn',
+      message: 'two',
+    });
     expect(store.droppedWriteCount()).toBe(0);
   });
 

@@ -27,7 +27,10 @@ export async function writeFlowVerdict({
 }) {
   const pass = !error && result?.pass !== false;
   const lines = [`# ${slug}`, '', `**${pass ? 'PASS' : 'FAIL'}** — ${elapsedMs}ms`, ''];
-  for (const [label, value] of Object.entries({ 'run dir': runDir, ...metadata })) {
+  for (const [label, value] of Object.entries({
+    'run dir': runDir,
+    ...metadata,
+  })) {
     lines.push(`- ${label}: \`${value}\``);
   }
   lines.push('');

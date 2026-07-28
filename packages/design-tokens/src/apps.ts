@@ -1,9 +1,9 @@
 // Built-in app catalog — names, descriptions, color/icon picks.
 // Shared across desktop + mobile so both home grids stay in sync.
 
+import type { IconName } from './icons';
 import { palette } from './palette';
 import type { ColorKey, ColorHex } from './palette';
-import type { IconName } from './icons';
 
 export interface AppMeta {
   id: string;

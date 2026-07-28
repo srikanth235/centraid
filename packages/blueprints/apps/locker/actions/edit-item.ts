@@ -25,7 +25,9 @@ const FIELDS = [
 
 export default async function editItem({ body, ctx }: HandlerArgs) {
   const input = (body ?? {}) as Record<string, unknown>;
-  const cmdInput: Record<string, unknown> = { item_id: String(input.item_id ?? '') };
+  const cmdInput: Record<string, unknown> = {
+    item_id: String(input.item_id ?? ''),
+  };
   if (input.title != null) cmdInput.title = String(input.title);
   if (Array.isArray(input.tags)) cmdInput.tags = input.tags.map(String);
   if (input.url_match_policy != null) cmdInput.url_match_policy = String(input.url_match_policy);
@@ -39,6 +41,9 @@ export default async function editItem({ body, ctx }: HandlerArgs) {
     return { status: 200, body: outcome };
   } catch (err) {
     const e = err as { code?: string; message?: string };
-    return { status: 200, body: { status: 'denied', reason: e.message, code: e.code } };
+    return {
+      status: 200,
+      body: { status: 'denied', reason: e.message, code: e.code },
+    };
   }
 }

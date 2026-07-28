@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { automationTurnMessages, buildRunSnapshot } from './runViewData.js';
+
 import {
   automationLiveMessages,
   createAutomationLiveTrace,
   reduceAutomationTurnEvent,
 } from './automationLiveMessages.js';
+import { automationTurnMessages, buildRunSnapshot } from './runViewData.js';
 
 // `vi.mock` is hoisted above the import by vitest, so the gateway stub lands
 // before runViewData.js pulls gateway-client-core's load-time side-effect.
@@ -17,7 +18,11 @@ const row = (): CentraidAutomationRow =>
     name: 'Daily Digest',
     enabled: true,
     triggers: [{ kind: 'cron', expr: '0 9 * * *' }],
-    manifest: { requires: { model: 'claude-opus-4-8' }, prompt: 'Summarize', history: {} },
+    manifest: {
+      requires: { model: 'claude-opus-4-8' },
+      prompt: 'Summarize',
+      history: {},
+    },
   }) as unknown as CentraidAutomationRow;
 
 const run = (over: Partial<CentraidAutomationTurnRecord> = {}): CentraidAutomationTurnRecord =>
@@ -53,7 +58,14 @@ describe(buildRunSnapshot, () => {
 
   it('renders a trigger log row plus one per node', () => {
     const nodes = [
-      { runId: 'r1', ordinal: 1, kind: 'tool', name: 'fetch', startedAt: Date.now(), ok: true },
+      {
+        runId: 'r1',
+        ordinal: 1,
+        kind: 'tool',
+        name: 'fetch',
+        startedAt: Date.now(),
+        ok: true,
+      },
     ] as unknown as CentraidAutomationItem[];
     const snap = buildRunSnapshot(row(), run({ endedAt: Date.now() }), nodes, new Map());
     // trigger + node + completion row
@@ -93,7 +105,12 @@ describe(buildRunSnapshot, () => {
   it('falls back to the run id when a deleted run has no recorded automationId', () => {
     const snap = buildRunSnapshot(
       null,
-      run({ endedAt: Date.now(), ok: true, automationId: undefined, turnId: 'r9' }),
+      run({
+        endedAt: Date.now(),
+        ok: true,
+        automationId: undefined,
+        turnId: 'r9',
+      }),
       [],
       new Map(),
     );
@@ -160,7 +177,11 @@ describe(buildRunSnapshot, () => {
   it('flags hasUsage true when the run reports tokens', () => {
     const snap = buildRunSnapshot(
       row(),
-      run({ endedAt: Date.now(), totalInputTokens: 100, totalOutputTokens: 20 } as never),
+      run({
+        endedAt: Date.now(),
+        totalInputTokens: 100,
+        totalOutputTokens: 20,
+      } as never),
       [],
       new Map(),
     );
@@ -169,7 +190,14 @@ describe(buildRunSnapshot, () => {
 
   it('flags hasUsage true when the run has recorded steps', () => {
     const nodes = [
-      { runId: 'r1', ordinal: 1, kind: 'tool', name: 'fetch', startedAt: Date.now(), ok: true },
+      {
+        runId: 'r1',
+        ordinal: 1,
+        kind: 'tool',
+        name: 'fetch',
+        startedAt: Date.now(),
+        ok: true,
+      },
     ] as unknown as CentraidAutomationItem[];
     const snap = buildRunSnapshot(row(), run({ endedAt: Date.now() }), nodes, new Map());
     expect(snap.side.hasUsage).toBe(true);
@@ -177,7 +205,13 @@ describe(buildRunSnapshot, () => {
 
   it('surfaces streamed live text on an in-flight agent node', () => {
     const nodes = [
-      { runId: 'r1', ordinal: 2, kind: 'agent', startedAt: Date.now(), ok: true },
+      {
+        runId: 'r1',
+        ordinal: 2,
+        kind: 'agent',
+        startedAt: Date.now(),
+        ok: true,
+      },
     ] as unknown as CentraidAutomationItem[];
     const snap = buildRunSnapshot(
       row(),
@@ -327,7 +361,12 @@ describe('automation live trace reducer', () => {
       streaming: false,
       error: false,
       copyText: 'Three messages arrived.',
-      usage: { inputTokens: 20, outputTokens: 5, costUsd: 0.001, model: 'fast-model' },
+      usage: {
+        inputTokens: 20,
+        outputTokens: 5,
+        costUsd: 0.001,
+        model: 'fast-model',
+      },
     });
   });
 

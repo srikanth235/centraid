@@ -1,7 +1,7 @@
+import { Feather } from '@expo/vector-icons';
 import React, { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
 
 import { useReplica } from '../../kit/replica/ReplicaProvider';
 import { family, useTheme } from '../../kit/theme';
@@ -32,7 +32,10 @@ export default function PhotoStateView({
   );
   const title = mode === 'favorites' ? 'Favorites' : mode === 'archive' ? 'Archive' : 'Trash';
   const apply = async (): Promise<void> => {
-    for (const asset of assets.filter((item) => selection.has(item.id) && item.assetId))
+    const selectedAssets = assets.filter((item) => selection.has(item.id) && item.assetId);
+    const applyNext = async (index: number): Promise<void> => {
+      const asset = selectedAssets[index];
+      if (!asset) return;
       await session?.write(
         'photos',
         mode === 'trash'
@@ -45,6 +48,9 @@ export default function PhotoStateView({
               },
             },
       );
+      return applyNext(index + 1);
+    };
+    await applyNext(0);
     setSelection(new Set());
   };
   return (
@@ -56,7 +62,8 @@ export default function PhotoStateView({
         <View style={styles.copy}>
           <Text style={[styles.title, { color: colors.ink }]}>{title}</Text>
           <Text style={[styles.meta, { color: colors.ink2 }]}>
-            {assets.length} items{mode === 'trash' ? ' · device originals untouched' : ''}
+            {assets.length} items
+            {mode === 'trash' ? ' · device originals untouched' : ''}
           </Text>
         </View>
         {selection.size ? (
@@ -70,7 +77,11 @@ export default function PhotoStateView({
       {assets.length ? (
         <PhotoTimeline
           sections={sectionPhotoAssets(
-            assets.map((asset) => ({ ...asset, archived: false, deleted: false })),
+            assets.map((asset) => ({
+              ...asset,
+              archived: false,
+              deleted: false,
+            })),
           )}
           selection={selection}
           onSelectionChange={setSelection}
@@ -89,7 +100,12 @@ const styles = StyleSheet.create({
   action: { fontFamily: family.sansBold, fontSize: 13 },
   copy: { flex: 1, marginLeft: 10 },
   empty: { alignItems: 'center', flex: 1, justifyContent: 'center' },
-  header: { alignItems: 'center', flexDirection: 'row', minHeight: 56, paddingHorizontal: 14 },
+  header: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    minHeight: 56,
+    paddingHorizontal: 14,
+  },
   meta: { fontFamily: family.sansRegular, fontSize: 11, marginTop: 3 },
   safe: { flex: 1 },
   title: { fontFamily: family.displayBold, fontSize: 18 },

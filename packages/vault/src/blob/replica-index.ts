@@ -7,6 +7,7 @@
 /* eslint-disable max-classes-per-file -- (#405) ReplicaIndex + AccessIndex are the two durable-table helpers of one cache-index module (blob_replica + blob_access), paired by design */
 
 import type { DatabaseSync } from 'node:sqlite';
+
 import { nowIso } from '../ids.js';
 
 /** Which remote store class a replica lives under (issue #425 Wave 2). */

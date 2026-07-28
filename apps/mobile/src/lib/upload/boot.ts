@@ -20,15 +20,15 @@
 import { useEffect } from 'react';
 import { AppState } from 'react-native';
 
+import { Store } from '../../storage';
 import { authHeader, resolveGatewayBase } from '../gateway';
 import type { NativeReplicaSession } from '../replica/native-session';
 import { withDrainLock } from './drain-lock';
 import { replaySettledUploadFollowups } from './followup';
-import { UploadQueue } from './native-queue';
 import { UploadForegroundService } from './foreground-service';
 import { LAST_SUCCESSFUL_SYNC_KEY, nativeUploadPolicy } from './native-policy';
+import { UploadQueue } from './native-queue';
 import { reconcileGate } from './reconcile-gate';
-import { Store } from '../../storage';
 
 export interface ReconcileSummary {
   settled: number;
@@ -38,18 +38,32 @@ export interface ReconcileSummary {
   poisoned: number;
 }
 
-const EMPTY_RECONCILE: ReconcileSummary = { settled: 0, deduped: 0, replayed: 0, poisoned: 0 };
+const EMPTY_RECONCILE: ReconcileSummary = {
+  settled: 0,
+  deduped: 0,
+  replayed: 0,
+  poisoned: 0,
+};
 
 async function reconcileOnce(session?: NativeReplicaSession): Promise<ReconcileSummary> {
   let queue: UploadQueue | undefined;
   try {
     // Open the queue before resolving the gateway: with nothing pending there
     // is no reason to spin up the tunnel.
-    const probe = UploadQueue.open({ gatewayBaseUrl: 'http://127.0.0.1', headers: authHeader });
+    const probe = UploadQueue.open({
+      gatewayBaseUrl: 'http://127.0.0.1',
+      headers: authHeader,
+    });
     const hasTransfers = probe.pending().length > 0;
     const hasFollowups = probe.pendingFollowups().length > 0;
     probe.close();
-    if (!reconcileGate({ hasTransfers, hasFollowups, hasSession: Boolean(session) })) {
+    if (
+      !reconcileGate({
+        hasTransfers,
+        hasFollowups,
+        hasSession: Boolean(session),
+      })
+    ) {
       return EMPTY_RECONCILE;
     }
 

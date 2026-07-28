@@ -40,7 +40,10 @@ const CAPTION_SCHEMA = {
         required: ['label', 'confidence'],
         additionalProperties: false,
         properties: {
-          label: { type: 'string', description: 'A short scene/object label, e.g. "beach".' },
+          label: {
+            type: 'string',
+            description: 'A short scene/object label, e.g. "beach".',
+          },
           confidence: { type: 'number', minimum: 0, maximum: 1 },
         },
       },

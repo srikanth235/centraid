@@ -152,8 +152,9 @@ const effortValues = () =>
 
 /** A `session/new`/`session/load` config-option set shaped like the real schema. */
 const configOptions = () => [
-  ...(!noModelOption
-    ? [
+  ...(noModelOption
+    ? []
+    : [
         {
           id: 'model',
           name: 'Model',
@@ -165,10 +166,10 @@ const configOptions = () => [
             { value: 'fake-opus-9-1', name: 'Most capable' },
           ],
         },
-      ]
-    : []),
-  ...(!noEffortOption
-    ? [
+      ]),
+  ...(noEffortOption
+    ? []
+    : [
         {
           id: 'effort',
           name: 'Effort',
@@ -177,8 +178,7 @@ const configOptions = () => [
           currentValue: activeEffort,
           options: effortValues(),
         },
-      ]
-    : []),
+      ]),
 ];
 
 const sessionModes = () => ({
@@ -225,7 +225,10 @@ let mcpServer;
 let mcpReqId = 0;
 
 async function mcpCall(method, params, { auth = true } = {}) {
-  const headers = { 'content-type': 'application/json', accept: 'application/json' };
+  const headers = {
+    'content-type': 'application/json',
+    accept: 'application/json',
+  };
   if (auth) for (const h of mcpServer.headers) headers[h.name] = h.value;
   const res = await fetch(mcpServer.url, {
     method: 'POST',
@@ -380,7 +383,7 @@ async function runPrompt(reqId, sessionId) {
         terminalId: 'term-1',
       },
     ],
-    ...(!noLocations ? { locations: [{ path: 'notes.txt', line: 1 }] } : {}),
+    ...(noLocations ? {} : { locations: [{ path: 'notes.txt', line: 1 }] }),
     rawOutput: { ok: true },
   });
   update(sessionId, {
@@ -406,7 +409,7 @@ async function runPrompt(reqId, sessionId) {
       sessionUpdate: 'usage_update',
       used: 1234,
       size: 200000,
-      ...(cost !== undefined ? { cost: { amount: Number(cost), currency } } : {}),
+      ...(cost === undefined ? {} : { cost: { amount: Number(cost), currency } }),
     });
   }
 
@@ -438,11 +441,11 @@ function handle(msg) {
     if (resolve) {
       pendingClient.delete(msg.id);
       resolve(
-        msg.error !== undefined
-          ? { outcome: 'cancelled' }
-          : msg.result && msg.result.outcome
+        msg.error === undefined
+          ? msg.result && msg.result.outcome
             ? msg.result.outcome
-            : msg.result,
+            : msg.result
+          : { outcome: 'cancelled' },
       );
     }
     return;
@@ -485,11 +488,18 @@ function handle(msg) {
       send({
         jsonrpc: '2.0',
         id,
-        error: { code: -32029, message: 'Rate limit exceeded; quota resets later' },
+        error: {
+          code: -32029,
+          message: 'Rate limit exceeded; quota resets later',
+        },
       });
       return;
     }
-    respond(id, { sessionId: 'sess-1', configOptions: configOptions(), modes: sessionModes() });
+    respond(id, {
+      sessionId: 'sess-1',
+      configOptions: configOptions(),
+      modes: sessionModes(),
+    });
     return;
   }
   if (method === 'session/set_config_option') {
@@ -516,7 +526,11 @@ function handle(msg) {
   }
   if (method === 'session/resume') {
     if (failResume) {
-      send({ jsonrpc: '2.0', id, error: { code: -32001, message: 'resume handle expired' } });
+      send({
+        jsonrpc: '2.0',
+        id,
+        error: { code: -32001, message: 'resume handle expired' },
+      });
       return;
     }
     if (mcpMarker) writeFileSync(mcpMarker, JSON.stringify(params?.mcpServers ?? null));
@@ -531,7 +545,11 @@ function handle(msg) {
   }
   if (method === 'session/load') {
     if (failResume) {
-      send({ jsonrpc: '2.0', id, error: { code: -32001, message: 'load handle expired' } });
+      send({
+        jsonrpc: '2.0',
+        id,
+        error: { code: -32001, message: 'load handle expired' },
+      });
       return;
     }
     if (mcpMarker) writeFileSync(mcpMarker, JSON.stringify(params?.mcpServers ?? null));
@@ -555,7 +573,10 @@ function handle(msg) {
       send({
         jsonrpc: '2.0',
         id,
-        error: { code: -32603, message: 'Failed to authenticate: OAuth session expired' },
+        error: {
+          code: -32603,
+          message: 'Failed to authenticate: OAuth session expired',
+        },
       });
       return;
     }
@@ -599,10 +620,10 @@ process.stdin.on('data', (chunk) => {
 // Client closed stdin → teardown. Exit cleanly so the parent's exit wait
 // resolves. `--ignore-stdin-end` models the agent that honours NEITHER stdin
 // close nor SIGTERM: only SIGKILL ends it.
-if (!ignoreStdinEnd) {
+if (ignoreStdinEnd) {
+  setInterval(() => {}, 1000);
+} else {
   process.stdin.on('end', () => process.exit(0));
   process.stdin.on('close', () => process.exit(0));
-} else {
-  setInterval(() => {}, 1000);
 }
 void promptSessionId;

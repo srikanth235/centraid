@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { validateManifest } from './manifest.js';
 
 describe('manifest vault block', () => {
@@ -61,16 +62,22 @@ describe('manifest vault block', () => {
   });
 
   it('rejects malformed and unsupported scopes', () => {
-    expect(() => validateManifest({ ...base, vault: { scopes: [] } })).toThrow(/vault\.purpose/);
-    expect(() =>
-      validateManifest({ ...base, vault: { purpose: 'dpv:Billing', scopes: [] } }),
-    ).toThrow(/vault\.scopes/);
+    expect(() => validateManifest({ ...base, vault: { scopes: [] } })).toThrow(/vault\.purpose/u);
     expect(() =>
       validateManifest({
         ...base,
-        vault: { purpose: 'dpv:Billing', scopes: [{ schema: 'finance', verbs: 'write' }] },
+        vault: { purpose: 'dpv:Billing', scopes: [] },
       }),
-    ).toThrow(/verbs/);
+    ).toThrow(/vault\.scopes/u);
+    expect(() =>
+      validateManifest({
+        ...base,
+        vault: {
+          purpose: 'dpv:Billing',
+          scopes: [{ schema: 'finance', verbs: 'write' }],
+        },
+      }),
+    ).toThrow(/verbs/u);
     expect(() =>
       validateManifest({
         ...base,
@@ -87,7 +94,7 @@ describe('manifest vault block', () => {
           ],
         },
       }),
-    ).toThrow(/rowFilter/);
+    ).toThrow(/rowFilter/u);
     expect(() =>
       validateManifest({
         ...base,
@@ -103,6 +110,6 @@ describe('manifest vault block', () => {
           ],
         },
       }),
-    ).toThrow(/supported vault filter operator/);
+    ).toThrow(/supported vault filter operator/u);
   });
 });

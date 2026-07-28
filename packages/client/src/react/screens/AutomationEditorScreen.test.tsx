@@ -1,10 +1,11 @@
 import { act } from 'react';
-import { button, setValue } from './domTestKit.js';
-import { addTrigger, makeData, makeProps } from './automationEditorTestKit.js';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
 import type { AutomationEditorBridgeProps, AutomationEditorData } from '../screen-contracts.js';
 import AutomationEditorScreen from './AutomationEditorScreen.js';
+import { addTrigger, makeData, makeProps } from './automationEditorTestKit.js';
+import { button, setValue } from './domTestKit.js';
 
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
@@ -63,7 +64,7 @@ describe('screens/AutomationEditorScreen', () => {
       const instructionsField = el.querySelector('textarea') as HTMLTextAreaElement;
       expect(nameInput).toBeTruthy();
       expect(instructionsField).toBeTruthy();
-      expect(instructionsField.placeholder).toMatch(/unread emails/i);
+      expect(instructionsField.placeholder).toMatch(/unread emails/iu);
 
       const createBtn = button(el, 'Create automation');
       expect(createBtn.disabled).toBe(true);
@@ -119,7 +120,12 @@ describe('screens/AutomationEditorScreen', () => {
       const onSearchEntities = vi
         .fn<AutomationEditorBridgeProps['onSearchEntities']>()
         .mockResolvedValue([
-          { id: 'party-1', subtitle: 'person', title: 'Priya', type: 'core.party' },
+          {
+            id: 'party-1',
+            subtitle: 'person',
+            title: 'Priya',
+            type: 'core.party',
+          },
         ]);
       const el = await mount(makeProps({ onSearchEntities }));
       const instructions = el.querySelector('textarea') as HTMLTextAreaElement;
@@ -439,7 +445,10 @@ describe('screens/AutomationEditorScreen', () => {
       expect(props.onSave).toHaveBeenCalledWith(
         expect.objectContaining({
           connections: [
-            expect.objectContaining({ connectionId: 'conn-new-42', kind: 'pull.github' }),
+            expect.objectContaining({
+              connectionId: 'conn-new-42',
+              kind: 'pull.github',
+            }),
           ],
           name: 'After connect',
         }),

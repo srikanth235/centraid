@@ -6,8 +6,9 @@
 // report every touched row so the spine stamps provenance for each.
 
 import type { DatabaseSync } from 'node:sqlite';
-import { nowIso, sha256Hex, uuidv7 } from '../ids.js';
+
 import { promoteStagedBlob } from '../blob/promote.js';
+import { nowIso, sha256Hex, uuidv7 } from '../ids.js';
 import { ONTOLOGY_VERSION } from '../schema/migrate.js';
 import { ENRICH_PUBLISHERS } from './enrich-publishers.js';
 import { assertPayload } from './payload-schemas.js';
@@ -171,8 +172,16 @@ const partyPublisher: Publisher = {
           .get(i.scheme, i.value),
     );
     return missing.length > 0
-      ? { entityId: partyId, disposition: 'update', note: 'existing person; backfills new handles' }
-      : { entityId: partyId, disposition: 'skip', note: 'existing person; nothing new' };
+      ? {
+          entityId: partyId,
+          disposition: 'update',
+          note: 'existing person; backfills new handles',
+        }
+      : {
+          entityId: partyId,
+          disposition: 'skip',
+          note: 'existing person; nothing new',
+        };
   },
   create(vault, _owner, payload, now) {
     const p = assertPayload<PartyPayload>('PartyPayload', payload);
@@ -183,7 +192,10 @@ const partyPublisher: Publisher = {
          VALUES (?, 'person', ?, ?, ?, NULL, ?, ?, ?)`,
       )
       .run(partyId, p.fn, p.sortName, p.bday, now, now, ONTOLOGY_VERSION);
-    return { entityId: partyId, wrote: bindIdentifiers(vault, partyId, p.identifiers) };
+    return {
+      entityId: partyId,
+      wrote: bindIdentifiers(vault, partyId, p.identifiers),
+    };
   },
   update(vault, entityId, payload) {
     const p = assertPayload<PartyPayload>('PartyPayload', payload);
@@ -205,7 +217,12 @@ export interface MessagePayload {
   /** Normalized subject — the thread grouping key. */
   threadKey: string;
   /** Staged blob shas the parser hashed into the CAS (issue #296). */
-  attachments?: { stagedSha: string; filename: string; mediaType: string; byteSize: number }[];
+  attachments?: {
+    stagedSha: string;
+    filename: string;
+    mediaType: string;
+    byteSize: number;
+  }[];
 }
 
 /** Dedupe-or-insert a plain-text body as a canonical content item. */
@@ -246,7 +263,11 @@ const messagePublisher: Publisher = {
       .prepare('SELECT message_id FROM social_message WHERE external_id = ?')
       .get(p.messageId) as { message_id: string } | undefined;
     return existing
-      ? { entityId: existing.message_id, disposition: 'skip', note: 'message already imported' }
+      ? {
+          entityId: existing.message_id,
+          disposition: 'skip',
+          note: 'message already imported',
+        }
       : null;
   },
   create(vault, _owner, payload, now) {
@@ -416,7 +437,11 @@ const transactionPublisher: Publisher = {
       .prepare('SELECT txn_id FROM core_transaction WHERE external_id = ?')
       .get(p.externalId) as { txn_id: string } | undefined;
     return existing
-      ? { entityId: existing.txn_id, disposition: 'skip', note: 'transaction already imported' }
+      ? {
+          entityId: existing.txn_id,
+          disposition: 'skip',
+          note: 'transaction already imported',
+        }
       : null;
   },
   create(vault, ownerPartyId, payload) {

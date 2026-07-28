@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+
 import { outcomeForStopReason } from './stop-reason.js';
 
 describe('stop-reason', () => {
@@ -17,7 +18,7 @@ describe('stop-reason', () => {
     const o = outcomeForStopReason('refusal');
     expect(o.emitFinal).toBe(false);
     expect(o.error?.type).toBe('error');
-    expect(o.error && o.error.type === 'error' && o.error.message).toMatch(/refused/i);
+    expect(o.error && o.error.type === 'error' && o.error.message).toMatch(/refused/iu);
   });
 
   test('max_tokens warns then allows final', () => {

@@ -23,7 +23,9 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
+
 import { AUTHED_DEVICE_HEADER } from '@centraid/app-engine';
+
 import type { RouteHandler } from '../serve/build-gateway.js';
 import type {
   DeviceComputeCapabilities,
@@ -364,10 +366,9 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
       removed.map((r) => r.endpointId).filter((key) => !deps.enrollments.isEnrolled(key)),
     );
     const selfKey = callerKey && deadKeys.has(callerKey) ? callerKey : undefined;
-    for (const key of deadKeys) {
-      if (key === selfKey) continue;
-      await deps.onEndpointRevoked?.(key);
-    }
+    await Promise.all(
+      [...deadKeys].filter((key) => key !== selfKey).map((key) => deps.onEndpointRevoked?.(key)),
+    );
     const sent = sendJson(res, 200, { removed: true });
     if (selfKey && deps.onEndpointRevoked) {
       // Let a self-unpair response finish traversing the current QUIC stream.

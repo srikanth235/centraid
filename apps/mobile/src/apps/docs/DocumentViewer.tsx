@@ -1,16 +1,16 @@
+import { Feather } from '@expo/vector-icons';
+import { File, Paths } from 'expo-file-system';
+import { Image } from 'expo-image';
+import * as Sharing from 'expo-sharing';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import React from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
-import { Image } from 'expo-image';
 import { WebView } from 'react-native-webview';
-import { VideoView, useVideoPlayer } from 'expo-video';
-import * as Sharing from 'expo-sharing';
-import { File, Paths } from 'expo-file-system';
 
-import { authHeader } from '../../lib/gateway';
-import { family, useTheme } from '../../kit/theme';
 import { useReplica } from '../../kit/replica/ReplicaProvider';
+import { family, useTheme } from '../../kit/theme';
+import { authHeader } from '../../lib/gateway';
 import type { DocsScreenProps } from '../../navigation';
 import type { NativeDocument } from './docs-model';
 import { useDocsLibrary } from './useDocsLibrary';
@@ -103,7 +103,11 @@ export default function DocumentViewer({
               'The current document and its version history remain restorable until vault purge.',
               [
                 { text: 'Cancel' },
-                { text: 'Trash', style: 'destructive', onPress: () => void action('trash') },
+                {
+                  text: 'Trash',
+                  style: 'destructive',
+                  onPress: () => void action('trash'),
+                },
               ],
             )
           }
@@ -123,7 +127,12 @@ const styles = StyleSheet.create({
     minHeight: 50,
     paddingHorizontal: 14,
   },
-  meta: { flex: 1, fontFamily: family.sansRegular, fontSize: 11, textAlign: 'center' },
+  meta: {
+    flex: 1,
+    fontFamily: family.sansRegular,
+    fontSize: 11,
+    textAlign: 'center',
+  },
   safe: { flex: 1 },
   title: { flex: 1, fontFamily: family.sansBold, fontSize: 15 },
   toolbar: {

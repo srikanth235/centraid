@@ -1,16 +1,18 @@
+import { mkdirSync } from 'node:fs';
+import { IncomingMessage, ServerResponse } from 'node:http';
+import path from 'node:path';
+
 import { tempDirSync } from '@centraid/test-kit/temp-dir';
 // governance: allow-repo-hygiene file-size-limit #181 — cohesive
 // conversation-history suite; the build-kind coverage tips it just over 500
 // lines, not worth a split.
 import { beforeEach, describe, expect, it } from 'vitest';
-import { mkdirSync } from 'node:fs';
-import { join } from 'node:path';
-import { IncomingMessage, ServerResponse } from 'node:http';
-import { ConversationHistoryStore, deriveTitle, type RecordTurnInput } from './history.js';
+
 import { makeConversationRouteHandler } from '../http/conversation-routes.js';
-import { ConversationStore } from './store.js';
 import { makeJournalDbProvider, type DatabaseProvider } from '../stores/gateway-db.js';
 import type { WorkspaceProvider } from '../stores/vault-workspace.js';
+import { ConversationHistoryStore, deriveTitle, type RecordTurnInput } from './history.js';
+import { ConversationStore } from './store.js';
 
 // Tests that don't care about cross-user isolation share this stub owner id.
 const TEST_USER_ID = 'test-user-uuid-0000';
@@ -23,7 +25,7 @@ const APP = 'todos';
 function freshVaultDir(...appIds: string[]): string {
   const dir = tempDirSync('centraid-chat-history-');
   for (const id of appIds.length ? appIds : [APP]) {
-    mkdirSync(join(dir, 'apps', id), { recursive: true });
+    mkdirSync(path.join(dir, 'apps', id), { recursive: true });
   }
   return dir;
 }
@@ -35,7 +37,7 @@ const providersByDir = new Map<string, DatabaseProvider>();
 function journalFor(dir: string): DatabaseProvider {
   let provider = providersByDir.get(dir);
   if (!provider) {
-    provider = makeJournalDbProvider(join(dir, 'journal.db'));
+    provider = makeJournalDbProvider(path.join(dir, 'journal.db'));
     providersByDir.set(dir, provider);
   }
   return provider;
@@ -46,10 +48,10 @@ function workspaceFor(dir: string, ownerPartyId: string = TEST_USER_ID): Workspa
   return () => ({
     vaultId: 'vault-test',
     ownerPartyId,
-    appsDir: join(dir, 'apps'),
+    appsDir: path.join(dir, 'apps'),
     journal: journalFor(dir),
-    journalDbFile: join(dir, 'journal.db'),
-    runnerSessionDir: join(dir, 'runner-sessions'),
+    journalDbFile: path.join(dir, 'journal.db'),
+    runnerSessionDir: path.join(dir, 'runner-sessions'),
   });
 }
 
@@ -118,7 +120,7 @@ describe(ConversationHistoryStore, () => {
   });
 
   it('rejects an invalid app id', () => {
-    expect(() => store.createSession('../escape')).toThrow(/invalid app id/i);
+    expect(() => store.createSession('../escape')).toThrow(/invalid app id/iu);
   });
 
   it('recordTurn folds a turn into a run and getSession reconstructs it', () => {
@@ -128,8 +130,14 @@ describe(ConversationHistoryStore, () => {
     const loaded = store.getSession(APP, s.id);
     expect(loaded?.messages.length).toBe(2);
     expect(loaded?.messages.map((m) => m.idx)).toStrictEqual([0, 1]);
-    expect(loaded?.messages[0]!.payload).toStrictEqual({ kind: 'user', text: 'first' });
-    expect(loaded?.messages[1]!.payload).toMatchObject({ kind: 'ai', text: 'reply' });
+    expect(loaded?.messages[0]!.payload).toStrictEqual({
+      kind: 'user',
+      text: 'first',
+    });
+    expect(loaded?.messages[1]!.payload).toMatchObject({
+      kind: 'ai',
+      text: 'reply',
+    });
   });
 
   it('reconstruction tags the terminal answer with its turn id and null feedback (#420)', () => {
@@ -167,7 +175,12 @@ describe(ConversationHistoryStore, () => {
       ],
     });
     const ai = store.getSession(APP, s.id)?.messages[1]!.payload as {
-      usage?: { inputTokens?: number; outputTokens?: number; costUsd?: number; model?: string };
+      usage?: {
+        inputTokens?: number;
+        outputTokens?: number;
+        costUsd?: number;
+        model?: string;
+      };
     };
     expect(ai.usage?.inputTokens).toBe(1200);
     expect(ai.usage?.outputTokens).toBe(340);
@@ -187,11 +200,18 @@ describe(ConversationHistoryStore, () => {
     const loaded = store.getSession(APP, s.id);
     // One user row + one ai row (the family is collapsed), not two of each.
     expect(loaded?.messages.length).toBe(2);
-    expect(loaded?.messages[0]!.payload).toStrictEqual({ kind: 'user', text: 'why?' });
+    expect(loaded?.messages[0]!.payload).toStrictEqual({
+      kind: 'user',
+      text: 'why?',
+    });
     const ai = loaded?.messages[1]!.payload as {
       text: string;
       turnId?: string;
-      retry?: { index: number; count: number; attempts: Array<{ turnId: string; text: string }> };
+      retry?: {
+        index: number;
+        count: number;
+        attempts: Array<{ turnId: string; text: string }>;
+      };
     };
     // The latest attempt is shown inline...
     expect(ai.text).toBe('because B');
@@ -208,10 +228,14 @@ describe(ConversationHistoryStore, () => {
     const r = store.recordTurn(APP, turn(s.id, 'q', 'a'));
     const turnId = r!.turnId;
     expect(store.setTurnFeedback(APP, s.id, turnId, 'up')).toBe(true);
-    let ai = store.getSession(APP, s.id)?.messages[1]!.payload as { feedback?: unknown };
+    let ai = store.getSession(APP, s.id)?.messages[1]!.payload as {
+      feedback?: unknown;
+    };
     expect(ai.feedback).toBe('up');
     expect(store.setTurnFeedback(APP, s.id, turnId, null)).toBe(true);
-    ai = store.getSession(APP, s.id)?.messages[1]!.payload as { feedback?: unknown };
+    ai = store.getSession(APP, s.id)?.messages[1]!.payload as {
+      feedback?: unknown;
+    };
     expect(ai.feedback).toBeNull();
   });
 
@@ -224,7 +248,10 @@ describe(ConversationHistoryStore, () => {
   it('findRecordedTurn returns the replayable answer for a recorded idempotency key (#420)', () => {
     const s = store.createSession(APP);
     const key = 'idem-key-1';
-    store.recordTurn(APP, { ...turn(s.id, 'q', 'the answer'), idempotencyKey: key });
+    store.recordTurn(APP, {
+      ...turn(s.id, 'q', 'the answer'),
+      idempotencyKey: key,
+    });
     const found = store.findRecordedTurn(APP, s.id, key);
     expect(found?.ok).toBe(true);
     expect(found?.finalText).toBe('the answer');
@@ -245,7 +272,13 @@ describe(ConversationHistoryStore, () => {
       error: 'nope',
       idempotencyKey: key,
       nodes: [
-        { kind: 'step', text: 'nope', isError: true, startedAt: Date.now(), endedAt: Date.now() },
+        {
+          kind: 'step',
+          text: 'nope',
+          isError: true,
+          startedAt: Date.now(),
+          endedAt: Date.now(),
+        },
       ],
     });
     const found = store.findRecordedTurn(APP, s.id, key);
@@ -265,7 +298,7 @@ describe(ConversationHistoryStore, () => {
     const db = journalFor(dir)();
     expect(
       db.prepare(`SELECT seq FROM turns WHERE conversation_id = ? ORDER BY seq`).all(session.id),
-    ).toEqual([{ seq: 0 }]);
+    ).toStrictEqual([{ seq: 0 }]);
     const codexAtOne = durable.getAdapterResumeState(APP, session.id, 'codex');
     expect(codexAtOne).toMatchObject({
       kind: 'codex',
@@ -289,7 +322,7 @@ describe(ConversationHistoryStore, () => {
     expect(codexDelta?.throughSeq).toBe(1);
     expect(
       codexDelta?.messages.map((message) => (message.payload as { text?: string }).text),
-    ).toEqual(['ask B', 'answer B']);
+    ).toStrictEqual(['ask B', 'answer B']);
 
     durable.recordTurn(APP, {
       ...turn(session.id, 'back to A', 'answer A2'),
@@ -345,10 +378,22 @@ describe(ConversationHistoryStore, () => {
             ORDER BY created_at, acp_session_id`,
         )
         .all(session.id),
-    ).toEqual([
-      { runner_kind: 'codex', acp_session_id: 'codex-session', status: 'stale' },
-      { runner_kind: 'claude-code', acp_session_id: 'claude-session', status: 'warm' },
-      { runner_kind: 'codex', acp_session_id: 'codex-session-2', status: 'active' },
+    ).toStrictEqual([
+      {
+        runner_kind: 'codex',
+        acp_session_id: 'codex-session',
+        status: 'stale',
+      },
+      {
+        runner_kind: 'claude-code',
+        acp_session_id: 'claude-session',
+        status: 'warm',
+      },
+      {
+        runner_kind: 'codex',
+        acp_session_id: 'codex-session-2',
+        status: 'active',
+      },
     ]);
     expect(durable.deleteSession(APP, session.id)).toBe(true);
     for (const table of [
@@ -373,16 +418,21 @@ describe(ConversationHistoryStore, () => {
     const dir = freshVaultDir();
     const durable = new ConversationHistoryStore(workspaceFor(dir));
     const session = durable.createSession(APP);
-    durable.noteTurn(APP, session.id, { kind: 'codex', sessionId: 'codex-session' });
+    durable.noteTurn(APP, session.id, {
+      kind: 'codex',
+      sessionId: 'codex-session',
+    });
     const fresh = durable.getAdapterResumeState(APP, session.id, 'codex');
-    expect(fresh).toMatchObject({ sessionId: 'codex-session', hydratedThroughSeq: -1 });
+    expect(fresh).toMatchObject({
+      sessionId: 'codex-session',
+      hydratedThroughSeq: -1,
+    });
 
     durable.recordTurn(APP, turn(session.id, 'first ever question', 'first ever answer'));
     const delta = durable.getHydrationDelta(APP, session.id, fresh!.hydratedThroughSeq!);
-    expect(delta?.messages.map((message) => (message.payload as { text?: string }).text)).toEqual([
-      'first ever question',
-      'first ever answer',
-    ]);
+    expect(
+      delta?.messages.map((message) => (message.payload as { text?: string }).text),
+    ).toStrictEqual(['first ever question', 'first ever answer']);
   });
 
   it('keeps a failed turn inside the next delta instead of advancing the watermark', () => {
@@ -441,9 +491,13 @@ describe(ConversationHistoryStore, () => {
             ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'warm' THEN 1 ELSE 2 END`,
         )
         .all(session.id),
-    ).toEqual([
+    ).toStrictEqual([
       { runner_kind: 'copilot', acp_session_id: 'copilot-c', status: 'active' },
-      { runner_kind: 'claude-code', acp_session_id: 'claude-b', status: 'warm' },
+      {
+        runner_kind: 'claude-code',
+        acp_session_id: 'claude-b',
+        status: 'warm',
+      },
       { runner_kind: 'codex', acp_session_id: 'codex-a', status: 'cold' },
     ]);
     expect(durable.getAdapterResumeState(APP, session.id, 'copilot')).toMatchObject({
@@ -453,7 +507,10 @@ describe(ConversationHistoryStore, () => {
       sessionId: 'claude-b',
     });
     const codexResume = durable.getAdapterResumeState(APP, session.id, 'codex');
-    expect(codexResume).toMatchObject({ sessionId: 'codex-a', hydratedThroughSeq: 0 });
+    expect(codexResume).toMatchObject({
+      sessionId: 'codex-a',
+      hydratedThroughSeq: 0,
+    });
     const delta = durable.getHydrationDelta(APP, session.id, codexResume?.hydratedThroughSeq ?? -1);
     expect(JSON.stringify(delta?.messages)).not.toContain('ask codex');
     expect(JSON.stringify(delta?.messages)).toContain('ask claude-code');
@@ -472,10 +529,14 @@ describe(ConversationHistoryStore, () => {
             ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'warm' THEN 1 ELSE 2 END`,
         )
         .all(session.id),
-    ).toEqual([
+    ).toStrictEqual([
       { runner_kind: 'codex', acp_session_id: 'codex-a', status: 'active' },
       { runner_kind: 'copilot', acp_session_id: 'copilot-c', status: 'warm' },
-      { runner_kind: 'claude-code', acp_session_id: 'claude-b', status: 'cold' },
+      {
+        runner_kind: 'claude-code',
+        acp_session_id: 'claude-b',
+        status: 'cold',
+      },
     ]);
   });
 
@@ -489,7 +550,12 @@ describe(ConversationHistoryStore, () => {
       ok: true,
       finalText: 'got it',
       attachments: [
-        { hash: 'a'.repeat(64), mime: 'image/png', sizeBytes: 1234, filename: 'shot.png' },
+        {
+          hash: 'a'.repeat(64),
+          mime: 'image/png',
+          sizeBytes: 1234,
+          filename: 'shot.png',
+        },
       ],
       nodes: [{ kind: 'step', text: 'got it', startedAt: 1_000, endedAt: 1_010 }],
     });
@@ -557,7 +623,7 @@ describe(ConversationHistoryStore, () => {
     const tool = store.getSession(APP, s.id)?.messages[1]?.payload as {
       artifacts?: Array<Record<string, unknown>>;
     };
-    expect(tool.artifacts).toEqual([
+    expect(tool.artifacts).toStrictEqual([
       {
         hash: 'b'.repeat(64),
         mime: 'text/markdown',
@@ -584,7 +650,10 @@ describe(ConversationHistoryStore, () => {
     const chat = local.createSession(APP);
     const build = local.createSession(APP);
     local.recordTurn(APP, turn(chat.id, 'data q', 'data a', 1_000));
-    local.recordTurn(APP, { ...turn(build.id, 'tweak ui', 'done', 2_000), kind: 'build' });
+    local.recordTurn(APP, {
+      ...turn(build.id, 'tweak ui', 'done', 2_000),
+      kind: 'build',
+    });
 
     // The kind moved UP onto the conversation (issue #190): a builder turn
     // sets its thread to `kind: 'build'`; a data chat stays `'chat'`. Read the
@@ -596,8 +665,14 @@ describe(ConversationHistoryStore, () => {
     // Transcript reconstruction is kind-agnostic — a build turn round-trips
     // exactly like a chat turn.
     const loaded = local.getSession(APP, build.id);
-    expect(loaded?.messages[0]!.payload).toStrictEqual({ kind: 'user', text: 'tweak ui' });
-    expect(loaded?.messages[1]!.payload).toMatchObject({ kind: 'ai', text: 'done' });
+    expect(loaded?.messages[0]!.payload).toStrictEqual({
+      kind: 'user',
+      text: 'tweak ui',
+    });
+    expect(loaded?.messages[1]!.payload).toMatchObject({
+      kind: 'ai',
+      text: 'done',
+    });
   });
 
   it('recordTurn reconstructs tool nodes interleaved before the assistant reply', () => {
@@ -621,7 +696,12 @@ describe(ConversationHistoryStore, () => {
           startedAt: t,
           endedAt: t + 20,
         },
-        { kind: 'step', text: 'there is 1 row', startedAt: t + 20, endedAt: t + 50 },
+        {
+          kind: 'step',
+          text: 'there is 1 row',
+          startedAt: t + 20,
+          endedAt: t + 50,
+        },
       ],
     });
     const loaded = store.getSession(APP, s.id);
@@ -633,7 +713,10 @@ describe(ConversationHistoryStore, () => {
     expect(tool.state).toBe('ok');
     expect(tool.result).toStrictEqual([{ n: 1 }]);
     expect(tool.id).toBeTypeOf('string');
-    expect(loaded?.messages[2]!.payload).toMatchObject({ kind: 'ai', text: 'there is 1 row' });
+    expect(loaded?.messages[2]!.payload).toMatchObject({
+      kind: 'ai',
+      text: 'there is 1 row',
+    });
   });
 
   it('recordTurn marks a failed tool node as state=error', () => {
@@ -672,11 +755,21 @@ describe(ConversationHistoryStore, () => {
       ok: false,
       error: 'runner crashed',
       nodes: [
-        { kind: 'step', text: 'runner crashed', isError: true, startedAt: t, endedAt: t + 5 },
+        {
+          kind: 'step',
+          text: 'runner crashed',
+          isError: true,
+          startedAt: t,
+          endedAt: t + 5,
+        },
       ],
     });
     const ai = store.getSession(APP, s.id)?.messages[1]!.payload as Record<string, unknown>;
-    expect(ai).toMatchObject({ kind: 'ai', text: 'runner crashed', error: true });
+    expect(ai).toMatchObject({
+      kind: 'ai',
+      text: 'runner crashed',
+      error: true,
+    });
   });
 
   it('recordTurn derives the title from the first user message if empty', () => {
@@ -739,7 +832,10 @@ describe(ConversationHistoryStore, () => {
     expect(s.turnCount).toBe(0);
     expect(s.adapterKind).toBeNull();
 
-    const after1 = store.noteTurn(APP, s.id, { kind: 'codex', sessionId: 'cx-1' });
+    const after1 = store.noteTurn(APP, s.id, {
+      kind: 'codex',
+      sessionId: 'cx-1',
+    });
     expect(after1?.turnCount).toBe(1);
     expect(after1?.adapterKind).toBe('codex');
     expect(after1?.adapterSessionId).toBe('cx-1');
@@ -787,7 +883,10 @@ describe('ConversationHistoryStore per-app scoping', () => {
 
 describe('ConversationHistoryStore per-user scoping', () => {
   // Two stores on the same vault's journal.db, different owner identities.
-  function pair(): { alice: ConversationHistoryStore; bob: ConversationHistoryStore } {
+  function pair(): {
+    alice: ConversationHistoryStore;
+    bob: ConversationHistoryStore;
+  } {
     const appsDir = freshVaultDir();
     return {
       alice: new ConversationHistoryStore(workspaceFor(appsDir, 'alice')),
@@ -857,14 +956,14 @@ describe('ConversationHistoryStore data persistence', () => {
 interface FakeReq {
   url: string;
   method: string;
-  [Symbol.asyncIterator](): AsyncIterableIterator<Buffer>;
+  [Symbol.asyncIterator]: () => AsyncIterableIterator<Buffer>;
 }
 interface FakeRes {
   status: number;
   headers: Record<string, string>;
   bodyText: string;
-  writeHead(status: number, headers: Record<string, string>): FakeRes;
-  end(text?: string): void;
+  writeHead: (status: number, headers: Record<string, string>) => FakeRes;
+  end: (text?: string) => void;
   readonly body: unknown;
 }
 
@@ -950,7 +1049,9 @@ describe(makeConversationRouteHandler, () => {
     expect(loaded.status).toBe(200);
     expect((loaded.body as { messages: unknown[] }).messages).toStrictEqual([]);
 
-    const renamed = await call(handler, 'PATCH', `${BASE}/${id}`, { title: 'renamed' });
+    const renamed = await call(handler, 'PATCH', `${BASE}/${id}`, {
+      title: 'renamed',
+    });
     expect(renamed.status).toBe(200);
     expect((renamed.body as { title: string }).title).toBe('renamed');
 
@@ -995,7 +1096,9 @@ describe(makeConversationRouteHandler, () => {
   });
 
   it('GET sessions/search returns FTS hits with a snippet (#420)', async () => {
-    const created = await call(handler, 'POST', BASE, { title: 'Budget review' });
+    const created = await call(handler, 'POST', BASE, {
+      title: 'Budget review',
+    });
     const id = (created.body as { id: string }).id;
     store.recordTurn(APP, turn(id, 'plan the quarterly budget', 'sure'));
     const res = await call(handler, 'GET', `${BASE}/search?q=quarterly`);
@@ -1009,9 +1112,15 @@ describe(makeConversationRouteHandler, () => {
   });
 
   it('PATCH pins / archives a session and list ordering + flags reflect it (#420)', async () => {
-    const a = (await call(handler, 'POST', BASE, { title: 'Alpha' })).body as { id: string };
-    const b = (await call(handler, 'POST', BASE, { title: 'Beta' })).body as { id: string };
-    const pinned = await call(handler, 'PATCH', `${BASE}/${a.id}`, { pinned: true });
+    const a = (await call(handler, 'POST', BASE, { title: 'Alpha' })).body as {
+      id: string;
+    };
+    const b = (await call(handler, 'POST', BASE, { title: 'Beta' })).body as {
+      id: string;
+    };
+    const pinned = await call(handler, 'PATCH', `${BASE}/${a.id}`, {
+      pinned: true,
+    });
     expect(pinned.status).toBe(200);
     expect((pinned.body as { pinned: boolean }).pinned).toBe(true);
     const list = (await call(handler, 'GET', BASE)).body as {
@@ -1020,7 +1129,9 @@ describe(makeConversationRouteHandler, () => {
     // Pinned a sorts before b regardless of recency.
     expect(list.sessions[0]!.id).toBe(a.id);
     expect(list.sessions[0]!.pinned).toBe(true);
-    const archived = await call(handler, 'PATCH', `${BASE}/${b.id}`, { archived: true });
+    const archived = await call(handler, 'PATCH', `${BASE}/${b.id}`, {
+      archived: true,
+    });
     expect((archived.body as { archived: boolean }).archived).toBe(true);
     // Archived b drops out of search.
     store.recordTurn(APP, turn(b.id, 'beta needle text', 'ok'));

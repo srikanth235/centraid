@@ -20,6 +20,19 @@
  */
 
 import {
+  appTurnPath,
+  assistantTurnPath,
+  resolvePath,
+  conversationStatusPath,
+  blobsPath,
+} from '@centraid/blueprints/kit/conversation-client.js';
+// Shared chat-client core (issue #420): the ONE SSE parser + wire-route
+// builders + the documented TurnStreamEvent union, from the canonical kit copy.
+import { consumeSse } from '@centraid/blueprints/kit/turn-stream.js';
+import type { TurnStreamEvent } from '@centraid/blueprints/kit/turn-stream.js';
+
+import type { CentraidAgentsStatus, CentraidRunnerStatus } from './centraid-api.js';
+import {
   auth,
   authHeaders,
   doFetch,
@@ -27,25 +40,11 @@ import {
   scopedAuthHeaders,
   GatewayClientError,
 } from './gateway-client-core.js';
-import type { CentraidAgentsStatus, CentraidRunnerStatus } from './centraid-api.js';
-// Shared chat-client core (issue #420): the ONE SSE parser + wire-route
-// builders + the documented TurnStreamEvent union, from the canonical kit copy.
-import { consumeSse } from '@centraid/blueprints/kit/turn-stream.js';
-import type { TurnStreamEvent } from '@centraid/blueprints/kit/turn-stream.js';
-import {
-  appTurnPath,
-  assistantTurnPath,
-  resolvePath,
-  conversationsPath,
-  conversationPath,
-  conversationSearchPath,
-  conversationStatusPath,
-  blobsPath,
-} from '@centraid/blueprints/kit/conversation-client.js';
+
+export { type TurnStreamEvent } from '@centraid/blueprints/kit/turn-stream.js';
 
 // Re-exported so every consumer keeps importing the union from this barrel; the
 // definition now lives in one place (the wire contract, turn-stream.d.ts).
-export type { TurnStreamEvent };
 
 /**
  * Runner preflight + model catalog from the ACTIVE gateway. Reads the
@@ -173,7 +172,7 @@ async function postTurnWithRetry(
   scopeId?: string,
 ): Promise<Response> {
   const { baseUrl, token } = await auth();
-  for (let attempt = 0; ; attempt++) {
+  async function postAttempt(attempt: number): Promise<Response> {
     const res = await doFetch(baseUrl, path, {
       method: 'POST',
       headers: scopedAuthHeaders(token, scopeId, 'application/json'),
@@ -185,7 +184,7 @@ async function postTurnWithRetry(
       const waitMs = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 3000;
       await res.body?.cancel().catch(() => undefined);
       await delay(waitMs);
-      continue;
+      return postAttempt(attempt + 1);
     }
     if (!res.ok) {
       const text = await res.text().catch(() => '');
@@ -213,6 +212,7 @@ async function postTurnWithRetry(
       );
     return res;
   }
+  return postAttempt(0);
 }
 
 /**
@@ -241,7 +241,12 @@ export async function uploadConversationAttachment(
     throw new GatewayClientError('gateway_error', `upload failed (HTTP ${res.status}): ${text}`);
   }
   const out = (await res.json()) as { hash: string; sizeBytes: number };
-  return { hash: out.hash, mime, sizeBytes: out.sizeBytes, ...(filename ? { filename } : {}) };
+  return {
+    hash: out.hash,
+    mime,
+    sizeBytes: out.sizeBytes,
+    ...(filename ? { filename } : {}),
+  };
 }
 
 /**
@@ -269,9 +274,9 @@ export async function streamTurn(
       ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
       ...(input.attachments?.length ? { attachments: input.attachments } : {}),
       ...(input.providerConsent?.length ? { providerConsent: input.providerConsent } : {}),
-      ...(input.additionalDirectories !== undefined
-        ? { additionalDirectories: input.additionalDirectories }
-        : {}),
+      ...(input.additionalDirectories === undefined
+        ? {}
+        : { additionalDirectories: input.additionalDirectories }),
       ...(input.workspaceKind ? { workspaceKind: input.workspaceKind } : {}),
     }),
     signal,
@@ -321,9 +326,9 @@ export async function streamAssistantTurn(
       ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
       ...(input.attachments?.length ? { attachments: input.attachments } : {}),
       ...(input.providerConsent?.length ? { providerConsent: input.providerConsent } : {}),
-      ...(input.additionalDirectories !== undefined
-        ? { additionalDirectories: input.additionalDirectories }
-        : {}),
+      ...(input.additionalDirectories === undefined
+        ? {}
+        : { additionalDirectories: input.additionalDirectories }),
       ...(input.workspaceKind ? { workspaceKind: input.workspaceKind } : {}),
     }),
     signal,

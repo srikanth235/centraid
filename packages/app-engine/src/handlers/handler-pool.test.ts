@@ -1,21 +1,22 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import { writeFile } from 'node:fs/promises';
 // Warm-spare worker pool (issue #404). These cover the four properties the
 // pool must hold beyond "dispatch still works": it keeps warm spares between
 // runs, it preserves per-run module isolation (a worker is never reused across
 // handlers), a hung handler is still terminable, and a worker crash doesn't
 // poison the pool for subsequent runs.
-
-import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
+
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+
 import { runHandler, HANDLER_WORKER_FILE } from './handler-runner.js';
+import { workerMaxConcurrentFromEnv } from './worker-admission.js';
 import {
   WorkerPool,
   workerPoolSizeFromEnv,
   workerResourceLimitsFromEnv,
   DEFAULT_WORKER_POOL_SIZE,
 } from './worker-pool.js';
-import { workerMaxConcurrentFromEnv } from './worker-admission.js';
 
 let appDir: string;
 let pool: WorkerPool;
@@ -153,7 +154,7 @@ describe('handler-pool', () => {
       pool,
     });
     expect(outcome.ok).toBe(false);
-    expect(outcome.error).toMatch(/exited with code|worker/i);
+    expect(outcome.error).toMatch(/exited with code|worker/iu);
 
     // The pool is unharmed: a normal handler runs fine right after.
     const ok = await writeHandler('ok.js', `export default async () => 'alive';`);
@@ -205,13 +206,20 @@ describe('handler-pool', () => {
     expect(workerPoolSizeFromEnv({ ...standard, CENTRAID_WORKER_POOL_SIZE: '' })).toBe(
       DEFAULT_WORKER_POOL_SIZE,
     );
-    expect(workerPoolSizeFromEnv({ CENTRAID_RESOLVED_HARDWARE_PROFILE: 'constrained' })).toBe(0);
+    expect(
+      workerPoolSizeFromEnv({
+        CENTRAID_RESOLVED_HARDWARE_PROFILE: 'constrained',
+      }),
+    ).toBe(0);
     expect(workerPoolSizeFromEnv({ CENTRAID_WORKER_POOL_SIZE: '0' })).toBe(0);
     expect(workerPoolSizeFromEnv({ CENTRAID_WORKER_POOL_SIZE: '3' })).toBe(3);
     expect(workerPoolSizeFromEnv({ CENTRAID_WORKER_POOL_SIZE: '999' })).toBe(8);
-    expect(workerPoolSizeFromEnv({ ...standard, CENTRAID_WORKER_POOL_SIZE: 'nonsense' })).toBe(
-      DEFAULT_WORKER_POOL_SIZE,
-    );
+    expect(
+      workerPoolSizeFromEnv({
+        ...standard,
+        CENTRAID_WORKER_POOL_SIZE: 'nonsense',
+      }),
+    ).toBe(DEFAULT_WORKER_POOL_SIZE);
     expect(workerPoolSizeFromEnv({ ...standard, CENTRAID_WORKER_POOL_SIZE: '-2' })).toBe(
       DEFAULT_WORKER_POOL_SIZE,
     );
@@ -234,7 +242,10 @@ describe('handler-pool', () => {
     });
     expect(
       workerResourceLimitsFromEnv({ CENTRAID_RESOLVED_HARDWARE_PROFILE: 'constrained' }, large),
-    ).toStrictEqual({ maxOldGenerationSizeMb: 128, maxYoungGenerationSizeMb: 16 });
+    ).toStrictEqual({
+      maxOldGenerationSizeMb: 128,
+      maxYoungGenerationSizeMb: 16,
+    });
     expect(
       workerResourceLimitsFromEnv(
         {
@@ -243,6 +254,9 @@ describe('handler-pool', () => {
         },
         constrained,
       ),
-    ).toStrictEqual({ maxOldGenerationSizeMb: 96, maxYoungGenerationSizeMb: 12 });
+    ).toStrictEqual({
+      maxOldGenerationSizeMb: 96,
+      maxYoungGenerationSizeMb: 12,
+    });
   });
 });

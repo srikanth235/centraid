@@ -1,4 +1,5 @@
 import { assert, beforeEach, describe, expect, test } from 'vitest';
+
 import { bootstrapVault, type BootstrapResult } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { createGateway, Gateway } from '../gateway/gateway.js';
@@ -22,11 +23,19 @@ describe('attachments', () => {
     gw = createGateway(db);
     registerAttachmentCommands(gw);
     registerTaskCommands(gw);
-    owner = { kind: 'device', deviceId: boot.deviceId, deviceKey: boot.deviceKey };
+    owner = {
+      kind: 'device',
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+    };
   });
 
   function invoke(command: string, input: Record<string, unknown>) {
-    return gw.invoke(owner, { command, input, purpose: 'dpv:ServiceProvision' });
+    return gw.invoke(owner, {
+      command,
+      input,
+      purpose: 'dpv:ServiceProvision',
+    });
   }
 
   function addTask(title: string): string {
@@ -45,7 +54,13 @@ describe('attachments', () => {
     });
     expect(out.status).toBe('executed');
     const output = (
-      out as { output: { attachment_id: string; content_id: string; is_primary: number } }
+      out as {
+        output: {
+          attachment_id: string;
+          content_id: string;
+          is_primary: number;
+        };
+      }
     ).output;
     expect(output.is_primary).toBe(1); // first attachment is the cover
 
@@ -75,7 +90,7 @@ describe('attachments', () => {
     expect(content.byte_size).toBeGreaterThan(0);
     // Binary bytes spill to the CAS (issue #296): the row keeps the address,
     // custody keeps the bytes, and the sha is of the RAW bytes.
-    expect(content.content_uri).toMatch(/^blob:sha256-[0-9a-f]{64}$/);
+    expect(content.content_uri).toMatch(/^blob:sha256-[0-9a-f]{64}$/u);
     const sha = content.content_uri.slice('blob:sha256-'.length);
     expect(db.blobs.hasSync(sha)).toBe(true);
   });
@@ -105,7 +120,11 @@ describe('attachments', () => {
 
   test('a second file on the same subject is not primary', () => {
     const taskId = addTask('Two files');
-    invoke('core.attach', { subject_type: 'schedule.task', subject_id: taskId, data_uri: PNG });
+    invoke('core.attach', {
+      subject_type: 'schedule.task',
+      subject_id: taskId,
+      data_uri: PNG,
+    });
     const second = invoke('core.attach', {
       subject_type: 'schedule.task',
       subject_id: taskId,
@@ -214,7 +233,10 @@ describe('attachments', () => {
 
   test('attach requires exactly one source: neither and both are refused', () => {
     const taskId = addTask('Sources');
-    const neither = invoke('core.attach', { subject_type: 'schedule.task', subject_id: taskId });
+    const neither = invoke('core.attach', {
+      subject_type: 'schedule.task',
+      subject_id: taskId,
+    });
     expect(neither.status).toBe('failed');
     assert(neither.status === 'failed');
     expect(neither.predicate).toContain('exactly_one_source');

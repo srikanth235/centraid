@@ -188,7 +188,13 @@ export function footprintScale(report: LocalUsageReportDTO): FootprintScale {
       warnFraction: null,
     };
   }
-  return { kind: 'none', againstBytes: null, fillFraction: 0, over: false, warnFraction: null };
+  return {
+    kind: 'none',
+    againstBytes: null,
+    fillFraction: 0,
+    over: false,
+    warnFraction: null,
+  };
 }
 
 /** Bytes for humans. Binary units, one decimal above KB — the same shape the

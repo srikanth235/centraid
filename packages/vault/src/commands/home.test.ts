@@ -1,4 +1,5 @@
 import { assert, beforeEach, describe, expect, test } from 'vitest';
+
 import { bootstrapVault, type BootstrapResult } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { createGateway, Gateway } from '../gateway/gateway.js';
@@ -16,11 +17,19 @@ describe('home', () => {
     boot = bootstrapVault(db, { ownerName: 'Priya' });
     gw = createGateway(db);
     registerHomeCommands(gw);
-    owner = { kind: 'device', deviceId: boot.deviceId, deviceKey: boot.deviceKey };
+    owner = {
+      kind: 'device',
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+    };
   });
 
   function invoke(command: string, input: Record<string, unknown>) {
-    return gw.invoke(owner, { command, input, purpose: 'dpv:ServiceProvision' });
+    return gw.invoke(owner, {
+      command,
+      input,
+      purpose: 'dpv:ServiceProvision',
+    });
   }
 
   function addItem(input: Record<string, unknown>): string {
@@ -56,7 +65,11 @@ describe('home', () => {
     const item = db.vault
       .prepare('SELECT name, serial_no, acquired_on FROM home_asset_item WHERE item_id = ?')
       .get(itemId);
-    expect(item).toMatchObject({ name: 'Road bike', serial_no: 'RB-1', acquired_on: null });
+    expect(item).toMatchObject({
+      name: 'Road bike',
+      serial_no: 'RB-1',
+      acquired_on: null,
+    });
   });
 
   test('dispose_item stamps the lifecycle date once; a second disposal is refused', () => {
@@ -134,11 +147,17 @@ describe('home', () => {
     expect(moved.status).toBe('executed');
 
     // A phantom room is refused, receipted.
-    const ghost = invoke('home.update_item', { item_id: bare, place_id: 'nowhere' });
+    const ghost = invoke('home.update_item', {
+      item_id: bare,
+      place_id: 'nowhere',
+    });
     expect(ghost.status).toBe('failed');
 
     // A price with no currency anywhere is refused.
-    const naked = invoke('home.add_item', { name: 'TV', purchase_price_minor: 50000 });
+    const naked = invoke('home.add_item', {
+      name: 'TV',
+      purchase_price_minor: 50000,
+    });
     expect(naked.status).toBe('failed');
   });
 
@@ -158,7 +177,10 @@ describe('home', () => {
       )
       .run(now);
 
-    const bound = addItem({ name: 'Espresso machine', acquired_txn_id: 'home-purchase' });
+    const bound = addItem({
+      name: 'Espresso machine',
+      acquired_txn_id: 'home-purchase',
+    });
     expect(
       db.vault
         .prepare(
@@ -177,18 +199,21 @@ describe('home', () => {
       purchase_currency: 'EUR',
     });
     expect(
-      invoke('home.update_item', { item_id: unbound, acquired_txn_id: 'home-purchase' }).status,
+      invoke('home.update_item', {
+        item_id: unbound,
+        acquired_txn_id: 'home-purchase',
+      }).status,
     ).toBe('executed');
     expect(() =>
       db.vault
         .prepare("UPDATE core_transaction SET currency = 'USD' WHERE txn_id = 'home-purchase'")
         .run(),
-    ).toThrow(/bound to an asset purchase/);
+    ).toThrow(/bound to an asset purchase/u);
     expect(() =>
       db.vault
         .prepare('UPDATE home_asset_item SET purchase_price_minor = 1 WHERE item_id = ?')
         .run(bound),
-    ).toThrow(/must agree with its transaction/);
+    ).toThrow(/must agree with its transaction/u);
   });
 
   test('complete_maintenance stamps last_done_on; a missing plan is refused', () => {
@@ -200,14 +225,20 @@ describe('home', () => {
        VALUES (?, ?, 'Descale', 'FREQ=MONTHLY', NULL, NULL, NULL)`,
       )
       .run(planId, itemId);
-    const outcome = invoke('home.complete_maintenance', { plan_id: planId, done_on: '2026-07-03' });
+    const outcome = invoke('home.complete_maintenance', {
+      plan_id: planId,
+      done_on: '2026-07-03',
+    });
     expect(outcome.status).toBe('executed');
     const plan = db.vault
       .prepare('SELECT last_done_on FROM home_maintenance_plan WHERE plan_id = ?')
       .get(planId) as { last_done_on: string };
     expect(plan.last_done_on).toBe('2026-07-03');
     expect(
-      invoke('home.complete_maintenance', { plan_id: 'ghost', done_on: '2026-07-03' }).status,
+      invoke('home.complete_maintenance', {
+        plan_id: 'ghost',
+        done_on: '2026-07-03',
+      }).status,
     ).toBe('failed');
   });
 });

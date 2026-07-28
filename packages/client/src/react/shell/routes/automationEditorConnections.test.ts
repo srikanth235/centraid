@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+
 import type { ConnectionRowDTO } from '../../screens/SettingsConnectionsScreen.js';
 import { matchEditorConnection } from './AutomationEditorRoute.js';
 

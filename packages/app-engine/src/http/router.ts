@@ -104,7 +104,10 @@ export function parseRoute(method: string, rawUrl: string): Route {
   // generic `app-*` dispatch below.
   if (segments[0] === '_turn') {
     if (segments[1] === 'runner-status' && segments.length === 2 && m === 'GET') {
-      return { kind: 'app-runner-status', refresh: url.searchParams.get('refresh') === '1' };
+      return {
+        kind: 'app-runner-status',
+        refresh: url.searchParams.get('refresh') === '1',
+      };
     }
     return { kind: 'not-found' };
   }

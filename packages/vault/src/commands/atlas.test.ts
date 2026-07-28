@@ -7,12 +7,13 @@
 // operator provenance.
 
 import { afterEach, assert, beforeEach, describe, expect, test } from 'vitest';
+
 import { bootstrapVault, type BootstrapResult } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { createGateway, Gateway } from '../gateway/gateway.js';
 import type { Credential, InvokeOutcome } from '../gateway/types.js';
 import { readReplicaChanges } from '../replica/change-log.js';
-import { registerAtlasCommands } from './atlas.js';
+import { browseDependents, browseRefSearch } from '../schema/atlas-browse-refs.js';
 import {
   browseColumns,
   browseRow,
@@ -20,7 +21,7 @@ import {
   browseTableList,
   BrowseError,
 } from '../schema/atlas-browse.js';
-import { browseDependents, browseRefSearch } from '../schema/atlas-browse-refs.js';
+import { registerAtlasCommands } from './atlas.js';
 
 let db: VaultDb;
 let gw: Gateway;
@@ -33,7 +34,11 @@ describe('atlas', () => {
     boot = bootstrapVault(db, { ownerName: 'Priya' });
     gw = createGateway(db);
     registerAtlasCommands(gw);
-    owner = { kind: 'device', deviceId: boot.deviceId, deviceKey: boot.deviceKey };
+    owner = {
+      kind: 'device',
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+    };
   });
 
   afterEach(() => {
@@ -41,7 +46,11 @@ describe('atlas', () => {
   });
 
   function invoke(command: string, input: Record<string, unknown>): InvokeOutcome {
-    return gw.invoke(owner, { command, input, purpose: 'dpv:ServiceProvision' });
+    return gw.invoke(owner, {
+      command,
+      input,
+      purpose: 'dpv:ServiceProvision',
+    });
   }
 
   function addParty(id: string, name: string): string {
@@ -122,7 +131,10 @@ describe('atlas', () => {
   test('unknown tables are rejected, never turned into SQL', () => {
     expect(() => browseColumns(db.vault, 'nope.table')).toThrow(BrowseError);
     expect(() => browseRows(db.vault, { table: 'core.bogus' })).toThrow(BrowseError);
-    const out = invoke('atlas.insert_row', { table: 'nope.table', values: { x: 1 } });
+    const out = invoke('atlas.insert_row', {
+      table: 'nope.table',
+      values: { x: 1 },
+    });
     expect(out.status).toBe('failed');
   });
 
@@ -162,7 +174,10 @@ describe('atlas', () => {
       addScheme(id, `Scheme ${id}`);
     // The full (single-page) order is ground truth; a small-page walk must
     // reproduce it exactly — no duplicates across boundaries, no dropped rows.
-    const full = browseRows(db.vault, { table: 'core.concept_scheme', limit: 100 });
+    const full = browseRows(db.vault, {
+      table: 'core.concept_scheme',
+      limit: 100,
+    });
     expect(full.nextCursor).toBeNull();
     const fullIds = full.rows.map((r) => r['scheme_id'] as string);
     const paged = paginateAll({ table: 'core.concept_scheme' }, 'scheme_id', 2);
@@ -224,7 +239,7 @@ describe('atlas', () => {
       set: { password: 'newsecret' },
     });
     expect(out.status).toBe('failed');
-    expect((out as { reason: string }).reason).toMatch(/sealed/);
+    expect((out as { reason: string }).reason).toMatch(/sealed/u);
   });
 
   test('machinery bands are read-only unless explicitly unlocked', () => {
@@ -233,7 +248,7 @@ describe('atlas', () => {
       values: { content_id: 'c1' },
     });
     expect(locked.status).toBe('failed');
-    expect((locked as { reason: string }).reason).toMatch(/machinery/);
+    expect((locked as { reason: string }).reason).toMatch(/machinery/u);
 
     // With the unlock flag the guard is passed; the write then fails (or not) on
     // the table's OWN constraints — the point is it is no longer machinery-blocked.
@@ -243,7 +258,7 @@ describe('atlas', () => {
       unlockMachinery: true,
     });
     assert(unlocked.status === 'failed');
-    expect((unlocked as { reason: string }).reason).not.toMatch(/machinery/);
+    expect((unlocked as { reason: string }).reason).not.toMatch(/machinery/u);
   });
 
   // --- write: journalled path (replica + provenance) — THE hard requirement --
@@ -251,7 +266,12 @@ describe('atlas', () => {
   test('a Browse write lands in the replica change log and records operator provenance', () => {
     const out = invoke('atlas.insert_row', {
       table: 'core.concept_scheme',
-      values: { scheme_id: 'S1', uri: 'urn:atlas:test', title: 'Test Scheme', version: '1' },
+      values: {
+        scheme_id: 'S1',
+        uri: 'urn:atlas:test',
+        title: 'Test Scheme',
+        version: '1',
+      },
     });
     expect(out.status).toBe('executed');
 

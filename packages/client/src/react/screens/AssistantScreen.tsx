@@ -1,19 +1,21 @@
 // governance: allow-repo-hygiene file-size-limit (#567) the Assistant screen is one stateful composition over the shared composer/status primitives; splitting its bridge state would duplicate fallible control coordination
 import { useEffect, useRef, useState, type JSX } from 'react';
+
 import type {
   AsstModelPickerDTO,
   AssistantBridgeProps,
   AssistantSnapshot,
 } from '../screen-contracts.js';
-import styles from './AssistantScreen.module.css';
-import Icon from '../ui/Icon.js';
 import { cx } from '../ui/cx.js';
-import Message, { type MessageCallbacks } from './AssistantMessage.js';
-import { useAssistantScroll } from './useAssistantScroll.js';
+import Icon from '../ui/Icon.js';
 import { clearDraft, loadDraft, saveDraft } from './assistantDrafts.js';
-import { useComposerAutocomplete } from './ComposerAutocomplete.js';
+import Message, { type MessageCallbacks } from './AssistantMessage.js';
 import ChatComposer from './ChatComposer.js';
+import { useComposerAutocomplete } from './ComposerAutocomplete.js';
+import { useAssistantScroll } from './useAssistantScroll.js';
 import { workspaceKindLabel } from './workspaceKindLabel.js';
+
+import styles from './AssistantScreen.module.css';
 
 const NO_ENTITIES = async (): Promise<never[]> => [];
 
@@ -55,7 +57,7 @@ export function RunnerPicker({
         {picker.runners.map((runner) => (
           <option key={runner.kind} value={runner.kind} title={runner.hint}>
             {runner.title}
-            {!runner.sessionReady ? ' — setup or sign-in needed' : ''}
+            {runner.sessionReady ? '' : ' — setup or sign-in needed'}
           </option>
         ))}
       </select>
@@ -424,7 +426,7 @@ export default function AssistantScreen({
                   <div key={directory} className={styles.attachChip} title={directory}>
                     <Icon name="Folder" size={12} />
                     <span className={styles.attachName}>
-                      {directory.split(/[\\/]/).filter(Boolean).at(-1) ?? directory}
+                      {directory.match(/[^\\/]+$/u)?.[0] ?? directory}
                     </span>
                     <button
                       type="button"

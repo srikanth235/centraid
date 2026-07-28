@@ -26,7 +26,12 @@ export function toCrashRecord(
 ): CrashRecord {
   const message = err instanceof Error ? err.message : String(err);
   const stack = err instanceof Error && typeof err.stack === 'string' ? err.stack : undefined;
-  return { at: now().toISOString(), kind, message, ...(stack ? { stack } : {}) };
+  return {
+    at: now().toISOString(),
+    kind,
+    message,
+    ...(stack ? { stack } : {}),
+  };
 }
 
 /** One newline-delimited JSON line — the crash log is NDJSON, cheap to `tail`/parse. */

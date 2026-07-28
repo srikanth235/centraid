@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
+
+import { SEALED_SENTINEL } from './atlasBrowseData.js';
 import { ZOOM_MIN } from './atlasOrreryGeometry.js';
 import {
   cleanupTab,
@@ -15,7 +17,6 @@ import {
   setLevel,
   viewportTransform,
 } from './atlasRelationsTestKit.js';
-import { SEALED_SENTINEL } from './atlasBrowseData.js';
 
 // Component behaviour for the Relations "Map" tab (issue #519). Pure geometry
 // and the detail-dial predicates live in atlasOrreryGeometry.test; the shared
@@ -82,7 +83,7 @@ describe('AtlasRelationsTab', () => {
         '[data-testid="atlas-edge"][data-from="knowledge_note"][data-to="core_party"][data-ghost="false"]',
       );
       const w = (p: SVGPathElement | null): number =>
-        parseFloat((p?.style.strokeWidth || '0').toString());
+        Number((p?.style.strokeWidth || '0').toString());
       expect(w(spine)).toBeGreaterThan(w(note));
     });
 
@@ -335,14 +336,22 @@ describe('AtlasRelationsTab', () => {
       const g = makeGraph({
         nodes: [
           node('core_party', 'core', 'ontology', { friendly: 'People' }),
-          node('core_observation', 'core', 'ontology', { friendly: 'Observations' }),
+          node('core_observation', 'core', 'ontology', {
+            friendly: 'Observations',
+          }),
           node('knowledge_note', 'knowledge', 'ontology'),
           node('knowledge_tag', 'knowledge', 'ontology'), // empty: no rows, no live edge
           node('consent_device', 'consent', 'machinery'), // plumbing
         ],
         fkEdges: [
-          edge('core_observation', 'subject_party_id', 'core_party', { childRows: 100, fill: 100 }),
-          edge('knowledge_note', 'author_party_id', 'core_party', { childRows: 50, fill: 50 }),
+          edge('core_observation', 'subject_party_id', 'core_party', {
+            childRows: 100,
+            fill: 100,
+          }),
+          edge('knowledge_note', 'author_party_id', 'core_party', {
+            childRows: 50,
+            fill: 50,
+          }),
         ],
         authoredLinks: [],
         island: [],

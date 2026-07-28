@@ -1,10 +1,11 @@
 import { ROUTES } from '@centraid/protocol';
+
 import { handleCompanionRequest } from './companion-api.js';
-import { companionJson } from './transport.js';
-import { isLocked, loadPairing } from './storage.js';
-import type { CompanionRequest, PageCapture } from './types.js';
-import { clearFillMaterial, clearSavedPassword } from './credential-gesture.js';
 import { pageCaptureFromTab } from './content-core.js';
+import { clearFillMaterial, clearSavedPassword } from './credential-gesture.js';
+import { isLocked, loadPairing } from './storage.js';
+import { companionJson } from './transport.js';
+import type { CompanionRequest, PageCapture } from './types.js';
 import {
   approvalBadgeForState,
   isLockerFillMessage,
@@ -27,7 +28,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       clearSavedPassword(message);
     },
     (error) => {
-      sendResponse({ ok: false, error: error instanceof Error ? error.message : String(error) });
+      sendResponse({
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      });
       clearSavedPassword(message);
     },
   );

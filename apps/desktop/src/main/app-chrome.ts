@@ -3,6 +3,8 @@
  * Registers centraid:// as the default protocol; tray shows gateway status.
  */
 
+import path from 'node:path';
+
 import {
   app,
   BrowserWindow,
@@ -12,7 +14,7 @@ import {
   type MenuItemConstructorOptions,
   type NativeImage,
 } from 'electron';
-import path from 'node:path';
+
 import { isOAuthFinishDeepLink } from './oauth-deep-link.js';
 
 const __dirname = import.meta.dirname;

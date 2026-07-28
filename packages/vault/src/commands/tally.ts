@@ -269,12 +269,23 @@ const CREATE_GROUP: CommandDefinition = {
   },
   preconditions: [],
   postconditions: [
-    { name: 'group_created', sql: GROUP_EXISTS_SQL, column: 'n', op: 'eq', value: 1 },
+    {
+      name: 'group_created',
+      sql: GROUP_EXISTS_SQL,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
   ],
   idempotency: 'once',
   risk: 'low',
   handler: (ctx) => {
-    const input = ctx.input as { name: string; icon: string; color?: string; member_ids: string[] };
+    const input = ctx.input as {
+      name: string;
+      icon: string;
+      color?: string;
+      member_ids: string[];
+    };
     const owner = ownerPartyId(ctx);
     // The group IS an audience: a social.circle carries the name and the
     // membership; tally_group decorates it with the icon and colour (issue
@@ -321,8 +332,19 @@ const RENAME_GROUP: CommandDefinition = {
       name: { type: 'string', minLength: 1 },
     },
   },
-  outputSchema: { type: 'object', properties: { group_id: { type: 'string' } } },
-  preconditions: [{ name: 'group_exists', sql: GROUP_EXISTS_SQL, column: 'n', op: 'eq', value: 1 }],
+  outputSchema: {
+    type: 'object',
+    properties: { group_id: { type: 'string' } },
+  },
+  preconditions: [
+    {
+      name: 'group_exists',
+      sql: GROUP_EXISTS_SQL,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+  ],
   postconditions: [],
   idempotency: 'idempotent',
   risk: 'low',
@@ -350,8 +372,19 @@ const ADD_GROUP_MEMBER: CommandDefinition = {
       party_id: { type: 'string', minLength: 1 },
     },
   },
-  outputSchema: { type: 'object', properties: { group_id: { type: 'string' } } },
-  preconditions: [{ name: 'group_exists', sql: GROUP_EXISTS_SQL, column: 'n', op: 'eq', value: 1 }],
+  outputSchema: {
+    type: 'object',
+    properties: { group_id: { type: 'string' } },
+  },
+  preconditions: [
+    {
+      name: 'group_exists',
+      sql: GROUP_EXISTS_SQL,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+  ],
   postconditions: [
     {
       name: 'member_present',
@@ -385,9 +418,18 @@ const REMOVE_GROUP_MEMBER: CommandDefinition = {
       party_id: { type: 'string', minLength: 1 },
     },
   },
-  outputSchema: { type: 'object', properties: { group_id: { type: 'string' } } },
+  outputSchema: {
+    type: 'object',
+    properties: { group_id: { type: 'string' } },
+  },
   preconditions: [
-    { name: 'group_exists', sql: GROUP_EXISTS_SQL, column: 'n', op: 'eq', value: 1 },
+    {
+      name: 'group_exists',
+      sql: GROUP_EXISTS_SQL,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
     {
       // Refuse while the party is still on the ledger (paid or owes) in-group.
       name: 'member_off_ledger',
@@ -425,9 +467,18 @@ const DELETE_GROUP: CommandDefinition = {
     additionalProperties: false,
     properties: { group_id: { type: 'string', minLength: 1 } },
   },
-  outputSchema: { type: 'object', properties: { group_id: { type: 'string' } } },
+  outputSchema: {
+    type: 'object',
+    properties: { group_id: { type: 'string' } },
+  },
   preconditions: [
-    { name: 'group_exists', sql: GROUP_EXISTS_SQL, column: 'n', op: 'eq', value: 1 },
+    {
+      name: 'group_exists',
+      sql: GROUP_EXISTS_SQL,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
     {
       name: 'group_empty',
       sql: 'SELECT count(*) AS n FROM tally_expense WHERE group_id = :group_id',
@@ -436,7 +487,15 @@ const DELETE_GROUP: CommandDefinition = {
       value: 0,
     },
   ],
-  postconditions: [{ name: 'group_gone', sql: GROUP_EXISTS_SQL, column: 'n', op: 'eq', value: 0 }],
+  postconditions: [
+    {
+      name: 'group_gone',
+      sql: GROUP_EXISTS_SQL,
+      column: 'n',
+      op: 'eq',
+      value: 0,
+    },
+  ],
   idempotency: 'once',
   risk: 'low',
   handler: (ctx) => {
@@ -476,9 +535,23 @@ const ADD_EXPENSE: CommandDefinition = {
     required: ['expense_id'],
     properties: { expense_id: { type: 'string' } },
   },
-  preconditions: [{ name: 'group_exists', sql: GROUP_EXISTS_SQL, column: 'n', op: 'eq', value: 1 }],
+  preconditions: [
+    {
+      name: 'group_exists',
+      sql: GROUP_EXISTS_SQL,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+  ],
   postconditions: [
-    { name: 'expense_created', sql: EXPENSE_EXISTS_SQL, column: 'n', op: 'eq', value: 1 },
+    {
+      name: 'expense_created',
+      sql: EXPENSE_EXISTS_SQL,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
   ],
   idempotency: 'once',
   risk: 'low',
@@ -543,8 +616,19 @@ const EDIT_EXPENSE: CommandDefinition = {
       splits: SPLIT_SCHEMA,
     },
   },
-  outputSchema: { type: 'object', properties: { expense_id: { type: 'string' } } },
-  preconditions: [{ name: 'expense_live', sql: EXPENSE_LIVE_SQL, column: 'n', op: 'eq', value: 1 }],
+  outputSchema: {
+    type: 'object',
+    properties: { expense_id: { type: 'string' } },
+  },
+  preconditions: [
+    {
+      name: 'expense_live',
+      sql: EXPENSE_LIVE_SQL,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+  ],
   postconditions: [],
   idempotency: 'idempotent',
   risk: 'low',
@@ -599,10 +683,27 @@ const DELETE_EXPENSE: CommandDefinition = {
     additionalProperties: false,
     properties: { expense_id: { type: 'string', minLength: 1 } },
   },
-  outputSchema: { type: 'object', properties: { expense_id: { type: 'string' } } },
-  preconditions: [{ name: 'expense_live', sql: EXPENSE_LIVE_SQL, column: 'n', op: 'eq', value: 1 }],
+  outputSchema: {
+    type: 'object',
+    properties: { expense_id: { type: 'string' } },
+  },
+  preconditions: [
+    {
+      name: 'expense_live',
+      sql: EXPENSE_LIVE_SQL,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+  ],
   postconditions: [
-    { name: 'expense_trashed', sql: EXPENSE_TRASHED_SQL, column: 'n', op: 'eq', value: 1 },
+    {
+      name: 'expense_trashed',
+      sql: EXPENSE_TRASHED_SQL,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
   ],
   idempotency: 'once',
   risk: 'low',
@@ -617,7 +718,11 @@ const DELETE_EXPENSE: CommandDefinition = {
       .prepare(
         'UPDATE tally_expense SET deleted_at = :now, purge_at = :purge WHERE expense_id = :expense_id',
       )
-      .run({ expense_id: expenseId, now: ctx.now, purge: plusDays(ctx.now, PURGE_WINDOW_DAYS) });
+      .run({
+        expense_id: expenseId,
+        now: ctx.now,
+        purge: plusDays(ctx.now, PURGE_WINDOW_DAYS),
+      });
     ctx.wrote('tally.expense', expenseId);
     return { expense_id: expenseId };
   },
@@ -632,12 +737,27 @@ const RESTORE_EXPENSE: CommandDefinition = {
     additionalProperties: false,
     properties: { expense_id: { type: 'string', minLength: 1 } },
   },
-  outputSchema: { type: 'object', properties: { expense_id: { type: 'string' } } },
+  outputSchema: {
+    type: 'object',
+    properties: { expense_id: { type: 'string' } },
+  },
   preconditions: [
-    { name: 'expense_trashed', sql: EXPENSE_TRASHED_SQL, column: 'n', op: 'eq', value: 1 },
+    {
+      name: 'expense_trashed',
+      sql: EXPENSE_TRASHED_SQL,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
   ],
   postconditions: [
-    { name: 'expense_live', sql: EXPENSE_LIVE_SQL, column: 'n', op: 'eq', value: 1 },
+    {
+      name: 'expense_live',
+      sql: EXPENSE_LIVE_SQL,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
   ],
   idempotency: 'idempotent',
   risk: 'low',
@@ -754,7 +874,11 @@ const SETTLE_UP: CommandDefinition = {
         ctx.now,
       );
     ctx.wrote('tally.settlement', settlementId);
-    ctx.cite({ claim: 'Payment recorded', entityType: 'tally.settlement', entityId: settlementId });
+    ctx.cite({
+      claim: 'Payment recorded',
+      entityType: 'tally.settlement',
+      entityId: settlementId,
+    });
     if (txnId)
       ctx.cite({
         claim: 'Settlement posted to the canonical ledger',
@@ -792,7 +916,11 @@ const BIND_TXN: CommandDefinition = {
   idempotency: 'idempotent',
   risk: 'low',
   handler: (ctx) => {
-    const input = ctx.input as { txn_id: string; expense_id?: string; settlement_id?: string };
+    const input = ctx.input as {
+      txn_id: string;
+      expense_id?: string;
+      settlement_id?: string;
+    };
     const targets = [input.expense_id, input.settlement_id].filter(Boolean).length;
     if (targets !== 1) throw new Error('bind exactly one of expense_id or settlement_id');
     if (input.expense_id) {
@@ -830,8 +958,19 @@ const SET_EXPENSE_MEMO: CommandDefinition = {
       note: { type: 'string' },
     },
   },
-  outputSchema: { type: 'object', properties: { expense_id: { type: 'string' } } },
-  preconditions: [{ name: 'expense_live', sql: EXPENSE_LIVE_SQL, column: 'n', op: 'eq', value: 1 }],
+  outputSchema: {
+    type: 'object',
+    properties: { expense_id: { type: 'string' } },
+  },
+  preconditions: [
+    {
+      name: 'expense_live',
+      sql: EXPENSE_LIVE_SQL,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+  ],
   postconditions: [],
   idempotency: 'idempotent',
   risk: 'low',

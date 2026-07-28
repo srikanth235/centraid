@@ -1,4 +1,5 @@
 import { assert, beforeEach, describe, expect, test } from 'vitest';
+
 import { bootstrapVault, createGrant, enrollApp, type BootstrapResult } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { createGateway, Gateway } from '../gateway/gateway.js';
@@ -20,7 +21,11 @@ describe('links', () => {
     registerLinkCommands(gw);
     registerTaskCommands(gw);
     registerKnowledgeCommands(gw);
-    owner = { kind: 'device', deviceId: boot.deviceId, deviceKey: boot.deviceKey };
+    owner = {
+      kind: 'device',
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+    };
   });
 
   function invoke(cred: Credential, command: string, input: Record<string, unknown>) {
@@ -34,7 +39,10 @@ describe('links', () => {
   }
 
   function addNote(title: string): string {
-    const out = invoke(owner, 'knowledge.create_note', { title, body_text: `${title} body` });
+    const out = invoke(owner, 'knowledge.create_note', {
+      title,
+      body_text: `${title} body`,
+    });
     expect(out.status).toBe('executed');
     return (out as { output: { note_id: string } }).output.note_id;
   }
@@ -176,7 +184,11 @@ describe('links', () => {
     const noteId = addNote('A');
     const taskId = addTask('B');
     const app = enrollApp(db, { name: 'linker' });
-    const appCred: Credential = { kind: 'app', appId: app.appId, signingKey: app.signingKey };
+    const appCred: Credential = {
+      kind: 'app',
+      appId: app.appId,
+      signingKey: app.signingKey,
+    };
     const purposeId = boot.concepts['dpv:ServiceProvision'] ?? '';
 
     // Grant: act on both link commands, read on knowledge only — schedule is
@@ -220,7 +232,10 @@ describe('links', () => {
     });
     expect(allowed.status).toBe('executed');
     const linkId = (allowed as { output: { link_id: string } }).output.link_id;
-    expect(liveLink(linkId)).toMatchObject({ valid_to: null, asserted_by: 'app' });
+    expect(liveLink(linkId)).toMatchObject({
+      valid_to: null,
+      asserted_by: 'app',
+    });
   });
 
   test('purging an endpoint end-dates its live links via the gateway sweep', () => {
@@ -357,7 +372,10 @@ describe('links', () => {
     const linkId = linkNoteToTask(SELECTOR);
     const first = anchorOf(linkId);
     const moved = { ...SELECTOR, start: 40, prefix: 'met ' };
-    const out = invoke(owner, 'core.anchor_link', { link_id: linkId, selector: moved });
+    const out = invoke(owner, 'core.anchor_link', {
+      link_id: linkId,
+      selector: moved,
+    });
     expect(out.status).toBe('executed');
     const after = anchorOf(linkId);
     expect(after?.anchor_id).toBe(first?.anchor_id); // moved, not multiplied
@@ -369,7 +387,10 @@ describe('links', () => {
   test('anchor_link can attach an anchor to a link created without one (re-anchor an orphaned edge)', () => {
     const linkId = linkNoteToTask();
     expect(anchorOf(linkId)).toBeUndefined();
-    const out = invoke(owner, 'core.anchor_link', { link_id: linkId, selector: SELECTOR });
+    const out = invoke(owner, 'core.anchor_link', {
+      link_id: linkId,
+      selector: SELECTOR,
+    });
     expect(out.status).toBe('executed');
     expect((out as { output: { anchor_id?: string } }).output.anchor_id).toBeTruthy();
     expect(anchorOf(linkId)).toBeDefined();
@@ -386,7 +407,10 @@ describe('links', () => {
   test('an ended link takes no new locator', () => {
     const linkId = linkNoteToTask(SELECTOR);
     expect(invoke(owner, 'core.unlink_entities', { link_id: linkId }).status).toBe('executed');
-    const out = invoke(owner, 'core.anchor_link', { link_id: linkId, selector: SELECTOR });
+    const out = invoke(owner, 'core.anchor_link', {
+      link_id: linkId,
+      selector: SELECTOR,
+    });
     expect(out.status).toBe('failed');
     assert(out.status === 'failed');
     expect(out.predicate).toContain('link_live');

@@ -107,5 +107,11 @@ export function mintContentFromDataUri(
       ctx.now,
     );
   ctx.wrote('core.content_item', contentId);
-  return { contentId, mediaType, byteSize: bytes.length, sha256: sha, deduped: 0 };
+  return {
+    contentId,
+    mediaType,
+    byteSize: bytes.length,
+    sha256: sha,
+    deduped: 0,
+  };
 }

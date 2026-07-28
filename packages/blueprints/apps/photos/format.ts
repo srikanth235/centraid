@@ -148,12 +148,18 @@ export function exifRows(asset: Asset): ExifRow[] {
     }
   }
   if (asset.width && asset.height) {
-    rows.push({ label: 'Dimensions', value: `${asset.width} × ${asset.height}` });
+    rows.push({
+      label: 'Dimensions',
+      value: `${asset.width} × ${asset.height}`,
+    });
   }
   if (Number.isFinite(Number(asset.duration_s))) {
     const seconds = Math.round(Number(asset.duration_s));
     const minutes = Math.floor(seconds / 60);
-    rows.push({ label: 'Duration', value: `${minutes}:${String(seconds % 60).padStart(2, '0')}` });
+    rows.push({
+      label: 'Duration',
+      value: `${minutes}:${String(seconds % 60).padStart(2, '0')}`,
+    });
   }
   const size = fmtBytes(assetBytes(asset));
   if (size) rows.push({ label: 'File size', value: size });
@@ -166,7 +172,10 @@ export function exifRows(asset: Asset): ExifRow[] {
       // spells out the weekday on its own.
       rows.push({
         label: 'Captured',
-        value: d.toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'short' }),
+        value: d.toLocaleString(undefined, {
+          dateStyle: 'full',
+          timeStyle: 'short',
+        }),
       });
     }
   }

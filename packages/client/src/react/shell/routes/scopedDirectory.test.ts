@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
+
 import { rejectScopedDirectory } from './scopedDirectory.js';
 
-describe('rejectScopedDirectory', () => {
+describe(rejectScopedDirectory, () => {
   it('accepts absolute POSIX, Windows, and UNC roots', () => {
     expect(rejectScopedDirectory('/Users/me/project', [])).toBeNull();
     expect(rejectScopedDirectory('C:\\Users\\me\\project', [])).toBeNull();

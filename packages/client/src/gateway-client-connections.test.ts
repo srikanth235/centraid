@@ -3,8 +3,8 @@ import { beforeAll, beforeEach, describe, expect, test, vi } from 'vitest';
 let completeAssistAuthorization: typeof import('./gateway-client-connections.js').completeAssistAuthorization;
 let resetGatewayAuthCache: typeof import('./gateway-client-core.js').resetGatewayAuthCache;
 
-const getGatewayAuth = vi.fn();
-const irohFetch = vi.fn();
+const getGatewayAuth = vi.fn<typeof window.CentraidApi.getGatewayAuth>();
+const irohFetch = vi.fn<NonNullable<typeof window.CentraidIroh>['fetch']>();
 
 describe('gateway-client-connections', () => {
   beforeAll(async () => {
@@ -15,7 +15,7 @@ describe('gateway-client-connections', () => {
     } as unknown as typeof window.CentraidApi;
     window.CentraidIroh = {
       fetch: irohFetch,
-      url: vi.fn(),
+      url: vi.fn<NonNullable<typeof window.CentraidIroh>['url']>(),
     };
     ({ completeAssistAuthorization } = await import('./gateway-client-connections.js'));
     ({ resetGatewayAuthCache } = await import('./gateway-client-core.js'));
@@ -57,7 +57,7 @@ describe('gateway-client-connections', () => {
     const headers = new Headers(init.headers);
     expect(headers.get('authorization')).toBe('Bearer device-token');
     expect(headers.get('x-centraid-vault')).toBe('vault-1');
-    expect(headers.get('x-centraid-client-session')).toMatch(/^[a-f0-9]{64}$/);
+    expect(headers.get('x-centraid-client-session')).toMatch(/^[a-f0-9]{64}$/u);
     expect(JSON.parse(String(init.body))).toStrictEqual({
       code: 'authorization-code',
       receipt: `v1.1999999999.${'B'.repeat(43)}`,

@@ -6,6 +6,7 @@
 // decision.
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+
 import { describe, expect, it, vi } from 'vitest';
 
 const PKG = path.resolve(import.meta.dirname, '..');
@@ -19,10 +20,17 @@ const {
   normalizeApproveOutcome,
 } = await import(url);
 
+type ConsentFetchTestSeam = (
+  url: string,
+  options?: { method?: string; body?: string },
+) => Promise<{ ok: boolean; status: number; body: Record<string, unknown> }>;
+
 describe('outcomeOf', () => {
   it('finds a bare or nested InvokeOutcome, else null', () => {
     expect(outcomeOf({ status: 'parked' })).toStrictEqual({ status: 'parked' });
-    expect(outcomeOf({ output: { status: 'denied' } })).toStrictEqual({ status: 'denied' });
+    expect(outcomeOf({ output: { status: 'denied' } })).toStrictEqual({
+      status: 'denied',
+    });
     expect(outcomeOf({ nope: 1 })).toBeNull();
     expect(outcomeOf(null)).toBeNull();
   });
@@ -51,10 +59,12 @@ describe('shortVal + describeParked', () => {
 
 describe('fetchParkedEntry', () => {
   it('finds the matching invocation on the consent surface', async () => {
-    const fetchJson = vi.fn().mockResolvedValue({
+    const fetchJson = vi.fn<ConsentFetchTestSeam>().mockResolvedValue({
       ok: true,
       status: 200,
-      body: { parked: [{ invocationId: 'inv-1', command: 'a' }, { invocationId: 'inv-2' }] },
+      body: {
+        parked: [{ invocationId: 'inv-1', command: 'a' }, { invocationId: 'inv-2' }],
+      },
     });
     await expect(fetchParkedEntry('inv-2', { fetchJson })).resolves.toStrictEqual({
       invocationId: 'inv-2',
@@ -66,7 +76,7 @@ describe('fetchParkedEntry', () => {
 
 describe('confirmParked', () => {
   it('POSTs the decision and returns the outcome body', async () => {
-    const fetchJson = vi.fn().mockResolvedValue({
+    const fetchJson = vi.fn<ConsentFetchTestSeam>().mockResolvedValue({
       ok: true,
       status: 200,
       body: { status: 'executed', receiptId: 'r1' },
@@ -80,9 +90,11 @@ describe('confirmParked', () => {
   });
 
   it('throws the server message on a non-ok response', async () => {
-    const fetchJson = vi
-      .fn()
-      .mockResolvedValue({ ok: false, status: 409, body: { message: 'stale' } });
+    const fetchJson = vi.fn<ConsentFetchTestSeam>().mockResolvedValue({
+      ok: false,
+      status: 409,
+      body: { message: 'stale' },
+    });
     await expect(confirmParked('inv-1', false, { fetchJson })).rejects.toThrow('stale');
   });
 });

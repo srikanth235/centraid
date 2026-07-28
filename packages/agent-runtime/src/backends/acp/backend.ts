@@ -13,7 +13,9 @@
 import { spawn, type ChildProcessByStdio } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import type { Readable, Writable } from 'node:stream';
+
 import type { TurnStreamEvent } from '@centraid/app-engine';
+
 import { lowPriorityCommand } from '../../low-priority.js';
 import {
   acpAttachmentBlocks,
@@ -52,11 +54,11 @@ import {
   type SessionSetupResult,
 } from './session-config.js';
 import { putWarmSlot, takeWarmSlot } from './session-warm.js';
-import { createSessionUpdateMapper } from './stream-events.js';
 import { outcomeForStopReason } from './stop-reason.js';
+import { createSessionUpdateMapper } from './stream-events.js';
 import { startTurnVaultTools } from './turn-vault-tools.js';
-import { buildUsageEvent, deltaCumulativeUsage } from './usage.js';
 import type { AcpTurnConfig, AcpTurnInput, AcpTurnResult } from './types.js';
+import { buildUsageEvent, deltaCumulativeUsage } from './usage.js';
 
 export type { AcpAdapterSpec, AcpTurnConfig, AcpTurnInput, AcpTurnResult } from './types.js';
 
@@ -67,7 +69,7 @@ const DEFAULT_PROMPT_IDLE_TIMEOUT_MS = 120_000;
 
 function requestWithTimeout<T>(request: Promise<T>, timeoutMs: number, stage: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_, reject) => {
+  const timeout = new Promise<never>((_resolve, reject) => {
     timer = setTimeout(
       () => reject(new Error(`ACP ${stage} timed out after ${timeoutMs}ms`)),
       timeoutMs,
@@ -240,7 +242,11 @@ export async function runAcpTurn(
     parkWarm = false;
     if (sessionId && !conn.hasExited()) {
       try {
-        conn.send({ jsonrpc: '2.0', method: 'session/cancel', params: { sessionId } });
+        conn.send({
+          jsonrpc: '2.0',
+          method: 'session/cancel',
+          params: { sessionId },
+        });
       } catch {
         // ignore
       }
@@ -262,7 +268,66 @@ export async function runAcpTurn(
   };
 
   try {
-    if (!reusedWarm) {
+    if (reusedWarm) {
+      for (const notice of pendingNotices) emit(notice);
+      const vaultTools = await startTurnVaultTools({
+        toolContext: input.toolContext,
+        httpMcp,
+        emit,
+        agentStreamsTool: stream.agentStreamsTool,
+      });
+      vaultMcp = vaultTools.handle;
+      const mcpServers = vaultTools.mcpServers;
+      const sid = sessionId!;
+      try {
+        if (canResume) {
+          const resumed = await requestWithTimeout(
+            conn.request<SessionSetupResult>('session/resume', {
+              ...sessionParams(sid),
+              mcpServers,
+            }),
+            stageTimeoutMs,
+            'session/resume',
+          );
+          configOptions = readConfigOptions(resumed);
+          modes = resumed?.modes ?? undefined;
+        } else if (canLoad) {
+          const loaded = await requestWithTimeout(
+            conn.request<SessionSetupResult>('session/load', {
+              ...sessionParams(sid),
+              mcpServers,
+            }),
+            stageTimeoutMs,
+            'session/load',
+          );
+          configOptions = readConfigOptions(loaded);
+          modes = loaded?.modes ?? undefined;
+        }
+      } catch {
+        const created = await requestWithTimeout(
+          conn.request<SessionSetupResult>('session/new', {
+            ...sessionParams(),
+            mcpServers,
+          }),
+          stageTimeoutMs,
+          'session/new after resume failure',
+        );
+        const freshId = typeof created?.sessionId === 'string' ? created.sessionId : undefined;
+        if (!freshId) throw new Error('acp agent did not return a sessionId after resume failure');
+        configOptions = readConfigOptions(created);
+        modes = created?.modes ?? undefined;
+        sessionId = freshId;
+        continuity = 'fresh';
+        // Announced only after the replacement session exists (see above).
+        emit({
+          type: 'notice',
+          level: 'warn',
+          code: 'session_resume_self_heal',
+          message:
+            'The agent no longer recognized its saved session. Started a fresh session and restored the conversation from Centraid’s ledger.',
+        });
+      }
+    } else {
       const init = await requestWithTimeout(
         conn.request<InitializeResult>('initialize', {
           protocolVersion: ACP_PROTOCOL_VERSION,
@@ -270,7 +335,11 @@ export async function runAcpTurn(
             fs: { readTextFile: false, writeTextFile: false },
             terminal: false,
           },
-          clientInfo: { name: 'centraid-local-runner', title: 'Centraid', version: '0.1.0' },
+          clientInfo: {
+            name: 'centraid-local-runner',
+            title: 'Centraid',
+            version: '0.1.0',
+          },
         }),
         stageTimeoutMs,
         'initialize',
@@ -355,65 +424,6 @@ export async function runAcpTurn(
               'The agent no longer recognized its saved session. Started a fresh session and restored the conversation from Centraid’s ledger.',
           });
         }
-      }
-    } else {
-      for (const notice of pendingNotices) emit(notice);
-      const vaultTools = await startTurnVaultTools({
-        toolContext: input.toolContext,
-        httpMcp,
-        emit,
-        agentStreamsTool: stream.agentStreamsTool,
-      });
-      vaultMcp = vaultTools.handle;
-      const mcpServers = vaultTools.mcpServers;
-      const sid = sessionId!;
-      try {
-        if (canResume) {
-          const resumed = await requestWithTimeout(
-            conn.request<SessionSetupResult>('session/resume', {
-              ...sessionParams(sid),
-              mcpServers,
-            }),
-            stageTimeoutMs,
-            'session/resume',
-          );
-          configOptions = readConfigOptions(resumed);
-          modes = resumed?.modes ?? undefined;
-        } else if (canLoad) {
-          const loaded = await requestWithTimeout(
-            conn.request<SessionSetupResult>('session/load', {
-              ...sessionParams(sid),
-              mcpServers,
-            }),
-            stageTimeoutMs,
-            'session/load',
-          );
-          configOptions = readConfigOptions(loaded);
-          modes = loaded?.modes ?? undefined;
-        }
-      } catch {
-        const created = await requestWithTimeout(
-          conn.request<SessionSetupResult>('session/new', {
-            ...sessionParams(),
-            mcpServers,
-          }),
-          stageTimeoutMs,
-          'session/new after resume failure',
-        );
-        const freshId = typeof created?.sessionId === 'string' ? created.sessionId : undefined;
-        if (!freshId) throw new Error('acp agent did not return a sessionId after resume failure');
-        configOptions = readConfigOptions(created);
-        modes = created?.modes ?? undefined;
-        sessionId = freshId;
-        continuity = 'fresh';
-        // Announced only after the replacement session exists (see above).
-        emit({
-          type: 'notice',
-          level: 'warn',
-          code: 'session_resume_self_heal',
-          message:
-            'The agent no longer recognized its saved session. Started a fresh session and restored the conversation from Centraid’s ledger.',
-        });
       }
     }
 
@@ -551,7 +561,7 @@ export async function runAcpTurn(
     usageSnapshot = resumeBaseline;
 
     promptStarted = true;
-    const idleWatchdog = new Promise<never>((_, reject) => {
+    const idleWatchdog = new Promise<never>((_resolve, reject) => {
       rejectPromptIdle = reject;
       touchPromptIdleWatchdog();
     });
@@ -597,14 +607,14 @@ export async function runAcpTurn(
       if (stop.error) {
         emit({
           ...stop.error,
-          ...(stopReason !== undefined ? { stopReason } : {}),
+          ...(stopReason === undefined ? {} : { stopReason }),
           rawJson,
         });
       } else if (stop.emitFinal) {
         emit({
           type: 'final',
           text: stream.finalText(),
-          ...(stopReason !== undefined ? { stopReason } : {}),
+          ...(stopReason === undefined ? {} : { stopReason }),
           rawJson,
         });
       }
@@ -688,7 +698,11 @@ export async function runAcpTurn(
   const spawnError = conn.spawnError();
   if (input.abortSignal.aborted) input.onEvent({ type: 'aborted' });
   else if (spawnError) {
-    input.onEvent({ type: 'error', message: spawnError.message, failureClass: 'spawn' });
+    input.onEvent({
+      type: 'error',
+      message: spawnError.message,
+      failureClass: 'spawn',
+    });
   }
 
   return sessionId

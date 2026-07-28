@@ -611,7 +611,11 @@ function validateOneTrigger(raw: unknown, field: string): Trigger {
         );
       }
     }
-    return { kind: 'data', entities, ...(every === undefined ? {} : { every }) };
+    return {
+      kind: 'data',
+      entities,
+      ...(every === undefined ? {} : { every }),
+    };
   }
   if (t.kind === 'event') {
     const connectorKind = requireString(t.connectorKind, `${field}.connectorKind`);

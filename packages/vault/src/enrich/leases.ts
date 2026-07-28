@@ -9,6 +9,7 @@
 
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
+
 import type { DerivativeVariant } from '../blob/derivatives.js';
 
 export const ENRICHMENT_CAPABILITIES = [
@@ -419,6 +420,14 @@ export function enrichmentQueueDepth(
          FROM enrich_request
         WHERE drained_at IS NULL AND required_capability IS NOT NULL`,
     )
-    .get(iso(now), iso(now)) as { total: number; available: number | null; leased: number | null };
-  return { total: row.total, available: row.available ?? 0, leased: row.leased ?? 0 };
+    .get(iso(now), iso(now)) as {
+    total: number;
+    available: number | null;
+    leased: number | null;
+  };
+  return {
+    total: row.total,
+    available: row.available ?? 0,
+    leased: row.leased ?? 0,
+  };
 }

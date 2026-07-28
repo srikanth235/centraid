@@ -5,6 +5,7 @@
 // constraints — never authored here.
 
 import type { DatabaseSync } from 'node:sqlite';
+
 import { nowIso } from '../ids.js';
 import type { ConditionSpec, Risk } from './types.js';
 
@@ -117,7 +118,11 @@ export function judgmentVeto(
       `SELECT judgment_id, subject_scope, rule_json FROM agent_judgment
         WHERE active = 1 AND (expires_at IS NULL OR expires_at > ?)`,
     )
-    .all(nowIso()) as { judgment_id: string; subject_scope: string; rule_json: string }[];
+    .all(nowIso()) as {
+    judgment_id: string;
+    subject_scope: string;
+    rule_json: string;
+  }[];
   for (const row of rows) {
     if (row.subject_scope !== commandName && row.subject_scope !== ownerSchema) continue;
     const rule = JSON.parse(row.rule_json) as { veto_command?: string };

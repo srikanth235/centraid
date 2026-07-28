@@ -39,17 +39,22 @@ export function colorForIcon(iconKey: IconNameType | string): ColorHexType {
  * Returns `null` when neither key resolves, so callers fall back to the
  * legacy stored UserAppMeta / inference chain.
  */
-export function tileVisualFromListing(row: {
-  iconKey?: string;
-  colorKey?: string;
-}): { iconKey: IconNameType; colorKey: ColorKeyType; color: ColorHexType } | null {
+export function tileVisualFromListing(row: { iconKey?: string; colorKey?: string }): {
+  iconKey: IconNameType;
+  colorKey: ColorKeyType;
+  color: ColorHexType;
+} | null {
   const iconOk = !!row.iconKey && !!(Icon as Record<string, unknown>)[row.iconKey];
   const palette = ICON_PALETTE as unknown as Record<string, ColorHexType>;
   const colorOk = !!row.colorKey && !!palette[row.colorKey];
   if (!iconOk && !colorOk) return null;
   const iconKey = (iconOk ? row.iconKey : 'Sparkle') as IconNameType;
   const colorKey = (colorOk ? row.colorKey : colorKeyForIcon(iconKey)) as ColorKeyType;
-  return { iconKey, colorKey, color: palette[colorKey] ?? colorForIcon(iconKey) };
+  return {
+    iconKey,
+    colorKey,
+    color: palette[colorKey] ?? colorForIcon(iconKey),
+  };
 }
 
 // Prompt-keyword icon inference for freshly generated apps. The pool is
@@ -104,7 +109,12 @@ export function inferAppVisual(prompt: string): {
   const cleaned = prompt.replace(/^\s*(?:a|an)\s+/iu, '').trim();
   const words = cleaned.split(/\s+/u).slice(0, 3).join(' ');
   const name = words.charAt(0).toUpperCase() + words.slice(1);
-  return { iconKey, colorKey, color: colorForIcon(iconKey), name: name || 'New app' };
+  return {
+    iconKey,
+    colorKey,
+    color: colorForIcon(iconKey),
+    name: name || 'New app',
+  };
 }
 
 // "X ago" relative-time formatter. Mirrors builder.ts:relativeWhen, but
@@ -141,7 +151,10 @@ export function relativeRunLabel(d: Date): string {
   const startOfDay = (x: Date): number =>
     new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
   const dayDiff = Math.round((startOfDay(d) - startOfDay(new Date())) / 86_400_000);
-  const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  const time = d.toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
   const day =
     dayDiff === 0
       ? 'Today'

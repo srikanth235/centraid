@@ -6,19 +6,21 @@
  * a real limits file, and nothing else.
  */
 
-import { afterEach, describe, expect, test } from 'vitest';
-import http from 'node:http';
-import path from 'node:path';
 import { promises as fs } from 'node:fs';
+import http from 'node:http';
 import type { AddressInfo } from 'node:net';
+import path from 'node:path';
+
 import { tempDir } from '@centraid/test-kit/temp-dir';
-import type { RouteHandler } from '../serve/build-gateway.js';
-import type { VaultRegistry } from '../serve/vault-registry.js';
-import { openStorageConnectionStore } from '../backup/storage-connections.js';
+import { afterEach, describe, expect, test } from 'vitest';
+
 import { RecoveryKitStateStore } from '../backup/recovery-kit-state.js';
+import { openStorageConnectionStore } from '../backup/storage-connections.js';
 import { StorageUsagePoller } from '../backup/storage-usage.js';
+import type { RouteHandler } from '../serve/build-gateway.js';
 import { LocalUsageScanner } from '../serve/local-usage.js';
 import { StorageLimitsStore } from '../serve/storage-limits.js';
+import type { VaultRegistry } from '../serve/vault-registry.js';
 import { makeStorageRouteHandler } from './storage-routes.js';
 
 const servers: http.Server[] = [];
@@ -27,7 +29,7 @@ const dirs: string[] = [];
 describe('storage-local-routes', () => {
   afterEach(async () => {
     for (const server of servers.splice(0)) server.close();
-    for (const dir of dirs.splice(0)) await fs.rm(dir, { recursive: true, force: true });
+    await Promise.all(dirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
   });
 
   function startHandlerServer(handler: RouteHandler): Promise<string> {
@@ -48,7 +50,11 @@ describe('storage-local-routes', () => {
     });
   }
 
-  async function harness(): Promise<{ base: string; limits: StorageLimitsStore; root: string }> {
+  async function harness(): Promise<{
+    base: string;
+    limits: StorageLimitsStore;
+    root: string;
+  }> {
     const root = await tempDir('centraid-storage-local-routes-');
     dirs.push(root);
     const storageDir = path.join(root, 'storage');
@@ -84,7 +90,10 @@ describe('storage-local-routes', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       totalBytes: number;
-      vaults: { vaultId: string; components: { component: string; bytes: number }[] }[];
+      vaults: {
+        vaultId: string;
+        components: { component: string; bytes: number }[];
+      }[];
       components: { component: string }[];
       disk: { freeBytes: number; totalBytes: number };
       limits: { totalLimitBytes: number | null };
@@ -110,7 +119,10 @@ describe('storage-local-routes', () => {
     const set = await fetch(`${base}/centraid/_gateway/storage/limits`, {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ totalLimitBytes: 10 * 1024 ** 3, journalLimitBytes: 1024 ** 3 }),
+      body: JSON.stringify({
+        totalLimitBytes: 10 * 1024 ** 3,
+        journalLimitBytes: 1024 ** 3,
+      }),
     });
     expect(set.status).toBe(200);
     expect(((await set.json()) as { limits: { totalLimitBytes: number } }).limits).toMatchObject({
@@ -151,7 +163,11 @@ describe('storage-local-routes', () => {
     const res = await fetch(`${base}/centraid/_gateway/storage/local?refresh=1`);
     const body = (await res.json()) as {
       limits: { totalLimitBytes: number };
-      limit: { status: string; limitBytes: number; fractionUsed: number | null };
+      limit: {
+        status: string;
+        limitBytes: number;
+        fractionUsed: number | null;
+      };
     };
     expect(res.status).toBe(200);
     expect(body.limits.totalLimitBytes).toBe(budget);
@@ -176,7 +192,9 @@ describe('storage-local-routes', () => {
 
   test('storage/local refuses a non-GET', async () => {
     const { base } = await harness();
-    const res = await fetch(`${base}/centraid/_gateway/storage/local`, { method: 'POST' });
+    const res = await fetch(`${base}/centraid/_gateway/storage/local`, {
+      method: 'POST',
+    });
     expect(res.status).toBe(405);
   });
 });

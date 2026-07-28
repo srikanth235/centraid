@@ -1,17 +1,19 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { afterEach, describe, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { aesGcmKeyProtector, KeyStore } from '@centraid/vault';
-import { landlordBearerForDataDir, landlordBearerForEndpointSecret } from './landlord-auth.js';
+import { afterEach, describe, expect, test } from 'vitest';
+
 import { daemonKeyStore } from './key-store.js';
+import { landlordBearerForDataDir, landlordBearerForEndpointSecret } from './landlord-auth.js';
 import { daemonLayoutFor } from './paths.js';
 
 const roots: string[] = [];
 
 describe('landlord-auth', () => {
   afterEach(async () => {
-    while (roots.length > 0) await fs.rm(roots.pop()!, { recursive: true, force: true });
+    await Promise.all(roots.splice(0).map((root) => fs.rm(root, { recursive: true, force: true })));
   });
 
   test('the derived bearer is stable for an endpoint secret and unique to it', () => {
@@ -19,7 +21,7 @@ describe('landlord-auth', () => {
     const bearer = landlordBearerForEndpointSecret(secret);
 
     expect(bearer).toBe(landlordBearerForEndpointSecret(Buffer.alloc(32, 0x7a)));
-    expect(bearer).toMatch(/^[0-9a-f]{64}$/);
+    expect(bearer).toMatch(/^[0-9a-f]{64}$/u);
     // A different identity must not derive the same loopback admin bearer.
     expect(landlordBearerForEndpointSecret(Buffer.alloc(32, 0x7b))).not.toBe(bearer);
     // The bearer must not simply be the key material in another encoding.
@@ -51,9 +53,9 @@ describe('landlord-auth', () => {
     roots.push(dataDir);
     const masterKey = Buffer.alloc(32, 0x31);
     const keysDir = daemonLayoutFor(dataDir).keysDir;
-    const secret = new KeyStore(keysDir, { protector: aesGcmKeyProtector(masterKey) }).create(
-      'endpoint-key.bin',
-    );
+    const secret = new KeyStore(keysDir, {
+      protector: aesGcmKeyProtector(masterKey),
+    }).create('endpoint-key.bin');
 
     expect(landlordBearerForDataDir(dataDir, { masterKey })).toBe(
       landlordBearerForEndpointSecret(secret),
@@ -77,7 +79,7 @@ describe('landlord-auth', () => {
     expect(
       landlordBearerForDataDir(dataDir, { masterKey: Buffer.alloc(32, 0x42) }),
     ).toBeUndefined();
-    expect(landlordBearerForDataDir(dataDir, { masterKey })).toMatch(/^[0-9a-f]{64}$/);
+    expect(landlordBearerForDataDir(dataDir, { masterKey })).toMatch(/^[0-9a-f]{64}$/u);
 
     // A copied data directory yields a DIFFERENT identity's bearer only if it
     // carries that identity's key; it can never derive one it does not hold.

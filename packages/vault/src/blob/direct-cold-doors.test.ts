@@ -1,4 +1,5 @@
-import { tempDirSync } from '@centraid/test-kit/temp-dir';
+import { randomBytes } from 'node:crypto';
+import { rmSync } from 'node:fs';
 // Direct-to-IA storage class for large media originals (issue #425 Wave 3
 // Part B) — the remote-primary ingress doors, where the CAS object is minted
 // BEFORE the staging row exists, so the class is resolved from a media hint the
@@ -9,12 +10,13 @@ import { tempDirSync } from '@centraid/test-kit/temp-dir';
 // The pure eligibility resolver and the local-first outbox-drain doors that
 // resolve the class from an already-written `blob_staging` row live alongside in
 // direct-cold-originals.test.ts.
-
-import { randomBytes } from 'node:crypto';
 import http from 'node:http';
-import { rmSync } from 'node:fs';
 import path from 'node:path';
+
+import { forEachSequentially } from '@centraid/test-kit/sequential';
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { afterEach, describe, expect, test } from 'vitest';
+
 import { resolveBackupPolicy, type BackupPolicy } from '../backup-policy.js';
 import { bootstrapVault } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
@@ -25,15 +27,15 @@ import { FsBlobStore } from './local.js';
 import type { RemoteBlobTransfer } from './remote-transfer.js';
 import { S3TransferStore } from './s3-transfer.js';
 import { unsealBlob } from './seal.js';
+import { COLD_ORIGINAL_STORAGE_CLASS, storageClassForShaWrite } from './store-routing.js';
 import type { BlobRange, BlobStat, BlobStore } from './store.js';
 import { sha256OfBytes } from './store.js';
-import { COLD_ORIGINAL_STORAGE_CLASS, storageClassForShaWrite } from './store-routing.js';
 import { BlobTransferCoordinator } from './transfers.js';
 
 const cleanups: (() => void | Promise<void>)[] = [];
 describe('direct-cold-doors', () => {
   afterEach(async () => {
-    while (cleanups.length > 0) await cleanups.pop()?.();
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
   });
 
   const SUPPORTED = ['STANDARD', 'STANDARD_IA'];
@@ -47,13 +49,20 @@ describe('direct-cold-doors', () => {
 
   interface FakeS3 {
     url: string;
-    requests: { method: string; storageClass: string | null; copySource: string | null }[];
-    close(): Promise<void>;
+    requests: {
+      method: string;
+      storageClass: string | null;
+      copySource: string | null;
+    }[];
+    close: () => Promise<void>;
   }
 
   function startFakeS3(): Promise<FakeS3> {
-    const requests: { method: string; storageClass: string | null; copySource: string | null }[] =
-      [];
+    const requests: {
+      method: string;
+      storageClass: string | null;
+      copySource: string | null;
+    }[] = [];
     const server = http.createServer((req, res) => {
       requests.push({
         method: req.method ?? '',
@@ -136,7 +145,11 @@ describe('direct-cold-doors', () => {
     db.blobTransfers.abandon();
     bootstrapVault(db, { ownerName: 'Ravi' });
     const local = new FsBlobStore(path.join(dir, 'blobs'));
-    const merged: BackupPolicy = { ...policy, cacheBudgetBytes: 1, reservedHeadroomBytes: 0 };
+    const merged: BackupPolicy = {
+      ...policy,
+      cacheBudgetBytes: 1,
+      reservedHeadroomBytes: 0,
+    };
     const cache = new BlobCache(db.vault, local, { policy: () => merged });
     const keys = new BlobContentKeyRegistry(db.vault, db.sealKey);
     const objects = new Map<string, Buffer>();
@@ -246,7 +259,9 @@ describe('direct-cold-doors', () => {
   }
 
   test('stream-through door: an eligible large video original promotes with STANDARD_IA', async () => {
-    const policy = resolveBackupPolicy({ directToColdOriginals: { minBytes: 1024 } });
+    const policy = resolveBackupPolicy({
+      directToColdOriginals: { minBytes: 1024 },
+    });
     const h = openStreamHarness(policy, SUPPORTED);
     const plain = randomBytes(4096);
     const sha = await streamThroughIngress(h.coordinator(), plain, 'video/mp4');
@@ -256,7 +271,9 @@ describe('direct-cold-doors', () => {
   });
 
   test('stream-through door: an ineligible original promotes class-less (no header)', async () => {
-    const policy = resolveBackupPolicy({ directToColdOriginals: { minBytes: 1024 } });
+    const policy = resolveBackupPolicy({
+      directToColdOriginals: { minBytes: 1024 },
+    });
     // Non-media original at size — sniffs application/pdf, so it never goes cold.
     const h = openStreamHarness(policy, SUPPORTED);
     const sha = await streamThroughIngress(h.coordinator(), randomBytes(4096), 'application/pdf');

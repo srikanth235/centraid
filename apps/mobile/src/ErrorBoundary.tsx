@@ -12,7 +12,7 @@ interface State {
 
 /* eslint-disable react/no-set-state, react/state-in-constructor -- (#468) React error boundaries require a class component */
 export default class ErrorBoundary extends Component<Props, State> {
-  static displayName = 'ErrorBoundary';
+  static readonly displayName = 'ErrorBoundary';
 
   override state: State = { error: null };
 

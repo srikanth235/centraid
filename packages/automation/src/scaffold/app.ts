@@ -23,6 +23,7 @@
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+
 import {
   HANDLER_FILE,
   MANIFEST_FILE,
@@ -158,35 +159,49 @@ export async function list(appsDir: string): Promise<ListAppsResult> {
     if (isEnoent(err)) return { rows: [], errors: [] };
     throw err;
   }
-  const rows: Row[] = [];
-  const errors: AppError[] = [];
-  for (const app of appEntries) {
-    if (!app.isDirectory()) continue;
-    if (app.name.startsWith('.') || app.name.startsWith('_')) continue;
-    const codeDir = path.join(appsDir, app.name);
-    const autoRoot = path.join(codeDir, APP_AUTOMATIONS_SUBDIR);
-    let autoEntries: import('node:fs').Dirent[];
-    try {
-      autoEntries = await fs.readdir(autoRoot, { withFileTypes: true });
-    } catch (err) {
-      if (isEnoent(err)) continue;
-      throw err;
-    }
-    for (const e of autoEntries) {
-      if (!e.isDirectory()) continue;
-      if (e.name.startsWith('.') || e.name.startsWith('_')) continue;
-      try {
-        const row = await readAppAt(path.join(autoRoot, e.name), app.name);
-        if (row) rows.push(row);
-      } catch (err) {
-        errors.push({
-          id: `${app.name}/${e.name}`,
-          error: err instanceof Error ? err.message : String(err),
-          ...(err instanceof ManifestError ? { code: err.code } : {}),
-        });
-      }
-    }
-  }
+  const results = await Promise.all(
+    appEntries
+      .filter((app) => app.isDirectory() && !app.name.startsWith('.') && !app.name.startsWith('_'))
+      .map(async (app): Promise<ListAppsResult> => {
+        const codeDir = path.join(appsDir, app.name);
+        const autoRoot = path.join(codeDir, APP_AUTOMATIONS_SUBDIR);
+        let autoEntries: import('node:fs').Dirent[];
+        try {
+          autoEntries = await fs.readdir(autoRoot, { withFileTypes: true });
+        } catch (err) {
+          if (isEnoent(err)) return { rows: [], errors: [] };
+          throw err;
+        }
+        const entries = await Promise.all(
+          autoEntries
+            .filter(
+              (entry) =>
+                entry.isDirectory() && !entry.name.startsWith('.') && !entry.name.startsWith('_'),
+            )
+            .map(async (entry): Promise<{ row?: Row; error?: AppError }> => {
+              try {
+                return {
+                  row: await readAppAt(path.join(autoRoot, entry.name), app.name),
+                };
+              } catch (err) {
+                return {
+                  error: {
+                    id: `${app.name}/${entry.name}`,
+                    error: err instanceof Error ? err.message : String(err),
+                    ...(err instanceof ManifestError ? { code: err.code } : {}),
+                  },
+                };
+              }
+            }),
+        );
+        return {
+          rows: entries.flatMap((entry) => (entry.row ? [entry.row] : [])),
+          errors: entries.flatMap((entry) => (entry.error ? [entry.error] : [])),
+        };
+      }),
+  );
+  const rows = results.flatMap((result) => result.rows);
+  const errors = results.flatMap((result) => result.errors);
   rows.sort((a, b) => a.name.localeCompare(b.name));
   return { rows, errors };
 }

@@ -78,14 +78,22 @@ export class FsObjectStore implements ObjectStore {
           ws.on('error', reject);
           ws.on('finish', resolve);
           (async () => {
-            try {
-              for await (const chunk of data) {
-                if (!ws.write(chunk)) {
-                  await new Promise<void>((resolve) => ws.once('drain', () => resolve()));
-                }
+            const iterator = data[Symbol.asyncIterator]();
+            const writeNext = async (): Promise<void> => {
+              const next = await iterator.next();
+              if (next.done) {
+                ws.end();
+                return;
               }
-              ws.end();
+              if (!ws.write(next.value)) {
+                await new Promise<void>((resolve) => ws.once('drain', () => resolve()));
+              }
+              return writeNext();
+            };
+            try {
+              await writeNext();
             } catch (err) {
+              await iterator.return?.();
               ws.destroy();
               reject(err instanceof Error ? err : new Error(String(err)));
             }
@@ -106,17 +114,19 @@ export class FsObjectStore implements ObjectStore {
 
   getStream(key: string): AsyncIterable<Uint8Array> {
     const full = this.resolve(key);
-    /** @yields Successive byte ranges of the file, in order. */
+    /** @yields {Uint8Array} Successive byte ranges of the file, in order. */
     async function* gen(): AsyncGenerator<Uint8Array> {
       const handle = await fs.open(full, 'r');
       try {
         const bufSize = 64 * 1024;
         const buf = Buffer.alloc(bufSize);
-        for (;;) {
+        const readNext = async function* (): AsyncGenerator<Uint8Array> {
           const { bytesRead } = await handle.read(buf, 0, bufSize, null);
-          if (bytesRead === 0) break;
+          if (bytesRead === 0) return;
           yield new Uint8Array(buf.subarray(0, bytesRead));
-        }
+          yield* readNext();
+        };
+        yield* readNext();
       } finally {
         await handle.close();
       }
@@ -150,7 +160,11 @@ export class FsObjectStore implements ObjectStore {
         if ((err as NodeJS.ErrnoException).code === 'ENOENT') return;
         throw err;
       }
-      for (const entry of entries) {
+      const walkNextEntry = async function* (
+        index: number,
+      ): AsyncGenerator<{ key: string; size: number }> {
+        const entry = entries[index];
+        if (!entry) return;
         const full = path.join(dir, entry.name);
         if (entry.isDirectory()) {
           yield* walk(full);
@@ -161,7 +175,9 @@ export class FsObjectStore implements ObjectStore {
             yield { key: rel, size: st.size };
           }
         }
-      }
+        yield* walkNextEntry(index + 1);
+      };
+      yield* walkNextEntry(0);
     }
     if (prefix.length > 0) assertSafeKey(prefix.endsWith('/') ? `${prefix}x` : prefix);
     return walk(root);

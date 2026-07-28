@@ -1,7 +1,7 @@
 import { webCryptoDigest, type ReplicaDigest } from './digest.js';
 import type { ReplicaIdentity } from './types.js';
 
-export type { ReplicaDigest };
+export { type ReplicaDigest } from './digest.js';
 
 /** Opaque, non-secret namespace shared by SQLite, IDB and Cache Storage. */
 export async function replicaStorageKey(

@@ -27,7 +27,11 @@ export interface RolePreset {
  * casually paired phone mint further tickets and revoke this very device.
  */
 export const ROLE_PRESETS: readonly RolePreset[] = [
-  { role: 'read', label: 'Viewer', hint: 'Can see this space. Cannot change anything.' },
+  {
+    role: 'read',
+    label: 'Viewer',
+    hint: 'Can see this space. Cannot change anything.',
+  },
   {
     role: 'write',
     label: 'Member',
@@ -91,7 +95,7 @@ export function pairErrorMessage(err: unknown): string {
  * instead of making the owner retype anything.
  */
 const LAST_ADMIN_CODE = 'last_admin_confirmation_required';
-const LAST_ADMIN_SPACE = /(?:type|member of)\s+\\?"([^"\\]+)\\?"/;
+const LAST_ADMIN_SPACE = /(?:type|member of)\s+\\?"(?<space>[^"\\]+)\\?"/u;
 
 /** The space that would lose its last owner, or `undefined` for other errors. */
 export function lastAdminSpace(err: unknown): string | undefined {

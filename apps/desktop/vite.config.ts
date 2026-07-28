@@ -1,6 +1,8 @@
 import { fileURLToPath } from 'node:url';
+
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
+
 import { inlineBlueprintAliases } from '../../packages/client/src/react/blueprints/inline-vite-aliases.ts';
 
 // Builds the React coexistence island (issue #325, Phase 0) into the same

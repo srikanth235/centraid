@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
 import type { UsageByStore } from '@centraid/backup';
+import { describe, expect, it } from 'vitest';
+
 import {
   createStorageQuotaHealthProbe,
   QUOTA_DEGRADED_AT,
@@ -8,7 +9,12 @@ import {
 } from './storage-quota-health.js';
 
 function report(bytesStored: number, quotaBytes: number | null): UsageByStore['backup'] {
-  return { bytesStored, objectCount: 1, quotaBytes, period: { start: 0, end: 1 } };
+  return {
+    bytesStored,
+    objectCount: 1,
+    quotaBytes,
+    period: { start: 0, end: 1 },
+  };
 }
 
 function probeWith(
@@ -17,7 +23,9 @@ function probeWith(
 ) {
   return createStorageQuotaHealthProbe({
     connections: async () => connections,
-    usageFor: async (id) => ({ providerReported: usageByConnection[id] ?? null }),
+    usageFor: async (id) => ({
+      providerReported: usageByConnection[id] ?? null,
+    }),
   });
 }
 
@@ -77,7 +85,9 @@ describe(createStorageQuotaHealthProbe, () => {
   it('stays ok just under the degraded watermark (strict-greater-or-equal thresholds)', async () => {
     const quota = 1000;
     const probe = probeWith([{ connectionId: 'c1', name: 'Clawgnition', kind: 'provider' }], {
-      c1: { backup: report(Math.floor(quota * QUOTA_DEGRADED_AT) - 1, quota) },
+      c1: {
+        backup: report(Math.floor(quota * QUOTA_DEGRADED_AT) - 1, quota),
+      },
     });
     const result = await probe();
     expect(result.status).toBe('ok');

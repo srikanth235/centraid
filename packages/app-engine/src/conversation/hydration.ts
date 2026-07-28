@@ -106,7 +106,10 @@ export function hydrationMessagesFromLedger(
         if (item.kind === 'step' && item.name?.startsWith('notice:')) continue;
         const text = outputText(item.outputJson);
         if (!text) continue;
-        messages.push({ payload: { kind: 'ai', text }, createdAt: item.startedAt });
+        messages.push({
+          payload: { kind: 'ai', text },
+          createdAt: item.startedAt,
+        });
         assistantRecorded = true;
       }
     }
@@ -194,7 +197,7 @@ function compileTurns(
       const tool = typeof payload.tool === 'string' ? payload.tool : 'tool';
       const sql =
         typeof payload.sql === 'string'
-          ? ` — ${payload.sql.replace(/\s+/g, ' ').trim().slice(0, 240)}`
+          ? ` — ${payload.sql.replace(/\s+/gu, ' ').trim().slice(0, 240)}`
           : '';
       // Two producers feed this compiler and they spell tool status
       // differently: `hydrationMessagesFromLedger` projects the raw item's

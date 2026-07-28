@@ -19,8 +19,9 @@
 import { execSync } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
-import { runSyncVersions } from './sync-versions.mjs';
+
 import { buildSurfaceMatrix, defaultShipSurfaceIds, resolveShipSurfaces } from './surfaces.mjs';
+import { runSyncVersions } from './sync-versions.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const args = process.argv.slice(2);
@@ -166,8 +167,14 @@ execSync(
     'apps/mobile/ios/ShareExtension/ShareExtension-Info.plist 2>/dev/null || true',
   { cwd: root, stdio: 'inherit', shell: true },
 );
-execSync(`git commit -m ${JSON.stringify(commitMsg)}`, { cwd: root, stdio: 'inherit' });
-execSync(`git tag -a ${tag} -m "Centraid ${tag}"`, { cwd: root, stdio: 'inherit' });
+execSync(`git commit -m ${JSON.stringify(commitMsg)}`, {
+  cwd: root,
+  stdio: 'inherit',
+});
+execSync(`git tag -a ${tag} -m "Centraid ${tag}"`, {
+  cwd: root,
+  stdio: 'inherit',
+});
 
 if (doPush) {
   execSync('git push origin HEAD', { cwd: root, stdio: 'inherit' });

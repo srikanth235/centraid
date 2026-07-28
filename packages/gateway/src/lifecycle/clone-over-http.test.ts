@@ -1,4 +1,4 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import crypto from 'node:crypto';
 /*
  * Template clone over HTTP (issue #141). The desktop no longer writes a
  * cloned template into a local worktree — it reads the bundled catalog,
@@ -10,15 +10,16 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  * lands on `main` with a plain-slug id, `kind: 'automation'`, and a
  * provisioned webhook (hashed secret, no plaintext, no `pending` flag).
  */
-
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
-import { cloneTemplateFiles } from '@centraid/blueprints';
+
 import { provisionPendingWebhooksInFiles } from '@centraid/automation';
-import { serve, type GatewayServeHandle } from '../serve/serve.ts';
+import { cloneTemplateFiles } from '@centraid/blueprints';
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+
 import type { GatewayPaths } from '../paths.ts';
+import { serve, type GatewayServeHandle } from '../serve/serve.ts';
 
 let dataDir: string;
 let handle: GatewayServeHandle;
@@ -83,7 +84,10 @@ function templateFiles(): { path: string; content: string }[] {
 describe('clone-over-http', () => {
   beforeEach(async () => {
     dataDir = await tempDir(`gw-clone-${crypto.randomUUID()}-`);
-    handle = await serve({ initVaultName: "Owner's vault", paths: pathsUnder(dataDir) });
+    handle = await serve({
+      initVaultName: "Owner's vault",
+      paths: pathsUnder(dataDir),
+    });
   });
 
   afterEach(async () => {
@@ -135,16 +139,18 @@ describe('clone-over-http', () => {
       headers: { ...auth(), 'Content-Type': 'application/json' },
       body: JSON.stringify({ sessionId: 's1' }),
     });
-    for (const f of files) {
-      const res = await fetch(
-        `${handle.url}/centraid/_apps/inbound-2/files/${f.path
-          .split('/')
-          .map(encodeURIComponent)
-          .join('/')}?sessionId=s1`,
-        { method: 'PUT', headers: auth(), body: f.content },
-      );
-      expect(res.status).toBe(200);
-    }
+    const uploads = await Promise.all(
+      files.map((file) =>
+        fetch(
+          `${handle.url}/centraid/_apps/inbound-2/files/${file.path
+            .split('/')
+            .map(encodeURIComponent)
+            .join('/')}?sessionId=s1`,
+          { method: 'PUT', headers: auth(), body: file.content },
+        ),
+      ),
+    );
+    for (const upload of uploads) expect(upload.status).toBe(200);
     const pub = await fetch(`${handle.url}/centraid/_apps/inbound-2/publish`, {
       method: 'POST',
       headers: { ...auth(), 'Content-Type': 'application/json' },
@@ -154,7 +160,9 @@ describe('clone-over-http', () => {
 
     // 4. The cloned app is on `main` with its kind + tile identity surfaced
     //    in the list.
-    const listRes = await fetch(`${handle.url}/centraid/_apps`, { headers: auth() });
+    const listRes = await fetch(`${handle.url}/centraid/_apps`, {
+      headers: auth(),
+    });
     const list = (await listRes.json()) as Array<{
       id: string;
       kind?: string;
@@ -172,11 +180,18 @@ describe('clone-over-http', () => {
     const filesRes = await fetch(`${handle.url}/centraid/_apps/inbound-2/files?sessionId=s1`, {
       headers: auth(),
     });
-    const draft = (await filesRes.json()) as { files: { path: string; content: string }[] };
+    const draft = (await filesRes.json()) as {
+      files: { path: string; content: string }[];
+    };
     const manifestFile = draft.files.find((f) => f.path === 'automations/inbound/automation.json');
     expect(manifestFile).toBeTruthy();
     const manifest = JSON.parse(manifestFile!.content) as {
-      triggers: { kind: string; id?: string; secretHash?: string; pending?: boolean }[];
+      triggers: {
+        kind: string;
+        id?: string;
+        secretHash?: string;
+        pending?: boolean;
+      }[];
     };
     const hook = manifest.triggers.find((t) => t.kind === 'webhook')!;
     expect(hook.id && hook.secretHash).toBeTruthy();

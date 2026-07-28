@@ -1,19 +1,12 @@
-import { tempDirSync } from '@centraid/test-kit/temp-dir';
-// Direct-to-IA storage class for large media originals (issue #425 Wave 3
-// Part B). The pure eligibility resolver + the local-first replication doors it
-// wires into, which resolve the class from the sha's already-written
-// `blob_staging` original row: the outbox-drain single PUT and the outbox-drain
-// durable multipart CreateMultipartUpload (>32 MiB).
-// Binary derivatives, small originals, non-media originals, and undeclared
-// targets stay class-less; an explicit vault-level class suppresses the
-// heuristic entirely.
-// The remote-primary ingress doors — the low-level S3 CopyObject unit and the
-// gateway-mediated multipart stream-through — live in direct-cold-doors.test.ts.
-
 import { randomBytes } from 'node:crypto';
 import { rmSync } from 'node:fs';
+/** Direct-to-IA eligibility and local-first outbox replication doors for large media originals. */
 import path from 'node:path';
+
+import { forEachSequentially } from '@centraid/test-kit/sequential';
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { afterEach, describe, expect, test } from 'vitest';
+
 import { DEFAULT_BACKUP_POLICY, resolveBackupPolicy, type BackupPolicy } from '../backup-policy.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { BlobCache } from './cache.js';
@@ -21,19 +14,19 @@ import type { RemoteTier } from './custody-types.js';
 import { FsBlobStore } from './local.js';
 import { drainOutboxRow } from './outbox-drain.js';
 import type { RemoteBlobTransfer } from './remote-transfer.js';
-import type { BlobRange, BlobStore } from './store.js';
-import { sha256OfBytes } from './store.js';
 import {
   originalMediaForSha,
   resolveStorageClassForWrite,
   storageClassForShaWrite,
 } from './store-routing.js';
+import type { BlobRange, BlobStore } from './store.js';
+import { sha256OfBytes } from './store.js';
 import { BlobTransferState } from './transfer-state.js';
 
 const cleanups: (() => void | Promise<void>)[] = [];
 describe('direct-cold-originals', () => {
   afterEach(async () => {
-    while (cleanups.length > 0) await cleanups.pop()?.();
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
   });
 
   const SUPPORTED = ['STANDARD', 'STANDARD_IA'];
@@ -43,8 +36,6 @@ describe('direct-cold-originals', () => {
     return Buffer.from(bytes.subarray(range.start, (range.end ?? bytes.length - 1) + 1));
   }
 
-  // ---------- the pure resolver ----------
-
   const BIG = 30 * 1024 * 1024;
 
   test('resolveStorageClassForWrite: the eligibility matrix', () => {
@@ -53,22 +44,34 @@ describe('direct-cold-originals', () => {
       policy: DEFAULT_BACKUP_POLICY,
       supportedStorageClasses: SUPPORTED,
     };
-    // Eligible: video/audio original at/above the 25 MiB floor on a declaring target.
-    expect(resolveStorageClassForWrite({ ...base, mediaType: 'video/mp4', byteSize: BIG })).toBe(
-      'STANDARD_IA',
-    );
-    expect(resolveStorageClassForWrite({ ...base, mediaType: 'audio/mpeg', byteSize: BIG })).toBe(
-      'STANDARD_IA',
-    );
-    // Not media (image is conservatively warm in v0).
     expect(
-      resolveStorageClassForWrite({ ...base, mediaType: 'image/png', byteSize: BIG }),
-    ).toBeUndefined();
-    // Below the floor.
+      resolveStorageClassForWrite({
+        ...base,
+        mediaType: 'video/mp4',
+        byteSize: BIG,
+      }),
+    ).toBe('STANDARD_IA');
     expect(
-      resolveStorageClassForWrite({ ...base, mediaType: 'video/mp4', byteSize: 10 * 1024 * 1024 }),
+      resolveStorageClassForWrite({
+        ...base,
+        mediaType: 'audio/mpeg',
+        byteSize: BIG,
+      }),
+    ).toBe('STANDARD_IA');
+    expect(
+      resolveStorageClassForWrite({
+        ...base,
+        mediaType: 'image/png',
+        byteSize: BIG,
+      }),
     ).toBeUndefined();
-    // Target does not declare STANDARD_IA / declares nothing.
+    expect(
+      resolveStorageClassForWrite({
+        ...base,
+        mediaType: 'video/mp4',
+        byteSize: 10 * 1024 * 1024,
+      }),
+    ).toBeUndefined();
     expect(
       resolveStorageClassForWrite({
         ...base,
@@ -85,7 +88,6 @@ describe('direct-cold-originals', () => {
         byteSize: BIG,
       }),
     ).toBeUndefined();
-    // A derived write is never demoted to cold.
     expect(
       resolveStorageClassForWrite({
         ...base,
@@ -94,9 +96,7 @@ describe('direct-cold-originals', () => {
         byteSize: BIG,
       }),
     ).toBeUndefined();
-    // Not an original (no media/size known).
     expect(resolveStorageClassForWrite({ ...base })).toBeUndefined();
-    // Explicit vault-level class wins — the heuristic stands down.
     expect(
       resolveStorageClassForWrite({
         ...base,
@@ -105,20 +105,22 @@ describe('direct-cold-originals', () => {
         byteSize: BIG,
       }),
     ).toBeUndefined();
-    // Explicitly disabled.
     expect(
       resolveStorageClassForWrite({
         ...base,
-        policy: resolveBackupPolicy({ directToColdOriginals: { enabled: false } }),
+        policy: resolveBackupPolicy({
+          directToColdOriginals: { enabled: false },
+        }),
         mediaType: 'video/mp4',
         byteSize: BIG,
       }),
     ).toBeUndefined();
-    // Custom knobs: a smaller floor + an image prefix opt-in.
     expect(
       resolveStorageClassForWrite({
         ...base,
-        policy: resolveBackupPolicy({ directToColdOriginals: { minBytes: 1024 } }),
+        policy: resolveBackupPolicy({
+          directToColdOriginals: { minBytes: 1024 },
+        }),
         mediaType: 'video/mp4',
         byteSize: 2048,
       }),
@@ -126,7 +128,9 @@ describe('direct-cold-originals', () => {
     expect(
       resolveStorageClassForWrite({
         ...base,
-        policy: resolveBackupPolicy({ directToColdOriginals: { mimePrefixes: ['image/'] } }),
+        policy: resolveBackupPolicy({
+          directToColdOriginals: { mimePrefixes: ['image/'] },
+        }),
         mediaType: 'image/png',
         byteSize: BIG,
       }),
@@ -151,8 +155,6 @@ describe('direct-cold-originals', () => {
        VALUES (?, ?, 'image/png', ?, 'thumb', ?, ?)`,
       )
       .run('s-thumb', derivativeSha, 4096, originalSha, now);
-    // node:sqlite hands back null-prototype rows; spreading compares the column
-    // data (which is the contract) without asserting the driver's prototype.
     expect({ ...originalMediaForSha(db.vault, originalSha) }).toStrictEqual({
       mediaType: 'video/mp4',
       byteSize: BIG,
@@ -160,8 +162,6 @@ describe('direct-cold-originals', () => {
     expect(originalMediaForSha(db.vault, derivativeSha)).toBeNull();
     expect(originalMediaForSha(db.vault, 'c'.repeat(64))).toBeNull();
   });
-
-  // ---------- the outbox-drain doors ----------
 
   interface DrainHarness {
     db: VaultDb;
@@ -185,7 +185,6 @@ describe('direct-cold-originals', () => {
     return { db, local, cache, state };
   }
 
-  /** Stage an ORIGINAL (variant IS NULL) with a media type + enqueue its bytes. */
   function stageOriginal(h: DrainHarness, bytes: Buffer, mediaType: string): string {
     const sha = sha256OfBytes(bytes);
     h.local.putSync(sha, bytes);
@@ -208,8 +207,10 @@ describe('direct-cold-originals', () => {
       storageClassForShaWrite(h.db.vault, sha, storeClass, supported, policy);
   }
 
-  /** A single-PUT cas store (no putStream) that records the class per write. */
-  function putCaptureStore(): { store: BlobStore; classOf: Map<string, string | undefined> } {
+  function putCaptureStore(): {
+    store: BlobStore;
+    classOf: Map<string, string | undefined>;
+  } {
     const objects = new Map<string, Buffer>();
     const classOf = new Map<string, string | undefined>();
     const store: BlobStore = {
@@ -235,7 +236,9 @@ describe('direct-cold-originals', () => {
 
   test('outbox drain single-PUT door: a >floor video original PUTs STANDARD_IA', async () => {
     const h = openDrainHarness();
-    const policy = resolveBackupPolicy({ directToColdOriginals: { minBytes: 1024 } });
+    const policy = resolveBackupPolicy({
+      directToColdOriginals: { minBytes: 1024 },
+    });
     const sha = stageOriginal(h, randomBytes(4096), 'video/mp4');
     const { store, classOf } = putCaptureStore();
     const remote: RemoteTier = {
@@ -257,8 +260,9 @@ describe('direct-cold-originals', () => {
   });
 
   test('outbox drain single-PUT door: small / non-media / undeclared stay class-less', async () => {
-    const policy = resolveBackupPolicy({ directToColdOriginals: { minBytes: 1024 } });
-    // A tiny original (below the floor).
+    const policy = resolveBackupPolicy({
+      directToColdOriginals: { minBytes: 1024 },
+    });
     {
       const h = openDrainHarness();
       const sha = stageOriginal(h, randomBytes(512), 'video/mp4');
@@ -268,14 +272,16 @@ describe('direct-cold-originals', () => {
           state: h.state,
           local: h.local,
           cache: h.cache,
-          remote: () => ({ store, storageClassFor: storageClassFor(h, SUPPORTED, policy) }),
+          remote: () => ({
+            store,
+            storageClassFor: storageClassFor(h, SUPPORTED, policy),
+          }),
           onReplicated: () => undefined,
         },
         h.state.outbox(sha)!,
       );
       expect(classOf.get(sha)).toBeUndefined();
     }
-    // A non-media original at size.
     {
       const h = openDrainHarness();
       const sha = stageOriginal(h, randomBytes(4096), 'application/pdf');
@@ -285,14 +291,16 @@ describe('direct-cold-originals', () => {
           state: h.state,
           local: h.local,
           cache: h.cache,
-          remote: () => ({ store, storageClassFor: storageClassFor(h, SUPPORTED, policy) }),
+          remote: () => ({
+            store,
+            storageClassFor: storageClassFor(h, SUPPORTED, policy),
+          }),
           onReplicated: () => undefined,
         },
         h.state.outbox(sha)!,
       );
       expect(classOf.get(sha)).toBeUndefined();
     }
-    // A large video original against a target that declares NO classes.
     {
       const h = openDrainHarness();
       const sha = stageOriginal(h, randomBytes(4096), 'video/mp4');
@@ -302,7 +310,10 @@ describe('direct-cold-originals', () => {
           state: h.state,
           local: h.local,
           cache: h.cache,
-          remote: () => ({ store, storageClassFor: storageClassFor(h, undefined, policy) }),
+          remote: () => ({
+            store,
+            storageClassFor: storageClassFor(h, undefined, policy),
+          }),
           onReplicated: () => undefined,
         },
         h.state.outbox(sha)!,
@@ -313,12 +324,13 @@ describe('direct-cold-originals', () => {
 
   test('outbox drain single-PUT door: a binary derivative never goes to cold', async () => {
     const h = openDrainHarness();
-    const policy = resolveBackupPolicy({ directToColdOriginals: { minBytes: 1024 } });
+    const policy = resolveBackupPolicy({
+      directToColdOriginals: { minBytes: 1024 },
+    });
     const bytes = randomBytes(4096);
     const sha = sha256OfBytes(bytes);
     h.local.putSync(sha, bytes);
     h.state.enqueue(sha, bytes.length);
-    // Record the sha as a binary derivative — NOT an original.
     h.db.vault
       .prepare(
         `INSERT INTO blob_staging (staging_id, sha256, media_type, byte_size, variant, variant_of, staged_at)
@@ -331,7 +343,10 @@ describe('direct-cold-originals', () => {
         state: h.state,
         local: h.local,
         cache: h.cache,
-        remote: () => ({ store, storageClassFor: storageClassFor(h, SUPPORTED, policy) }),
+        remote: () => ({
+          store,
+          storageClassFor: storageClassFor(h, SUPPORTED, policy),
+        }),
         onReplicated: () => undefined,
       },
       h.state.outbox(sha)!,
@@ -459,8 +474,6 @@ describe('direct-cold-originals', () => {
         return bytes ? { size: bytes.length } : null;
       },
     };
-    // The instance store carries DEEP_ARCHIVE itself; the per-write override the
-    // heuristic would compute is undefined, so beginShaUpload gets no override.
     const remote: RemoteTier = {
       store,
       transfer: transfer as RemoteBlobTransfer,

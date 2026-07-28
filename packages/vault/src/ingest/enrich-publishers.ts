@@ -16,8 +16,9 @@
 //     place; wiping derived rows and re-running is always safe.
 
 import type { DatabaseSync } from 'node:sqlite';
-import { sha256Hex, uuidv7 } from '../ids.js';
+
 import { DOCUMENT_TARGET_TYPE, FOLDER_SCHEME_URI } from '../commands/documents.js';
+import { sha256Hex, uuidv7 } from '../ids.js';
 import { VISION_SCHEME_URI } from '../schema/enrich.js';
 import { assertPayload } from './payload-schemas.js';
 import type { Publisher, PublishedWrite } from './staging.js';
@@ -96,7 +97,11 @@ const annotationPublisher: Publisher = {
       )
       .get(p.target_type, p.target_id, p.author_party_id) as { annotation_id: string } | undefined;
     return existing
-      ? { entityId: existing.annotation_id, disposition: 'update', note: 'replaces prior caption' }
+      ? {
+          entityId: existing.annotation_id,
+          disposition: 'update',
+          note: 'replaces prior caption',
+        }
       : null;
   },
   create(vault, _owner, payload, now) {
@@ -159,8 +164,16 @@ const tagPublisher: Publisher = {
     // An owner-asserted tag (carries a party) is terminal; a machine tag
     // updates its confidence in place.
     return row.tagged_by_party_id
-      ? { entityId: row.tag_id, disposition: 'skip', note: 'owner-asserted tag is terminal' }
-      : { entityId: row.tag_id, disposition: 'update', note: 'refreshes confidence' };
+      ? {
+          entityId: row.tag_id,
+          disposition: 'skip',
+          note: 'owner-asserted tag is terminal',
+        }
+      : {
+          entityId: row.tag_id,
+          disposition: 'update',
+          note: 'refreshes confidence',
+        };
   },
   create(vault, _owner, payload, now) {
     const p = assertPayload<TagPayload>('TagPayload', payload);
@@ -354,7 +367,11 @@ const contentItemPublisher: Publisher = {
         .prepare('SELECT content_id FROM core_content_item WHERE sha256 = ? AND deleted_at IS NULL')
         .get(remoteContentSha(p.sourceId)) as { content_id: string } | undefined;
       return existing
-        ? { entityId: existing.content_id, disposition: 'update', note: 'remote content item' }
+        ? {
+            entityId: existing.content_id,
+            disposition: 'update',
+            note: 'remote content item',
+          }
         : null;
     }
     const p = payload;
@@ -364,7 +381,11 @@ const contentItemPublisher: Publisher = {
       )
       .get(p.content_id ?? '') as { content_id: string } | undefined;
     if (!existing) return null;
-    return { entityId: existing.content_id, disposition: 'update', note: 'filing proposal' };
+    return {
+      entityId: existing.content_id,
+      disposition: 'update',
+      note: 'filing proposal',
+    };
   },
   create(vault, _owner, payload, now) {
     if (isFilingPayload(payload)) {

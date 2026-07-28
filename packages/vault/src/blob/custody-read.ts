@@ -51,7 +51,10 @@ export async function fetchFrameDirectory(
   if (!trailerBytes) return null;
   const { directoryLength, frameCount } = decodeTrailer(trailerBytes);
   const dirStart = size - TRAILER_BYTES - directoryLength;
-  const dirBytes = await store.get(sha, { start: dirStart, end: size - TRAILER_BYTES - 1 });
+  const dirBytes = await store.get(sha, {
+    start: dirStart,
+    end: size - TRAILER_BYTES - 1,
+  });
   if (!dirBytes) return null;
   return openDirectory(key, sha, frameCount, dirBytes);
 }
@@ -76,17 +79,22 @@ export async function fetchRemoteRange(
   if (!resolved) return null;
   if (dir.frameCount === 0) return Buffer.alloc(0);
   const { first, last } = coveringFrames(dir.frameSize, resolved.start, resolved.end);
-  const plaintextParts: Buffer[] = [];
-  for (let i = first; i <= last; i++) {
-    const offset = dir.offsets[i]!;
-    const sealedLen = dir.sealedLens[i]!;
-    const sealed = await store.get(sha, { start: offset, end: offset + sealedLen - 1 });
-    if (!sealed) return null; // raced a delete mid-range
-    plaintextParts.push(unsealFrame(key, sha, i, dir.frameCount, sealed));
-  }
+  const plaintextParts = await Promise.all(
+    Array.from({ length: last - first + 1 }, async (_, index) => {
+      const frameIndex = first + index;
+      const offset = dir.offsets[frameIndex]!;
+      const sealedLen = dir.sealedLens[frameIndex]!;
+      const sealed = await store.get(sha, {
+        start: offset,
+        end: offset + sealedLen - 1,
+      });
+      return sealed ? unsealFrame(key, sha, frameIndex, dir.frameCount, sealed) : null;
+    }),
+  );
+  if (plaintextParts.some((part) => part === null)) return null; // raced a delete mid-range
   // The covering frames start at plaintext offset `first * frameSize`; slice
   // the requested window out of that contiguous run.
-  const covered = Buffer.concat(plaintextParts);
+  const covered = Buffer.concat(plaintextParts.filter((part): part is Buffer => part !== null));
   const sliceStart = resolved.start - first * dir.frameSize;
   const sliceEnd = resolved.end - first * dir.frameSize;
   return covered.subarray(sliceStart, sliceEnd + 1);

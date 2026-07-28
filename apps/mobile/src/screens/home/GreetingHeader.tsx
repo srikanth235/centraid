@@ -9,6 +9,7 @@
 
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+
 import { family, useTheme, type ThemeColors } from '../../kit/theme';
 import { firstNameOf, greetingFor, initialsOf } from '../../lib/profile';
 

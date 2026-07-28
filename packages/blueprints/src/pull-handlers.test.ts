@@ -1,9 +1,9 @@
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { fileURLToPath } from 'node:url';
+
 import { describe, expect, it } from 'vitest';
 
-const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const PACKAGE_ROOT = path.resolve(import.meta.dirname, '..');
 
 interface FetchResult {
   status: number;
@@ -13,26 +13,29 @@ interface FetchResult {
 
 interface PullContext {
   now: string;
-  fetch(spec: { url: string }): Promise<FetchResult>;
+  fetch: (spec: { url: string }) => Promise<FetchResult>;
 }
 
 interface CursorStrategy {
   readonly current: unknown;
-  set(value: unknown): void;
-  clear(): void;
-  observe(value: unknown): void;
+  set: (value: unknown) => void;
+  clear: () => void;
+  observe: (value: unknown) => void;
 }
 
 interface PullSpec {
-  principal(args: { ctx: PullContext }): Promise<string>;
-  pull(args: {
+  principal: (args: { ctx: PullContext }) => Promise<string>;
+  pull: (args: {
     ctx: PullContext;
     cursor: {
-      provider(key: string): CursorStrategy;
-      highWater(key: string): CursorStrategy;
+      provider: (key: string) => CursorStrategy;
+      highWater: (key: string) => CursorStrategy;
     };
-    log: { info(message: string): void; warn(message: string): void };
-  }): Promise<{ rows: Array<Record<string, unknown>> }>;
+    log: {
+      info: (message: string) => void;
+      warn: (message: string) => void;
+    };
+  }) => Promise<{ rows: Array<Record<string, unknown>> }>;
 }
 
 async function loadPull(id: string): Promise<PullSpec> {
@@ -49,8 +52,8 @@ function json(value: unknown, headers: Record<string, string> = {}): FetchResult
 
 function cursorHarness(initial: Record<string, unknown> = {}): {
   cursor: {
-    provider(key: string): CursorStrategy;
-    highWater(key: string): CursorStrategy;
+    provider: (key: string) => CursorStrategy;
+    highWater: (key: string) => CursorStrategy;
   };
   updates: Map<string, unknown>;
 } {
@@ -116,7 +119,7 @@ describe('bundled pull handler correctness', () => {
             nextPageToken: 'next',
           });
         }
-        const id = /\/messages\/([^?]+)/.exec(url)?.[1];
+        const id = /\/messages\/(?<id>[^?]+)/u.exec(url)?.[1];
         if (id) {
           return json({
             id,
@@ -190,15 +193,25 @@ describe('bundled pull handler correctness', () => {
       async fetch({ url }) {
         if (url.endsWith('/auth.test')) return json({ ok: true, user_id: 'U1' });
         if (url.includes('/conversations.list?')) {
-          return json({ ok: true, channels: [{ id: 'C123', name: 'renamed-channel' }] });
+          return json({
+            ok: true,
+            channels: [{ id: 'C123', name: 'renamed-channel' }],
+          });
         }
         if (url.includes('/conversations.history?')) {
-          return json({ ok: true, messages: [{ ts: '100.25', text: 'hello' }] });
+          return json({
+            ok: true,
+            messages: [{ ts: '100.25', text: 'hello' }],
+          });
         }
         throw new Error(`unexpected Slack URL ${url}`);
       },
     };
-    const result = await spec.pull({ ctx, cursor: cursorHarness().cursor, log });
+    const result = await spec.pull({
+      ctx,
+      cursor: cursorHarness().cursor,
+      log,
+    });
 
     expect(result.rows[0]).toMatchObject({
       external_id: 'slack:C123:100.25',
@@ -254,7 +267,10 @@ describe('bundled pull handler correctness', () => {
       now: '2026-07-23T00:00:00.000Z',
       async fetch({ url }) {
         requested.push(url);
-        return json({ value: [], '@odata.deltaLink': 'https://graph.microsoft.com/new-delta' });
+        return json({
+          value: [],
+          '@odata.deltaLink': 'https://graph.microsoft.com/new-delta',
+        });
       },
     };
     const harness = cursorHarness({

@@ -5,13 +5,13 @@
 // collection entries — the sweep's doctrine, issue #272/#274). Provenance
 // records the purge; receipts stay: history is never rewritten.
 
-import { nowIso } from '../ids.js';
 import type { VaultDb } from '../db.js';
-import { resolveEntity } from '../schema/tables.js';
+import { nowIso } from '../ids.js';
 import { cleanupPolyRefs } from '../schema/poly-refs.js';
 import { SEED_PURGE_ACTIVITY } from '../schema/seed.js';
-import { pkColumn } from './execution.js';
+import { resolveEntity } from '../schema/tables.js';
 import { writeProvenance, writeReceipt } from './evidence.js';
+import { pkColumn } from './execution.js';
 import type { Identity } from './types.js';
 
 export interface DemoPurgeResult {
@@ -119,7 +119,10 @@ export function purgeDemoRows(db: VaultDb, owner: Identity, appId?: string): Dem
   return {
     purged,
     missing,
-    blocked: remaining.map((r) => ({ entityType: r.target_type, entityId: r.target_id })),
+    blocked: remaining.map((r) => ({
+      entityType: r.target_type,
+      entityId: r.target_id,
+    })),
     receiptId,
   };
 }

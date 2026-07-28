@@ -7,14 +7,22 @@
 
 import type { Gateway } from '../gateway/gateway.js';
 import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
-import { annotate } from './annotations.js';
 import { sha256Hex } from '../ids.js';
+import { annotate } from './annotations.js';
 
 /** FHIR vital-signs mapping: type → Open mHealth code + LOINC + UCUM unit. */
 const VITAL_CODES: Record<string, { code: string; loinc: string; unit: string }> = {
   heart_rate: { code: 'omh:heart-rate', loinc: '8867-4', unit: '/min' },
-  bp_systolic: { code: 'omh:systolic-blood-pressure', loinc: '8480-6', unit: 'mm[Hg]' },
-  bp_diastolic: { code: 'omh:diastolic-blood-pressure', loinc: '8462-4', unit: 'mm[Hg]' },
+  bp_systolic: {
+    code: 'omh:systolic-blood-pressure',
+    loinc: '8480-6',
+    unit: 'mm[Hg]',
+  },
+  bp_diastolic: {
+    code: 'omh:diastolic-blood-pressure',
+    loinc: '8462-4',
+    unit: 'mm[Hg]',
+  },
   spo2: { code: 'omh:oxygen-saturation', loinc: '59408-5', unit: '%' },
   body_weight: { code: 'omh:body-weight', loinc: '29463-7', unit: 'kg' },
   glucose: { code: 'omh:blood-glucose', loinc: '2339-0', unit: 'mg/dL' },
@@ -53,14 +61,23 @@ const LOG_VITAL: CommandDefinition = {
       },
       value_num: { type: 'number' },
       observed_at: { type: 'string', minLength: 1 },
-      context: { type: 'string', enum: ['rest', 'exercise', 'sleep', 'post_meal'] },
-      modality: { type: 'string', enum: ['sensed', 'self_reported', 'derived'] },
+      context: {
+        type: 'string',
+        enum: ['rest', 'exercise', 'sleep', 'post_meal'],
+      },
+      modality: {
+        type: 'string',
+        enum: ['sensed', 'self_reported', 'derived'],
+      },
     },
   },
   outputSchema: {
     type: 'object',
     required: ['observation_id', 'vital_id'],
-    properties: { observation_id: { type: 'string' }, vital_id: { type: 'string' } },
+    properties: {
+      observation_id: { type: 'string' },
+      vital_id: { type: 'string' },
+    },
   },
   preconditions: [
     {
@@ -148,7 +165,10 @@ const VOID_VITAL: CommandDefinition = {
   outputSchema: {
     type: 'object',
     required: ['observation_id', 'status'],
-    properties: { observation_id: { type: 'string' }, status: { type: 'string' } },
+    properties: {
+      observation_id: { type: 'string' },
+      status: { type: 'string' },
+    },
   },
   preconditions: [
     {
@@ -222,7 +242,10 @@ const IMPORT_WORKOUT: CommandDefinition = {
   outputSchema: {
     type: 'object',
     required: ['activity_id', 'workout_id'],
-    properties: { activity_id: { type: 'string' }, workout_id: { type: 'string' } },
+    properties: {
+      activity_id: { type: 'string' },
+      workout_id: { type: 'string' },
+    },
   },
   preconditions: [
     {

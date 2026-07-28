@@ -4,6 +4,7 @@
 // receipted deny row.
 
 import type { DatabaseSync } from 'node:sqlite';
+
 import { nowIso } from '../ids.js';
 import type { ExecutionScopeSpec, FilterClause, Identity } from './types.js';
 import { DEFAULT_PURPOSE, GatewayError } from './types.js';
@@ -279,7 +280,11 @@ export function evaluateConsent(
   }
   const grants = activeGrants(vault, identity, purpose, evaluatedAt);
   if (grants.length === 0) {
-    return { decision: 'deny', failing: `no active grant for purpose ${purpose}`, grantId: null };
+    return {
+      decision: 'deny',
+      failing: `no active grant for purpose ${purpose}`,
+      grantId: null,
+    };
   }
   const explicitOnly = requiresExplicitScope(vault, schema, table, evaluatedAt);
   for (const grant of grants) {

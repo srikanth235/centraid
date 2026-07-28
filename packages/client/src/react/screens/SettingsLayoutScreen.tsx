@@ -1,10 +1,12 @@
 import { useEffect, useState, type JSX } from 'react';
+
 import type { SettingsLayoutBridgeProps } from '../screen-contracts.js';
 import {
   loadDefaultCronTimeZone,
   saveDefaultCronTimeZone,
 } from '../shell/routes/settingsCronTimezoneData.js';
 import { DrawerGroup, DrawerRow, Segmented, Switch } from './settings-controls.js';
+
 import sc from './settings-controls.module.css';
 
 const DENSITIES = ['compact', 'regular', 'comfy'] as const;

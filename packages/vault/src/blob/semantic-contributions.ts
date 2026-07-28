@@ -3,6 +3,7 @@
 // rows are the indexes existing search code already consumes.
 
 import type { DatabaseSync } from 'node:sqlite';
+
 import { encodeVector } from '../enrich/similarity.js';
 
 interface EmbeddingPayload {

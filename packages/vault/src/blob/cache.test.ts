@@ -1,28 +1,23 @@
-// Bounded storage tier — cache policy, eviction, replication index, QoS and
-// bounded-parallel replication (issue #405 §3/§4/§7). A fake remote counts
-// list()/get()/put() so the acceptance criteria ("zero remote reads",
-// "statusFor/replicate perform ZERO list() calls", "max in-flight = N") are
-// assertions over recorded call shapes, not vibes.
+/** Cache policy, replication evidence, QoS, and bounded-parallel I/O acceptance tests. */
 
 import { afterEach, describe, expect, test, vi } from 'vitest';
+
 import { openVaultDb, type VaultDb } from '../db.js';
+import { VaultBlobBackpressureError } from '../errors.js';
 import { nowIso, uuidv7 } from '../ids.js';
-import { BlobCustody } from './custody.js';
 import { BlobCache, CACHE_BUDGET_CEILING_BYTES, CACHE_BUDGET_FLOOR_BYTES } from './cache.js';
+import { BlobCustody } from './custody.js';
 import { MemoryBlobStore } from './local.js';
 import type { BlobRange, BlobStat, BlobStore } from './store.js';
 import { blobUriFor, sha256OfBytes } from './store.js';
-import { VaultBlobBackpressureError } from '../errors.js';
 
 // ---------- an instrumented in-memory remote ----------
 
 interface FakeRemote extends BlobStore {
   objects: Map<string, Buffer>;
   calls: { list: number; get: number; put: number };
-  /** Gate every put on a promise the test controls (bounded-parallel / QoS). */
-  gatePuts(): { release: () => void; inFlightMax: () => number };
-  /** Gate every get on a promise the test controls (QoS interactive read). */
-  gateGets(): { resolveAll: () => void; pending: () => number };
+  gatePuts: () => { release: () => void; inFlightMax: () => number };
+  gateGets: () => { resolveAll: () => void; pending: () => number };
 }
 
 function makeRemote(): FakeRemote {
@@ -219,8 +214,6 @@ describe('cache', () => {
     expect(explicit.budgetBytes()).toBe(777);
   });
 
-  // ---------- §7: metrics shape ----------
-
   test('metrics() reports hits, read-throughs, bytes served, evictions and spool/budget', async () => {
     const h = makeHarness({ budgetBytes: 1000 });
     const x = blobOf('metrics-blob');
@@ -238,8 +231,6 @@ describe('cache', () => {
     expect(m.budgetBytes).toBe(1000);
     expect(m.spoolBytes).toBe(x.bytes.length); // promoted back
   });
-
-  // ---------- §3: tinies are pinned unevictable ----------
 
   test('a thumb (tiny) is pinned — never evicted under any cache pressure', async () => {
     const h = makeHarness({ budgetBytes: 1_000_000 }); // room to ingest first
@@ -289,8 +280,6 @@ describe('cache', () => {
     expect(h.local.hasSync(a.sha)).toBe(true);
   });
 
-  // ---------- §3: LRU order — previews before originals; recent outlives stale ----------
-
   test('eviction sheds previews before originals', async () => {
     const h = makeHarness({ budgetBytes: 1000 });
     const preview = blobOf('preview-medium-bytes-................'); // larger
@@ -326,8 +315,6 @@ describe('cache', () => {
     expect(h.local.hasSync(fresh.sha)).toBe(true);
   });
 
-  // ---------- §3/§4: read-through promotes, then is evictable ----------
-
   test('a remote-only blob reads through into local (promote), and is evictable later', async () => {
     const h = makeHarness({ budgetBytes: 1000 });
     const x = blobOf('cloud-resident-photo');
@@ -350,15 +337,16 @@ describe('cache', () => {
     expect(h.remote.objects.has(x.sha)).toBe(true); // the durable copy remains
   });
 
-  // ---------- §5: paced large-import (scaled down) ----------
-
   test('paced import: 16 MiB through a 4 MiB spool completes, spool never exceeds budget, nothing lost', async () => {
     const BUDGET = 4 * 1024 * 1024;
     const BLOB = 1 * 1024 * 1024; // 1 MiB blobs
     const COUNT = 16; // 16 MiB total, 4x the spool
     const h = makeHarness({ budgetBytes: BUDGET });
     const shas: string[] = [];
-    for (let i = 0; i < COUNT; i++) {
+    // Each admission is measured after the prior replicate/evict cycle; this
+    // test proves the intermediate budget invariant, not just the final state.
+    const importNext = async (i: number): Promise<void> => {
+      if (i >= COUNT) return;
       const bytes = Buffer.alloc(BLOB, i + 1); // distinct bytes per blob
       const { sha256 } = h.custody.ingestSync(bytes); // precheck may evict-first
       shas.push(sha256);
@@ -369,7 +357,9 @@ describe('cache', () => {
       await h.custody.replicate();
       h.cache.replica.heal('cas', new Set(h.remote.objects.keys()), () => BLOB);
       h.cache.runEviction(BLOB, 0, 0, 'reconciled-sweep');
-    }
+      return importNext(i + 1);
+    };
+    await importNext(0);
     // Nothing lost: every sha is on remote or still local (or both).
     for (const sha of shas) {
       expect(h.remote.objects.has(sha) || h.local.hasSync(sha)).toBe(true);
@@ -441,10 +431,11 @@ describe('cache', () => {
     expect(h.custody.metrics().localHits).toBe(N);
   });
 
-  // ---------- §4: bounded-parallel replication ----------
-
   test('replicate pushes at most `concurrency` blobs in flight at once', async () => {
-    const h = makeHarness({ budgetBytes: 100_000_000, replicationConcurrency: 3 });
+    const h = makeHarness({
+      budgetBytes: 100_000_000,
+      replicationConcurrency: 3,
+    });
     for (let i = 0; i < 9; i++) h.custody.ingestSync(Buffer.from(`bounded-parallel-${i}`));
     const gate = h.remote.gatePuts(); // every put() parks until released
 
@@ -485,10 +476,13 @@ describe('cache', () => {
     // Hold the QoS invariant across a real wall-clock window — setImmediate alone
     // can miss a setTimeout(1) deferred put that the old 20ms window caught.
     const holdDeadline = Date.now() + 50;
-    while (Date.now() < holdDeadline) {
+    const observeQoS = async (): Promise<void> => {
+      if (Date.now() >= holdDeadline) return;
       expect(h.remote.calls.put).toBe(putsBefore); // parked by QoS
       await new Promise((resolve) => setTimeout(resolve, 10));
-    }
+      return observeQoS();
+    };
+    await observeQoS();
     expect(h.remote.calls.put).toBe(putsBefore);
 
     getGate.resolveAll(); // the interactive read completes

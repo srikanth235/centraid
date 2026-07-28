@@ -3,18 +3,20 @@
 // malformed-request handling, and idempotent teardown. Driven with raw fetch
 // against the real listener rather than through a spawned agent.
 
+import { forEachSequentially } from '@centraid/test-kit/sequential';
 import { afterEach, describe, expect, test } from 'vitest';
+
+import { vaultToolContext } from './test-fixtures.ts';
 import {
   startVaultMcpServer,
   type VaultMcpHandle,
   type VaultMcpHooks,
 } from './vault-mcp-server.ts';
-import { vaultToolContext } from './test-fixtures.ts';
 
 const openHandles: VaultMcpHandle[] = [];
 describe('vault-mcp-server', () => {
   afterEach(async () => {
-    while (openHandles.length) await openHandles.pop()?.close();
+    await forEachSequentially(openHandles.splice(0).toReversed(), (handle) => handle.close());
   });
 
   async function start(
@@ -40,9 +42,9 @@ describe('vault-mcp-server', () => {
     const { handle, url } = await start();
     expect(handle.server.type).toBe('http');
     expect(handle.server.name).toBe('centraid');
-    expect(url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/mcp$/);
+    expect(url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/mcp$/u);
     expect(handle.server.headers[0]?.name).toBe('Authorization');
-    expect(handle.server.headers[0]?.value).toMatch(/^Bearer [0-9a-f]{64}$/);
+    expect(handle.server.headers[0]?.value).toMatch(/^Bearer [0-9a-f]{64}$/u);
   });
 
   test('a request to the wrong path 404s (before the bearer check)', async () => {
@@ -61,13 +63,20 @@ describe('vault-mcp-server', () => {
     expect(res.status).toBe(401);
     expect(res.headers.get('www-authenticate')).toBe('Bearer');
 
-    const wrong = await rpc(url, 'Bearer deadbeef', { jsonrpc: '2.0', id: 1, method: 'ping' });
+    const wrong = await rpc(url, 'Bearer deadbeef', {
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'ping',
+    });
     expect(wrong.status).toBe(401);
   });
 
   test('a non-POST method on the route is 405 with an Allow header', async () => {
     const { url, bearer } = await start();
-    const res = await fetch(url, { method: 'GET', headers: { authorization: bearer } });
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: { authorization: bearer },
+    });
     expect(res.status).toBe(405);
     expect(res.headers.get('allow')).toBe('POST');
   });
@@ -100,7 +109,11 @@ describe('vault-mcp-server', () => {
 
   test('ping returns an empty result', async () => {
     const { url, bearer } = await start();
-    const res = await rpc(url, bearer, { jsonrpc: '2.0', id: 2, method: 'ping' });
+    const res = await rpc(url, bearer, {
+      jsonrpc: '2.0',
+      id: 2,
+      method: 'ping',
+    });
     const body = (await res.json()) as { result: unknown };
     expect(body.result).toStrictEqual({});
   });
@@ -112,7 +125,9 @@ describe('vault-mcp-server', () => {
       id: 3,
       method: 'tools/list',
     });
-    const bareBody = (await listBare.json()) as { result: { tools: { name: string }[] } };
+    const bareBody = (await listBare.json()) as {
+      result: { tools: { name: string }[] };
+    };
     expect(bareBody.result.tools.map((t) => t.name)).toStrictEqual(['vault_sql']);
 
     const full = await start({
@@ -124,7 +139,9 @@ describe('vault-mcp-server', () => {
       id: 4,
       method: 'tools/list',
     });
-    const fullBody = (await listFull.json()) as { result: { tools: { name: string }[] } };
+    const fullBody = (await listFull.json()) as {
+      result: { tools: { name: string }[] };
+    };
     expect(fullBody.result.tools.map((t) => t.name)).toStrictEqual([
       'vault_sql',
       'vault_invoke',
@@ -171,7 +188,7 @@ describe('vault-mcp-server', () => {
       result: { isError: boolean; content: { text: string }[] };
     };
     expect(body.result.isError).toBe(true);
-    expect(body.result.content[0]?.text).toMatch(/unknown tool "not_a_tool"/);
+    expect(body.result.content[0]?.text).toMatch(/unknown tool "not_a_tool"/u);
   });
 
   test('tools/call with non-object arguments coerces to {} (surfaced as a tool error here)', async () => {
@@ -187,7 +204,7 @@ describe('vault-mcp-server', () => {
     };
     // Empty args → vault_sql reports its usage error rather than crashing.
     expect(body.result.isError).toBe(true);
-    expect(body.result.content[0]?.text).toMatch(/requires/);
+    expect(body.result.content[0]?.text).toMatch(/requires/u);
   });
 
   test('a tool whose runner throws returns isError with the failure message', async () => {
@@ -206,7 +223,7 @@ describe('vault-mcp-server', () => {
       result: { isError: boolean; content: { text: string }[] };
     };
     expect(body.result.isError).toBe(true);
-    expect(body.result.content[0]?.text).toMatch(/db exploded/);
+    expect(body.result.content[0]?.text).toMatch(/db exploded/u);
   });
 
   test('a throwing dispatch (hook) is caught and returned as a -32603 JSON-RPC error', async () => {
@@ -225,21 +242,30 @@ describe('vault-mcp-server', () => {
       params: { name: 'vault_sql', arguments: { sql: 'SELECT 1' } },
     });
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { error: { code: number; message: string } };
+    const body = (await res.json()) as {
+      error: { code: number; message: string };
+    };
     expect(body.error.code).toBe(-32603);
     expect(body.error.message).toBe('hook boom');
   });
 
   test('a notification (no id) is acknowledged with 202 and no body', async () => {
     const { url, bearer } = await start();
-    const res = await rpc(url, bearer, { jsonrpc: '2.0', method: 'notifications/initialized' });
+    const res = await rpc(url, bearer, {
+      jsonrpc: '2.0',
+      method: 'notifications/initialized',
+    });
     expect(res.status).toBe(202);
     await expect(res.text()).resolves.toBe('');
   });
 
   test('an unknown method with an id returns method-not-found (-32601)', async () => {
     const { url, bearer } = await start();
-    const res = await rpc(url, bearer, { jsonrpc: '2.0', id: 10, method: 'resources/list' });
+    const res = await rpc(url, bearer, {
+      jsonrpc: '2.0',
+      id: 10,
+      method: 'resources/list',
+    });
     const body = (await res.json()) as { error: { code: number } };
     expect(body.error.code).toBe(-32601);
   });

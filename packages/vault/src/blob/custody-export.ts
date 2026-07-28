@@ -7,6 +7,7 @@
 
 import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+
 import { asVaultDiskFullError } from '../errors.js';
 import type { LocalBlobStore } from './local.js';
 

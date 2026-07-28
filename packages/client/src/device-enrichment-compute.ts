@@ -5,9 +5,10 @@
 // The shell owns scheduling/eligibility; this file owns bounded PDF.js text
 // extraction and hardware-decoded video poster generation.
 
+import type { PDFDocumentProxy } from 'pdfjs-dist';
 // eslint-disable-next-line import/default -- Vite's ?url loader synthesizes the default URL export; governance: allow-no-unjustified-suppressions upstream module has no source-level default (#414)
 import pdfWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
-import type { PDFDocumentProxy } from 'pdfjs-dist';
+
 import type { DeviceEnrichmentLease } from './gateway-client-devices.js';
 import { captureVideoFrames } from './video-frame.js';
 
@@ -54,11 +55,16 @@ async function extractPdfText(source: Blob): Promise<string | null> {
       isEvalSupported: false,
     } as Parameters<typeof pdfjs.getDocument>[0] & { isEvalSupported: boolean };
     const loading = pdfjs.getDocument(options);
-    pdfDocument = await loading.promise;
+    const document = await loading.promise;
+    pdfDocument = document;
     const pages: string[] = [];
     let chars = 0;
-    for (let pageNo = 1; pageNo <= Math.min(pdfDocument.numPages, MAX_PDF_PAGES); pageNo += 1) {
-      const page = await pdfDocument.getPage(pageNo);
+    const lastPage = Math.min(document.numPages, MAX_PDF_PAGES);
+    // Concatenate text in document page order; parallel extraction would make
+    // the rendered transcript depend on worker completion timing.
+    const extractNextPage = async (pageNo: number): Promise<void> => {
+      if (pageNo > lastPage) return;
+      const page = await document.getPage(pageNo);
       const content = await page.getTextContent();
       const text = content.items
         .map((item) => ('str' in item && typeof item.str === 'string' ? item.str : ''))
@@ -66,12 +72,14 @@ async function extractPdfText(source: Blob): Promise<string | null> {
         .join(' ')
         .replace(/\s+/gu, ' ')
         .trim();
-      if (!text) continue;
+      if (!text) return extractNextPage(pageNo + 1);
       const remaining = MAX_TEXT_CHARS - chars;
-      if (remaining <= 0) break;
+      if (remaining <= 0) return;
       pages.push(text.slice(0, remaining));
       chars += Math.min(text.length, remaining) + 1;
-    }
+      return extractNextPage(pageNo + 1);
+    };
+    await extractNextPage(1);
     return pages.join('\n').trim() || null;
   } catch {
     return null;
@@ -91,10 +99,22 @@ async function videoContributions(source: Blob): Promise<DeviceWorkContribution[
   return captured
     ? [
         ...(captured.poster
-          ? [{ variant: 'poster' as const, body: captured.poster, mediaType: 'image/jpeg' }]
+          ? [
+              {
+                variant: 'poster' as const,
+                body: captured.poster,
+                mediaType: 'image/jpeg',
+              },
+            ]
           : []),
         ...(captured.thumb
-          ? [{ variant: 'thumb' as const, body: captured.thumb, mediaType: 'image/jpeg' }]
+          ? [
+              {
+                variant: 'thumb' as const,
+                body: captured.thumb,
+                mediaType: 'image/jpeg',
+              },
+            ]
           : []),
       ]
     : [];
@@ -106,7 +126,12 @@ async function transcriptContributions(source: Blob): Promise<DeviceWorkContribu
     return [];
   }
   try {
-    const text = (await transcribe({ bytes: await readBlobBytes(source), mediaType: source.type }))
+    const text = (
+      await transcribe({
+        bytes: await readBlobBytes(source),
+        mediaType: source.type,
+      })
+    )
       .trim()
       .slice(0, MAX_TEXT_CHARS);
     return text

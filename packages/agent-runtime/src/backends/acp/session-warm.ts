@@ -13,6 +13,7 @@
 
 import type { ChildProcessByStdio } from 'node:child_process';
 import type { Readable, Writable } from 'node:stream';
+
 import type { AcpConnection } from './json-rpc.js';
 
 const IDLE_MS = 120_000;
@@ -163,8 +164,10 @@ export async function disposeSlot(
 export async function clearWarmPool(): Promise<void> {
   const all = [...pool.values()];
   pool.clear();
-  for (const s of all) {
-    clearTimeout(s.timer);
-    await disposeSlot(s);
-  }
+  await Promise.all(
+    all.map(async (slot) => {
+      clearTimeout(slot.timer);
+      await disposeSlot(slot);
+    }),
+  );
 }

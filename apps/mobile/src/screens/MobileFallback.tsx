@@ -1,8 +1,9 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Icon from '../kit/components/Icon';
+
 import Button from '../kit/components/Button';
+import Icon from '../kit/components/Icon';
 import { radii, spacing, t, useTheme, type ThemeColors } from '../kit/theme';
 import type { RootScreenProps } from '../navigation';
 

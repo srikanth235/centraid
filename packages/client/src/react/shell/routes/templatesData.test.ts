@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import type { TemplateMetaEntry } from '../../../gateway-client.js';
 import {
   installAppTemplate,
   loadAppTemplates,
@@ -10,14 +12,14 @@ import {
 // `vi.hoisted` lifts these mock fns above the hoisted `vi.mock` factory so it can
 // close over them without a TDZ error, keeping the real imports first.
 const { listTemplates, gwCloneTemplate, gwInstallTemplate } = vi.hoisted(() => ({
-  listTemplates: vi.fn(),
-  gwCloneTemplate: vi.fn(),
-  gwInstallTemplate: vi.fn(),
+  listTemplates: vi.fn<typeof import('../../../gateway-client.js').listTemplates>(),
+  gwCloneTemplate: vi.fn<typeof import('../../../gateway-client.js').cloneTemplate>(),
+  gwInstallTemplate: vi.fn<typeof import('../../../gateway-client.js').installTemplate>(),
 }));
 vi.mock(import('../../../gateway-client.js'), () => ({
-  listTemplates: () => listTemplates(),
-  cloneTemplate: (a: unknown) => gwCloneTemplate(a),
-  installTemplate: (a: unknown) => gwInstallTemplate(a),
+  listTemplates,
+  cloneTemplate: gwCloneTemplate,
+  installTemplate: gwInstallTemplate,
 }));
 
 const app = {
@@ -28,7 +30,7 @@ const app = {
   iconKey: 'Todo',
   desc: 'd',
   version: '1',
-};
+} satisfies TemplateMetaEntry;
 const auto = {
   id: 'digest',
   name: 'Digest',
@@ -37,7 +39,7 @@ const auto = {
   iconKey: 'Bolt',
   desc: 'd',
   version: '1',
-};
+} satisfies TemplateMetaEntry;
 
 describe('templatesData', () => {
   beforeEach(() => {
@@ -58,8 +60,16 @@ describe('templatesData', () => {
     });
 
     it('loadAutomationTemplates passes data/condition triggerKind through unchanged', async () => {
-      const dataAuto = { ...auto, id: 'photo-captioner', triggerKind: 'data' };
-      const conditionAuto = { ...auto, id: 'renewal-reminders', triggerKind: 'condition' };
+      const dataAuto = {
+        ...auto,
+        id: 'photo-captioner',
+        triggerKind: 'data',
+      } satisfies TemplateMetaEntry;
+      const conditionAuto = {
+        ...auto,
+        id: 'renewal-reminders',
+        triggerKind: 'condition',
+      } satisfies TemplateMetaEntry;
       listTemplates.mockResolvedValue([app, dataAuto, conditionAuto]);
       const result = await loadAutomationTemplates();
       expect(result.map((t) => t.triggerKind)).toStrictEqual(['data', 'condition']);
@@ -83,7 +93,12 @@ describe('templatesData', () => {
           desc: 'Extract due dates',
           triggerLabel: 'On document',
         },
-        { ...auto, id: 'google-gmail-pull', name: 'Gmail sync', desc: 'Pull mail' },
+        {
+          ...auto,
+          id: 'google-gmail-pull',
+          name: 'Gmail sync',
+          desc: 'Pull mail',
+        },
       ]);
       const rows = await loadOverviewSuggestions(3);
       expect(rows.map((r) => r.id)).toStrictEqual(['obligation-extractor', 'google-gmail-pull']);
@@ -131,7 +146,10 @@ describe('templatesData', () => {
     });
 
     it('falls back to the template name/desc when the install response omits them', async () => {
-      gwInstallTemplate.mockResolvedValue({ app: { id: 'todos' }, alreadyInstalled: true });
+      gwInstallTemplate.mockResolvedValue({
+        app: { id: 'todos' },
+        alreadyInstalled: true,
+      });
       const pin = await installAppTemplate(app as never);
       expect(pin.name).toBe('Todos');
       expect(pin.desc).toBe('d');
@@ -139,7 +157,10 @@ describe('templatesData', () => {
 
     it('surfaceMintedWebhook never logs the URL or plaintext secret', () => {
       const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
-      surfaceMintedWebhook({ url: 'https://gw.example/_centraid-hook/abc', secret: 'shh' });
+      surfaceMintedWebhook({
+        url: 'https://gw.example/_centraid-hook/abc',
+        secret: 'shh',
+      });
       expect(spy).not.toHaveBeenCalled();
       spy.mockRestore();
     });

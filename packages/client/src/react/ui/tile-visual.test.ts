@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
 import { apps, tileFinish } from '@centraid/design-tokens';
+import { describe, expect, it } from 'vitest';
+
 import { tileVisual } from './tile-visual.js';
 
 describe(tileVisual, () => {

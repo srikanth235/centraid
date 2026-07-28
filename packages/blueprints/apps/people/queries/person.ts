@@ -256,7 +256,13 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
       relationLinks.length > 0
         ? ctx.vault.read({
             entity: 'core.party',
-            where: [{ column: 'party_id', op: 'in', value: relationLinks.map((l) => l.to_id) }],
+            where: [
+              {
+                column: 'party_id',
+                op: 'in',
+                value: relationLinks.map((l) => l.to_id),
+              },
+            ],
             purpose,
           })
         : Promise.resolve({ rows: [] }),

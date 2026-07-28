@@ -42,7 +42,11 @@ import type { SettingsInject } from '../http/static-server.js';
  */
 type KeySpec =
   | { kind: 'data'; attr: string; coerce?: (v: unknown) => string | undefined }
-  | { kind: 'css'; cssVar: string; coerce?: (v: unknown) => string | undefined };
+  | {
+      kind: 'css';
+      cssVar: string;
+      coerce?: (v: unknown) => string | undefined;
+    };
 
 const asString = (v: unknown): string | undefined =>
   typeof v === 'string' && v.length > 0 ? v : undefined;
@@ -63,7 +67,11 @@ export const KNOWN_KEYS: Record<string, KeySpec> = {
   theme: { kind: 'data', attr: 'theme', coerce: asString },
   density: { kind: 'data', attr: 'density', coerce: asString },
   cards: { kind: 'data', attr: 'cards', coerce: asString },
-  coolCast: { kind: 'data', attr: 'cool-cast', coerce: asBoolFlag('on', 'off') },
+  coolCast: {
+    kind: 'data',
+    attr: 'cool-cast',
+    coerce: asBoolFlag('on', 'off'),
+  },
   // bgL is stored as a number (slider value 0-35); the CSS var wants `<n>%`.
   bgL: { kind: 'css', cssVar: 'bg-l', coerce: asPercent },
   accent: { kind: 'css', cssVar: 'accent', coerce: asString },

@@ -1,9 +1,11 @@
 import crypto from 'node:crypto';
 import path from 'node:path';
-import { afterEach, describe, expect, test, vi } from 'vitest';
+
 import { tempDir } from '@centraid/test-kit/temp-dir';
-import { DeviceStore } from './device-store.js';
+import { afterEach, describe, expect, test, vi } from 'vitest';
+
 import { startPreferredDesktopTunnel } from './desktop-tunnel.js';
+import { DeviceStore } from './device-store.js';
 import { startGatewayEndpoint } from './gateway-endpoint.js';
 
 const native = vi.hoisted(() => ({
@@ -23,7 +25,13 @@ vi.mock(import('./native-relay.js'), () => ({
 const cleanups: Array<() => Promise<void>> = [];
 describe('native-fallback', () => {
   afterEach(async () => {
-    while (cleanups.length > 0) await cleanups.pop()?.();
+    const closeNext = async (): Promise<void> => {
+      const cleanup = cleanups.pop();
+      if (!cleanup) return;
+      await cleanup();
+      return closeNext();
+    };
+    await closeNext();
   });
 
   test('gateway falls back to the JS relay when the native artifact cannot load', async () => {
@@ -37,7 +45,7 @@ describe('native-fallback', () => {
     });
     cleanups.push(() => endpoint.close());
 
-    expect(endpoint.endpointId).toMatch(/^[a-z0-9]+$/);
+    expect(endpoint.endpointId).toMatch(/^[a-z0-9]+$/u);
   });
 
   test('desktop falls back to the JS relay when the native artifact cannot load', async () => {
@@ -50,6 +58,6 @@ describe('native-fallback', () => {
     });
     cleanups.push(() => desktop.close());
 
-    expect(desktop.endpointId).toMatch(/^[a-z0-9]+$/);
+    expect(desktop.endpointId).toMatch(/^[a-z0-9]+$/u);
   });
 });

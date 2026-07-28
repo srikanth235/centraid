@@ -5,6 +5,7 @@
 
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
+
 import { VaultBlobAuthorizationError } from '../errors.js';
 import { nowIso, uuidv7 } from '../ids.js';
 import { assertSha } from './store.js';
@@ -188,7 +189,10 @@ export class BlobContentKeyRegistry {
         .run(row.device_id);
       for (const device of devices) {
         const current = this.deviceWrapState(device.device_id);
-        const next = { key_epoch: current.key_epoch + 1, salt: randomBytes(KEY_BYTES) };
+        const next = {
+          key_epoch: current.key_epoch + 1,
+          salt: randomBytes(KEY_BYTES),
+        };
         this.db
           .prepare(
             'UPDATE blob_device_wrap_key SET key_epoch = ?, salt = ?, updated_at = ? WHERE device_id = ?',
@@ -242,7 +246,10 @@ export class BlobContentKeyRegistry {
     return revoked;
   }
 
-  private deviceWrapState(deviceId: string): { key_epoch: number; salt: Buffer } {
+  private deviceWrapState(deviceId: string): {
+    key_epoch: number;
+    salt: Buffer;
+  } {
     this.db
       .prepare(
         `INSERT INTO blob_device_wrap_key (device_id, key_epoch, salt, updated_at)

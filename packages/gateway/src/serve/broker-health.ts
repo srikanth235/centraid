@@ -19,6 +19,7 @@
  */
 
 import type { DatabaseSync } from 'node:sqlite';
+
 import type { HealthProbe } from './health-registry.js';
 
 export interface BrokerHealthVaultEntry {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { pageCaptureFromTab, randomPassword, unwrapCompanionEnvelope } from './content-core.js';
 
 describe(unwrapCompanionEnvelope, () => {
@@ -19,7 +20,7 @@ describe(randomPassword, () => {
       return arr;
     });
     expect(pw).toHaveLength(16);
-    expect(pw).toMatch(/^[ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*]+$/);
+    expect(pw).toMatch(/^[ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*]+$/u);
   });
 
   it('rejects out-of-bound samples (unbiased charset)', () => {
@@ -43,7 +44,11 @@ describe(pageCaptureFromTab, () => {
       url: 'https://x.test',
     });
     expect(
-      pageCaptureFromTab({ title: 'Page', url: 'https://x.test', selectionText: 'hi' }),
+      pageCaptureFromTab({
+        title: 'Page',
+        url: 'https://x.test',
+        selectionText: 'hi',
+      }),
     ).toStrictEqual({ title: 'Page', url: 'https://x.test', selection: 'hi' });
   });
 });

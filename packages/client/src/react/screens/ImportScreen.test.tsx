@@ -1,6 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
 import type { ImportBridgeProps, ImportData } from '../screen-contracts.js';
 import ImportScreen from './ImportScreen.js';
 
@@ -52,8 +53,18 @@ function makeProps(over: Partial<ImportBridgeProps> = {}): ImportBridgeProps {
     loadData: vi.fn<ImportBridgeProps['loadData']>().mockResolvedValue(dataWithDraft),
     stage: vi.fn<ImportBridgeProps['stage']>().mockResolvedValue(3),
     loadRows: vi.fn<ImportBridgeProps['loadRows']>().mockResolvedValue([
-      { entityType: 'event', externalId: 'e1', disposition: 'create', note: null },
-      { entityType: 'event', externalId: 'e2', disposition: 'skip', note: 'dup' },
+      {
+        entityType: 'event',
+        externalId: 'e1',
+        disposition: 'create',
+        note: null,
+      },
+      {
+        entityType: 'event',
+        externalId: 'e2',
+        disposition: 'skip',
+        note: 'dup',
+      },
     ]),
     publish: vi.fn<ImportBridgeProps['publish']>().mockResolvedValue(undefined),
     discard: vi.fn<ImportBridgeProps['discard']>().mockResolvedValue(undefined),
@@ -126,7 +137,9 @@ describe('screens/ImportScreen', () => {
 
     it('shows the no-vault note when loadData resolves null', async () => {
       const el = await mount(
-        makeProps({ loadData: vi.fn<ImportBridgeProps['loadData']>().mockResolvedValue(null) }),
+        makeProps({
+          loadData: vi.fn<ImportBridgeProps['loadData']>().mockResolvedValue(null),
+        }),
       );
       expect(el.textContent).toContain('nothing to import into');
     });

@@ -14,6 +14,7 @@
 // targets the text/* case the door check cannot redirect away from.
 
 import type { DatabaseSync } from 'node:sqlite';
+
 import { decodeDataUri } from '../blob/mint.js';
 
 /** Default inline-body budget: ~64KB of decoded text. */

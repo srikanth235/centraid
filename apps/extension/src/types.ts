@@ -54,7 +54,12 @@ export interface PageCapture {
 
 export type CompanionRequest =
   | { type: 'status' }
-  | { type: 'pair'; ticket: string; deviceName?: string; grants: CompanionModule[] }
+  | {
+      type: 'pair';
+      ticket: string;
+      deviceName?: string;
+      grants: CompanionModule[];
+    }
   | { type: 'unpair' }
   | { type: 'lock' }
   | { type: 'unlock' }
@@ -63,10 +68,27 @@ export type CompanionRequest =
   | { type: 'blocking-count' }
   | { type: 'locker:candidates'; pageUrl: string }
   | { type: 'locker:fill'; itemId: string; pageUrl: string }
-  | { type: 'locker:save'; pageUrl: string; title: string; username?: string; password: string }
+  | {
+      type: 'locker:save';
+      pageUrl: string;
+      title: string;
+      username?: string;
+      password: string;
+    }
   | { type: 'capture:task'; capture: PageCapture }
   | { type: 'capture:note'; capture: PageCapture }
   | { type: 'capture:document'; capture: PageCapture; screenshot: string }
-  | { type: 'agenda:add'; summary: string; start: string; end: string; calendarId: string }
-  | { type: 'people:add'; displayName: string; cadenceDays: number; role?: string }
+  | {
+      type: 'agenda:add';
+      summary: string;
+      start: string;
+      end: string;
+      calendarId: string;
+    }
+  | {
+      type: 'people:add';
+      displayName: string;
+      cadenceDays: number;
+      role?: string;
+    }
   | { type: 'page:capture' };

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { DEFAULT_STARTERS, resolveStarters } from './assistantStarters.js';
 
 describe(resolveStarters, () => {

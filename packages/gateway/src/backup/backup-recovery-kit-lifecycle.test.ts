@@ -1,19 +1,26 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+
 import { WAL_DB_FILES, wrapRecoveryKit } from '@centraid/backup';
+import { forEachSequentially } from '@centraid/test-kit/sequential';
 import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterEach, describe, expect, test } from 'vitest';
+
 import { HealthRegistry } from '../serve/health-registry.js';
 import { openVaultRegistry, type VaultRegistry } from '../serve/vault-registry.js';
 import type { BackupConfig } from './backup-config.js';
 import { BackupService } from './backup-service.js';
 
-const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
+const silentLogger = {
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+};
 const cleanups: Array<() => Promise<void> | void> = [];
 
 describe('backup-recovery-kit-lifecycle', () => {
   afterEach(async () => {
-    while (cleanups.length > 0) await cleanups.pop()?.();
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
   });
 
   interface Harness {
@@ -61,7 +68,11 @@ describe('backup-recovery-kit-lifecycle', () => {
             walGeneration: base.generation,
             baseTickMs: base.createdAtMs,
           })),
-          { path: 'fixture.bin', kind: 'blob' as const, absolutePath: fixtureFile },
+          {
+            path: 'fixture.bin',
+            kind: 'blob' as const,
+            absolutePath: fixtureFile,
+          },
         ]),
     });
 
@@ -70,7 +81,11 @@ describe('backup-recovery-kit-lifecycle', () => {
 
   async function verifyExportedKit(h: Harness) {
     const kit = wrapRecoveryKit(await h.service.recoveryKitDocument(), 'test-password');
-    return h.service.verifyRecoveryKit({ kit, password: 'test-password', lossConsent: true });
+    return h.service.verifyRecoveryKit({
+      kit,
+      password: 'test-password',
+      lossConsent: true,
+    });
   }
 
   test('confirming again refreshes the timestamp rather than erroring', async () => {

@@ -3,8 +3,8 @@
 // refetch is deferred. Both are pure plumbing with no app state, which is why
 // they live here rather than inside the mount closure.
 import { subscribeReadUpdates } from './kit.ts';
-import type { LibraryData } from './types.ts';
 import type { ScopeReadResult } from './library-store.ts';
+import type { LibraryData } from './types.ts';
 
 /**
  * Fan the `library` query across scopes. `readAll` is the multi-scope door —
@@ -60,7 +60,11 @@ export async function readLibraryScopes(
     const scope = scopeIds[index]!;
     if (result.status === 'fulfilled') return { scope, ok: true, data: result.value };
     const reason = result.reason as { message?: string };
-    return { scope, ok: false, error: { message: String(reason?.message ?? result.reason) } };
+    return {
+      scope,
+      ok: false,
+      error: { message: String(reason?.message ?? result.reason) },
+    };
   });
 }
 

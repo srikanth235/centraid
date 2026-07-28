@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { extractBlobMeta } from './pipeline.js';
+
 import {
   parseId3Metadata,
   parseIsoBmffMetadata,
@@ -7,6 +7,7 @@ import {
   parseVorbisMetadata,
   parseWebmMetadata,
 } from './media-metadata.js';
+import { extractBlobMeta } from './pipeline.js';
 
 function box(type: string, ...payloads: Buffer[]): Buffer {
   const payload = Buffer.concat(payloads);

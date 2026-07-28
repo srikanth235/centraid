@@ -61,7 +61,10 @@ export function resolveWriteTarget(input: WriteTargetInput): WriteTarget {
 
   // Case 4 before case 3 — the read-only answer is the interesting one.
   if (!audience.canWrite) {
-    return { disabled: true, reason: `You can view ${audience.label} but not add to it.` };
+    return {
+      disabled: true,
+      reason: `You can view ${audience.label} but not add to it.`,
+    };
   }
   return { disabled: false, scopeId: audience.id, label: audience.label };
 }

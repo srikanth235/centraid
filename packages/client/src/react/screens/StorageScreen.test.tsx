@@ -1,8 +1,9 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import StorageScreen, { type StorageScreenProps } from './StorageScreen.js';
+
 import type { LocalUsageReportDTO } from '../../gateway-client-local-storage.js';
+import StorageScreen, { type StorageScreenProps } from './StorageScreen.js';
 
 // The Storage page (issue #544) stacks three cards: the local footprint, the
 // owner's limits, and the offsite Backups card that used to be the whole
@@ -47,8 +48,17 @@ describe('screens/StorageScreen', () => {
         },
       ],
       disk: { freeBytes: 120 * GB, totalBytes: 500 * GB },
-      limits: { totalLimitBytes: null, warnAtPercent: 80, journalLimitBytes: null },
-      limit: { status: 'ok', fractionUsed: null, usedBytes: 3 * GB, limitBytes: null },
+      limits: {
+        totalLimitBytes: null,
+        warnAtPercent: 80,
+        journalLimitBytes: null,
+      },
+      limit: {
+        status: 'ok',
+        fractionUsed: null,
+        usedBytes: 3 * GB,
+        limitBytes: null,
+      },
       ...over,
     };
   }
@@ -58,7 +68,11 @@ describe('screens/StorageScreen', () => {
       now: NOW,
       loadLocalUsage: () => Promise.resolve(report()),
       saveStorageLimits: () =>
-        Promise.resolve({ totalLimitBytes: null, warnAtPercent: 80, journalLimitBytes: null }),
+        Promise.resolve({
+          totalLimitBytes: null,
+          warnAtPercent: 80,
+          journalLimitBytes: null,
+        }),
       loadBackupStatus: () => Promise.resolve({ configured: false, vaults: [] }),
       onRunBackupNow: noRunBackupNow,
       onConfirmRecoveryKit: noConfirmRecoveryKit,
@@ -110,7 +124,11 @@ describe('screens/StorageScreen', () => {
         loadLocalUsage: () =>
           Promise.resolve(
             report({
-              limits: { totalLimitBytes: 2 * GB, warnAtPercent: 80, journalLimitBytes: null },
+              limits: {
+                totalLimitBytes: 2 * GB,
+                warnAtPercent: 80,
+                journalLimitBytes: null,
+              },
               limit: {
                 status: 'error',
                 fractionUsed: 1.5,
@@ -144,7 +162,9 @@ describe('screens/StorageScreen', () => {
         await Promise.resolve();
       });
 
-      expect(saveStorageLimits).toHaveBeenCalledWith({ totalLimitBytes: 30 * GB });
+      expect(saveStorageLimits).toHaveBeenCalledWith({
+        totalLimitBytes: 30 * GB,
+      });
       // The evaluation is the gateway's call, so the screen re-reads rather
       // than patching its cached report.
       expect(loadLocalUsage.mock.calls.length).toBeGreaterThan(1);

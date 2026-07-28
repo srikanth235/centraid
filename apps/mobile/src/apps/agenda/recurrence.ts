@@ -71,9 +71,9 @@ export function parseRule(value: string): ParsedRule | undefined {
   if (freq !== 'DAILY' && freq !== 'WEEKLY' && freq !== 'MONTHLY' && freq !== 'YEARLY') {
     return undefined;
   }
-  const interval = Math.max(1, Number.parseInt(parts.get('INTERVAL') ?? '1', 10) || 1);
+  const interval = Math.max(1, Math.trunc(Number(parts.get('INTERVAL') ?? '1')) || 1);
   const countRaw = parts.get('COUNT');
-  const count = countRaw ? Math.max(1, Number.parseInt(countRaw, 10) || 0) || undefined : undefined;
+  const count = countRaw ? Math.max(1, Math.trunc(Number(countRaw)) || 0) || undefined : undefined;
   const untilRaw = parts.get('UNTIL');
   const until = untilRaw ? parseIcalInstant(untilRaw) : undefined;
   const byDayRaw = parts.get('BYDAY');

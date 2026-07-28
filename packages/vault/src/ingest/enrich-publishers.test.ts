@@ -1,6 +1,7 @@
 // Enrichment publisher unit tests (issue #545 B6) — tagNotation + ATTRIBUTED contract.
 
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+
 import { bootstrapVault, type BootstrapResult } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { uuidv7 } from '../ids.js';
@@ -74,7 +75,10 @@ describe('enrich-publishers', () => {
       body: 'Updated caption',
       author_party_id: agentParty,
     });
-    expect(probed).toMatchObject({ entityId: created.entityId, disposition: 'update' });
+    expect(probed).toMatchObject({
+      entityId: created.entityId,
+      disposition: 'update',
+    });
     publisher.update(
       db.vault,
       created.entityId,

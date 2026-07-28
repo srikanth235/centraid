@@ -1,5 +1,5 @@
 // governance: allow-repo-hygiene file-size-limit (#567) one fire-spine suite shares the real worker, stable automation conversation, audit store, failover notice, and onFailure fixtures
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import { promises as fs } from 'node:fs';
 /*
  * Automation fire spine (issue #147, Concern 2). The per-fire orchestration
  * lives here in app-engine; the `ctx.agent` dispatch surface is injected by
@@ -8,10 +8,8 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  * the automation, opens its ledger, runs the handler, and cascades
  * `onFailure` — all without any agent-runtime CLI machinery.
  */
-
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { promises as fs } from 'node:fs';
 import path from 'node:path';
+
 import {
   ConversationHistoryStore,
   ConversationStore,
@@ -19,8 +17,11 @@ import {
   setPricingCatalog,
   type AutomationTurnStreamEvent,
 } from '@centraid/app-engine';
-import { runFire, type DispatchSurface, type OpenDispatchArgs } from './fire.js';
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
 import type { Manifest } from '../manifest/manifest.js';
+import { runFire, type DispatchSurface, type OpenDispatchArgs } from './fire.js';
 
 function manifest(over: Partial<Manifest> = {}): Manifest {
   return {
@@ -94,7 +95,7 @@ describe(runFire, () => {
     // dir as workdir.
     expect(opened).toHaveLength(1);
     expect(opened[0]!.automationRef).toBe('notes/digest');
-    expect(opened[0]!.workdir).toMatch(/notes[/\\]automations[/\\]digest$/);
+    expect(opened[0]!.workdir).toMatch(/notes[/\\]automations[/\\]digest$/u);
     expect(closes.n).toBe(1);
   });
 
@@ -116,7 +117,7 @@ describe(runFire, () => {
 
     const journal = makeJournalDbProvider(journalDbFile);
     const store = new ConversationStore(journal);
-    expect(store.listItems(record.runId)).toEqual(
+    expect(store.listItems(record.runId)).toStrictEqual(
       expect.arrayContaining([
         expect.objectContaining({
           kind: 'step',
@@ -135,10 +136,14 @@ describe(runFire, () => {
       journalDbFile,
       runnerSessionDir: path.join(appsDir, 'runner-sessions'),
     }));
-    expect(history.getSession('notes', 'notes/digest')?.messages).toEqual(
+    expect(history.getSession('notes', 'notes/digest')?.messages).toStrictEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          payload: expect.objectContaining({ kind: 'notice', level: 'warn', text: notice }),
+          payload: expect.objectContaining({
+            kind: 'notice',
+            level: 'warn',
+            text: notice,
+          }),
         }),
       ]),
     );
@@ -159,7 +164,9 @@ describe(runFire, () => {
       { openDispatch: stubDispatch(opened, closes) },
     );
     expect(outcome.ok).toBe(true);
-    expect(outcome.output).toStrictEqual({ now: new Date(record.startedAt).toISOString() });
+    expect(outcome.output).toStrictEqual({
+      now: new Date(record.startedAt).toISOString(),
+    });
   });
 
   it('emits a live turn stream: turn.start → item lifecycle per ctx call → turn.end', async () => {
@@ -376,7 +383,11 @@ describe(runFire, () => {
     const dispatch = (): Promise<DispatchSurface> =>
       Promise.resolve({
         agentDispatcher: async (call) => {
-          call.onEvent?.({ type: 'final', text: 'done', rawJson: '{"stopReason":"end_turn"}' });
+          call.onEvent?.({
+            type: 'final',
+            text: 'done',
+            rawJson: '{"stopReason":"end_turn"}',
+          });
           // A trailing error with no envelope of its own must not blank the
           // one the final already captured.
           call.onEvent?.({ type: 'error', message: 'stream closed late' });
@@ -553,7 +564,12 @@ describe(runFire, () => {
       });
 
     const { outcome, record } = await runFire(
-      { automationRef: 'notes/settle', appsDir, journalDbFile, runnerKind: 'codex' },
+      {
+        automationRef: 'notes/settle',
+        appsDir,
+        journalDbFile,
+        runnerKind: 'codex',
+      },
       { openDispatch: dispatch },
     );
 

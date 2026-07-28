@@ -111,9 +111,19 @@ export interface BlockingSummary {
  * transport error, so callers read `.status` rather than catching.
  */
 export type OutboxOutcome =
-  | { status: 'executed'; invocationId: string; receiptId: string; output: unknown }
+  | {
+      status: 'executed';
+      invocationId: string;
+      receiptId: string;
+      output: unknown;
+    }
   | { status: 'parked'; invocationId: string; reason: string }
-  | { status: 'denied'; invocationId?: string; receiptId: string; reason: string }
+  | {
+      status: 'denied';
+      invocationId?: string;
+      receiptId: string;
+      reason: string;
+    }
   | {
       status: 'failed';
       invocationId: string;

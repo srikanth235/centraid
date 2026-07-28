@@ -1,3 +1,10 @@
+import { Feather } from '@expo/vector-icons';
+import { File, Paths } from 'expo-file-system';
+import * as Haptics from 'expo-haptics';
+import { Image } from 'expo-image';
+import * as MediaLibrary from 'expo-media-library';
+import * as Sharing from 'expo-sharing';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
@@ -9,28 +16,21 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
-import { Image } from 'expo-image';
-import { VideoView, useVideoPlayer } from 'expo-video';
 import { GestureDetector } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
-import * as Haptics from 'expo-haptics';
-import * as MediaLibrary from 'expo-media-library';
-import * as Sharing from 'expo-sharing';
-import { File, Paths } from 'expo-file-system';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useReplicaQuery } from '../../kit/hooks/useReplicaQuery';
+import { useReplica } from '../../kit/replica/ReplicaProvider';
+import { useTheme } from '../../kit/theme';
 import { authHeader } from '../../lib/gateway';
 import type { NativeOptimisticMutation } from '../../lib/replica/native-session';
-import { useTheme } from '../../kit/theme';
-import { useReplica } from '../../kit/replica/ReplicaProvider';
-import { useReplicaQuery } from '../../kit/hooks/useReplicaQuery';
 import type { PhotosScreenProps } from '../../navigation';
-import type { PhotoAsset } from './timeline-model';
 import { InCloudOriginalError, openDeviceOriginal } from './device-media';
 import { buildDismissGesture, buildZoomGesture } from './lightbox-gestures';
 import { imageSource, videoSource } from './media-source';
 import { styles } from './PhotoLightbox.styles';
+import type { PhotoAsset } from './timeline-model';
 import { usePhotoTimeline } from './timeline-source';
 
 // Gesture construction lives in lightbox-gestures.ts — see the comment there
@@ -77,7 +77,9 @@ function MediaPage({
   }
   const scale = useSharedValue(1);
   const startScale = useSharedValue(1);
-  const zoomStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const zoomStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
   const zoom = buildZoomGesture(scale, startScale);
   if (asset.kind === 'video')
     return <VideoAsset uri={asset.originalUri} width={width} height={height} />;
@@ -322,7 +324,9 @@ export default function PhotoLightbox({
                     op: 'upsert',
                     entity: 'media.media_asset',
                     rowId: current.assetId!,
-                    values: { archived_at: current.archived ? null : new Date().toISOString() },
+                    values: {
+                      archived_at: current.archived ? null : new Date().toISOString(),
+                    },
                   },
                 ],
               )

@@ -199,11 +199,10 @@ function maskNonCode(src: string, maskStrings: boolean): string {
           braceDepth = tplStack.pop()!;
           mask(i);
           mode = 'tpl';
-          i++;
         } else {
           if (braceDepth > 0) braceDepth--;
-          i++;
         }
+        i++;
       } else {
         i++;
       }
@@ -212,49 +211,43 @@ function maskNonCode(src: string, maskStrings: boolean): string {
       else mask(i);
       i++;
     } else if (mode === 'block') {
+      mask(i);
       if (c === '*' && d === '/') {
-        mask(i);
         mask(i + 1);
         mode = 'code';
         i += 2;
       } else {
-        mask(i);
         i++;
       }
     } else if (mode === 'sq' || mode === 'dq') {
       const quote = mode === 'sq' ? "'" : '"';
+      maskStr(i);
       if (c === '\\') {
-        maskStr(i);
         if (i + 1 < n) maskStr(i + 1);
         i += 2;
       } else if (c === quote) {
-        maskStr(i);
         mode = 'code';
         i++;
       } else {
-        maskStr(i);
         i++;
       }
     } else {
       // template literal body
+      maskStr(i);
       if (c === '\\') {
-        maskStr(i);
         if (i + 1 < n) maskStr(i + 1);
         i += 2;
       } else if (c === '`') {
-        maskStr(i);
         mode = 'code';
         i++;
       } else if (c === '$' && d === '{') {
         // Enter an interpolation: the `${` is template syntax, the body is code.
-        maskStr(i);
         maskStr(i + 1);
         tplStack.push(braceDepth);
         braceDepth = 0;
         mode = 'code';
         i += 2;
       } else {
-        maskStr(i);
         i++;
       }
     }

@@ -14,6 +14,7 @@
 // ever authored data an app or agent could disagree with.
 
 import type { DatabaseSync } from 'node:sqlite';
+
 import { hexHamming } from './similarity.js';
 
 /** Two phashes within this hamming distance cluster together (issue #352). */

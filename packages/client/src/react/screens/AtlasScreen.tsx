@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
+
 import {
   browseRows,
   type AtlasCensusPayload,
   type AtlasGraphPayload,
   type AtlasPulsePayload,
 } from '../../gateway-client.js';
-import Icon from '../ui/Icon.js';
 import { cx } from '../ui/cx.js';
+import Icon from '../ui/Icon.js';
 import AtlasBrowseTab from './AtlasBrowseTab.js';
 import AtlasKindsTab from './AtlasKindsTab.js';
 import AtlasRelationsTab from './AtlasRelationsTab.js';
+
 import styles from './AtlasScreen.module.css';
 
 // The Vault Atlas (issue #441 Part B) — ontology at a glance in Operations.
@@ -91,7 +93,7 @@ export default function AtlasScreen({
     return () => {
       mountedRef.current = false;
     };
-  }, [loadStats, loadPulse, loadGraph]);
+  }, [loadStats, loadPulse, loadGraph, loadCensus]);
 
   const openBrowse = useCallback((logical: string) => {
     setBrowseTable(logical);

@@ -1,4 +1,6 @@
 import { Fragment, useState, type JSX } from 'react';
+
+import { formatBytes, relativeWhen } from '../../format.js';
 import type {
   AtlasCensusPack,
   AtlasCensusPayload,
@@ -6,9 +8,9 @@ import type {
   AtlasPulsePayload,
   AtlasPulseSeries,
 } from '../../gateway-client.js';
-import { formatBytes, relativeWhen } from '../../format.js';
-import Icon from '../ui/Icon.js';
 import { cx } from '../ui/cx.js';
+import Icon from '../ui/Icon.js';
+
 import a11y from '../styles/a11y.module.css';
 import styles from './AtlasKindsTab.module.css';
 

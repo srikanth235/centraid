@@ -1,4 +1,9 @@
 import { describe, expect, test } from 'vitest';
+
+import { bootstrapVault } from '../bootstrap.js';
+import { openVaultDb, type VaultDb } from '../db.js';
+import { createGateway, Gateway } from '../gateway/gateway.js';
+import type { Credential } from '../gateway/types.js';
 import {
   INLINE_BODY_BUDGET_BYTES,
   InlineBodyTooLargeError,
@@ -6,10 +11,6 @@ import {
   assertTextBodyWithinBudget,
   scanInlineBodyViolations,
 } from './inline-body-guard.js';
-import { openVaultDb, type VaultDb } from '../db.js';
-import { bootstrapVault } from '../bootstrap.js';
-import { createGateway, Gateway } from '../gateway/gateway.js';
-import type { Credential } from '../gateway/types.js';
 import { registerKnowledgeCommands } from './knowledge.js';
 import { registerSocialCommands } from './social.js';
 
@@ -77,11 +78,14 @@ describe('inline-body-guard', () => {
     const { gw, owner } = makeGateway();
     const outcome = gw.invoke(owner, {
       command: 'knowledge.create_note',
-      input: { title: 'Huge', body_text: 'z'.repeat(INLINE_BODY_BUDGET_BYTES + 1) },
+      input: {
+        title: 'Huge',
+        body_text: 'z'.repeat(INLINE_BODY_BUDGET_BYTES + 1),
+      },
       purpose: 'dpv:ServiceProvision',
     });
     expect(outcome.status).toBe('failed');
-    expect((outcome as { reason: string }).reason).toMatch(/inline .* body is/);
+    expect((outcome as { reason: string }).reason).toMatch(/inline .* body is/u);
   });
 
   test('knowledge.create_note accepts a body at the budget', () => {
@@ -113,7 +117,7 @@ describe('inline-body-guard', () => {
       purpose: 'dpv:ServiceProvision',
     });
     expect(outcome.status).toBe('failed');
-    expect((outcome as { reason: string }).reason).toMatch(/inline .* body is/);
+    expect((outcome as { reason: string }).reason).toMatch(/inline .* body is/u);
   });
 
   test('scanInlineBodyViolations finds pre-existing oversized inline bodies and attributes them by entity', () => {
@@ -143,9 +147,16 @@ describe('inline-body-guard', () => {
       .run(contentId, new Date().toISOString(), new Date().toISOString());
 
     const scan = scanInlineBodyViolations(db.vault);
-    expect(scan.total).toStrictEqual({ count: 1, bytes: Buffer.byteLength(bigText, 'utf8') });
+    expect(scan.total).toStrictEqual({
+      count: 1,
+      bytes: Buffer.byteLength(bigText, 'utf8'),
+    });
     expect(scan.byEntity).toStrictEqual([
-      { entity: 'knowledge.note', count: 1, bytes: Buffer.byteLength(bigText, 'utf8') },
+      {
+        entity: 'knowledge.note',
+        count: 1,
+        bytes: Buffer.byteLength(bigText, 'utf8'),
+      },
     ]);
   });
 

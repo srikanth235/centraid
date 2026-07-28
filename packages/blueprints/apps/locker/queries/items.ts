@@ -109,7 +109,11 @@ export async function readWatchtower(
 ): Promise<Map<string, WatchEntry>> {
   const map = new Map<string, WatchEntry>();
   try {
-    const out = await ctx.vault.invoke({ command: 'locker.watchtower', input: {}, purpose });
+    const out = await ctx.vault.invoke({
+      command: 'locker.watchtower',
+      input: {},
+      purpose,
+    });
     if (out.status !== 'executed') return map;
     const entries = (out.output?.items ?? []) as WatchEntry[];
     for (const entry of entries) map.set(entry.item_id, entry);

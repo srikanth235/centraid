@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
-import { Alert } from 'react-native';
-import { useShareIntentContext } from 'expo-share-intent';
 import { File } from 'expo-file-system';
+import { useShareIntentContext } from 'expo-share-intent';
+import { useEffect, useMemo } from 'react';
+import { Alert } from 'react-native';
 
 import { backupDeviceMedia, backupDocument } from '../../lib/upload/media-producer';
 import { useReplica } from '../replica/ReplicaProvider';
@@ -12,10 +12,9 @@ export function ShareIntentIngest(): null {
   const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntentContext();
   const { session, gatewayBase } = useReplica();
   // One gate across renders: a re-render while an ingest is still in flight must
-  // not spawn a second pass over the same files (#431 F9). `useState`'s lazy
-  // initialiser gives the same construct-once identity as a ref without the
-  // render-time `.current` read/write (the setter is never called).
-  const [gate] = useState(() => new ShareIntentGate());
+  // not spawn a second pass over the same files (#431 F9). The memoized gate
+  // has mount lifetime without a render-time ref read/write.
+  const gate = useMemo(() => new ShareIntentGate(), []);
   useEffect(() => {
     if (!hasShareIntent || !session || !gatewayBase) return;
     void gate.run(() =>

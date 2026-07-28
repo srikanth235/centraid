@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest';
 import type { RuntimeLogger } from '@centraid/app-engine';
-import { HealthRegistry } from './health-registry.js';
+import { describe, expect, it } from 'vitest';
+
 import { RESOURCE_KNOB_BOUNDS } from './hardware-profile.js';
+import { HealthRegistry } from './health-registry.js';
 
 const silentLogger: RuntimeLogger = {
   info: () => undefined,
@@ -82,7 +83,10 @@ describe(HealthRegistry, () => {
   it('loggerFor flips status on error and passes through to the base logger', async () => {
     const registry = new HealthRegistry();
     const seen: string[] = [];
-    const logger = registry.loggerFor('vaults', { ...silentLogger, error: (m) => seen.push(m) });
+    const logger = registry.loggerFor('vaults', {
+      ...silentLogger,
+      error: (m) => seen.push(m),
+    });
 
     logger.error('sqlite is corrupt');
     const snap = await registry.snapshot();
@@ -104,7 +108,10 @@ describe(HealthRegistry, () => {
   it('probe result wins the component status at snapshot time', async () => {
     const registry = new HealthRegistry();
     registry.reportError('vaults', 'mount failed');
-    registry.registerProbe('vaults', async () => ({ status: 'ok', detail: '2 vaults mounted' }));
+    registry.registerProbe('vaults', async () => ({
+      status: 'ok',
+      detail: '2 vaults mounted',
+    }));
 
     const snap = await registry.snapshot();
     const comp = snap.components.find((c) => c.component === 'vaults');
@@ -149,7 +156,10 @@ describe(HealthRegistry, () => {
     it('pulls outboxPending/sseClients from the injected source at snapshot time', async () => {
       const registry = new HealthRegistry();
       let pending = 3;
-      registry.setMetricsSource(() => ({ outboxPending: pending, sseClients: 2 }));
+      registry.setMetricsSource(() => ({
+        outboxPending: pending,
+        sseClients: 2,
+      }));
 
       let snap = await registry.snapshot();
       expect(snap.metrics.outboxPending).toBe(3);
@@ -173,7 +183,11 @@ describe(HealthRegistry, () => {
       const withUsage = new HealthRegistry();
       const usage = {
         sinceMs: 1_000,
-        process: { cpuSecondsTotal: 1.5, currentRssBytes: 200, peakRssBytes: 300 },
+        process: {
+          cpuSecondsTotal: 1.5,
+          currentRssBytes: 200,
+          peakRssBytes: 300,
+        },
         subsystems: {
           workerPool: { tasks: 4, busyMs: 40 },
           replication: { passes: 2, bytesReplicated: 512, busyMs: 12 },
@@ -183,7 +197,10 @@ describe(HealthRegistry, () => {
         },
         backgroundTimerFiresLastHour: 7,
       };
-      withUsage.setMetricsSource(() => ({ outboxPending: 0, resourceUsage: usage }));
+      withUsage.setMetricsSource(() => ({
+        outboxPending: 0,
+        resourceUsage: usage,
+      }));
       const snap = await withUsage.snapshot();
       expect(snap.metrics.resourceUsage).toStrictEqual(usage);
       expect(snap.metrics.resourceUsage?.subsystems.agentRuns.cpuSeconds).toBeNull();
@@ -303,7 +320,10 @@ describe(HealthRegistry, () => {
     it('forces one visible background pass after sustained load shedding', async () => {
       let clock = 1_000;
       let p99 = 75;
-      const registry = new HealthRegistry({ now: () => clock, maxLoadShedMs: 5_000 });
+      const registry = new HealthRegistry({
+        now: () => clock,
+        maxLoadShedMs: 5_000,
+      });
       registry.setPerformanceMetricsSource(() => ({ eventLoopLagP99Ms: p99 }));
 
       expect(registry.shouldDeferBackgroundWork()).toBe(true);
@@ -316,7 +336,7 @@ describe(HealthRegistry, () => {
         expect.objectContaining({
           component: 'load-shed',
           status: 'degraded',
-          detail: expect.stringMatching(/deferred background pass|pausing backups/),
+          detail: expect.stringMatching(/deferred background pass|pausing backups/u),
         }),
       );
 
@@ -336,7 +356,10 @@ describe(HealthRegistry, () => {
     it('is unpaused by default and exposes an unpaused snapshot window', async () => {
       const registry = new HealthRegistry();
       expect(registry.shouldPauseBackgroundWork()).toBe(false);
-      expect(registry.backgroundPauseState()).toStrictEqual({ paused: false, until: null });
+      expect(registry.backgroundPauseState()).toStrictEqual({
+        paused: false,
+        until: null,
+      });
       expect((await registry.snapshot()).metrics.backgroundPause).toStrictEqual({
         paused: false,
         until: null,
@@ -350,12 +373,21 @@ describe(HealthRegistry, () => {
       expect(registry.shouldPauseBackgroundWork()).toBe(true);
 
       const snap = await registry.snapshot();
-      expect(snap.metrics.backgroundPause).toStrictEqual({ paused: true, until: null });
+      expect(snap.metrics.backgroundPause).toStrictEqual({
+        paused: true,
+        until: null,
+      });
       expect(snap.components).toContainEqual(
-        expect.objectContaining({ component: 'background-pause', status: 'degraded' }),
+        expect.objectContaining({
+          component: 'background-pause',
+          status: 'degraded',
+        }),
       );
       expect(snap.recentEvents).toContainEqual(
-        expect.objectContaining({ component: 'background-pause', level: 'warn' }),
+        expect.objectContaining({
+          component: 'background-pause',
+          level: 'warn',
+        }),
       );
     });
 
@@ -369,13 +401,19 @@ describe(HealthRegistry, () => {
       expect(registry.shouldPauseBackgroundWork()).toBe(true);
       clock = 6_000;
       expect(registry.shouldPauseBackgroundWork()).toBe(false);
-      expect(registry.backgroundPauseState()).toStrictEqual({ paused: false, until: null });
+      expect(registry.backgroundPauseState()).toStrictEqual({
+        paused: false,
+        until: null,
+      });
     });
 
     it('resume lifts an active pause and is a no-op afterward', async () => {
       const registry = new HealthRegistry();
       registry.pauseBackgroundWork();
-      expect(registry.resumeBackgroundWork()).toStrictEqual({ paused: false, until: null });
+      expect(registry.resumeBackgroundWork()).toStrictEqual({
+        paused: false,
+        until: null,
+      });
       expect(registry.shouldPauseBackgroundWork()).toBe(false);
 
       const before = (await registry.snapshot()).recentEvents.length;

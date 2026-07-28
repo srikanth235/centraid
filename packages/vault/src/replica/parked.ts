@@ -1,6 +1,6 @@
 import type { VaultDb } from '../db.js';
-import type { Identity, InvokeRequest } from '../gateway/types.js';
 import { writeExplanation, writeReceipt } from '../gateway/evidence.js';
+import type { Identity, InvokeRequest } from '../gateway/types.js';
 import { sealAad, sealValue, unsealValue } from '../schema/sealed.js';
 import {
   transitionReplicaIntentOutcomeInTransaction,
@@ -235,7 +235,11 @@ export function recordDurableParkedDenial(
       )
       .run(receiptId, payload.invocationId);
     db.journal.exec('COMMIT');
-    return { invocationId: payload.invocationId, receiptId, reason: input.reason };
+    return {
+      invocationId: payload.invocationId,
+      receiptId,
+      reason: input.reason,
+    };
   } catch (error) {
     db.journal.exec('ROLLBACK');
     throw error;

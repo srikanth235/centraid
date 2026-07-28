@@ -3,6 +3,7 @@
 // selector.test.ts; shared fixtures in test-fixtures.ts.
 
 import { describe, expect, it } from 'vitest';
+
 import { runConversationArchival, readArchivedConversationSegment } from './index.js';
 import {
   MemoryBlobSink,
@@ -199,7 +200,12 @@ describe('page reclamation', () => {
   it('drops page_count after a custody-proven prune (incremental_vacuum)', () => {
     const { journal } = openTempJournal();
     const blobSink = new MemoryBlobSink();
-    seedConversation(journal, { id: 'c1', kind: 'chat', appId: 'app', updatedAt: daysAgo(120) });
+    seedConversation(journal, {
+      id: 'c1',
+      kind: 'chat',
+      appId: 'app',
+      updatedAt: daysAgo(120),
+    });
     // Enough bulky turns to occupy real pages worth reclaiming.
     for (let i = 0; i < 200; i++) {
       seedTurn(journal, {

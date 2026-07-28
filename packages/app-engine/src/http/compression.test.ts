@@ -1,6 +1,8 @@
-import { describe, expect, it } from 'vitest';
-import zlib from 'node:zlib';
 import { IncomingMessage, ServerResponse } from 'node:http';
+import zlib from 'node:zlib';
+
+import { describe, expect, it } from 'vitest';
+
 import {
   compress,
   DYNAMIC_QUALITY,
@@ -119,7 +121,9 @@ describe('compression', () => {
   });
 
   describe(sendJsonNegotiated, () => {
-    const big = { rows: Array.from({ length: 500 }, (_, i) => ({ i, name: `row-${i}` })) };
+    const big = {
+      rows: Array.from({ length: 500 }, (_, i) => ({ i, name: `row-${i}` })),
+    };
 
     it('compresses a large body with brotli and sets Vary + Content-Encoding', async () => {
       const { res, data } = mockRes();

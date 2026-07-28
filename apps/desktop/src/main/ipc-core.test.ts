@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+
 import { describe, expect, it } from 'vitest';
+
 import {
   Channel,
   gatewayChangedPayload,
@@ -10,23 +11,23 @@ import {
 } from './ipc-core.js';
 import { UPDATE_AVAILABLE_CHANNEL } from './update-watcher.js';
 
-const here = path.dirname(fileURLToPath(import.meta.url));
+const here = import.meta.dirname;
 
 describe('Channel map', () => {
   it('uses the centraid: namespace for every channel', () => {
     for (const [key, value] of Object.entries(Channel)) {
-      expect(value, key).toMatch(/^centraid:/);
+      expect(value, key).toMatch(/^centraid:/u);
     }
   });
 
   it('is imported by both ipc.ts and preload.ts (parity)', () => {
     const ipc = readFileSync(path.join(here, 'ipc.ts'), 'utf8');
     const preload = readFileSync(path.join(here, '..', 'preload.ts'), 'utf8');
-    expect(ipc).toMatch(/from ['"]\.\/ipc-core\.js['"]/);
-    expect(preload).toMatch(/from ['"]\.\/main\/ipc-core\.js['"]/);
+    expect(ipc).toMatch(/from ['"]\.\/ipc-core\.js['"]/u);
+    expect(preload).toMatch(/from ['"]\.\/main\/ipc-core\.js['"]/u);
     // Neither file re-declares the channel map inline.
-    expect(ipc).not.toMatch(/SETTINGS_GET:\s*'centraid:settings:get'/);
-    expect(preload).not.toMatch(/SETTINGS_GET:\s*'centraid:settings:get'/);
+    expect(ipc).not.toMatch(/SETTINGS_GET:\s*'centraid:settings:get'/u);
+    expect(preload).not.toMatch(/SETTINGS_GET:\s*'centraid:settings:get'/u);
   });
 
   it('covers the gateway + vault + deep-link surfaces the renderer uses', () => {

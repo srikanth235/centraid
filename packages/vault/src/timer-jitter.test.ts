@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+
 import { jitterDelayMs } from './timer-jitter.js';
 
 describe('timer-jitter', () => {

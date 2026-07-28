@@ -16,7 +16,6 @@ import {
   unsealFrame,
   DEFAULT_FRAME_SIZE,
 } from '../../../../../packages/vault/src/blob/seal-frames.js';
-
 import {
   FRAME_BYTES,
   HEADER_BYTES,
@@ -47,21 +46,20 @@ async function sealWholeObject(plain: Uint8Array): Promise<Uint8Array> {
   const sha256 = shaOf(plain);
   const frameCount = frameCountFor(plain.byteLength);
   const directory = await sealDirectory(crypto, KEY, sha256, plain.byteLength, frameCount);
-  const parts: Uint8Array[] = [];
-  for (let partNumber = 1; partNumber <= partCountFor(frameCount); partNumber += 1) {
-    parts.push(
-      await sealPart({
+  const parts = await Promise.all(
+    Array.from({ length: partCountFor(frameCount) }, async (_, index) =>
+      sealPart({
         crypto,
         key: KEY,
         sha256,
         plaintextSize: plain.byteLength,
         frameCount,
-        partNumber,
+        partNumber: index + 1,
         directory,
         read: async (offset, length) => plain.subarray(offset, offset + length),
       }),
-    );
-  }
+    ),
+  );
   const total = parts.reduce((sum, part) => sum + part.byteLength, 0);
   const out = new Uint8Array(total);
   let offset = 0;

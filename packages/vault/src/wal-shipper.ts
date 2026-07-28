@@ -69,6 +69,7 @@ import {
 } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+
 import {
   newWalGeneration,
   parseWalCloserKey,
@@ -88,6 +89,7 @@ import {
   walSalts,
   walSegmentKey,
 } from '@centraid/backup';
+
 import type { VaultDb } from './db.js';
 import { sha256File } from './gateway/custody.js';
 import { writeReceipt } from './gateway/evidence.js';
@@ -380,7 +382,10 @@ const MAX_CAPTURE_BYTES = 64 * 1024 * 1024;
  * checkpoint under.
  */
 const TRUNCATE_SETTLE_PASSES = 8;
-const noopLog: Required<WalShipperLogger> = { info: () => undefined, warn: () => undefined };
+const noopLog: Required<WalShipperLogger> = {
+  info: () => undefined,
+  warn: () => undefined,
+};
 /** Reflink support is a filesystem property; remember failed probes per device pair. */
 const reflinkCapability = new Map<string, boolean>();
 
@@ -716,7 +721,10 @@ export class WalShipper {
           this.rollover(db, stream, reasons, report);
         }
       } catch (err) {
-        report.errors.push({ db, message: err instanceof Error ? err.message : String(err) });
+        report.errors.push({
+          db,
+          message: err instanceof Error ? err.message : String(err),
+        });
         this.log.warn(`wal-ship: ${db} tick failed: ${report.errors.at(-1)!.message}`);
       }
     }
@@ -934,10 +942,16 @@ export class WalShipper {
     try {
       scan = scanWalPrefix(bytes);
     } catch {
-      return { kind: 'break', reason: 'wal-checksum-invalid-before-captured-offset' };
+      return {
+        kind: 'break',
+        reason: 'wal-checksum-invalid-before-captured-offset',
+      };
     }
     if (scan.validEndOffset < stream.offset) {
-      return { kind: 'break', reason: 'wal-checksum-invalid-before-captured-offset' };
+      return {
+        kind: 'break',
+        reason: 'wal-checksum-invalid-before-captured-offset',
+      };
     }
     const header = bytes.subarray(0, WAL_HEADER_BYTES);
     const salts = walSalts(header);
@@ -1001,7 +1015,9 @@ export class WalShipper {
    *     ledger writers, the key-admin CLI).
    */
   private dataVersion(db: WalDbName): number {
-    const row = this.handle(db).prepare('PRAGMA data_version').get() as { data_version: number };
+    const row = this.handle(db).prepare('PRAGMA data_version').get() as {
+      data_version: number;
+    };
     return row.data_version;
   }
 
@@ -1086,7 +1102,9 @@ export class WalShipper {
       : undefined;
     handle.exec(`PRAGMA busy_timeout = ${CHECKPOINT_BUSY_MS}`);
     try {
-      const row = handle.prepare('PRAGMA wal_checkpoint(TRUNCATE)').get() as { busy: number };
+      const row = handle.prepare('PRAGMA wal_checkpoint(TRUNCATE)').get() as {
+        busy: number;
+      };
       if (row.busy !== 0) return null;
       const size = existsSync(this.walPath(db)) ? statSync(this.walPath(db)).size : 0;
       if (size !== 0) return null; // not fully truncated — treat as busy
@@ -1289,7 +1307,10 @@ export class WalShipper {
       }
       truncated[db] = result;
     }
-    const olds = { vault: this.state.dbs.vault, journal: this.state.dbs.journal };
+    const olds = {
+      vault: this.state.dbs.vault,
+      journal: this.state.dbs.journal,
+    };
     for (const db of WAL_CAPTURE_ORDER) this.mintBase(db, reasons[db]!, report);
     // Issue #411 action 1: tally the foreign checkpoints THIS break healed. One
     // increment per database that INDEPENDENTLY established a foreign reason —
@@ -1336,7 +1357,9 @@ export class WalShipper {
       // A partial pair break can never authenticate a group end. Even when
       // this stream looked healthy before TRUNCATE, the sibling did not cut,
       // so a closer here would certify a one-sided instant.
-      this.finishTruncate(db, stream, result, reasons, report, { trusted: false });
+      this.finishTruncate(db, stream, result, reasons, report, {
+        trusted: false,
+      });
     }
     // AFTER finishTruncate — it may have upgraded a reason to
     // `checkpoint-raced-writer`, and that is the reason the retry must carry.
@@ -1431,7 +1454,12 @@ export class WalShipper {
         objectId: null,
         purpose: null,
         decision: 'allow',
-        detail: { db, reason, generation: stream.generation, baseSha256: stream.baseSha256 },
+        detail: {
+          db,
+          reason,
+          generation: stream.generation,
+          baseSha256: stream.baseSha256,
+        },
       });
     } catch (err) {
       this.log.warn(
@@ -1516,7 +1544,10 @@ export class WalShipper {
 
   /** Delete one BASE PAIR's local markers (markers are pair-scoped, not per-db). */
   private dropLocalMarkers(vaultGeneration: string, journalGeneration: string): void {
-    rmSync(this.markerDir(vaultGeneration, journalGeneration), { recursive: true, force: true });
+    rmSync(this.markerDir(vaultGeneration, journalGeneration), {
+      recursive: true,
+      force: true,
+    });
   }
 
   /**
@@ -1691,7 +1722,7 @@ export class WalShipper {
         const genRoot = path.join(dbRoot, generation);
         for (const groupName of dirsIn(genRoot, /^\d{8}$/u)) {
           const groupRoot = path.join(genRoot, groupName);
-          const group = Number.parseInt(groupName, 10);
+          const group = Math.trunc(Number(groupName));
           for (const name of readdirSync(groupRoot).sort()) {
             const full = path.join(groupRoot, name);
             const addr = this.parseSegmentFileName(db, generation, group, name);
@@ -1735,7 +1766,7 @@ export class WalShipper {
         const journalGeneration = pair.slice(33);
         for (const name of readdirSync(pairDir).sort()) {
           if (!name.endsWith('.tick')) continue;
-          const tickMs = Number.parseInt(name.slice(0, -5), 10);
+          const tickMs = Math.trunc(Number(name.slice(0, -5)));
           if (!Number.isInteger(tickMs)) continue;
           const full = path.join(pairDir, name);
           let payload: { vault?: WalPairPosition; journal?: WalPairPosition };
@@ -1752,7 +1783,13 @@ export class WalShipper {
             vault: payload.vault,
             journal: payload.journal,
           };
-          out.push({ file: full, key: walPairMarkerKey(marker), kind: 'marker', marker, bytes: 0 });
+          out.push({
+            file: full,
+            key: walPairMarkerKey(marker),
+            kind: 'marker',
+            marker,
+            bytes: 0,
+          });
         }
       }
     }
@@ -1850,7 +1887,15 @@ export class WalShipper {
 
   status(): {
     dbs: Partial<
-      Record<WalDbName, { generation: string; group: number; offset: number; basePending: boolean }>
+      Record<
+        WalDbName,
+        {
+          generation: string;
+          group: number;
+          offset: number;
+          basePending: boolean;
+        }
+      >
     >;
     localBytes: number;
     /** Issue #411 action 1: foreign checkpoints detected+healed over this

@@ -1,10 +1,10 @@
+import { Feather } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, FlatList, Pressable, RefreshControl, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
 
-import { spacing, useTheme } from '../../kit/theme';
 import HomeKey from '../../kit/components/HomeKey';
+import { spacing, useTheme } from '../../kit/theme';
 import { runAutomation, type AutomationRow } from '../../lib/automations';
 import type { AutomationsScreenProps } from '../../navigation';
 import { makeStyles } from './Automations.styles';

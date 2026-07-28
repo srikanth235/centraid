@@ -1,4 +1,4 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import crypto from 'node:crypto';
 /*
  * Gateway-owned app lifecycle over HTTP (issue #141, Phase 2). The
  * deterministic builder — scaffold / clone / update-meta / automation
@@ -12,13 +12,14 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  *   - automation create mints a webhook secret (returned once) and the
  *     toggled/deleted automation flows through publish.
  */
-
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
-import { serve, type GatewayServeHandle } from '../serve/serve.ts';
+
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+
 import type { GatewayPaths } from '../paths.ts';
+import { serve, type GatewayServeHandle } from '../serve/serve.ts';
 // lifecycle-routes is exercised through serve() HTTP paths below (#545 B7).
 
 let dataDir: string;
@@ -42,11 +43,17 @@ function auth(extra: Record<string, string> = {}): Record<string, string> {
 async function listApps(): Promise<Array<{ id: string; name?: string; kind?: string }>> {
   const res = await fetch(`${handle.url}/centraid/_apps`, { headers: auth() });
   expect(res.status).toBe(200);
-  return (await res.json()) as Array<{ id: string; name?: string; kind?: string }>;
+  return (await res.json()) as Array<{
+    id: string;
+    name?: string;
+    kind?: string;
+  }>;
 }
 
 async function listSessions(): Promise<string[]> {
-  const res = await fetch(`${handle.url}/centraid/_apps/_sessions`, { headers: auth() });
+  const res = await fetch(`${handle.url}/centraid/_apps/_sessions`, {
+    headers: auth(),
+  });
   expect(res.status).toBe(200);
   return ((await res.json()) as { sessions: string[] }).sessions;
 }
@@ -54,7 +61,10 @@ async function listSessions(): Promise<string[]> {
 describe('lifecycle-over-http', () => {
   beforeEach(async () => {
     dataDir = await tempDir(`gw-lifecycle-${crypto.randomUUID()}-`);
-    handle = await serve({ initVaultName: "Owner's vault", paths: pathsUnder(dataDir) });
+    handle = await serve({
+      initVaultName: "Owner's vault",
+      paths: pathsUnder(dataDir),
+    });
   });
 
   afterEach(async () => {
@@ -72,7 +82,10 @@ describe('lifecycle-over-http', () => {
       body: JSON.stringify({ id: 'jotter', name: 'Jotter' }),
     });
     expect(staged.status).toBe(201);
-    const stagedBody = (await staged.json()) as { sessionId: string; staged: boolean };
+    const stagedBody = (await staged.json()) as {
+      sessionId: string;
+      staged: boolean;
+    };
     expect(stagedBody.staged).toBe(true);
     expect(stagedBody.sessionId).toBeTypeOf('string');
     expect(stagedBody.sessionId.length).toBeGreaterThan(0);
@@ -107,7 +120,12 @@ describe('lifecycle-over-http', () => {
     const published = await fetch(`${handle.url}/centraid/_apps`, {
       method: 'POST',
       headers: auth({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ id: 'todos', name: 'Todos', iconKey: 'Todo', publish: true }),
+      body: JSON.stringify({
+        id: 'todos',
+        name: 'Todos',
+        iconKey: 'Todo',
+        publish: true,
+      }),
     });
     expect(published.status).toBe(201);
     const rows = (await (
@@ -202,7 +220,7 @@ describe('lifecycle-over-http', () => {
     expect(body.row?.ownerApp).toBe('inbound');
     expect(body.webhook).toBeDefined();
     expect(body.webhook!.secret.length).toBeGreaterThan(0);
-    expect(body.webhook!.url).toMatch(/\/_centraid-hook\//);
+    expect(body.webhook!.url).toMatch(/\/_centraid-hook\//u);
 
     // The app is on `main`, marked as an automation app.
     const row = (await listApps()).find((a) => a.id === 'inbound');
@@ -254,7 +272,7 @@ describe('lifecycle-over-http', () => {
     // The old code called `ensureRegistered` after `deleteApp`, re-creating
     // the registry entry + data dir for the app just deleted; the fix
     // deregisters + cleans the data dir instead.
-    await expect(fs.stat(dataAppDir)).rejects.toThrow(/ENOENT/);
+    await expect(fs.stat(dataAppDir)).rejects.toThrow(/ENOENT/u);
   });
 
   test('DELETE /_apps/<id> tears down the app data dir, not just the code', async () => {
@@ -277,7 +295,7 @@ describe('lifecycle-over-http', () => {
 
     // Finding A regression: the wrapper dir under appsDir is removed, so a
     // recreated `shelf` cannot inherit stale rows/history.
-    await expect(fs.stat(dataAppDir)).rejects.toThrow(/ENOENT/);
+    await expect(fs.stat(dataAppDir)).rejects.toThrow(/ENOENT/u);
   });
 
   test('DELETE /_apps/<id> deletes a never-published draft without a no_changes error', async () => {
@@ -300,11 +318,14 @@ describe('lifecycle-over-http', () => {
       headers: auth(),
     });
     expect(del.status).toBe(200);
-    const body = (await del.json()) as { deleted: boolean; codeRemoved: boolean };
+    const body = (await del.json()) as {
+      deleted: boolean;
+      codeRemoved: boolean;
+    };
     expect(body.deleted).toBe(true);
     expect(body.codeRemoved).toBe(false);
     // The teardown still ran: registry/data dir are cleaned.
-    await expect(fs.stat(dataAppDir)).rejects.toThrow(/ENOENT/);
+    await expect(fs.stat(dataAppDir)).rejects.toThrow(/ENOENT/u);
 
     // A second DELETE of the same id is a clean no-op, not a failure.
     const again = await fetch(`${handle.url}/centraid/_apps/scratch`, {

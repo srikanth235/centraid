@@ -41,7 +41,10 @@ const PROPOSE_EVENT: CommandDefinition = {
   outputSchema: {
     type: 'object',
     required: ['event_id'],
-    properties: { event_id: { type: 'string' }, attendees: { type: 'integer' } },
+    properties: {
+      event_id: { type: 'string' },
+      attendees: { type: 'integer' },
+    },
   },
   preconditions: [
     {
@@ -225,7 +228,11 @@ const RESCHEDULE_EVENT: CommandDefinition = {
 };
 
 function rescheduleEvent(ctx: HandlerCtx): Record<string, unknown> {
-  const input = ctx.input as { event_id: string; dtstart: string; dtend: string };
+  const input = ctx.input as {
+    event_id: string;
+    dtstart: string;
+    dtend: string;
+  };
   const current = ctx.db
     .prepare('SELECT sequence FROM core_event WHERE event_id = ?')
     .get(input.event_id) as { sequence: number } | undefined;
@@ -263,7 +270,10 @@ const RESPOND_RSVP: CommandDefinition = {
   outputSchema: {
     type: 'object',
     required: ['attendee_id', 'partstat'],
-    properties: { attendee_id: { type: 'string' }, partstat: { type: 'string' } },
+    properties: {
+      attendee_id: { type: 'string' },
+      partstat: { type: 'string' },
+    },
   },
   preconditions: [
     {
@@ -298,7 +308,11 @@ const RESPOND_RSVP: CommandDefinition = {
 };
 
 function respondRsvp(ctx: HandlerCtx): Record<string, unknown> {
-  const input = ctx.input as { event_id: string; party_id: string; partstat: string };
+  const input = ctx.input as {
+    event_id: string;
+    party_id: string;
+    partstat: string;
+  };
   const attendee = ctx.db
     .prepare(
       'SELECT attendee_id, partstat FROM schedule_attendee WHERE event_id = ? AND party_id = ?',

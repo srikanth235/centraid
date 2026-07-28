@@ -4,10 +4,12 @@
 // week changes (not on every unrelated re-render — an attach elsewhere must
 // not jerk a manually-scrolled view back).
 import { useEffect, useRef } from 'react';
+import type { CSSProperties } from 'react';
+
 import { bucketByDay, fmtRange, layoutDay, segTimeText, startOfWeek } from '../format.ts';
 import { localDayKey } from '../kit.ts';
-import type { CSSProperties } from 'react';
 import type { AgEvent, DaySegment } from '../types.ts';
+
 import styles from './WeekView.module.css';
 
 type ColorFor = (calendarId: string | null | undefined) => string | null;
@@ -44,7 +46,11 @@ function AllDayCell({
           key={seg.ev.instance_key ?? seg.ev.event_id}
           type="button"
           className={styles.alldayChip}
-          style={{ '--ev-color': colorFor(seg.ev.calendar_id) ?? undefined } as CSSProperties}
+          style={
+            {
+              '--ev-color': colorFor(seg.ev.calendar_id) ?? undefined,
+            } as CSSProperties
+          }
           title={fmtRange(seg.ev)}
           onClick={() => onEventOpen(seg.ev)}
         >

@@ -15,6 +15,7 @@
  */
 
 import type { PrefsStore } from '@centraid/app-engine';
+
 import type { DaemonConfig } from './config.js';
 
 const RUNNER_KEYS = [

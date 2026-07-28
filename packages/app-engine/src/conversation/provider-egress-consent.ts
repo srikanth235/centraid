@@ -8,25 +8,25 @@
  * evidence rather than deleting the row.
  */
 
-import type { ModelSubsystem } from '../stores/prefs-store.js';
 import type { DatabaseProvider } from '../stores/gateway-db.js';
+import type { ModelSubsystem } from '../stores/prefs-store.js';
 import type { RunnerKind } from './turn.js';
 
 export type ProviderConsentSource = 'direct' | 'ladder';
 
 export interface ProviderEgressConsentController {
-  has(conversationId: string, runnerKind: RunnerKind, subsystem?: ModelSubsystem): boolean;
+  has: (conversationId: string, runnerKind: RunnerKind, subsystem?: ModelSubsystem) => boolean;
   /**
    * Attended consent: the user answered an egress prompt for this
    * conversation, so a prior revocation is deliberately cleared.
    */
-  grant(
+  grant: (
     conversationId: string,
     runnerKind: RunnerKind,
     source: ProviderConsentSource,
     subsystem?: ModelSubsystem,
     now?: number,
-  ): void;
+  ) => void;
   /**
    * Unattended consent derived from user authoring (a prefs-primary runner or
    * current ladder membership). No owner is present to answer a prompt, so
@@ -36,16 +36,16 @@ export interface ProviderEgressConsentController {
    * Optional so a host may inject a narrower controller; an absent
    * implementation means unattended egress is denied, never assumed.
    */
-  recordDerived?(
+  recordDerived?: (
     conversationId: string,
     runnerKind: RunnerKind,
     source: ProviderConsentSource,
     subsystem?: ModelSubsystem,
     now?: number,
-  ): boolean;
-  revoke(conversationId: string, runnerKind: RunnerKind, now?: number): void;
+  ) => boolean;
+  revoke: (conversationId: string, runnerKind: RunnerKind, now?: number) => void;
   /** Revoke grants created by one subsystem's automatic ladder membership. */
-  revokeLadderProvider?(runnerKind: RunnerKind, subsystem: ModelSubsystem, now?: number): void;
+  revokeLadderProvider?: (runnerKind: RunnerKind, subsystem: ModelSubsystem, now?: number) => void;
 }
 
 function consentSubsystemFor(

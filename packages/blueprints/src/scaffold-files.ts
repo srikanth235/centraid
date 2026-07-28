@@ -11,6 +11,7 @@
  */
 
 import { toBlueprintCss, type ColorKey, type IconName } from '@centraid/design-tokens';
+
 import { rewriteTitleInHtml, applyManifestName } from './app-rewrites.js';
 import { AUTOMATIONS_README, DEFAULT_APP_CSS, README_TEMPLATE } from './scaffold-defaults.js';
 import { AppScaffoldError } from './scaffold-types.js';

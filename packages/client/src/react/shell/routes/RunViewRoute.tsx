@@ -1,5 +1,5 @@
-import { Store } from '../store.js';
 import { type JSX, useEffect, useRef } from 'react';
+
 import {
   readAutomation,
   readAutomationTurnExpanded,
@@ -11,6 +11,7 @@ import type { RunViewSnapshot } from '../../screen-contracts.js';
 import RunViewScreen from '../../screens/RunViewScreen.js';
 import { useShellActions } from '../actions.js';
 import PageScroll from '../PageScroll.js';
+import { Store } from '../store.js';
 import { buildRunSnapshot } from './runViewData.js';
 
 // React-owned run viewer — replaces the vanilla renderRunView. The stream lives
@@ -95,7 +96,9 @@ export default function RunViewRoute({
         rerender();
       } else if (ev.type === 'turn.end') {
         void (async () => {
-          const final = await readAutomationTurnExpanded({ turnId: runId }).catch(() => ({
+          const final = await readAutomationTurnExpanded({
+            turnId: runId,
+          }).catch(() => ({
             turn: null,
             items: [] as CentraidAutomationItem[],
           }));
@@ -170,7 +173,9 @@ export default function RunViewRoute({
       } catch {
         // Stream unavailable (older gateway) — one-shot ledger read fallback.
         if (stopped) return;
-        const expanded = await readAutomationTurnExpanded({ turnId: runId }).catch(() => ({
+        const expanded = await readAutomationTurnExpanded({
+          turnId: runId,
+        }).catch(() => ({
           turn: run,
           items: [] as CentraidAutomationItem[],
         }));

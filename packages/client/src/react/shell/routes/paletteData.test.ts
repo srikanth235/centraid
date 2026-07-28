@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
 import type { PaletteConversationSearch } from './paletteConversationSearch.js';
 import { buildPaletteGroups, type PaletteDeps } from './paletteData.js';
 
@@ -11,14 +12,34 @@ vi.mock(import('../iconSvg.js'), () => ({
 describe('paletteData', () => {
   beforeEach(() => {
     (globalThis as unknown as { CentraidTokens: unknown }).CentraidTokens = {
-      tileFinish: () => ({ background: '#111', boxShadow: 'none', glyphColor: '#fff' }),
+      tileFinish: () => ({
+        background: '#111',
+        boxShadow: 'none',
+        glyphColor: '#fff',
+      }),
     };
   });
 
   function deps(over: Partial<PaletteDeps> = {}): PaletteDeps {
     return {
-      userApps: [{ id: 'todos', name: 'Todos', color: 'blue', iconKey: 'Todo', desc: 'Tasks' }],
-      drafts: [{ id: 'd1', name: 'Draft One', color: 'teal', iconKey: 'Sparkle', __draft: true }],
+      userApps: [
+        {
+          id: 'todos',
+          name: 'Todos',
+          color: 'blue',
+          iconKey: 'Todo',
+          desc: 'Tasks',
+        },
+      ],
+      drafts: [
+        {
+          id: 'd1',
+          name: 'Draft One',
+          color: 'teal',
+          iconKey: 'Sparkle',
+          __draft: true,
+        },
+      ],
       builderEnabled: true,
       tileVariant: 'gradient',
       navigate: vi.fn<PaletteDeps['navigate']>(),
@@ -94,7 +115,10 @@ describe('paletteData', () => {
       expect(convo.items[0]!.sub).toBe('the budget plan');
       convo.items[0]!.run();
       expect(onClose).toHaveBeenCalledOnce();
-      expect(navigate).toHaveBeenCalledWith({ kind: 'assistant', conversationId: 'c9' });
+      expect(navigate).toHaveBeenCalledWith({
+        kind: 'assistant',
+        conversationId: 'c9',
+      });
     });
 
     it('omits the Conversations group with no query or no hits (#420)', () => {

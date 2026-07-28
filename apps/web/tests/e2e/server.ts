@@ -1,7 +1,8 @@
 import crypto from 'node:crypto';
+import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { promises as fs } from 'node:fs';
+
 import { serve } from '../../../../packages/gateway/dist/serve/serve.js';
 
 const dataDir = await fs.mkdtemp(
@@ -53,7 +54,11 @@ await fs.writeFile(
   path.join(appDir, 'queries', 'ping.js'),
   "export default async () => ({ pong: true, surface: 'web' });\n",
 );
-await store.publish({ sessionId: 'seed-web-e2e', appId: 'web-e2e', message: 'seed web e2e' });
+await store.publish({
+  sessionId: 'seed-web-e2e',
+  appId: 'web-e2e',
+  message: 'seed web e2e',
+});
 await store.closeSession('seed-web-e2e');
 await handle.syncApps();
 

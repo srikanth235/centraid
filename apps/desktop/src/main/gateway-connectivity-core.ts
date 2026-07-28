@@ -14,9 +14,9 @@ import {
   isTicketExpired,
   type PairingTicketPayload,
 } from './gateway-pairing-core.js';
-import type { HandshakeResult } from './version-handshake.js';
 import type { ListGatewayVaultsResult } from './gateway-vaults-core.js';
 import type { SshCommandResult } from './ssh-host.js';
+import type { HandshakeResult } from './version-handshake.js';
 
 export type ConnectivityStageId =
   | 'reach'
@@ -152,7 +152,7 @@ export function foldUrlIdentityStages(handshake: HandshakeResult): {
   }
 
   const statusText = /^HTTP (?<status>\d+)$/u.exec(handshake.detail)?.groups?.status;
-  const status = statusText !== undefined ? Number(statusText) : undefined;
+  const status = statusText === undefined ? undefined : Number(statusText);
 
   if (status === undefined) {
     // No HTTP response reached us at all (or the body wasn't even parseable
@@ -281,13 +281,24 @@ export function foldSshStatusStage(result: SshCommandResult<Record<string, unkno
   errorCode?: string;
 } {
   if (result.ok) return { stage: s('daemon', 'pass') };
-  return { stage: s('daemon', 'fail', result.message), errorCode: result.error };
+  return {
+    stage: s('daemon', 'fail', result.message),
+    errorCode: result.error,
+  };
 }
 
 export function foldSshVaultsStage(
   result: SshCommandResult<{ vaults: Array<Record<string, unknown>> }>,
-): { stage: ConnectivityStage; vaults?: ConnectivityVaultEntry[]; errorCode?: string } {
-  if (!result.ok) return { stage: s('vaults', 'fail', result.message), errorCode: result.error };
+): {
+  stage: ConnectivityStage;
+  vaults?: ConnectivityVaultEntry[];
+  errorCode?: string;
+} {
+  if (!result.ok)
+    return {
+      stage: s('vaults', 'fail', result.message),
+      errorCode: result.error,
+    };
   const vaults: ConnectivityVaultEntry[] = [];
   for (const row of result.value.vaults) {
     if (typeof row.vaultId === 'string' && typeof row.name === 'string') {

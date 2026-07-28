@@ -1,14 +1,15 @@
+import type { FC } from 'react';
+
 // The duplicates shelf (issue #352 / #299's deferred duplicates shelf): one
 // card per cluster, its assets laid out side by side so the owner can eyeball
 // which copy to keep, checkbox-select the redundant ones, and trash them in
 // one batch. Pure view — `duplicates.tsx` (the app-root orchestrator) owns
 // the load/selection state and passes it down, same split as toolbar.jsx/
 // Chips.jsx.
-import { fmtBytes } from '../kit.ts';
+import { armConfirm, fmtBytes } from '../kit.ts';
 import { mountMedia } from '../media.ts';
-import { armConfirm } from '../kit.ts';
-import type { FC } from 'react';
 import type { Asset, DuplicateCluster } from '../types.ts';
+
 import styles from './Duplicates.module.css';
 
 // The genuine <kit-skeleton> custom element, rendered as ordinary JSX — the
@@ -111,7 +112,12 @@ export function DuplicatesView({
               disabled={selected.size === 0}
               onClick={(e) => {
                 if (selected.size === 0) return;
-                if (!armConfirm(e.currentTarget, { armedLabel: `Trash ${selected.size}?` })) return;
+                if (
+                  !armConfirm(e.currentTarget, {
+                    armedLabel: `Trash ${selected.size}?`,
+                  })
+                )
+                  return;
                 onTrashSelected();
               }}
             >

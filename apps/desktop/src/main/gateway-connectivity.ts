@@ -7,10 +7,6 @@
  * stage with a human-actionable detail, per the frozen IPC contract.
  */
 
-import { handshakeGateway } from './version-handshake.js';
-import { fetchGatewayVaults } from './gateway-vaults-core.js';
-import { resolveGateway } from './gateway-store.js';
-import { sshStatus, sshVaultList, sshVersion, type SshHostProfile } from './ssh-host.js';
 import {
   assembleReport,
   buildTicketReport,
@@ -24,6 +20,10 @@ import {
   stage,
   type ConnectivityReport,
 } from './gateway-connectivity-core.js';
+import { resolveGateway } from './gateway-store.js';
+import { fetchGatewayVaults } from './gateway-vaults-core.js';
+import { sshStatus, sshVaultList, sshVersion, type SshHostProfile } from './ssh-host.js';
+import { handshakeGateway } from './version-handshake.js';
 
 export type { ConnectivityReport } from './gateway-connectivity-core.js';
 
@@ -100,7 +100,10 @@ export async function testGatewayConnection(
         return buildTicketReport(input.ticket);
 
       case 'ssh':
-        return await testSsh({ destination: input.destination, dataDir: input.dataDir });
+        return await testSsh({
+          destination: input.destination,
+          dataDir: input.dataDir,
+        });
 
       case 'gateway': {
         const resolved = await resolveGateway(input.gatewayId);
@@ -118,6 +121,8 @@ export async function testGatewayConnection(
   } catch (err) {
     // Belt-and-suspenders: the contract promises this never throws even if
     // something upstream (a store read, a malformed input) does.
-    return assembleReport([], { error: err instanceof Error ? err.message : String(err) });
+    return assembleReport([], {
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 }

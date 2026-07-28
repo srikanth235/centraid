@@ -1,6 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
 import type { GatewayRuntimeSnapshot } from '../shell/routes/gatewayData.js';
 import { buildAlertHistoryRows } from '../shell/routes/gatewayData.js';
 import AlertHistoryPanel from './AlertHistoryPanel.js';
@@ -11,8 +12,18 @@ const NOW = T0 + 3_600_000;
 // Only the fields buildAlertHistoryRows reads matter here.
 const snapshot = {
   alertHistory: [
-    { at: T0 - 3_600_000, kind: 'down', detail: 'fetch failed', previousSession: true },
-    { at: NOW - 5000, kind: 'recovered', durationMs: 5000, previousSession: false },
+    {
+      at: T0 - 3_600_000,
+      kind: 'down',
+      detail: 'fetch failed',
+      previousSession: true,
+    },
+    {
+      at: NOW - 5000,
+      kind: 'recovered',
+      durationMs: 5000,
+      previousSession: false,
+    },
   ],
 } as GatewayRuntimeSnapshot;
 

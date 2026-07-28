@@ -6,6 +6,7 @@
 import { mkdir } from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
+
 import { buildGateway } from '../../../packages/gateway/dist/serve/build-gateway.js';
 
 const dataDir = path.resolve(process.argv[2] ?? 'artifacts/mobile-ci-gateway');

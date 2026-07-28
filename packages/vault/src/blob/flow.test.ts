@@ -5,14 +5,15 @@
 // the purge sweep reclaims the CAS.
 
 import { assert, beforeEach, describe, expect, test } from 'vitest';
+
 import { bootstrapVault, type BootstrapResult } from '../bootstrap.js';
-import { openVaultDb, type VaultDb } from '../db.js';
-import { createGateway, Gateway } from '../gateway/gateway.js';
-import type { Credential } from '../gateway/types.js';
 import { registerAttachmentCommands } from '../commands/attachments.js';
 import { registerDocumentCommands } from '../commands/documents.js';
 import { registerMediaCommands } from '../commands/media.js';
 import { registerTaskCommands } from '../commands/tasks.js';
+import { openVaultDb, type VaultDb } from '../db.js';
+import { createGateway, Gateway } from '../gateway/gateway.js';
+import type { Credential } from '../gateway/types.js';
 import { sweepBlobStaging } from './staging.js';
 import { blobUriFor, sha256OfBytes } from './store.js';
 
@@ -35,11 +36,19 @@ describe('flow', () => {
     registerDocumentCommands(gw);
     registerMediaCommands(gw);
     registerTaskCommands(gw);
-    owner = { kind: 'device', deviceId: boot.deviceId, deviceKey: boot.deviceKey };
+    owner = {
+      kind: 'device',
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+    };
   });
 
   function invoke(command: string, input: Record<string, unknown>) {
-    return gw.invoke(owner, { command, input, purpose: 'dpv:ServiceProvision' });
+    return gw.invoke(owner, {
+      command,
+      input,
+      purpose: 'dpv:ServiceProvision',
+    });
   }
 
   function executed<T>(out: unknown): T {
@@ -48,7 +57,10 @@ describe('flow', () => {
   }
 
   test('stage → claim via media.add_asset: blob URI, spool metadata, tiny journal', () => {
-    const staged = gw.stageBlob(owner, { bytes: PNG_BYTES, filename: 'pixel.png' });
+    const staged = gw.stageBlob(owner, {
+      bytes: PNG_BYTES,
+      filename: 'pixel.png',
+    });
     expect(staged.mediaType).toBe('image/png'); // sniffed, not declared
     expect(staged.byteSize).toBe(PNG_BYTES.length);
     expect(db.blobs.hasSync(staged.sha256)).toBe(true);
@@ -74,7 +86,9 @@ describe('flow', () => {
     // The staging row is claimed, and the journal recorded a sha, not bytes.
     // node:sqlite hands back null-prototype rows; spreading compares the column
     // data (which is the contract) without asserting the driver's prototype.
-    expect({ ...db.vault.prepare('SELECT count(*) AS n FROM blob_staging').get() }).toStrictEqual({
+    expect({
+      ...db.vault.prepare('SELECT count(*) AS n FROM blob_staging').get(),
+    }).toStrictEqual({
       n: 0,
     });
     const journal = db.journal
@@ -86,16 +100,28 @@ describe('flow', () => {
   });
 
   test('same bytes, different declared type: one content item (raw-bytes dedup)', () => {
-    const first = gw.stageBlob(owner, { bytes: PNG_BYTES, mediaType: 'application/octet-stream' });
+    const first = gw.stageBlob(owner, {
+      bytes: PNG_BYTES,
+      mediaType: 'application/octet-stream',
+    });
     const a = executed<{ content_id: string }>(
-      invoke('core.add_document', { staged_sha: first.sha256, title: 'as-doc.bin' }),
+      invoke('core.add_document', {
+        staged_sha: first.sha256,
+        title: 'as-doc.bin',
+      }),
     );
-    const second = gw.stageBlob(owner, { bytes: PNG_BYTES, mediaType: 'image/x-weird' });
+    const second = gw.stageBlob(owner, {
+      bytes: PNG_BYTES,
+      mediaType: 'image/x-weird',
+    });
     expect(second.existingContentId).toBe(a.content_id);
     // A second document over the same bytes still dedupes the CONTENT — it's a
     // brand-new document, but wraps the identical content item (issue #352).
     const b = executed<{ content_id: string; deduped: number }>(
-      invoke('core.add_document', { staged_sha: second.sha256, title: 'again.png' }),
+      invoke('core.add_document', {
+        staged_sha: second.sha256,
+        title: 'again.png',
+      }),
     );
     expect(b.content_id).toBe(a.content_id);
     expect(b.deduped).toBe(1);
@@ -145,7 +171,10 @@ describe('flow', () => {
     const pdf = Buffer.from('%PDF-1.1\nBT (unicorn depreciation schedule) Tj ET\n%%EOF');
     const staged = gw.stageBlob(owner, { bytes: pdf, filename: 'depr.pdf' });
     const doc = executed<{ document_id: string; content_id: string }>(
-      invoke('core.add_document', { staged_sha: staged.sha256, title: 'Depreciation' }),
+      invoke('core.add_document', {
+        staged_sha: staged.sha256,
+        title: 'Depreciation',
+      }),
     );
     // The text variant exists and the OWNING document (not a shadow row) matches.
     const variant = db.vault
@@ -162,7 +191,12 @@ describe('flow', () => {
     expect(hits.rows.map((r) => r.document_id)).toContain(doc.document_id);
     // A rename rebuilds the FTS row — extracted text must survive (the
     // derivative-aware COALESCE, not a title-only rebuild).
-    executed(invoke('core.rename_document', { document_id: doc.document_id, title: 'Renamed' }));
+    executed(
+      invoke('core.rename_document', {
+        document_id: doc.document_id,
+        title: 'Renamed',
+      }),
+    );
     const after = gw.search(owner, {
       entity: 'core.document',
       query: 'unicorn',
@@ -174,7 +208,10 @@ describe('flow', () => {
   test('egress rule: attached serves, trash still serves, unclaimed refuses', () => {
     const staged = gw.stageBlob(owner, { bytes: PNG_BYTES });
     const doc = executed<{ document_id: string; content_id: string }>(
-      invoke('core.add_document', { staged_sha: staged.sha256, title: 'photo.png' }),
+      invoke('core.add_document', {
+        staged_sha: staged.sha256,
+        title: 'photo.png',
+      }),
     );
     const ok = gw.resolveBlob(owner, doc.content_id);
     expect(ok.status).toBe('ok');
@@ -192,7 +229,10 @@ describe('flow', () => {
 
   test('client-produced thumb variant rides staging and serves under ?variant=', () => {
     const thumbBytes = Buffer.from('tiny-thumb-jpeg-bytes');
-    const original = gw.stageBlob(owner, { bytes: PNG_BYTES, filename: 'full.png' });
+    const original = gw.stageBlob(owner, {
+      bytes: PNG_BYTES,
+      filename: 'full.png',
+    });
     gw.stageBlob(owner, {
       bytes: thumbBytes,
       mediaType: 'image/jpeg',
@@ -200,7 +240,10 @@ describe('flow', () => {
       variantOf: original.sha256,
     });
     const doc = executed<{ content_id: string }>(
-      invoke('core.add_document', { staged_sha: original.sha256, title: 'full.png' }),
+      invoke('core.add_document', {
+        staged_sha: original.sha256,
+        title: 'full.png',
+      }),
     );
     const thumb = gw.resolveBlob(owner, doc.content_id, { variant: 'thumb' });
     expect(thumb.status).toBe('ok');
@@ -210,9 +253,15 @@ describe('flow', () => {
   });
 
   test('a variant staged AFTER its parent was claimed registers immediately', () => {
-    const original = gw.stageBlob(owner, { bytes: PNG_BYTES, filename: 'late.png' });
+    const original = gw.stageBlob(owner, {
+      bytes: PNG_BYTES,
+      filename: 'late.png',
+    });
     const doc = executed<{ content_id: string }>(
-      invoke('core.add_document', { staged_sha: original.sha256, title: 'late.png' }),
+      invoke('core.add_document', {
+        staged_sha: original.sha256,
+        title: 'late.png',
+      }),
     );
     // The slow thumb arrives after the claim — it must not sit until the TTL.
     const thumbBytes = Buffer.from('late-thumb-bytes');
@@ -227,7 +276,9 @@ describe('flow', () => {
     assert(thumb.status === 'ok');
     expect(db.blobs.getSync(thumb.blob.sha256)?.equals(thumbBytes)).toBe(true);
     // And its staging row was consumed, not left for the sweep.
-    expect({ ...db.vault.prepare('SELECT count(*) AS n FROM blob_staging').get() }).toStrictEqual({
+    expect({
+      ...db.vault.prepare('SELECT count(*) AS n FROM blob_staging').get(),
+    }).toStrictEqual({
       n: 0,
     });
   });
@@ -236,7 +287,10 @@ describe('flow', () => {
     const pdf = Buffer.from('%PDF-1.1\nBT (soon to be purged content) Tj ET\n%%EOF');
     const staged = gw.stageBlob(owner, { bytes: pdf });
     const doc = executed<{ document_id: string; content_id: string }>(
-      invoke('core.add_document', { staged_sha: staged.sha256, title: 'doomed.pdf' }),
+      invoke('core.add_document', {
+        staged_sha: staged.sha256,
+        title: 'doomed.pdf',
+      }),
     );
     executed(invoke('core.trash_document', { document_id: doc.document_id }));
     // Ripen the trash, then sweep — the DOCUMENT purges (content is untouched
@@ -257,7 +311,10 @@ describe('flow', () => {
 
     // Unclaimed staging past the TTL loses rows AND bytes; a held row stays.
     const loose = gw.stageBlob(owner, { bytes: Buffer.from('never claimed') });
-    const held = gw.stageBlob(owner, { bytes: Buffer.from('held by review'), heldByBatch: 'b1' });
+    const held = gw.stageBlob(owner, {
+      bytes: Buffer.from('held by review'),
+      heldByBatch: 'b1',
+    });
     db.vault.prepare('UPDATE blob_staging SET staged_at = ?').run('2000-01-01T00:00:00.000Z');
     const result = sweepBlobStaging(db, {});
     expect(result.expired).toStrictEqual([loose.sha256]);
@@ -272,10 +329,18 @@ describe('flow', () => {
     expect(readBlobStoreSettings(db.vault)).toStrictEqual({});
     expect(mediaLocationPolicy(db)).toBe('keep');
     updateBlobStoreSettings(db, {
-      blob_store: { kind: 's3', endpoint: 'http://127.0.0.1:1', bucket: 'b', encrypt: true },
+      blob_store: {
+        kind: 's3',
+        endpoint: 'http://127.0.0.1:1',
+        bucket: 'b',
+        encrypt: true,
+      },
       media_location: 'strip',
     });
-    expect(readBlobStoreSettings(db.vault)).toMatchObject({ kind: 's3', bucket: 'b' });
+    expect(readBlobStoreSettings(db.vault)).toMatchObject({
+      kind: 's3',
+      bucket: 'b',
+    });
     expect(mediaLocationPolicy(db)).toBe('strip');
     // Clearing restores the local-only default.
     updateBlobStoreSettings(db, { blob_store: null, media_location: null });
@@ -303,7 +368,10 @@ describe('flow', () => {
     const row = db.vault
       .prepare('SELECT sha256, custody_state FROM blob_custody_state WHERE content_id = ?')
       .get(doc.content_id) as { sha256: string; custody_state: string } | undefined;
-    expect(row).toMatchObject({ sha256: staged.sha256, custody_state: 'local-only' });
+    expect(row).toMatchObject({
+      sha256: staged.sha256,
+      custody_state: 'local-only',
+    });
     // Read via the registered logical entity — the same surface an app uses.
     const read = gw.read(owner, {
       entity: 'blob.custody_state',

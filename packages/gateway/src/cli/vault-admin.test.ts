@@ -1,7 +1,9 @@
+import crypto from 'node:crypto';
+import { promises as fs } from 'node:fs';
+
 import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { promises as fs } from 'node:fs';
-import crypto from 'node:crypto';
+
 import { commandVault } from './vault-admin.ts';
 
 let dataDir: string;
@@ -78,11 +80,11 @@ describe('vault-admin', () => {
   test('vault CLI rejects bad usage and permits deletion back to zero vaults', async () => {
     await expect(
       capture(() => commandVault(['bogus', '--data-dir', dataDir], fail)),
-    ).rejects.toThrow(/list, create, rename, delete/);
-    await expect(capture(() => commandVault(['list'], fail))).rejects.toThrow(/--data-dir/);
+    ).rejects.toThrow(/list, create, rename, delete/u);
+    await expect(capture(() => commandVault(['list'], fail))).rejects.toThrow(/--data-dir/u);
     await expect(
       capture(() => commandVault(['rename', '--data-dir', dataDir], fail)),
-    ).rejects.toThrow(/vault rename/);
+    ).rejects.toThrow(/vault rename/u);
     const only = lastJson(
       await capture(() => commandVault(['create', '--data-dir', dataDir], fail)),
     );
@@ -103,7 +105,11 @@ describe('vault-admin', () => {
         commandVault(['create', '--data-dir', dataDir, '--name', 'Family', '--json'], fail),
       ),
     );
-    expect(created).toStrictEqual({ ok: true, vaultId: expect.any(String), name: 'Family' });
+    expect(created).toStrictEqual({
+      ok: true,
+      vaultId: expect.any(String),
+      name: 'Family',
+    });
     const listed = lastJson(
       await capture(() => commandVault(['list', '--data-dir', dataDir, '--json'], fail)),
     );
@@ -123,12 +129,12 @@ describe('vault-admin', () => {
       return true;
     }) as typeof process.stdout.write;
     try {
-      await expect(commandVault(['list', '--json'], fail)).rejects.toThrow(/--data-dir/);
+      await expect(commandVault(['list', '--json'], fail)).rejects.toThrow(/--data-dir/u);
     } finally {
       process.stdout.write = original;
     }
     const parsed = lastJson(captured);
     expect(parsed).toMatchObject({ ok: false, error: 'usage' });
-    expect(parsed.message).toMatch(/--data-dir/);
+    expect(parsed.message).toMatch(/--data-dir/u);
   });
 });

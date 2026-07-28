@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { createBlobHandoffUrl } from './data-plane-handoff.js';
 
 describe(createBlobHandoffUrl, () => {
@@ -26,8 +27,8 @@ describe(createBlobHandoffUrl, () => {
     };
     expect(decoded.relativePath).toBe('v1/blobs/sha256/ab/abc');
     expect(decoded.expiresAtMs).toBe(11_000);
-    expect(decoded.nonce).toMatch(/^[0-9a-f]{32}$/);
-    expect(signature).toMatch(/^[A-Za-z0-9_-]+$/);
+    expect(decoded.nonce).toMatch(/^[0-9a-f]{32}$/u);
+    expect(signature).toMatch(/^[A-Za-z0-9_-]+$/u);
   });
 
   it('refuses a path outside the configured data root', () => {

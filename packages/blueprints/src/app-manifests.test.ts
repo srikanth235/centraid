@@ -8,11 +8,11 @@
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
-import { validateAppManifest, type AppManifest } from '@centraid/app-engine';
 
-const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+import { validateAppManifest, type AppManifest } from '@centraid/app-engine';
+import { describe, expect, it } from 'vitest';
+
+const PACKAGE_ROOT = path.resolve(import.meta.dirname, '..');
 
 // A directory under `apps/` is a template UNLESS its name starts with `_`:
 // underscore-prefixed dirs are shared modules several apps import (issue #599's
@@ -88,7 +88,7 @@ describe('bundled blueprint manifests', () => {
       );
       expect(source, `${id} must not reach the vault rail`).not.toContain('ctx.vault');
       expect(source, `${id} must not bracket its own sync run`).not.toMatch(
-        /sync\.(?:begin_run|stage_rows|finish_run)/,
+        /sync\.(?:begin_run|stage_rows|finish_run)/u,
       );
     }
   });
@@ -136,7 +136,7 @@ describe('bundled blueprint manifests', () => {
         }
       }
       expect(source, `${id} must not persist mutable-list offsets`).not.toMatch(
-        /cursor\.(?:provider|highWater)\([^)]*(?:offset|\$skip)/i,
+        /cursor\.(?:provider|highWater)\([^)]*(?:offset|\$skip)/iu,
       );
     }
   });

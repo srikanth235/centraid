@@ -1,6 +1,8 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
+
 import { describe, expect, it } from 'vitest';
+
 import { scaffoldAppFiles } from './scaffold-files.js';
 
 const packageDir = path.resolve(import.meta.dirname, '..');
@@ -12,7 +14,7 @@ function sourceText(dir: string): string {
     .flatMap((entry) => {
       const file = path.join(dir, entry.name);
       if (entry.isDirectory()) return [sourceText(file)];
-      return /\.(?:ts|tsx)$/.test(entry.name) ? [readFileSync(file, 'utf8')] : [];
+      return /\.(?:ts|tsx)$/u.test(entry.name) ? [readFileSync(file, 'utf8')] : [];
     })
     .join('\n');
 }
@@ -54,6 +56,6 @@ describe('v0 blueprint runtime boundary', () => {
     const files = new Map(scaffoldAppFiles('demo').map((file) => [file.path, file.content]));
     expect(files.has('app.js')).toBe(true);
     expect(files.has('app.jsx')).toBe(false);
-    expect(files.get('app.js')).not.toMatch(/react|jsx-runtime/i);
+    expect(files.get('app.js')).not.toMatch(/react|jsx-runtime/iu);
   });
 });

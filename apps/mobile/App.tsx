@@ -1,15 +1,52 @@
-import React, { useCallback, useEffect } from 'react';
-import { Text, View, useColorScheme } from 'react-native';
-import { StatusBar } from 'expo-status-bar';
-import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+// Direct sub-path imports avoid the package's barrel index.js which
+// re-exports every weight (some of which Metro fails to resolve).
+import Geist_400Regular from '@expo-google-fonts/geist/400Regular/Geist_400Regular.ttf';
+import Geist_500Medium from '@expo-google-fonts/geist/500Medium/Geist_500Medium.ttf';
+import Geist_600SemiBold from '@expo-google-fonts/geist/600SemiBold/Geist_600SemiBold.ttf';
+import JetBrainsMono_400Regular from '@expo-google-fonts/jetbrains-mono/400Regular/JetBrainsMono_400Regular.ttf';
+import JetBrainsMono_500Medium from '@expo-google-fonts/jetbrains-mono/500Medium/JetBrainsMono_500Medium.ttf';
+import JetBrainsMono_600SemiBold from '@expo-google-fonts/jetbrains-mono/600SemiBold/JetBrainsMono_600SemiBold.ttf';
+import PlayfairDisplay_600SemiBold from '@expo-google-fonts/playfair-display/600SemiBold/PlayfairDisplay_600SemiBold.ttf';
+import PlayfairDisplay_600SemiBold_Italic from '@expo-google-fonts/playfair-display/600SemiBold_Italic/PlayfairDisplay_600SemiBold_Italic.ttf';
+import SpaceGrotesk_500Medium from '@expo-google-fonts/space-grotesk/500Medium/SpaceGrotesk_500Medium.ttf';
+import SpaceGrotesk_600SemiBold from '@expo-google-fonts/space-grotesk/600SemiBold/SpaceGrotesk_600SemiBold.ttf';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import * as Haptics from 'expo-haptics';
 import { useFonts } from 'expo-font';
+import * as Haptics from 'expo-haptics';
 import * as Notifications from 'expo-notifications';
-import * as SplashScreen from 'expo-splash-screen';
 import { ShareIntentProvider } from 'expo-share-intent';
+import * as SplashScreen from 'expo-splash-screen';
+import { StatusBar } from 'expo-status-bar';
+import React, { useCallback, useEffect } from 'react';
+import { Text, View, useColorScheme } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import AgendaEvent from './src/apps/agenda/AgendaEvent';
+import AgendaHome from './src/apps/agenda/AgendaHome';
+import AssistantScreen from './src/apps/assistant/Assistant';
+import AutomationsScreen from './src/apps/automations/Automations';
+import DocsHome from './src/apps/docs/DocsHome';
+import DocumentViewer from './src/apps/docs/DocumentViewer';
+import InsightsScreen from './src/apps/insights/Insights';
+import AlbumDetail from './src/apps/photos/AlbumDetail';
+import BackupHealth from './src/apps/photos/BackupHealth';
+import DuplicateReview from './src/apps/photos/DuplicateReview';
+import FaceReview from './src/apps/photos/FaceReview';
+import PhotoLightbox from './src/apps/photos/PhotoLightbox';
+import PhotosHome from './src/apps/photos/PhotosHome';
+import PhotosLibrary from './src/apps/photos/PhotosLibrary';
+import PhotosSearch from './src/apps/photos/PhotosSearch';
+import PhotoStateView from './src/apps/photos/PhotoStateView';
+import PlacesMap from './src/apps/photos/PlacesMap';
+import ErrorBoundary from './src/ErrorBoundary';
+import { ShareIntentIngest } from './src/kit/hooks/ShareIntentIngest';
+import {
+  REPLICA_UNPAIRED_MESSAGE,
+  ReplicaProvider,
+  useReplica,
+} from './src/kit/replica/ReplicaProvider';
 import {
   hydrateAppearance,
   navThemeFor,
@@ -18,52 +55,8 @@ import {
   useAppearance,
   useTheme,
 } from './src/kit/theme';
-import { useUploadReconciliation } from './src/lib/upload/boot';
-import {
-  REPLICA_UNPAIRED_MESSAGE,
-  ReplicaProvider,
-  useReplica,
-} from './src/kit/replica/ReplicaProvider';
-import { ShareIntentIngest } from './src/kit/hooks/ShareIntentIngest';
 import { hydrateProfile, isOnboarded } from './src/lib/profile';
-import OnboardingScreen from './src/screens/Onboarding';
-import ErrorBoundary from './src/ErrorBoundary';
-
-// Direct sub-path imports avoid the package's barrel index.js which
-// re-exports every weight (some of which Metro fails to resolve).
-import Geist_400Regular from '@expo-google-fonts/geist/400Regular/Geist_400Regular.ttf';
-import Geist_500Medium from '@expo-google-fonts/geist/500Medium/Geist_500Medium.ttf';
-import Geist_600SemiBold from '@expo-google-fonts/geist/600SemiBold/Geist_600SemiBold.ttf';
-import SpaceGrotesk_500Medium from '@expo-google-fonts/space-grotesk/500Medium/SpaceGrotesk_500Medium.ttf';
-import SpaceGrotesk_600SemiBold from '@expo-google-fonts/space-grotesk/600SemiBold/SpaceGrotesk_600SemiBold.ttf';
-import JetBrainsMono_400Regular from '@expo-google-fonts/jetbrains-mono/400Regular/JetBrainsMono_400Regular.ttf';
-import JetBrainsMono_500Medium from '@expo-google-fonts/jetbrains-mono/500Medium/JetBrainsMono_500Medium.ttf';
-import JetBrainsMono_600SemiBold from '@expo-google-fonts/jetbrains-mono/600SemiBold/JetBrainsMono_600SemiBold.ttf';
-import PlayfairDisplay_600SemiBold from '@expo-google-fonts/playfair-display/600SemiBold/PlayfairDisplay_600SemiBold.ttf';
-import PlayfairDisplay_600SemiBold_Italic from '@expo-google-fonts/playfair-display/600SemiBold_Italic/PlayfairDisplay_600SemiBold_Italic.ttf';
-
-import HomeScreen from './src/screens/Home';
-import AppDetailScreen from './src/screens/AppDetail';
-import SettingsScreen from './src/screens/Settings';
-import ApprovalsScreen from './src/screens/Approvals';
-import MobileFallbackScreen from './src/screens/MobileFallback';
-import AssistantScreen from './src/apps/assistant/Assistant';
-import AutomationsScreen from './src/apps/automations/Automations';
-import InsightsScreen from './src/apps/insights/Insights';
-import PhotosHome from './src/apps/photos/PhotosHome';
-import PhotoLightbox from './src/apps/photos/PhotoLightbox';
-import PhotosLibrary from './src/apps/photos/PhotosLibrary';
-import PhotosSearch from './src/apps/photos/PhotosSearch';
-import BackupHealth from './src/apps/photos/BackupHealth';
-import PlacesMap from './src/apps/photos/PlacesMap';
-import FaceReview from './src/apps/photos/FaceReview';
-import DuplicateReview from './src/apps/photos/DuplicateReview';
-import AlbumDetail from './src/apps/photos/AlbumDetail';
-import PhotoStateView from './src/apps/photos/PhotoStateView';
-import DocsHome from './src/apps/docs/DocsHome';
-import DocumentViewer from './src/apps/docs/DocumentViewer';
-import AgendaHome from './src/apps/agenda/AgendaHome';
-import AgendaEvent from './src/apps/agenda/AgendaEvent';
+import { useUploadReconciliation } from './src/lib/upload/boot';
 import type {
   AgendaStackParamList,
   DocsStackParamList,
@@ -71,6 +64,12 @@ import type {
   RootStackParamList,
   SettingsStackParamList,
 } from './src/navigation';
+import AppDetailScreen from './src/screens/AppDetail';
+import ApprovalsScreen from './src/screens/Approvals';
+import HomeScreen from './src/screens/Home';
+import MobileFallbackScreen from './src/screens/MobileFallback';
+import OnboardingScreen from './src/screens/Onboarding';
+import SettingsScreen from './src/screens/Settings';
 
 // Keep the native splash up until fonts have loaded — avoids a flash of
 // system-font text on first render.
@@ -119,7 +118,10 @@ function PhotosNavigator(): React.JSX.Element {
   const { colors } = useTheme();
   return (
     <PhotosStack.Navigator
-      screenOptions={{ contentStyle: { backgroundColor: colors.bg }, headerShown: false }}
+      screenOptions={{
+        contentStyle: { backgroundColor: colors.bg },
+        headerShown: false,
+      }}
     >
       <PhotosStack.Screen name="PhotosHome" component={PhotosHome} />
       <PhotosStack.Screen
@@ -143,7 +145,10 @@ function DocsNavigator(): React.JSX.Element {
   const { colors } = useTheme();
   return (
     <DocsStack.Navigator
-      screenOptions={{ contentStyle: { backgroundColor: colors.bg }, headerShown: false }}
+      screenOptions={{
+        contentStyle: { backgroundColor: colors.bg },
+        headerShown: false,
+      }}
     >
       <DocsStack.Screen name="DocsHome" component={DocsHome} />
       <DocsStack.Screen name="DocumentViewer" component={DocumentViewer} />
@@ -155,7 +160,10 @@ function AgendaNavigator(): React.JSX.Element {
   const { colors } = useTheme();
   return (
     <AgendaStack.Navigator
-      screenOptions={{ contentStyle: { backgroundColor: colors.bg }, headerShown: false }}
+      screenOptions={{
+        contentStyle: { backgroundColor: colors.bg },
+        headerShown: false,
+      }}
     >
       <AgendaStack.Screen name="AgendaHome" component={AgendaHome} />
       <AgendaStack.Screen name="AgendaEvent" component={AgendaEvent} />
@@ -320,7 +328,10 @@ export default function App(): React.JSX.Element | null {
                       <RootStack.Screen
                         name="MobileFallback"
                         component={MobileFallbackScreen}
-                        options={{ animation: 'slide_from_bottom', presentation: 'modal' }}
+                        options={{
+                          animation: 'slide_from_bottom',
+                          presentation: 'modal',
+                        }}
                       />
                     </RootStack.Navigator>
                   </NavigationContainer>

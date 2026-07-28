@@ -17,6 +17,7 @@
  */
 
 import { readFileSync } from 'node:fs';
+
 import { defaultStealSampler, type CpuStealSample } from './power-context.js';
 
 export interface HostLimits {

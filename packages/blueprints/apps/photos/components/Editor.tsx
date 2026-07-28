@@ -1,3 +1,6 @@
+import { useEffect, useRef, useState } from 'react';
+import type { PointerEvent } from 'react';
+
 // Crop/rotate editor (issue #352 phase 3/4). Non-destructive by design: the
 // vault has no media-domain equivalent of core.replace_document_content (no
 // "edit an asset's bytes in place" command exists — see this app's report
@@ -13,9 +16,8 @@
 // and `kit-*` classes stay global strings.
 import { isPendingOffsite, stageFileBytes, toast } from '../kit.ts';
 import { act, narrate } from '../outcomes.ts';
-import { useEffect, useRef, useState } from 'react';
-import type { PointerEvent } from 'react';
 import type { Asset } from '../types.ts';
+
 import styles from './Editor.module.css';
 
 interface Crop {
@@ -86,25 +88,25 @@ export function EditorView({
   useEffect(() => {
     let cancelled = false;
     const img = new Image();
-    img.onload = () => {
+    img.addEventListener('load', () => {
       if (cancelled) return;
       imgRef.current = img;
       draw();
-    };
-    img.onerror = () => {
+    });
+    img.addEventListener('error', () => {
       if (!cancelled) setLoadError(true);
-    };
+    });
     img.src = asset.content_uri ?? '';
     return () => {
       cancelled = true;
     };
     // (#360) one-shot load; the rotation-driven redraw is the effect below
-  }, []);
+  }, [draw, asset.content_uri]);
 
   useEffect(() => {
     draw();
     // (#360) draw() closes over the current rotation/refs each render
-  }, [rotation]);
+  }, [rotation, draw]);
 
   function fractionAt(e: { clientX: number; clientY: number }) {
     const rect = canvasRef.current!.getBoundingClientRect();
@@ -150,12 +152,14 @@ export function EditorView({
       );
       if (!blob) throw new Error('Could not render the edit.');
       const baseName = (asset.title || 'photo').replace(/\.[a-z0-9]+$/iu, '');
-      const file = new File([blob], `${baseName}-edited.jpg`, { type: 'image/jpeg' });
+      const file = new File([blob], `${baseName}-edited.jpg`, {
+        type: 'image/jpeg',
+      });
       // An edit is a NEW asset beside the original, so it lands in the
       // original's scope (issue #599) — never in the chip selection, which
       // could be a different audience entirely.
       const scope = asset.scope_id ?? undefined;
-      const staged = await stageFileBytes(file, '', { ...(scope ? { scope } : {}) });
+      const staged = await stageFileBytes(file, '', scope ? { scope } : {});
       const outcome = await act(
         'upload',
         {

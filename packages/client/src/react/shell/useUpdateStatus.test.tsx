@@ -1,6 +1,7 @@
-import { act } from 'react';
+import { act, useEffect } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import { relaunchToUpdate, useUpdateStatus, type UpdateStatus } from './useUpdateStatus.js';
 
 let root: Root | null = null;
@@ -8,8 +9,10 @@ let host: HTMLElement | null = null;
 
 // Captured broadcast subscriber so tests can push an UPDATE_AVAILABLE.
 let pushUpdate: ((msg: UpdateStatus) => void) | null = null;
-const unsubscribe = vi.fn();
-const relaunchIpc = vi.fn(() => Promise.resolve({ ok: true as const }));
+const unsubscribe = vi.fn<ReturnType<NonNullable<typeof window.CentraidApi.onUpdateAvailable>>>();
+const relaunchIpc = vi
+  .fn<NonNullable<typeof window.CentraidApi.relaunchToUpdate>>()
+  .mockResolvedValue({ ok: true });
 
 function mockApi(status: UpdateStatus | null): void {
   (globalThis as unknown as { CentraidApi: unknown }).CentraidApi = {
@@ -38,7 +41,10 @@ describe('shell/useUpdateStatus', () => {
 
   let status: UpdateStatus | null = null;
   function Harness(): null {
-    status = useUpdateStatus();
+    const nextStatus = useUpdateStatus();
+    useEffect(() => {
+      status = nextStatus;
+    }, [nextStatus]);
     return null;
   }
   async function mount(): Promise<void> {

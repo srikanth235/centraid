@@ -96,7 +96,7 @@ export function parseTransactionsCsv(text: string): CsvTransaction[] {
   for (const row of rows.slice(1)) {
     const day = isoDay(row[dateCol] ?? '');
     const rawAmount = (row[amountCol] ?? '').replace(/[,\s₹$€£]/gu, '');
-    const amount = Number.parseFloat(rawAmount);
+    const amount = Number(rawAmount);
     if (!day || Number.isNaN(amount)) continue; // ledger noise lines
     out.push({
       externalId: idCol >= 0 && row[idCol]?.trim() ? row[idCol]!.trim() : null,

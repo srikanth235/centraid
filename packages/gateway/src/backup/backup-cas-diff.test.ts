@@ -1,6 +1,7 @@
 // CAS inventory diff primitive unit tests (issue #545 B7).
 
 import { describe, expect, test } from 'vitest';
+
 import { baseStore, reconcileCasInventory } from './backup-cas-diff.js';
 import type { CollectedInventory } from './backup-provider-observability.js';
 

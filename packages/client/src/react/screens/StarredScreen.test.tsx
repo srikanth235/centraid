@@ -1,6 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
 import type { HomeAppItemDTO, HomeAutoItemDTO } from '../screen-contracts.js';
 import StarredScreen, { type StarredScreenProps } from './StarredScreen.js';
 
@@ -39,11 +40,11 @@ function makeProps(over: Partial<StarredScreenProps> = {}): StarredScreenProps {
   return {
     appItems,
     automationItems,
-    onOpenApp: vi.fn(),
-    onEnterDraft: vi.fn(),
-    onAppContext: vi.fn(),
-    onOpenAutomation: vi.fn(),
-    onAutomationMenu: vi.fn(),
+    onOpenApp: vi.fn<StarredScreenProps['onOpenApp']>(),
+    onEnterDraft: vi.fn<StarredScreenProps['onEnterDraft']>(),
+    onAppContext: vi.fn<StarredScreenProps['onAppContext']>(),
+    onOpenAutomation: vi.fn<StarredScreenProps['onOpenAutomation']>(),
+    onAutomationMenu: vi.fn<StarredScreenProps['onAutomationMenu']>(),
     ...over,
   };
 }

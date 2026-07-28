@@ -18,6 +18,9 @@ export default async function renameNotebook({ body, ctx }: HandlerArgs) {
     return { status: 200, body: outcome };
   } catch (err) {
     const e = err as { code?: string; message?: string };
-    return { status: 200, body: { status: 'denied', reason: e.message, code: e.code } };
+    return {
+      status: 200,
+      body: { status: 'denied', reason: e.message, code: e.code },
+    };
   }
 }

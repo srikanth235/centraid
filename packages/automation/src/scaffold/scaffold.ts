@@ -18,8 +18,10 @@
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { APP_AUTOMATIONS_SUBDIR } from './app.js';
-import { isValidId } from '../manifest/ref.js';
+
+import { isValidAppId } from '@centraid/app-engine';
+import { AppScaffoldError, type ScaffoldFile, type AppInfo } from '@centraid/blueprints';
+
 import {
   HANDLER_FILE,
   MANIFEST_FILE,
@@ -31,8 +33,8 @@ import {
   type ConnectorSpec,
   type ManifestVault,
 } from '../manifest/manifest.js';
-import { isValidAppId } from '@centraid/app-engine';
-import { AppScaffoldError, type ScaffoldFile, type AppInfo } from '@centraid/blueprints';
+import { isValidId } from '../manifest/ref.js';
+import { APP_AUTOMATIONS_SUBDIR } from './app.js';
 
 export interface ScaffoldOptions {
   /** Display name. Defaults to the app id. */
@@ -318,11 +320,13 @@ export async function scaffoldApp(
     // ENOENT — the directory is free, proceed.
   }
 
-  for (const file of files) {
-    const dest = path.join(appDir, file.path);
-    await fs.mkdir(path.dirname(dest), { recursive: true });
-    await fs.writeFile(dest, file.content);
-  }
+  await Promise.all(
+    files.map(async (file) => {
+      const dest = path.join(appDir, file.path);
+      await fs.mkdir(path.dirname(dest), { recursive: true });
+      await fs.writeFile(dest, file.content);
+    }),
+  );
 
   const appJson = JSON.parse(files.find((f) => f.path === 'app.json')!.content) as {
     name?: string;

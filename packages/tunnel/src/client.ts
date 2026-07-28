@@ -10,6 +10,12 @@
 
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
+
+import {
+  GW_PAIR_ALPN,
+  type GatewayPairRequest,
+  type GatewayPairResponse,
+} from './gateway-endpoint.js';
 import type { Connection, Endpoint } from './iroh.js';
 import { iroh } from './iroh.js';
 import type {
@@ -28,11 +34,6 @@ import {
   sanitizeHeaders,
   TUNNEL_ALPN,
 } from './protocol.js';
-import {
-  GW_PAIR_ALPN,
-  type GatewayPairRequest,
-  type GatewayPairResponse,
-} from './gateway-endpoint.js';
 
 export interface EndpointTicketHint {
   endpointId: string;
@@ -139,7 +140,12 @@ export interface TunnelResponse {
 /** One HTTP request over one bi-stream, response buffered (test helper). */
 export async function tunnelRequest(
   connection: Connection,
-  request: { method: string; target: string; headers?: HeaderMap; body?: Buffer },
+  request: {
+    method: string;
+    target: string;
+    headers?: HeaderMap;
+    body?: Buffer;
+  },
 ): Promise<TunnelResponse> {
   const bi = await connection.openBi();
   const header: TunnelRequestHeader = {

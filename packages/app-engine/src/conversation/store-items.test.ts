@@ -5,6 +5,7 @@
 // shared fixtures in store-test-fixtures.ts.
 
 import { describe, expect, it } from 'vitest';
+
 import { newStore } from './store-test-fixtures.js';
 
 describe('ConversationStore — items + message_in', () => {
@@ -17,7 +18,12 @@ describe('ConversationStore — items + message_in', () => {
       triggerKind: 'interactive',
       startedAt: 1,
     });
-    store.insertMessageIn({ turnId: 't', role: 'user', text: 'hi there', startedAt: 1 });
+    store.insertMessageIn({
+      turnId: 't',
+      role: 'user',
+      text: 'hi there',
+      startedAt: 1,
+    });
     store.insertItem({
       itemId: 's1',
       turnId: 't',
@@ -108,7 +114,13 @@ describe('ConversationStore — items + message_in', () => {
       rawJson: huge,
       startedAt: 0,
     });
-    store.closeItem({ itemId: 'n1', ok: true, rawJson: huge, endedAt: 1, durationMs: 1 });
+    store.closeItem({
+      itemId: 'n1',
+      ok: true,
+      rawJson: huge,
+      endedAt: 1,
+      durationMs: 1,
+    });
 
     const [item] = store.listItems('t');
     const raw = item?.rawJson ?? '';

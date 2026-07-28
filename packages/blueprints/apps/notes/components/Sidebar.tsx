@@ -6,12 +6,14 @@
 // #sidebarFoot — the brand row and "New note" button around them are static
 // HTML in index.html (stable, no per-render data), wired once in chrome.ts.
 import { useRef, useState } from 'react';
-import { I } from '../icons.ts';
+
 import { notebookColorVar } from '../format.ts';
-import { Icon } from './Shared.tsx';
+import { I } from '../icons.ts';
 import type { Nav, Notebook, SidebarCounts, SidebarTag } from '../types.ts';
-import styles from './Sidebar.module.css';
+import { Icon } from './Shared.tsx';
+
 import shared from './shared.module.css';
+import styles from './Sidebar.module.css';
 
 function NewNotebookForm({
   onSubmit,

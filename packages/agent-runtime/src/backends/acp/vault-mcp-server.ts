@@ -48,7 +48,9 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
+
 import type { ToolContext } from '@centraid/app-engine';
+
 import {
   VAULT_CONTENT_TOOL,
   VAULT_INVOKE_TOOL,
@@ -231,7 +233,12 @@ export async function startVaultMcpServer(
       hooks.onStart?.({ toolCallId, toolName: name, args });
       const out = await callTool(ctx, name, args);
       if (out.ok) {
-        hooks.onResult?.({ toolCallId, toolName: name, ok: true, result: out.result });
+        hooks.onResult?.({
+          toolCallId,
+          toolName: name,
+          ok: true,
+          result: out.result,
+        });
         return ok({
           content: [{ type: 'text', text: JSON.stringify(out.result) }],
           isError: false,
@@ -246,7 +253,10 @@ export async function startVaultMcpServer(
       });
       // A tool that failed is a successful RPC carrying an error result —
       // that is what lets the model read the message and correct itself.
-      return ok({ content: [{ type: 'text', text: out.errorText }], isError: true });
+      return ok({
+        content: [{ type: 'text', text: out.errorText }],
+        isError: true,
+      });
     }
     if (isNotification) return undefined; // initialized / cancelled / progress
     return fail(-32601, `method not found: ${String(method)}`);
@@ -301,7 +311,10 @@ export async function startVaultMcpServer(
       sendJson(res, 200, {
         jsonrpc: '2.0',
         id: body.id ?? null,
-        error: { code: -32603, message: err instanceof Error ? err.message : String(err) },
+        error: {
+          code: -32603,
+          message: err instanceof Error ? err.message : String(err),
+        },
       });
       return;
     }

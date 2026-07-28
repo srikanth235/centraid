@@ -12,6 +12,7 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
+
 import type { ConversationHistoryStore, ConversationSummary } from '../conversation/history.js';
 
 const ROUTE_PREFIX = '/_centraid-conversations';
@@ -176,7 +177,10 @@ export function makeConversationRouteHandler(getStore: () => ConversationHistory
           sendError(res, 404, 'session not found');
           return true;
         }
-        sendJson(res, 200, { turnCount: meta.turnCount, updatedAt: meta.updatedAt });
+        sendJson(res, 200, {
+          turnCount: meta.turnCount,
+          updatedAt: meta.updatedAt,
+        });
         return true;
       }
 
@@ -194,7 +198,9 @@ export function makeConversationRouteHandler(getStore: () => ConversationHistory
         const q = url.searchParams.get('q') ?? '';
         const limitParam = Number(url.searchParams.get('limit'));
         const limit = Number.isFinite(limitParam) && limitParam > 0 ? limitParam : 20;
-        sendJson(res, 200, { results: store.searchSessions(searchAppId, q, limit) });
+        sendJson(res, 200, {
+          results: store.searchSessions(searchAppId, q, limit),
+        });
         return true;
       }
 

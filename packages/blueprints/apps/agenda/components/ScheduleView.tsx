@@ -4,10 +4,11 @@
 // snippet included) route here — same shape as the loaded window, so one
 // component renders either source.
 import { bucketByDay, segTimeText } from '../format.ts';
-import { localDayKey } from '../kit.ts';
 import { I } from '../icons.ts';
-import { Icon, Snippet } from './Shared.tsx';
+import { localDayKey } from '../kit.ts';
 import type { AgEvent, DaySegment } from '../types.ts';
+import { Icon, Snippet } from './Shared.tsx';
+
 import styles from './ScheduleView.module.css';
 
 type ColorFor = (calendarId: string | null | undefined) => string | null;

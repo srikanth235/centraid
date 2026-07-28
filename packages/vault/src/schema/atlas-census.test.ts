@@ -4,11 +4,13 @@
 // are derived from the PRAGMA walk itself — never asserted as literals (no
 // 122/46).
 
-import { afterEach, describe, expect, test } from 'vitest';
 import type { DatabaseSync } from 'node:sqlite';
+
+import { afterEach, describe, expect, test } from 'vitest';
+
 import { openVaultDb } from '../db.js';
-import { VAULT_TABLES } from './tables.js';
 import { atlasCensus, atlasGraph, atlasPulse, ATLAS_GRAPH_CENTER } from './atlas-census.js';
+import { VAULT_TABLES } from './tables.js';
 
 const cleanups: (() => void)[] = [];
 describe('atlas-census', () => {
@@ -26,7 +28,10 @@ describe('atlas-census', () => {
   }
 
   /** Independently walk PRAGMA foreign_key_list — the derived expectation. */
-  function walkFkCount(vault: DatabaseSync): { total: number; toCenter: number } {
+  function walkFkCount(vault: DatabaseSync): {
+    total: number;
+    toCenter: number;
+  } {
     let total = 0;
     let toCenter = 0;
     for (const [schema, tables] of Object.entries(VAULT_TABLES)) {

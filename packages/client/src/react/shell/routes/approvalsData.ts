@@ -71,7 +71,12 @@ export function buildOutboxRow(item: OutboxItem): ApprovalsOutboxRowDTO {
 }
 
 export function buildNeedsAuthRow(row: OutboxNeedsAuth): ApprovalsNeedsAuthRowDTO {
-  return { connectionId: row.connectionId, label: row.label, kind: row.kind, note: row.note };
+  return {
+    connectionId: row.connectionId,
+    label: row.label,
+    kind: row.kind,
+    note: row.note,
+  };
 }
 
 export function buildParkedRow(row: VaultParkedEntry): ApprovalsParkedRowDTO {

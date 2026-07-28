@@ -1,4 +1,4 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import crypto from 'node:crypto';
 /*
  * The recovery-kit READER (issue #439 R1) — the counterpart to
  * `wrapRecoveryKit`. A kit is the ONLY thing standing between a blank machine
@@ -10,10 +10,11 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  * document validator is reached through `wrapRecoveryKit` (which validates
  * before sealing) and through a successful unwrap.
  */
-
-import { describe, expect, test } from 'vitest';
 import path from 'node:path';
-import crypto from 'node:crypto';
+
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { describe, expect, test } from 'vitest';
+
 import {
   createKeyring,
   parseRecoveryKit,
@@ -30,7 +31,12 @@ describe('recovery-kit', () => {
   test('round-trips a wrapped kit', async () => {
     const keyring = await createKeyring(await tempFile('keyring.json'));
     const targets = [
-      { provider: 'https://home.example', targetId: 't-1', vaultId: 'v-1', label: 'ab12' },
+      {
+        provider: 'https://home.example',
+        targetId: 't-1',
+        vaultId: 'v-1',
+        label: 'ab12',
+      },
     ];
     const wrapped = wrapRecoveryKit(
       {
@@ -65,13 +71,18 @@ describe('recovery-kit', () => {
       createdAt: new Date(0).toISOString(),
       keyring,
       targets: [
-        { provider: 'https://home.example', targetId: 't-1', vaultId: 'v-1', label: 'ab12' },
+        {
+          provider: 'https://home.example',
+          targetId: 't-1',
+          vaultId: 'v-1',
+          label: 'ab12',
+        },
       ],
     };
     expect(() => parseRecoveryKit(plain, 'correct horse battery staple')).toThrow(
-      /password-wrapped kit/,
+      /password-wrapped kit/u,
     );
-    expect(() => parseRecoveryKit(plain, '')).toThrow(/password-wrapped kit/);
+    expect(() => parseRecoveryKit(plain, '')).toThrow(/password-wrapped kit/u);
   });
 
   test('a wrapped kit still requires a non-empty password', async () => {
@@ -83,12 +94,17 @@ describe('recovery-kit', () => {
         createdAt: new Date(0).toISOString(),
         keyring,
         targets: [
-          { provider: 'https://home.example', targetId: 't-1', vaultId: 'v-1', label: 'ab12' },
+          {
+            provider: 'https://home.example',
+            targetId: 't-1',
+            vaultId: 'v-1',
+            label: 'ab12',
+          },
         ],
       },
       'correct horse battery staple',
     );
-    expect(() => parseRecoveryKit(wrapped, '')).toThrow(/password is required/);
+    expect(() => parseRecoveryKit(wrapped, '')).toThrow(/password is required/u);
   });
 
   test('password wrap round-trips keyring + per-target seal key and rejects a wrong password', async () => {
@@ -113,7 +129,7 @@ describe('recovery-kit', () => {
     expect(wrapped).toMatchObject({ kdf: 'scrypt', N: 2 ** 17, r: 8, p: 1 });
     expect(JSON.stringify(wrapped)).not.toContain(keyring.epochs[0]!.key);
     expect(parseRecoveryKit(wrapped, 'correct horse battery staple')).toStrictEqual(plain);
-    expect(() => parseRecoveryKit(wrapped, 'wrong')).toThrow(/wrong password or corrupt/);
+    expect(() => parseRecoveryKit(wrapped, 'wrong')).toThrow(/wrong password or corrupt/u);
   });
 
   test('fingerprint ignores labels and createdAt but changes with recovery material', async () => {
@@ -143,7 +159,12 @@ describe('recovery-kit', () => {
     expect(
       recoveryKitFingerprint({
         ...base,
-        targets: [{ ...base.targets[0]!, sealKey: Buffer.alloc(32, 2).toString('base64') }],
+        targets: [
+          {
+            ...base.targets[0]!,
+            sealKey: Buffer.alloc(32, 2).toString('base64'),
+          },
+        ],
       }),
     ).not.toBe(recoveryKitFingerprint(base));
   });
@@ -157,8 +178,8 @@ describe('recovery-kit', () => {
       wrapRecoveryKit(document as never, 'correct horse battery staple');
 
   test('rejects a document that is not a centraid recovery kit', () => {
-    expect(wrap({ kind: 'something-else', version: 1 })).toThrow(/not a centraid-recovery-kit/);
-    expect(wrap(null)).toThrow(/not an object/);
+    expect(wrap({ kind: 'something-else', version: 1 })).toThrow(/not a centraid-recovery-kit/u);
+    expect(wrap(null)).toThrow(/not an object/u);
   });
 
   test('rejects an unsupported version', async () => {
@@ -170,7 +191,7 @@ describe('recovery-kit', () => {
         keyring,
         targets: [{ provider: 'x', targetId: 't', vaultId: 'v', label: 'l' }],
       }),
-    ).toThrow(/unsupported version/);
+    ).toThrow(/unsupported version/u);
   });
 
   test('rejects a malformed keyring with the same rules loadKeyring uses', () => {
@@ -181,7 +202,7 @@ describe('recovery-kit', () => {
         keyring: { version: 1, active: 1, epochs: [] },
         targets: [{ provider: 'x', targetId: 't', vaultId: 'v', label: 'l' }],
       }),
-    ).toThrow(/keyring/);
+    ).toThrow(/keyring/u);
   });
 
   test('rejects a target missing its addressing', async () => {
@@ -193,6 +214,6 @@ describe('recovery-kit', () => {
         keyring,
         targets: [{ provider: 'x', vaultId: 'v', label: 'l' }],
       }),
-    ).toThrow(/missing "targetId"/);
+    ).toThrow(/missing "targetId"/u);
   });
 });

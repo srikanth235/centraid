@@ -1,15 +1,16 @@
-import { tempDirSync } from '@centraid/test-kit/temp-dir';
+import fs from 'node:fs';
 /*
  * `buildDiagnosticsBundle` — document shape, vault file sizing (cheap
  * statSync, no CAS walk), the redaction contract (issue #351), and the
  * per-table size breakdown + inline-body violation scan (issue #367 §E1/E4).
  */
-
-import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, test } from 'vitest';
+
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { bootstrapVault, openVaultDb, type VaultDb } from '@centraid/vault';
+import { afterEach, describe, expect, test } from 'vitest';
+
 import { buildDiagnosticsBundle } from './gateway-diagnostics.ts';
 import { GatewayLogStore } from './gateway-log-store.ts';
 import { HealthRegistry } from './health-registry.ts';
@@ -196,7 +197,10 @@ describe('gateway-diagnostics', () => {
     expect(stats!.vaultDb.tables.length).toBeGreaterThan(0);
     expect(stats!.journalDb.method).toBe('dbstat');
     // A fresh vault has nothing over the inline-body budget.
-    expect(stats!.inlineBodyViolations.total).toStrictEqual({ count: 0, bytes: 0 });
+    expect(stats!.inlineBodyViolations.total).toStrictEqual({
+      count: 0,
+      bytes: 0,
+    });
 
     db.close();
   });

@@ -1,9 +1,11 @@
 import type { IconName } from '@centraid/design-tokens';
 import { type CSSProperties, type JSX, useEffect, useRef, useState } from 'react';
-import { iconSvg } from '../iconSvg.js';
-import styles from './SpaceModal.module.css';
+
 import { cx } from '../../ui/cx.js';
+import { iconSvg } from '../iconSvg.js';
+
 import controlsCss from '../../styles/controls.module.css';
+import styles from './SpaceModal.module.css';
 
 // The Spaces add/rename modal, ported to React (issue #325, R5) from the vanilla
 // `window.Profiles.openModal`. A space IS a vault (#280); this is a name + icon +
@@ -75,7 +77,9 @@ function Avatar({
   return (
     <span
       style={{ background: color, width: size, height: size } as CSSProperties}
-      dangerouslySetInnerHTML={{ __html: iconSvg(icon, Math.round(size * 0.42), 1.7) }}
+      dangerouslySetInnerHTML={{
+        __html: iconSvg(icon, Math.round(size * 0.42), 1.7),
+      }}
     />
   );
 }
@@ -213,7 +217,8 @@ export default function SpaceModal({
 
           <label className={styles.profField}>
             <span className={styles.profFieldLabel}>
-              Description<span className={styles.profFieldOptional}>optional</span>
+              Description
+              <span className={styles.profFieldOptional}>optional</span>
             </span>
             <input
               className={styles.profFieldInput}

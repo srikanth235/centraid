@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReplicaRow, ReplicaReadWireResult } from '@centraid/client/replica/native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { useReplica } from '../replica/ReplicaProvider';
 import type { NativeReadRequest } from '../../lib/replica/native-session';
+import { useReplica } from '../replica/ReplicaProvider';
 
 export interface ReplicaQueryState {
   rows: Array<ReplicaRow & { __rowId: string }>;
@@ -19,7 +19,10 @@ export interface ReplicaQueryState {
 export function mapReplicaRows(
   result: ReplicaReadWireResult | undefined,
 ): Array<ReplicaRow & { __rowId: string }> {
-  return (result?.rows ?? []).map((row) => ({ ...row.values, __rowId: row.rowId }));
+  return (result?.rows ?? []).map((row) => ({
+    ...row.values,
+    __rowId: row.rowId,
+  }));
 }
 
 export function useReplicaQuery(appId: string, request: NativeReadRequest): ReplicaQueryState {

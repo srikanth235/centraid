@@ -144,7 +144,11 @@ function dateGroupLabel(startedAt: number): string {
   const ds = d.toDateString();
   if (ds === now.toDateString()) return 'Today';
   if (ds === new Date(now.getTime() - 86_400_000).toDateString()) return 'Yesterday';
-  return d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+  return d.toLocaleDateString(undefined, {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  });
 }
 
 function buildThreadRun(run: CentraidAutomationTurnRecord): ThreadRunDTO {
@@ -322,7 +326,10 @@ export async function decideConsentItem(input: {
       return outcome.status === 'executed';
     }
     case 'parked': {
-      await confirmVaultParked({ approve: input.decision !== 'discard', invocationId: input.id });
+      await confirmVaultParked({
+        approve: input.decision !== 'discard',
+        invocationId: input.id,
+      });
       return true;
     }
     case 'grant': {

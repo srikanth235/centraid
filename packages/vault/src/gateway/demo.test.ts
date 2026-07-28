@@ -4,7 +4,7 @@
 // one receipted act.
 
 import { beforeEach, describe, expect, test } from 'vitest';
-import { registerTaskCommands } from '../commands/tasks.js';
+
 import {
   bootstrapVault,
   createGrant,
@@ -13,6 +13,7 @@ import {
   enrollDevice,
   type BootstrapResult,
 } from '../bootstrap.js';
+import { registerTaskCommands } from '../commands/tasks.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { uuidv7 } from '../ids.js';
 import { createGateway, Gateway } from './gateway.js';
@@ -55,7 +56,11 @@ describe('demo', () => {
     boot = bootstrapVault(db, { ownerName: 'Priya' });
     gw = createGateway(db);
     registerTaskCommands(gw);
-    owner = { kind: 'device', deviceId: boot.deviceId, deviceKey: boot.deviceKey };
+    owner = {
+      kind: 'device',
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+    };
   });
 
   describe('demo register', () => {
@@ -90,7 +95,11 @@ describe('demo', () => {
         grantedByPartyId: boot.ownerPartyId,
         scopes: [{ schema: 'schedule', verbs: 'act' }],
       });
-      const cred: Credential = { kind: 'app', appId: app.appId, signingKey: app.signingKey };
+      const cred: Credential = {
+        kind: 'app',
+        appId: app.appId,
+        signingKey: app.signingKey,
+      };
       const outcome = gw.invoke(cred, {
         command: 'schedule.add_task',
         input: { title: 'sneaky' },
@@ -98,7 +107,7 @@ describe('demo', () => {
         demo: { appId: 'tasks' },
       });
       expect(outcome.status).toBe('denied');
-      expect((outcome as { reason: string }).reason).toMatch(/owner-only/);
+      expect((outcome as { reason: string }).reason).toMatch(/owner-only/u);
       const rows = db.vault.prepare('SELECT count(*) AS n FROM consent_seed_row').get() as {
         n: number;
       };
@@ -213,7 +222,7 @@ describe('demo', () => {
     });
 
     test('purge is owner-only', () => {
-      expect(() => gw.purgeDemo(agentCredential())).toThrow(/only the owner/);
+      expect(() => gw.purgeDemo(agentCredential())).toThrow(/only the owner/u);
     });
   });
 });

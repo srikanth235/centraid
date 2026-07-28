@@ -13,8 +13,8 @@
 // the inode survives until the last vault lets go — no shared pin table, no
 // cross-vault bookkeeping.
 
-import { VaultShareError } from '../errors.js';
 import type { LocalBlobStore } from '../blob/local.js';
+import { VaultShareError } from '../errors.js';
 
 /**
  * How a content address came to be in the audience vault's CAS.

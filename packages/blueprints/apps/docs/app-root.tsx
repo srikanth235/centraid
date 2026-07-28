@@ -7,6 +7,19 @@
 
 import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState } from 'react';
 import type { KeyboardEvent, ReactElement, ReactNode } from 'react';
+
+import type { InlineAppProps } from '../inline-types.ts';
+import { Chrome } from './Chrome.tsx';
+import { BulkBar } from './components/BulkBar.tsx';
+import { Details } from './components/Details.tsx';
+import { Editor } from './components/Editor.tsx';
+import { GridCard } from './components/Grid.tsx';
+import { ListHead, ListRow, WindowFoot } from './components/List.tsx';
+import { NewMenu } from './components/NewMenu.tsx';
+import { QuickLook } from './components/QuickLook.tsx';
+import { FolderList, SmartNav, Storage } from './components/Sidebar.tsx';
+import { TagChips, TypeChips } from './components/Toolbar.tsx';
+import { emptyStateFor } from './format.ts';
 import {
   closePopover,
   debounce,
@@ -19,22 +32,11 @@ import {
   showSkeleton,
   wireThemeToggle,
 } from './kit.ts';
-import { emptyStateFor } from './format.ts';
 import { createLogic } from './logic.ts';
 import { createNav } from './nav.ts';
-import { BulkBar } from './components/BulkBar.tsx';
-import { Details } from './components/Details.tsx';
-import { Editor } from './components/Editor.tsx';
-import { GridCard } from './components/Grid.tsx';
-import { ListHead, ListRow, WindowFoot } from './components/List.tsx';
-import { NewMenu } from './components/NewMenu.tsx';
-import { QuickLook } from './components/QuickLook.tsx';
-import { FolderList, SmartNav, Storage } from './components/Sidebar.tsx';
-import { TagChips, TypeChips } from './components/Toolbar.tsx';
-import { Chrome } from './Chrome.tsx';
-import styles from './Chrome.module.css';
 import type { AppData, AppState, DriveDoc, Folder } from './types.ts';
-import type { InlineAppProps } from '../inline-types.ts';
+
+import styles from './Chrome.module.css';
 
 // Vault entities this app's queries read — the doorbell filter re-derives only
 // when a change names one of these (or names none, i.e. "this app acted").
@@ -124,7 +126,11 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
   const flushEditorRef = useRef<(() => Promise<void>) | null>(null);
   const readFailedRef = useRef(false);
 
-  const dataRef = useRef<AppData>({ folders: [], documents: [], root_folder_id: null });
+  const dataRef = useRef<AppData>({
+    folders: [],
+    documents: [],
+    root_folder_id: null,
+  });
   const stateRef = useRef<AppState>(makeState(initialView(null)));
   const coreRef = useRef<Core | null>(null);
 
@@ -232,6 +238,43 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
   const core = coreRef.current;
   const { logic } = core;
   const { nav } = core;
+  const {
+    addTag: handleAddTag,
+    applySearch: handleSearchInput,
+    cancelCreateFolder: handleCancelCreateFolder,
+    cancelRenameFolder: handleCancelRenameFolder,
+    clearSelected: handleClearSelected,
+    createFolder: handleCreateFolder,
+    deleteFolder: handleDeleteFolder,
+    editDocument: handleEditDocument,
+    moveSelected: handleMoveSelected,
+    openDocMenu: handleOpenDocMenu,
+    openMovePopover: handleOpenMovePopover,
+    removeTag: handleRemoveTag,
+    renameFolder: handleRenameFolder,
+    replaceDocument: handleReplaceDocument,
+    restoreDoc: handleRestoreDoc,
+    restoreSelected: handleRestoreSelected,
+    restoreVersion: handleRestoreVersion,
+    startRenameFolder: handleStartRenameFolder,
+    toggleAllVisible: handleToggleAllVisible,
+    toggleSelect: handleToggleSelect,
+    toggleStar: handleToggleStar,
+    trashDoc: handleTrashDoc,
+    trashSelected: handleTrashSelected,
+  } = logic;
+  const {
+    closeDetails: handleCloseDetails,
+    closeQuick: handleCloseQuick,
+    openDetails: handleOpenDetails,
+    quickStep: handleQuickStep,
+    selectTag: handleSelectTag,
+    selectType: handleSelectType,
+    showMoreDocs: handleShowMoreDocs,
+    startCreateFolder: handleStartCreateFolder,
+    triggerUpload: handleTriggerUpload,
+  } = nav;
+  const handleOpenQuick = core.nav.openQuick;
   const state = stateRef.current;
   const data = dataRef.current;
 
@@ -364,14 +407,14 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       if (state.quickId) {
         if (e.key === 'Escape') {
           e.preventDefault();
-          nav.closeQuick();
-        } else if (e.key === 'ArrowLeft') nav.quickStep(-1);
-        else if (e.key === 'ArrowRight') nav.quickStep(1);
+          handleCloseQuick();
+        } else if (e.key === 'ArrowLeft') handleQuickStep(-1);
+        else if (e.key === 'ArrowRight') handleQuickStep(1);
         return;
       }
       if (e.key !== 'Escape') return;
       if (state.detailsId) {
-        nav.closeDetails();
+        handleCloseDetails();
         return;
       }
       if (state.newMenuOpen) {
@@ -471,7 +514,12 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     trash: logic.trashedFiles().length,
   };
 
-  const titles = { all: 'All documents', recent: 'Recent', starred: 'Starred', trash: 'Trash' };
+  const titles = {
+    all: 'All documents',
+    recent: 'Recent',
+    starred: 'Starred',
+    trash: 'Trash',
+  };
   let activeTitle =
     state.nav.kind === 'folder' ? logic.folderName(state.nav.folderId) : titles[state.nav.kind];
   if (state.search.trim()) activeTitle = `Results for “${state.search.trim()}”`;
@@ -530,29 +578,29 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       creatingFolder={state.creatingFolder}
       trashCount={counts.trash}
       onSelectNav={selectNav}
-      onStartRename={logic.startRenameFolder}
-      onDeleteFolder={logic.deleteFolder}
-      onRenameCommit={logic.renameFolder}
-      onRenameCancel={logic.cancelRenameFolder}
-      onCreateCommit={logic.createFolder}
-      onCreateCancel={logic.cancelCreateFolder}
+      onStartRename={handleStartRenameFolder}
+      onDeleteFolder={handleDeleteFolder}
+      onRenameCommit={handleRenameFolder}
+      onRenameCancel={handleCancelRenameFolder}
+      onCreateCommit={handleCreateFolder}
+      onCreateCancel={handleCancelCreateFolder}
     />
   );
   const storage = <Storage docs={active} truncated={state.driveTruncated} />;
   const newMenu = state.newMenuOpen ? (
-    <NewMenu onUpload={nav.triggerUpload} onNewFolder={nav.startCreateFolder} />
+    <NewMenu onUpload={handleTriggerUpload} onNewFolder={handleStartCreateFolder} />
   ) : null;
-  const typeChips = <TypeChips type={state.type} onSelect={nav.selectType} />;
-  const tagChips = <TagChips tags={tagOptions} active={state.tag} onSelect={nav.selectTag} />;
+  const typeChips = <TypeChips type={state.type} onSelect={handleSelectType} />;
+  const tagChips = <TagChips tags={tagOptions} active={state.tag} onSelect={handleSelectTag} />;
   const bulkBar =
     state.selected.size > 0 ? (
       <BulkBar
         n={state.selected.size}
         inTrash={inTrash}
-        onRestore={logic.restoreSelected}
-        onMoveTo={logic.moveSelected}
-        onTrashSelected={logic.trashSelected}
-        onClear={logic.clearSelected}
+        onRestore={handleRestoreSelected}
+        onMoveTo={handleMoveSelected}
+        onTrashSelected={handleTrashSelected}
+        onClear={handleClearSelected}
       />
     ) : null;
 
@@ -575,14 +623,14 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
               doc={d}
               index={i}
               selectedIds={state.selected}
-              onOpenDetails={nav.openDetails}
-              onOpenQuick={nav.openQuick}
-              onToggleSelect={logic.toggleSelect}
+              onOpenDetails={handleOpenDetails}
+              onOpenQuick={handleOpenQuick}
+              onToggleSelect={handleToggleSelect}
             />
           ))}
         </div>
         {showFoot ? (
-          <WindowFoot driveWindow={state.driveWindow} onShowMore={nav.showMoreDocs} />
+          <WindowFoot driveWindow={state.driveWindow} onShowMore={handleShowMoreDocs} />
         ) : null}
       </>
     );
@@ -595,7 +643,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
               <ListHead
                 rows={rows}
                 selectedIds={state.selected}
-                onToggleAll={logic.toggleAllVisible}
+                onToggleAll={handleToggleAllVisible}
               />
             </div>
           )}
@@ -610,17 +658,17 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
                 search={state.search}
                 trashed={trashed}
                 folderName={logic.folderName}
-                onOpenDetails={nav.openDetails}
-                onOpenQuick={nav.openQuick}
-                onToggleSelect={logic.toggleSelect}
-                onOpenMenu={logic.openDocMenu}
-                onRestore={logic.restoreDoc}
+                onOpenDetails={handleOpenDetails}
+                onOpenQuick={handleOpenQuick}
+                onToggleSelect={handleToggleSelect}
+                onOpenMenu={handleOpenDocMenu}
+                onRestore={handleRestoreDoc}
               />
             ))}
           </div>
         </div>
         {showFoot ? (
-          <WindowFoot driveWindow={state.driveWindow} onShowMore={nav.showMoreDocs} />
+          <WindowFoot driveWindow={state.driveWindow} onShowMore={handleShowMoreDocs} />
         ) : null}
       </>
     );
@@ -642,18 +690,18 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         <Details
           doc={detailsDoc}
           folderName={logic.folderName}
-          onClose={nav.closeDetails}
-          onOpenQuick={nav.openQuick}
-          onToggleStar={logic.toggleStar}
-          onMove={logic.openMovePopover}
-          onTrash={logic.trashDoc}
-          onRestore={logic.restoreDoc}
+          onClose={handleCloseDetails}
+          onOpenQuick={handleOpenQuick}
+          onToggleStar={handleToggleStar}
+          onMove={handleOpenMovePopover}
+          onTrash={handleTrashDoc}
+          onRestore={handleRestoreDoc}
           onEdit={(d) => nav.openEditor(d.document_id)}
-          onReplace={logic.replaceDocument}
+          onReplace={handleReplaceDocument}
           loadHistory={logic.loadHistory}
-          onRestoreVersion={logic.restoreVersion}
-          onAddTag={logic.addTag}
-          onRemoveTag={logic.removeTag}
+          onRestoreVersion={handleRestoreVersion}
+          onAddTag={handleAddTag}
+          onRemoveTag={handleRemoveTag}
           loadActivity={logic.loadActivity}
         />
       ) : null}
@@ -662,8 +710,8 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
           doc={quickDoc}
           rows={state.visibleRows}
           folderName={logic.folderName}
-          onClose={nav.closeQuick}
-          onStep={nav.quickStep}
+          onClose={handleCloseQuick}
+          onStep={handleQuickStep}
         />
       ) : null}
       {editorDoc ? (
@@ -674,7 +722,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
             flushEditorRef.current = fn;
           }}
           onClose={closeEditorSafely}
-          onSave={logic.editDocument}
+          onSave={handleEditDocument}
         />
       ) : null}
     </>
@@ -686,7 +734,13 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     // narrow observer wrongly flips to the phone drawer layout.
     <div
       ref={setRoot}
-      style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, minHeight: 0 }}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        flex: 1,
+        minWidth: 0,
+        minHeight: 0,
+      }}
     >
       <Chrome
         narrow={narrow}
@@ -705,7 +759,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         onToggleNewMenu={toggleNewMenu}
         onSelectView={selectView}
         onSort={onSort}
-        onSearchInput={core.applySearch}
+        onSearchInput={handleSearchInput}
         onSearchKeyDown={onSearchKeyDown}
         onUploadChange={onUploadChange}
         searchRef={(el) => {

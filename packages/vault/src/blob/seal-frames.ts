@@ -45,6 +45,9 @@
 // and are expected to be re-sealed by the next replication sweep; there is no
 // dual-format reader on purpose.
 
+import { createCipheriv, createDecipheriv, createHmac } from 'node:crypto';
+import * as zlib from 'node:zlib';
+
 import {
   CBSF_HEADER_BYTES,
   CBSF_MAGIC,
@@ -55,8 +58,6 @@ import {
   decodeCbsfDirectory,
   encodeCbsfDirectory,
 } from '@centraid/blob-format';
-import { createCipheriv, createDecipheriv, createHmac } from 'node:crypto';
-import * as zlib from 'node:zlib';
 
 const NONCE_BYTES = 12;
 const TAG_BYTES = 16;
@@ -324,7 +325,10 @@ export function encodeTrailer(directoryLength: number, frameCount: number): Buff
   return buf;
 }
 
-export function decodeTrailer(buf: Buffer): { directoryLength: number; frameCount: number } {
+export function decodeTrailer(buf: Buffer): {
+  directoryLength: number;
+  frameCount: number;
+} {
   assertMagicVersion(buf); // magic + version live at the trailer's front too
   return {
     directoryLength: buf.readUInt32BE(MAGIC.length + 1),
@@ -347,5 +351,8 @@ export function coveringFrames(
   start: number,
   end: number,
 ): { first: number; last: number } {
-  return { first: Math.floor(start / frameSize), last: Math.floor(end / frameSize) };
+  return {
+    first: Math.floor(start / frameSize),
+    last: Math.floor(end / frameSize),
+  };
 }

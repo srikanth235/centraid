@@ -177,7 +177,13 @@ export async function loadTally(ctx: HandlerCtx, purpose: string): Promise<Tally
 
   const people = new Map<string, ServerPerson>();
   if (me)
-    people.set(me, { party_id: me, name: 'You', color: YOU_COLOR, initials: 'You', is_me: true });
+    people.set(me, {
+      party_id: me,
+      name: 'You',
+      color: YOU_COLOR,
+      initials: 'You',
+      is_me: true,
+    });
   for (const f of friends) {
     const name = nameById.get(f.party_id) || 'Friend';
     people.set(f.party_id, {

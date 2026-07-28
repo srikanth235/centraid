@@ -3,6 +3,7 @@ import { avatarColor, metaLine, statusOf } from '../format.ts';
 import { I } from '../icons.ts';
 import type { Person } from '../types.ts';
 import { Icon, KitAvatar } from './Shared.tsx';
+
 import styles from './Grid.module.css';
 
 export function GridCard({

@@ -1,5 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+
 import { describe, expect, test, vi } from 'vitest';
+
 import { createRoutePrefixDispatch, forRoutePrefixes, type RouteHandler } from './build-gateway.js';
 
 describe('route-prefix-dispatch', () => {

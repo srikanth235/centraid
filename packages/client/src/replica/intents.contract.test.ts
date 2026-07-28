@@ -5,7 +5,9 @@ import { IntentQueue } from './intents.js';
 
 describe(IntentQueue, () => {
   test('retries with the same id and removes the overlay only after canonical outcome', async () => {
-    const queue = new IntentQueue(new MemoryIntentStore(), { idFactory: () => 'intent-1' });
+    const queue = new IntentQueue(new MemoryIntentStore(), {
+      idFactory: () => 'intent-1',
+    });
     const enqueued = await queue.enqueue({
       appId: 'agenda',
       action: 'complete',
@@ -20,10 +22,17 @@ describe(IntentQueue, () => {
         },
       ],
     });
-    expect(enqueued).toMatchObject({ intentId: 'intent-1', state: 'queued', attempts: 0 });
-    expect(enqueued.payloadHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(enqueued).toMatchObject({
+      intentId: 'intent-1',
+      state: 'queued',
+      attempts: 0,
+    });
+    expect(enqueued.payloadHash).toMatch(/^[a-f0-9]{64}$/u);
 
-    await expect(queue.claimNext()).resolves.toMatchObject({ state: 'sending', attempts: 1 });
+    await expect(queue.claimNext()).resolves.toMatchObject({
+      state: 'sending',
+      attempts: 1,
+    });
     await queue.transportFailed('intent-1', 'offline');
     await expect(queue.claimNext()).resolves.toMatchObject({
       intentId: 'intent-1',
@@ -35,7 +44,11 @@ describe(IntentQueue, () => {
 
     const [settled] = await queue.applyOutcomes([{ intentId: 'intent-1', status: 'executed' }]);
     await expect(queue.overlayMutations()).resolves.toStrictEqual([]);
-    expect(settled).toMatchObject({ intentId: 'intent-1', state: 'executed', attempts: 2 });
+    expect(settled).toMatchObject({
+      intentId: 'intent-1',
+      state: 'executed',
+      attempts: 2,
+    });
     await expect(queue.list()).resolves.toStrictEqual([]);
   });
 
@@ -58,7 +71,11 @@ describe(IntentQueue, () => {
     });
     await queue.claimNext();
     await queue.applyOutcomes([
-      { intentId: 'intent-parked', status: 'parked', reason: 'confirmation required' },
+      {
+        intentId: 'intent-parked',
+        status: 'parked',
+        reason: 'confirmation required',
+      },
     ]);
     await expect(queue.overlayMutations()).resolves.toHaveLength(1);
     expect((await queue.pending())[0]).toMatchObject({

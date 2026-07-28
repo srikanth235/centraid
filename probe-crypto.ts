@@ -9,7 +9,11 @@ export interface SubtleCryptoLikeC {
     keyUsages: readonly ('encrypt' | 'sign')[],
   ) => Promise<CryptoKeyLike>;
   encrypt: (
-    algorithm: { name: 'AES-GCM'; iv: ArrayBuffer; additionalData: ArrayBuffer },
+    algorithm: {
+      name: 'AES-GCM';
+      iv: ArrayBuffer;
+      additionalData: ArrayBuffer;
+    },
     key: CryptoKeyLike,
     data: ArrayBuffer,
   ) => Promise<ArrayBuffer>;

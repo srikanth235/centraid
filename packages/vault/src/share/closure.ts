@@ -32,6 +32,7 @@
 // stays possible without one existing now.
 
 import type { DatabaseSync } from 'node:sqlite';
+
 import { isBlobUri } from '../blob/store.js';
 import { VaultShareError } from '../errors.js';
 import { uuidv7 } from '../ids.js';

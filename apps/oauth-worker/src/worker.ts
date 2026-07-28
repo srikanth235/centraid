@@ -702,13 +702,15 @@ async function readBoundedText(
   let size = 0;
   let text = '';
   try {
-    for (;;) {
+    const readNext = async (): Promise<void> => {
       const next = await reader.read();
-      if (next.done) break;
+      if (next.done) return;
       size += next.value.byteLength;
       if (size > limit) throw new Error('body too large');
       text += decoder.decode(next.value, { stream: true });
-    }
+      return readNext();
+    };
+    await readNext();
     return text + decoder.decode();
   } finally {
     reader.releaseLock();

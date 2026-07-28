@@ -14,6 +14,7 @@
  */
 
 import { app } from 'electron';
+
 import {
   normalizeReleases,
   type ChangelogRelease,

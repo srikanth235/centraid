@@ -133,15 +133,18 @@ export function fillTileMedia(tile: HTMLElement, asset: Asset): void {
   }
   // A thumb 404 (variant never produced) must NOT fall back to the original —
   // swap in a placeholder instead of pulling multi-MB bytes into the grid.
-  img.onerror = () => {
-    img.onerror = null;
-    stopNextScreenObservation(img);
-    img.remove();
-    tile.querySelector('.ph-tile-video-badge')?.remove();
-    tile.querySelector('.ph-tile-duration')?.remove();
-    renderPlaceholder(tile, asset);
-    renderDuration(tile, asset);
-  };
+  img.addEventListener(
+    'error',
+    () => {
+      stopNextScreenObservation(img);
+      img.remove();
+      tile.querySelector('.ph-tile-video-badge')?.remove();
+      tile.querySelector('.ph-tile-duration')?.remove();
+      renderPlaceholder(tile, asset);
+      renderDuration(tile, asset);
+    },
+    { once: true },
+  );
   tile.appendChild(img);
   if (isVideoAsset(asset)) {
     const badge = document.createElement('span');

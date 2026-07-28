@@ -1,16 +1,18 @@
 import type { Dispatch, JSX } from 'react';
-import Icon from '../../ui/Icon.js';
+
 import { cx } from '../../ui/cx.js';
-import buttonCss from '../../ui/Button.module.css';
-import a11y from '../../styles/a11y.module.css';
-import controlsCss from '../../styles/controls.module.css';
-import { PROFILE_COLORS } from './SpaceModal.js';
+import Icon from '../../ui/Icon.js';
 import {
   canCommitConnectFlow,
   vaultCapability,
   type ConnectFlowEvent,
   type ConnectFlowState,
 } from './connectFlow-core.js';
+import { PROFILE_COLORS } from './SpaceModal.js';
+
+import a11y from '../../styles/a11y.module.css';
+import controlsCss from '../../styles/controls.module.css';
+import buttonCss from '../../ui/Button.module.css';
 import styles from './ConnectFlow.module.css';
 
 // The 'vault' step — split out of ConnectFlow.tsx (issue #382) purely to
@@ -96,7 +98,12 @@ export function VaultStep({
                   className={a11y.srControl}
                   name="connect-flow-vault"
                   checked={state.vaultChoice?.kind === 'create'}
-                  onChange={() => dispatch({ choice: { kind: 'create' }, type: 'selectVault' })}
+                  onChange={() =>
+                    dispatch({
+                      choice: { kind: 'create' },
+                      type: 'selectVault',
+                    })
+                  }
                 />
                 <span className={cx(styles.vaultDot, styles.vaultDotAdd)} aria-hidden="true">
                   <Icon name="Plus" size={12} strokeWidth={2.4} />
@@ -111,7 +118,11 @@ export function VaultStep({
                   autoFocus
                   value={state.newVaultName}
                   onChange={(e) =>
-                    dispatch({ field: 'newVaultName', type: 'setField', value: e.target.value })
+                    dispatch({
+                      field: 'newVaultName',
+                      type: 'setField',
+                      value: e.target.value,
+                    })
                   }
                 />
               ) : null}

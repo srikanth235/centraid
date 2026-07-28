@@ -21,8 +21,8 @@
  * strips off `PATH`.
  */
 
-import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 
 const require_ = createRequire(import.meta.url);

@@ -2,7 +2,7 @@
 // dependency: Vite emits its display chunk and worker asset with the inline
 // Docs app instead of relying on same-origin files in the shared kit.
 
-import pdfWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
+const pdfWorkerUrl = new URL('pdfjs-dist/legacy/build/pdf.worker.min.mjs', import.meta.url).href;
 
 const MAX_TEXT_CHARS = 1_000_000;
 const MAX_PDF_PAGES = 2_000;
@@ -89,15 +89,16 @@ export async function extractPdfTextWithPdfJs(
   file: PdfFileLike,
   pdfjs?: PdfJsModule,
 ): Promise<string | null> {
+  let resolvedPdfjs: PdfJsModule;
   try {
-    pdfjs ??= await loadPdfJs();
+    resolvedPdfjs = pdfjs ?? (await loadPdfJs());
   } catch {
     return null;
   }
-  if (!pdfjs?.getDocument || typeof file?.arrayBuffer !== 'function') return null;
+  if (!resolvedPdfjs.getDocument || typeof file?.arrayBuffer !== 'function') return null;
   let doc: PdfDocument | undefined;
   try {
-    const loading = pdfjs.getDocument({
+    const loading = resolvedPdfjs.getDocument({
       data: new Uint8Array(await file.arrayBuffer()),
       // Text-layer extraction never renders glyphs. Prefer installed system
       // metrics and disable generated-code font paths; no external font/CMap
@@ -105,11 +106,16 @@ export async function extractPdfTextWithPdfJs(
       useSystemFonts: true,
       isEvalSupported: false,
     });
-    doc = await loading.promise;
+    const document = await loading.promise;
+    doc = document;
     const pages: string[] = [];
     let chars = 0;
-    for (let pageNo = 1; pageNo <= Math.min(doc.numPages, MAX_PDF_PAGES); pageNo += 1) {
-      const page = await doc.getPage(pageNo);
+    const lastPage = Math.min(document.numPages, MAX_PDF_PAGES);
+    // Text is joined in document order; concurrent PDF.js workers would make
+    // the generated document text depend on completion timing.
+    const extractNextPage = async (pageNo: number): Promise<void> => {
+      if (pageNo > lastPage) return;
+      const page = await document.getPage(pageNo);
       const content = await page.getTextContent();
       const text = (content.items ?? [])
         .map((item) => (typeof item?.str === 'string' ? item.str : ''))
@@ -117,12 +123,14 @@ export async function extractPdfTextWithPdfJs(
         .join(' ')
         .replace(/\s+/gu, ' ')
         .trim();
-      if (!text) continue;
+      if (!text) return extractNextPage(pageNo + 1);
       const remaining = MAX_TEXT_CHARS - chars;
-      if (remaining <= 0) break;
+      if (remaining <= 0) return;
       pages.push(text.slice(0, remaining));
       chars += Math.min(text.length, remaining) + 1;
-    }
+      return extractNextPage(pageNo + 1);
+    };
+    await extractNextPage(1);
     const joined = pages.join('\n').trim();
     return joined || null;
   } catch {

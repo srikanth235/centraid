@@ -1,14 +1,15 @@
-import { tempDirSync } from '@centraid/test-kit/temp-dir';
+import { rmSync } from 'node:fs';
 // governance: allow-repo-hygiene file-size-limit pre-existing cohesive blob regression suite; decomposition is outside issue #417
 // Blob custody units (issue #296): the stores, the spool pipeline, and the
 // two-tier custody facade — including the S3 driver against an in-process
 // fake S3 endpoint (SigV4-signed requests over real HTTP, no SDK).
-
-import { rmSync } from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { deflateSync } from 'node:zlib';
+
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+
 import { BlobCustody, sealBlob, unsealBlob, type RemoteTier } from './custody.js';
 import { FsBlobStore, MemoryBlobStore } from './local.js';
 import { extractBlobMeta, sniffMediaType } from './pipeline.js';
@@ -62,7 +63,7 @@ describe('blob', () => {
 
   test('stores refuse keys that are not sha256 hex', () => {
     const store = new MemoryBlobStore();
-    expect(() => store.putSync('../etc/passwd', Buffer.from('x'))).toThrow(/not a sha256/);
+    expect(() => store.putSync('../etc/passwd', Buffer.from('x'))).toThrow(/not a sha256/u);
   });
 
   // ---------- spool pipeline ----------
@@ -91,7 +92,9 @@ describe('blob', () => {
     expect(kept.has_location).toBe(true);
     expect(kept.latitude).toBeCloseTo(37.5, 3);
     expect(kept.longitude).toBeCloseTo(-122.25, 3);
-    const stripped = extractBlobMeta(jpeg, 'image/jpeg', { keepLocation: false });
+    const stripped = extractBlobMeta(jpeg, 'image/jpeg', {
+      keepLocation: false,
+    });
     expect(stripped.has_location).toBe(true); // presence is reported...
     expect(stripped.latitude).toBeUndefined(); // ...coordinates are not
   });
@@ -169,8 +172,11 @@ describe('blob', () => {
       tiff.writeUInt16LE(tag, at);
       tiff.writeUInt16LE(type, at + 2);
       tiff.writeUInt32LE(count, at + 4);
-      if (inlineAscii !== undefined) tiff.write(inlineAscii, at + 8, 'latin1');
-      else tiff.writeUInt32LE(value, at + 8);
+      if (inlineAscii === undefined) {
+        tiff.writeUInt32LE(value, at + 8);
+      } else {
+        tiff.write(inlineAscii, at + 8, 'latin1');
+      }
     };
     // IFD0: pointers to the Exif and GPS IFDs.
     tiff.writeUInt16LE(2, ifd0At);
@@ -264,7 +270,9 @@ describe('blob', () => {
     remoteStore.putSync(pinned, Buffer.from('recovery-window byte'));
     remoteStore.putSync(stray, Buffer.from('genuine orphan'));
 
-    const result = await custody.reconcile(new Set(), { extraLiveRoots: new Set([pinned]) });
+    const result = await custody.reconcile(new Set(), {
+      extraLiveRoots: new Set([pinned]),
+    });
 
     expect(result.orphansDeleted).toStrictEqual([stray]);
     expect(remoteStore.hasSync(pinned)).toBe(true); // pinned survived the sweep
@@ -319,7 +327,10 @@ describe('blob', () => {
   test('encrypted remote tier stores ciphertext; open() fetches, verifies, re-caches', async () => {
     const key = Buffer.alloc(32, 9);
     const remoteStore = new MemoryBlobStore();
-    const { custody, local } = makeCustody({ store: remoteStore, encryptKey: key });
+    const { custody, local } = makeCustody({
+      store: remoteStore,
+      encryptKey: key,
+    });
     const bytes = Buffer.from('cloud-held photo bytes');
     const sha = custody.ingestSync(bytes).sha256;
     await custody.replicate();
@@ -355,7 +366,7 @@ describe('blob', () => {
      * rangeless GET of the object.
      */
     requests: { method: string; key: string; range: string }[];
-    close(): Promise<void>;
+    close: () => Promise<void>;
   }
 
   function startFakeS3(): Promise<FakeS3> {
@@ -365,8 +376,12 @@ describe('blob', () => {
     const server = http.createServer((req, res) => {
       authHeaders.push(String(req.headers.authorization ?? ''));
       const url = new URL(req.url ?? '/', 'http://s3.local');
-      const key = decodeURIComponent(url.pathname).replace(/^\/test-bucket\/?/, '');
-      requests.push({ method: req.method ?? '', key, range: String(req.headers.range ?? '') });
+      const key = decodeURIComponent(url.pathname).replace(/^\/test-bucket\/?/u, '');
+      requests.push({
+        method: req.method ?? '',
+        key,
+        range: String(req.headers.range ?? ''),
+      });
       const chunks: Buffer[] = [];
       req.on('data', (c: Buffer) => chunks.push(c));
       req.on('end', () => {
@@ -391,7 +406,7 @@ describe('blob', () => {
           if (!found) return void res.writeHead(404).end();
           const range = req.headers.range;
           if (range) {
-            const m = /bytes=(\d+)-(\d*)/.exec(range)!;
+            const m = /bytes=(?<start>\d+)-(?<end>\d*)/u.exec(range)!;
             const start = Number(m[1]);
             const end = m[2] ? Number(m[2]) : found.length - 1;
             res.writeHead(206).end(found.subarray(start, end + 1));
@@ -443,7 +458,7 @@ describe('blob', () => {
       // Every request carried a SigV4 Authorization header.
       expect(fake.authHeaders.length).toBeGreaterThan(0);
       for (const h of fake.authHeaders) {
-        expect(h).toMatch(/^AWS4-HMAC-SHA256 Credential=AK\//);
+        expect(h).toMatch(/^AWS4-HMAC-SHA256 Credential=AK\//u);
       }
     } finally {
       await fake.close();
@@ -475,15 +490,21 @@ describe('blob', () => {
 
       const puts = 8;
       const startUnthrottled = Date.now();
-      for (let i = 0; i < puts; i++) {
+      const putUnthrottled = async (i: number): Promise<void> => {
+        if (i >= puts) return;
         await unthrottled.put(sha256OfBytes(Buffer.concat([bytes, Buffer.from([i])])), bytes);
-      }
+        return putUnthrottled(i + 1);
+      };
+      await putUnthrottled(0);
       const unthrottledMs = Date.now() - startUnthrottled;
 
       const startThrottled = Date.now();
-      for (let i = 0; i < puts; i++) {
+      const putThrottled = async (i: number): Promise<void> => {
+        if (i >= puts) return;
         await throttled.put(sha256OfBytes(Buffer.concat([bytes, Buffer.from([i, 1])])), bytes);
-      }
+        return putThrottled(i + 1);
+      };
+      await putThrottled(0);
       const throttledMs = Date.now() - startThrottled;
 
       // 8 puts at 4 puts/sec worth of budget should take roughly ~1.75s of
@@ -514,7 +535,10 @@ describe('blob', () => {
     const fake = await startFakeS3();
     try {
       const key = Buffer.alloc(32, 0x33);
-      const remote = s3RemoteTier(fake, 'ranged', { encryptKey: key, frameSize: 32 });
+      const remote = s3RemoteTier(fake, 'ranged', {
+        encryptKey: key,
+        frameSize: 32,
+      });
       const local = new MemoryBlobStore();
       const custody = new BlobCustody(local, () => remote);
 
@@ -536,7 +560,7 @@ describe('blob', () => {
       // suffix, the directory, and the one covering frame — never the 200-byte
       // object whole (which would be a rangeless GET).
       const gets = fake.requests.filter((r) => r.method === 'GET' && r.key.endsWith(sha));
-      for (const g of gets) expect(g.range).toMatch(/^bytes=\d+-/);
+      for (const g of gets) expect(g.range).toMatch(/^bytes=\d+-/u);
       expect(gets.some((g) => g.range === '')).toBe(false);
       expect(gets).toHaveLength(3); // trailer + directory + 1 covering frame
       // The blob was NOT promoted whole into local (a partial read can't verify
@@ -551,7 +575,10 @@ describe('blob', () => {
     const fake = await startFakeS3();
     try {
       const key = Buffer.alloc(32, 0x44);
-      const remote = s3RemoteTier(fake, 'single-flight', { encryptKey: key, frameSize: 64 });
+      const remote = s3RemoteTier(fake, 'single-flight', {
+        encryptKey: key,
+        frameSize: 64,
+      });
       const local = new MemoryBlobStore();
       const custody = new BlobCustody(local, () => remote);
 

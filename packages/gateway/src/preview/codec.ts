@@ -15,9 +15,10 @@
 // #404, covers the miss). Gateway-side VIDEO decode is deliberately out of v0
 // — poster frames are client-only where cheap.
 
+import type { PreviewCodec, PreviewOutput } from '@centraid/vault';
 import jpegJs from 'jpeg-js';
 import { PNG } from 'pngjs';
-import type { PreviewCodec, PreviewOutput } from '@centraid/vault';
+
 import { rgbaToThumbHash } from './thumbhash.js';
 
 /** ThumbHash requires ≤100 px on each edge; the placeholder is coarse anyway. */

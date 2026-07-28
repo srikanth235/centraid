@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
-import { createSchedulerHealthProbe } from './scheduler-health.js';
 import type { SchedulerLedgerSnapshot } from '@centraid/automation';
+import { describe, expect, it } from 'vitest';
+
+import { createSchedulerHealthProbe } from './scheduler-health.js';
 
 const EMPTY: SchedulerLedgerSnapshot = { missed: [] };
 
@@ -10,7 +11,10 @@ describe(createSchedulerHealthProbe, () => {
       vaults: () => [
         {
           vaultId: 'vault-a',
-          snapshot: () => ({ lastTickAt: new Date(0).toISOString(), missed: [] }),
+          snapshot: () => ({
+            lastTickAt: new Date(0).toISOString(),
+            missed: [],
+          }),
         },
       ],
       now: () => 30_000, // 30s after the tick — well inside the 3-period default
@@ -50,7 +54,10 @@ describe(createSchedulerHealthProbe, () => {
       vaults: () => [
         {
           vaultId: 'vault-aaaaaaaa',
-          snapshot: () => ({ lastTickAt: new Date(0).toISOString(), missed: [] }),
+          snapshot: () => ({
+            lastTickAt: new Date(0).toISOString(),
+            missed: [],
+          }),
         },
       ],
       periodMs: 60_000,
@@ -68,7 +75,10 @@ describe(createSchedulerHealthProbe, () => {
       vaults: () => [
         {
           vaultId: 'vault-a',
-          snapshot: () => ({ lastTickAt: new Date(0).toISOString(), missed: [] }),
+          snapshot: () => ({
+            lastTickAt: new Date(0).toISOString(),
+            missed: [],
+          }),
         },
       ],
       periodMs: 60_000,

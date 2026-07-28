@@ -4,7 +4,10 @@
 
 const KIND = 'pull.linear';
 const API = 'https://api.linear.app/graphql';
-const AUTH = { authorization: '{{connection:api_key}}', 'content-type': 'application/json' };
+const AUTH = {
+  authorization: '{{connection:api_key}}',
+  'content-type': 'application/json',
+};
 
 async function gql(ctx, query, variables) {
   const res = await ctx.fetch({

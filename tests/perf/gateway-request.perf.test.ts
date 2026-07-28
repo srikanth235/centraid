@@ -1,5 +1,6 @@
 import { fork, type ChildProcess } from 'node:child_process';
 import path from 'node:path';
+
 import { recordQualityResult } from '@centraid/test-kit/quality-result';
 import { tempDir } from '@centraid/test-kit/temp-dir';
 import { describe, expect, onTestFinished, test } from 'vitest';
@@ -35,15 +36,17 @@ describe('gateway-request.perf', () => {
       child.kill();
     });
 
-    const ready = await childMessage<{ type: 'ready'; url: string; token: string }>(
-      child,
-      'ready',
-      () => childError,
-      20_000,
-    );
+    const ready = await childMessage<{
+      type: 'ready';
+      url: string;
+      token: string;
+    }>(child, 'ready', () => childError, 20_000);
 
     const samples: number[] = [];
-    for (let index = 0; index < 60; index += 1) {
+    // This benchmark intentionally measures one request at a time, not a
+    // concurrent load profile, so samples preserve a serial timeline.
+    const measureNext = async (index: number): Promise<void> => {
+      if (index >= 60) return;
       const started = performance.now();
       const response = await fetch(`${ready.url}/centraid/_apps`, {
         headers: { authorization: `Bearer ${ready.token}` },
@@ -51,7 +54,9 @@ describe('gateway-request.perf', () => {
       expect(response.status).toBe(200);
       await response.arrayBuffer();
       samples.push(performance.now() - started);
-    }
+      return measureNext(index + 1);
+    };
+    await measureNext(0);
     samples.sort((left, right) => left - right);
     const p95Ms = samples[Math.floor(samples.length * 0.95)] ?? Number.POSITIVE_INFINITY;
 
@@ -72,7 +77,12 @@ describe('gateway-request.perf', () => {
       name: 'Gateway request p95 and idle CPU',
       status: passed ? 'passed' : 'failed',
       measurements: [
-        { name: 'request p95', value: p95Ms, unit: 'ms', budget: REQUEST_P95_BUDGET_MS },
+        {
+          name: 'request p95',
+          value: p95Ms,
+          unit: 'ms',
+          budget: REQUEST_P95_BUDGET_MS,
+        },
         {
           name: 'idle CPU per second',
           value: idleCpuMsPerSecond,

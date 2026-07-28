@@ -5,6 +5,7 @@
 // repo-hygiene cap); shared harness in gateway-client-contract-fixtures.ts.
 
 import { describe, expect, it } from 'vitest';
+
 import {
   fetchMock,
   installGatewayContractHarness,
@@ -40,7 +41,10 @@ describe('renderer gateway owner-plane contracts', () => {
     });
     await vault.revokeVaultGrant({ grantId: 'grant-1' });
     await vault.vaultParked();
-    await vault.confirmVaultParked({ invocationId: 'invocation-1', approve: true });
+    await vault.confirmVaultParked({
+      invocationId: 'invocation-1',
+      approve: true,
+    });
     await vault.vaultDemoStatus();
     await vault.vaultDemoLoad('daily');
     await vault.vaultImportStage({

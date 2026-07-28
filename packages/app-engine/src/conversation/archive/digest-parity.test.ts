@@ -1,17 +1,18 @@
-import { tempDirSync } from '@centraid/test-kit/temp-dir';
+import { createHash } from 'node:crypto';
 // Digest parity (issue #438 decision 5): the numbers Insights reports must be
 // identical before archive (all live run_summary rows) and after archive+prune
 // (live rows + conversation_digest rollups), driven through the REAL
 // InsightsStore over the same journal handle. `recent` is live-only by design,
 // so this compares the aggregate surfaces the issue names: kpis, bySource,
 // byModel.
-
-import { createHash } from 'node:crypto';
 import path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
+
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { describe, expect, it } from 'vitest';
-import { makeJournalDbProvider, openJournalDb } from '../../stores/gateway-db.js';
+
 import { InsightsStore } from '../../insights/insights-store.js';
+import { makeJournalDbProvider, openJournalDb } from '../../stores/gateway-db.js';
 import { runConversationArchival } from './index.js';
 import type { BlobSink } from './types.js';
 
@@ -234,7 +235,13 @@ describe('digest parity with pre-archive rollups', () => {
     expect(r.segmentsWritten).toBeGreaterThan(0);
     expect(r.turnsPruned).toBeGreaterThan(0);
     // Confirm raw archived rows are actually gone (Insights now leans on digests).
-    expect((journal.prepare(`SELECT COUNT(*) AS n FROM turns`).get() as { n: number }).n).toBe(2); // the two live heads
+    expect(
+      (
+        journal.prepare(`SELECT COUNT(*) AS n FROM turns`).get() as {
+          n: number;
+        }
+      ).n,
+    ).toBe(2); // the two live heads
 
     const after = insights.summary(opts);
 
@@ -247,11 +254,11 @@ describe('digest parity with pre-archive rollups', () => {
 
     const norm = <T extends { key?: string; model?: string }>(rows: T[]): T[] =>
       [...rows].sort((a, b) => `${a.key ?? a.model}`.localeCompare(`${b.key ?? b.model}`));
-    expect(norm(after.bySource)).toEqual(norm(before.bySource));
-    expect(norm(after.byModel)).toEqual(norm(before.byModel));
+    expect(norm(after.bySource)).toStrictEqual(norm(before.bySource));
+    expect(norm(after.byModel)).toStrictEqual(norm(before.byModel));
     const normEffort = <T extends { effort: string }>(rows: T[]): T[] =>
       [...rows].sort((a, b) => a.effort.localeCompare(b.effort));
-    expect(normEffort(after.byEffort)).toEqual(normEffort(before.byEffort));
+    expect(normEffort(after.byEffort)).toStrictEqual(normEffort(before.byEffort));
     journal.close();
   });
 });

@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+
 import { replicationConcurrencyFromEnv } from './cache.js';
 
 describe('cache-profile', () => {

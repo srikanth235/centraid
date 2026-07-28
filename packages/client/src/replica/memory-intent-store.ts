@@ -56,7 +56,12 @@ export class MemoryIntentStore implements IntentRecordStore {
     if (!allowed.includes(existing.state)) {
       throw new ReplicaProtocolError(`Intent ${intentId} cannot transition from ${existing.state}`);
     }
-    const updated = { ...existing, ...clone(patch), intentId, createdOrder: existing.createdOrder };
+    const updated = {
+      ...existing,
+      ...clone(patch),
+      intentId,
+      createdOrder: existing.createdOrder,
+    };
     this.#records.set(intentId, updated);
     return clone(updated);
   }
@@ -71,7 +76,12 @@ export class MemoryIntentStore implements IntentRecordStore {
     if (!allowed.includes(existing.state)) {
       throw new ReplicaProtocolError(`Intent ${intentId} cannot settle from ${existing.state}`);
     }
-    const settled = { ...existing, ...clone(patch), intentId, createdOrder: existing.createdOrder };
+    const settled = {
+      ...existing,
+      ...clone(patch),
+      intentId,
+      createdOrder: existing.createdOrder,
+    };
     this.#records.delete(intentId);
     return clone(settled);
   }

@@ -1,4 +1,5 @@
 import { type JSX, useMemo } from 'react';
+
 import SettingsConnectionsScreen from '../../screens/SettingsConnectionsScreen.js';
 import { useShellActions } from '../actions.js';
 import PageScroll from '../PageScroll.js';

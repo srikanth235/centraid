@@ -53,6 +53,8 @@
 // keep each module under the repo file-size limit.
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
+
+import { provisionPendingWebhooksInFiles } from '@centraid/automation';
 import {
   AppScaffoldError,
   cloneTemplateFiles,
@@ -64,8 +66,15 @@ import {
   type ScaffoldAppOpts,
   type ScaffoldFile,
 } from '@centraid/blueprints';
-import { provisionPendingWebhooksInFiles } from '@centraid/automation';
-import { readFileMap, readJson, sendJson } from './route-helpers.js';
+
+import {
+  defaultSessionId,
+  prepareLifecycleSession,
+  sendLifecycleError,
+  stageAndMaybePublish,
+  webhookUrl,
+  type LifecycleRouteOptions,
+} from '../lifecycle/lifecycle-shared.js';
 import {
   handleAutomationCreate,
   handleAutomationCompile,
@@ -76,14 +85,7 @@ import {
   handleAutomationUpdate,
   handleEnrichmentToggle,
 } from './lifecycle-automation-routes.js';
-import {
-  defaultSessionId,
-  prepareLifecycleSession,
-  sendLifecycleError,
-  stageAndMaybePublish,
-  webhookUrl,
-  type LifecycleRouteOptions,
-} from '../lifecycle/lifecycle-shared.js';
+import { readFileMap, readJson, sendJson } from './route-helpers.js';
 
 export type { LifecycleRouteOptions } from '../lifecycle/lifecycle-shared.js';
 
@@ -158,7 +160,11 @@ async function handleCreate(
 ): Promise<boolean> {
   const body = await readJson(req);
   const id = typeof body.id === 'string' ? body.id : '';
-  if (!id) return sendJson(res, 400, { error: 'bad_request', message: 'create needs { id }' });
+  if (!id)
+    return sendJson(res, 400, {
+      error: 'bad_request',
+      message: 'create needs { id }',
+    });
   const name = typeof body.name === 'string' ? body.name : undefined;
   const version = typeof body.version === 'string' ? body.version : undefined;
   // Tile identity (issue #263) — pass-through strings from the renderer's
@@ -221,7 +227,10 @@ async function handleClone(
   const body = await readJson(req);
   const templateId = typeof body.templateId === 'string' ? body.templateId : '';
   if (!templateId) {
-    return sendJson(res, 400, { error: 'bad_request', message: 'clone needs { templateId }' });
+    return sendJson(res, 400, {
+      error: 'bad_request',
+      message: 'clone needs { templateId }',
+    });
   }
   const publish = body.publish === true;
 
@@ -316,7 +325,10 @@ async function handleInstall(
   const body = await readJson(req);
   const templateId = typeof body.templateId === 'string' ? body.templateId : '';
   if (!templateId) {
-    return sendJson(res, 400, { error: 'bad_request', message: 'install needs { templateId }' });
+    return sendJson(res, 400, {
+      error: 'bad_request',
+      message: 'install needs { templateId }',
+    });
   }
   if (!opts.installBundledApp) {
     return sendJson(res, 400, {
@@ -342,7 +354,11 @@ async function handleMeta(
   res: ServerResponse,
   appId: string,
 ): Promise<boolean> {
-  if (!appId) return sendJson(res, 400, { error: 'bad_request', message: 'meta needs an app id' });
+  if (!appId)
+    return sendJson(res, 400, {
+      error: 'bad_request',
+      message: 'meta needs an app id',
+    });
   const body = await readJson(req);
   const name = typeof body.name === 'string' ? body.name : undefined;
   const description = typeof body.description === 'string' ? body.description : undefined;

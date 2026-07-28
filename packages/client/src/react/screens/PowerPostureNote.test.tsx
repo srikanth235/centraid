@@ -1,6 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it } from 'vitest';
+
 import PowerPostureNote from './PowerPostureNote.js';
 import type { PowerContextState } from './resource-summary.js';
 
@@ -81,7 +82,12 @@ describe('screens/PowerPostureNote', () => {
   describe('PowerPostureNote — no battery (mains / server)', () => {
     it('renders the server CPU-steal fact when steal ≥ 5%', async () => {
       const el = await mount(
-        base({ kind: 'server', battery: null, stealPercent: 12, source: 'os-probe' }),
+        base({
+          kind: 'server',
+          battery: null,
+          stealPercent: 12,
+          source: 'os-probe',
+        }),
       );
       const note = el.querySelector('[data-testid="power-posture"]');
       expect(note?.textContent).toContain('Shared host: 12% CPU steal observed');
@@ -95,7 +101,12 @@ describe('screens/PowerPostureNote', () => {
 
     it('never renders battery/thermal chrome on a mains host, even when deferring', async () => {
       const el = await mount(
-        base({ kind: 'mains', battery: null, deferringBackgroundWork: true, reason: 'thermal' }),
+        base({
+          kind: 'mains',
+          battery: null,
+          deferringBackgroundWork: true,
+          reason: 'thermal',
+        }),
       );
       expect(el.querySelector('[data-testid="power-posture"]')).toBeNull();
       expect(el.textContent?.toLowerCase()).not.toContain('battery');

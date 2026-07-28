@@ -4,10 +4,12 @@
 // them. Local `completing` state gives the circle an optimistic fill the
 // instant it's clicked, reverting if the write didn't execute.
 import { useState } from 'react';
+
 import { flagLevel, fmtDay, fmtEffort, highlightSegments, todayStr } from '../format.ts';
+import { I } from '../icons.ts';
 import type { Task } from '../types.ts';
 import { Icon, Snippet } from './Shared.tsx';
-import { I } from '../icons.ts';
+
 import styles from './Row.module.css';
 import shared from './shared.module.css';
 

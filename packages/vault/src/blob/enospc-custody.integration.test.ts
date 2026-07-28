@@ -1,3 +1,6 @@
+import { existsSync, readdirSync } from 'node:fs';
+import path from 'node:path';
+
 /**
  * Always-on fault-injected ENOSPC custody proof (#496 P4 / B1).
  *
@@ -7,9 +10,8 @@
  * in `disk-full.integration.test.ts` behind CENTRAID_DISKFULL_E2E=1 (darwin).
  */
 import { tempDirSync } from '@centraid/test-kit/temp-dir';
-import { existsSync, readdirSync } from 'node:fs';
-import path from 'node:path';
 import { afterEach, describe, expect, test, vi } from 'vitest';
+
 import { VaultDiskFullError } from '../errors.js';
 import { FsBlobStore } from './local.js';
 
@@ -27,7 +29,9 @@ vi.mock(import('node:fs'), async (importOriginal) => {
     // this one property rather than widen the whole module.
     writeSync: ((...args: Parameters<typeof actual.writeSync>) => {
       if (writeSyncShouldFail) {
-        throw Object.assign(new Error('no space left on device'), { code: 'ENOSPC' });
+        throw Object.assign(new Error('no space left on device'), {
+          code: 'ENOSPC',
+        });
       }
       return actual.writeSync(...args);
     }) as typeof actual.writeSync,

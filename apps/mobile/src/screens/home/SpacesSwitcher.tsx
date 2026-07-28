@@ -16,6 +16,7 @@
 // accents, a prominent active card. Mechanics mirror the Space/Photos drawers (a
 // transparent Modal, an Animated slide, a fading scrim that closes on tap).
 
+import { icons as ICON_SET, type IconName } from '@centraid/design-tokens';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
@@ -29,7 +30,6 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { icons as ICON_SET, type IconName } from '@centraid/design-tokens';
 
 import Grabber from '../../kit/components/Grabber';
 import Icon from '../../kit/components/Icon';
@@ -57,7 +57,12 @@ export interface SpacesSwitcherProps {
 }
 
 /** A saved Space, or a vault the active gateway offers that isn't saved yet. */
-type AddableVault = { vaultId: string; name: string; color?: string; icon?: string };
+type AddableVault = {
+  vaultId: string;
+  name: string;
+  color?: string;
+  icon?: string;
+};
 
 function iconOf(value: string | undefined): IconName {
   return value !== undefined && value in ICON_SET ? (value as IconName) : DEFAULT_ICON;
@@ -138,7 +143,12 @@ export default function SpacesSwitcher({
         setAddable(
           vaults
             .filter((v: VaultRow) => !saved.has(v.vaultId))
-            .map((v) => ({ vaultId: v.vaultId, name: v.name, color: v.color, icon: v.icon })),
+            .map((v) => ({
+              vaultId: v.vaultId,
+              name: v.name,
+              color: v.color,
+              icon: v.icon,
+            })),
         );
       })
       .catch(() => {
@@ -230,7 +240,10 @@ export default function SpacesSwitcher({
         <Animated.View
           style={[
             styles.sheet,
-            { paddingBottom: insets.bottom + 14, transform: [{ translateY: slide }] },
+            {
+              paddingBottom: insets.bottom + 14,
+              transform: [{ translateY: slide }],
+            },
           ]}
         >
           <Grabber />
@@ -459,7 +472,12 @@ const makeStyles = (colors: ThemeColors) =>
       paddingHorizontal: 8,
       paddingVertical: 3,
     },
-    activePillText: { color: '#fff', fontFamily: family.monoBold, fontSize: 9, letterSpacing: 1 },
+    activePillText: {
+      color: '#fff',
+      fontFamily: family.monoBold,
+      fontSize: 9,
+      letterSpacing: 1,
+    },
     activeSub: { ...t('small'), color: colors.ink3, marginTop: 3 },
     addRow: { marginBottom: 8 },
     dot: {
@@ -477,7 +495,12 @@ const makeStyles = (colors: ThemeColors) =>
       justifyContent: 'center',
       width: 52,
     },
-    empty: { ...t('body'), color: colors.ink3, marginBottom: 20, paddingVertical: 8 },
+    empty: {
+      ...t('body'),
+      color: colors.ink3,
+      marginBottom: 20,
+      paddingVertical: 8,
+    },
     eyebrow: {
       color: colors.ink3,
       fontFamily: family.monoMedium,

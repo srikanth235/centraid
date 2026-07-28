@@ -96,45 +96,48 @@ export class LiveQuery<T> implements PromiseLike<T> {
   private async run(): Promise<void> {
     if (this.#running || this.#disposed) return;
     this.#running = true;
-    try {
-      while (this.#dirty && !this.#disposed) {
-        this.#dirty = false;
-        const abort = new AbortController();
-        this.#abort = abort;
-        try {
-          const execution = await this.runner(abort.signal);
-          if (abort.signal.aborted || this.#disposed) return;
-          this.#dependencies = new Set(execution.dependencies.map(keyOf));
-          this.#current = execution.value;
-          this.#hasCurrent = true;
-          if (!this.#firstSettled) {
-            this.#firstSettled = true;
-            this.#resolveFirst(execution.value);
-          }
-          for (const observer of this.#observers) {
-            try {
-              observer.next(execution.value);
-            } catch {
-              /* One subscriber cannot prevent delivery to the others. */
-            }
-          }
-        } catch (error) {
-          if (abort.signal.aborted || this.#disposed) return;
-          if (!this.#firstSettled) {
-            this.#firstSettled = true;
-            this.#rejectFirst(error);
-          }
-          for (const observer of this.#observers) {
-            try {
-              observer.error?.(error);
-            } catch {
-              /* One subscriber cannot prevent delivery to the others. */
-            }
-          }
-        } finally {
-          if (this.#abort === abort) this.#abort = undefined;
+    const runDirtyExecution = async (): Promise<void> => {
+      if (!this.#dirty || this.#disposed) return;
+      this.#dirty = false;
+      const abort = new AbortController();
+      this.#abort = abort;
+      try {
+        const execution = await this.runner(abort.signal);
+        if (abort.signal.aborted || this.#disposed) return;
+        this.#dependencies = new Set(execution.dependencies.map(keyOf));
+        this.#current = execution.value;
+        this.#hasCurrent = true;
+        if (!this.#firstSettled) {
+          this.#firstSettled = true;
+          this.#resolveFirst(execution.value);
         }
+        for (const observer of this.#observers) {
+          try {
+            observer.next(execution.value);
+          } catch {
+            /* One subscriber cannot prevent delivery to the others. */
+          }
+        }
+      } catch (error) {
+        if (abort.signal.aborted || this.#disposed) return;
+        if (!this.#firstSettled) {
+          this.#firstSettled = true;
+          this.#rejectFirst(error);
+        }
+        for (const observer of this.#observers) {
+          try {
+            observer.error?.(error);
+          } catch {
+            /* One subscriber cannot prevent delivery to the others. */
+          }
+        }
+      } finally {
+        if (this.#abort === abort) this.#abort = undefined;
       }
+      return runDirtyExecution();
+    };
+    try {
+      return await runDirtyExecution();
     } finally {
       this.#running = false;
       if (this.#dirty && !this.#disposed) void this.run();

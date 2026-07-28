@@ -6,8 +6,9 @@
 
 import { randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import path from 'node:path';
+
 import {
   parseRecoveryKit,
   recoveryKitFingerprint,
@@ -18,9 +19,10 @@ import {
 } from '@centraid/backup';
 import { ROUTES } from '@centraid/protocol';
 import { KeyStore, uuidv7 } from '@centraid/vault';
+
 import { recover, type RecoverReport } from '../backup/recover.js';
 import type { RecoveryKitStateStore } from '../backup/recovery-kit-state.js';
-import type { DeviceAccess } from '../serve/vault-context.js';
+import type { RouteHandler } from '../serve/build-gateway.js';
 import type { EnrollmentStore } from '../serve/enrollment-store.js';
 import {
   encodePairingTicket,
@@ -28,8 +30,8 @@ import {
   parseFoundingTicket,
   type PairingTicketStore,
 } from '../serve/pairing-store.js';
+import type { DeviceAccess } from '../serve/vault-context.js';
 import type { VaultRegistry } from '../serve/vault-registry.js';
-import type { RouteHandler } from '../serve/build-gateway.js';
 import { readJson, sendJson } from './route-helpers.js';
 
 export interface FoundingRouteDeps {
@@ -110,7 +112,10 @@ export function makeFoundingRouteHandler(deps: FoundingRouteDeps): RouteHandler 
       return false;
     }
     if ((req.method ?? 'GET') !== 'POST') {
-      return sendJson(res, 405, { error: 'method_not_allowed', message: 'POST only' });
+      return sendJson(res, 405, {
+        error: 'method_not_allowed',
+        message: 'POST only',
+      });
     }
 
     if (url.pathname === ROUTES.gatewayFoundingTicket) {
@@ -203,7 +208,11 @@ export function makeFoundingRouteHandler(deps: FoundingRouteDeps): RouteHandler 
           message: 'the selected recovery kit is not the one this gateway just created',
         });
       }
-      return sendJson(res, 200, { ok: true, vaultId: admin.vaultId, fingerprint });
+      return sendJson(res, 200, {
+        ok: true,
+        vaultId: admin.vaultId,
+        fingerprint,
+      });
     }
 
     if (!deps.vaults.isFresh()) {
@@ -228,7 +237,9 @@ export function makeFoundingRouteHandler(deps: FoundingRouteDeps): RouteHandler 
       const ticket = parseFoundingTicket(body.ticket);
       const reservation = ticket ? deps.tickets.reserveFounding(ticket.t, ticket.s) : undefined;
       if (!ticket || !reservation) {
-        return sendJson(res, 403, { error: 'invalid_or_expired_founding_ticket' });
+        return sendJson(res, 403, {
+          error: 'invalid_or_expired_founding_ticket',
+        });
       }
       let kit: RecoveryKitDocument;
       try {
@@ -255,14 +266,18 @@ export function makeFoundingRouteHandler(deps: FoundingRouteDeps): RouteHandler 
         deps.tickets.releaseFounding(reservation);
         return sendJson(res, 409, { error: 'founding_ticket_raced' });
       }
+      const password = body.password;
+      const apiKey = body.apiKey;
       const reports: RecoverReport[] = [];
       try {
-        for (const target of kit.targets) {
+        const recoverNext = async (index: number): Promise<void> => {
+          const target = kit.targets[index];
+          if (!target) return;
           reports.push(
             await recover({
               kitDocument: body.kit,
-              password: body.password,
-              apiKey: body.apiKey,
+              password,
+              apiKey,
               vaultId: target.vaultId,
               vaultRoot: deps.vaults.rootPath(),
               gatewayDatabase: deps.tickets.gatewayDatabase,
@@ -273,7 +288,9 @@ export function makeFoundingRouteHandler(deps: FoundingRouteDeps): RouteHandler 
               },
             }),
           );
-        }
+          return recoverNext(index + 1);
+        };
+        await recoverNext(0);
       } catch (error) {
         rollbackFoundingVaults(deps, reservation, pendingVaultIds);
         return sendJson(res, 400, {
@@ -326,7 +343,9 @@ export function makeFoundingRouteHandler(deps: FoundingRouteDeps): RouteHandler 
     if (!ticket) return sendJson(res, 403, { error: 'invalid_founding_ticket' });
     const reservation = deps.tickets.reserveFounding(ticket.t, ticket.s);
     if (!reservation) {
-      return sendJson(res, 403, { error: 'invalid_or_expired_founding_ticket' });
+      return sendJson(res, 403, {
+        error: 'invalid_or_expired_founding_ticket',
+      });
     }
 
     const vaultId = uuidv7();
@@ -371,7 +390,9 @@ export function makeFoundingRouteHandler(deps: FoundingRouteDeps): RouteHandler 
       )?.[0];
       if (!enrollment) {
         rollbackFoundingVaults(deps, reservation, [created.vaultId]);
-        return sendJson(res, 403, { error: 'invalid_or_expired_founding_ticket' });
+        return sendJson(res, 403, {
+          error: 'invalid_or_expired_founding_ticket',
+        });
       }
       return sendJson(res, 201, {
         ok: true,

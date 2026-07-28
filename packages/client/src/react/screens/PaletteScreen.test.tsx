@@ -1,12 +1,15 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
 import type { PaletteBridgeProps, PaletteGroupDTO } from '../screen-contracts.js';
 import PaletteScreen from './PaletteScreen.js';
 
-const buildRun = vi.fn();
-const browseRun = vi.fn();
-const appRun = vi.fn();
+type PaletteRun = NonNullable<PaletteGroupDTO['items'][number]['run']>;
+
+const buildRun = vi.fn<PaletteRun>();
+const browseRun = vi.fn<PaletteRun>();
+const appRun = vi.fn<PaletteRun>();
 
 function groupsFor(query: string): PaletteGroupDTO[] {
   const build: PaletteGroupDTO = {
@@ -20,7 +23,12 @@ function groupsFor(query: string): PaletteGroupDTO[] {
         kbd: '↵',
         run: buildRun,
       },
-      { label: 'Browse templates', iconHtml: '', variant: 'action', run: browseRun },
+      {
+        label: 'Browse templates',
+        iconHtml: '',
+        variant: 'action',
+        run: browseRun,
+      },
     ],
   };
   const apps: PaletteGroupDTO = {
@@ -41,7 +49,11 @@ function groupsFor(query: string): PaletteGroupDTO[] {
 }
 
 function makeProps(over: Partial<PaletteBridgeProps> = {}): PaletteBridgeProps {
-  return { buildGroups: vi.fn(groupsFor), onClose: vi.fn(), ...over };
+  return {
+    buildGroups: vi.fn<PaletteBridgeProps['buildGroups']>(groupsFor),
+    onClose: vi.fn<PaletteBridgeProps['onClose']>(),
+    ...over,
+  };
 }
 
 let root: Root | null = null;

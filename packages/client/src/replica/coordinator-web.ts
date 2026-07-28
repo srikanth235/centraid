@@ -49,7 +49,10 @@ export async function createReplicaCoordinator(
       await options.changeFeed.setShapeIds(shapeIds);
       await options.changeFeed.resume(status.cursor);
     }
-    return { replica: new ReplicaCoordinator(client, intents, options), status };
+    return {
+      replica: new ReplicaCoordinator(client, intents, options),
+      status,
+    };
   } catch (error) {
     await client.close().catch(() => undefined);
     throw error;

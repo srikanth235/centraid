@@ -6,6 +6,7 @@
 // the agent content primitive only ever spells derivatives.
 
 import { assert, beforeEach, describe, expect, test } from 'vitest';
+
 import {
   bootstrapVault,
   createGrant,
@@ -13,17 +14,17 @@ import {
   enrollDevice,
   type BootstrapResult,
 } from '../bootstrap.js';
-import { openVaultDb, type VaultDb } from '../db.js';
-import { createGateway, Gateway } from '../gateway/gateway.js';
 import { registerDocumentCommands } from '../commands/documents.js';
 import { registerEnrichCommands } from '../commands/enrich.js';
 import { registerMediaCommands } from '../commands/media.js';
 import { registerSyncCommands } from '../commands/sync.js';
+import { openVaultDb, type VaultDb } from '../db.js';
+import { createGateway, Gateway } from '../gateway/gateway.js';
 import type { Credential } from '../gateway/types.js';
 import { readEnrichSettings, updateEnrichSettings } from '../host.js';
 import { VISION_SCHEME_URI } from '../schema/enrich.js';
-import { hexHamming, encodeVector, decodeVector, cosine, scanEmbeddings } from './similarity.js';
 import { leaseNextEnrichmentRequest, queueDeviceEnrichmentRequest } from './leases.js';
+import { hexHamming, encodeVector, decodeVector, cosine, scanEmbeddings } from './similarity.js';
 
 let db: VaultDb;
 let gw: Gateway;
@@ -46,8 +47,15 @@ describe('enrich', () => {
     registerEnrichCommands(gw);
     registerMediaCommands(gw);
     registerSyncCommands(gw);
-    owner = { kind: 'device', deviceId: boot.deviceId, deviceKey: boot.deviceKey };
-    const enrolled = enrollAgent(db, { name: 'photo-captioner', modelRef: 'tier:fast' });
+    owner = {
+      kind: 'device',
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+    };
+    const enrolled = enrollAgent(db, {
+      name: 'photo-captioner',
+      modelRef: 'tier:fast',
+    });
     agentPartyId = enrolled.partyId;
     const device = enrollDevice(db, boot.ownerPartyId, 'agent-host');
     createGrant(db, {
@@ -80,7 +88,10 @@ describe('enrich', () => {
 
   /** Stage a pixel + claim it as a photo; returns asset + content ids. */
   function addPhoto(phash?: string): { assetId: string; contentId: string } {
-    const staged = gw.stageBlob(owner, { bytes: PNG_BYTES, filename: 'pixel.png' });
+    const staged = gw.stageBlob(owner, {
+      bytes: PNG_BYTES,
+      filename: 'pixel.png',
+    });
     const out = output<{ asset_id: string; content_id: string }>(
       invoke(owner, 'media.add_asset', {
         staged_sha: staged.sha256,
@@ -198,7 +209,10 @@ describe('enrich', () => {
       const upgraded = [
         {
           ...rows[0]!,
-          payload: { ...rows[0]!.payload, body: 'Kids at the beach with a red bucket' },
+          payload: {
+            ...rows[0]!.payload,
+            body: 'Kids at the beach with a red bucket',
+          },
         },
       ];
       invoke(agent, 'sync.stage_rows', {
@@ -295,7 +309,10 @@ describe('enrich', () => {
       });
       const after = db.vault
         .prepare('SELECT confidence, tagged_by_party_id FROM core_tag WHERE target_id = ?')
-        .get(assetId) as { confidence: number | null; tagged_by_party_id: string };
+        .get(assetId) as {
+        confidence: number | null;
+        tagged_by_party_id: string;
+      };
       expect(after.tagged_by_party_id).toBe(boot.ownerPartyId);
       expect(after.confidence).toBeNull();
     });
@@ -372,7 +389,9 @@ describe('enrich', () => {
       expect(JSON.parse(after.bbox_json).x).toBeCloseTo(0.1);
       expect(after.confidence).toBeCloseTo(0.8);
 
-      const rejected = invoke(owner, 'media.reject_face', { region_id: region.region_id });
+      const rejected = invoke(owner, 'media.reject_face', {
+        region_id: region.region_id,
+      });
       expect(rejected.status).toBe('executed');
       expect(
         (db.vault.prepare('SELECT count(*) AS n FROM media_face_region').get() as { n: number }).n,
@@ -403,7 +422,9 @@ describe('enrich', () => {
       expect(
         (db.vault.prepare('SELECT count(*) AS n FROM core_collection').get() as { n: number }).n,
       ).toBe(0);
-      const published = invoke(owner, 'sync.publish_batch', { batch_id: batchId });
+      const published = invoke(owner, 'sync.publish_batch', {
+        batch_id: batchId,
+      });
       expect(published.status).toBe('executed');
       const entries = db.vault
         .prepare(
@@ -425,7 +446,10 @@ describe('enrich', () => {
         filename: 'scan_001.txt',
       });
       const doc = output<{ document_id: string; content_id: string }>(
-        invoke(owner, 'core.add_document', { staged_sha: staged.sha256, title: 'scan_001' }),
+        invoke(owner, 'core.add_document', {
+          staged_sha: staged.sha256,
+          title: 'scan_001',
+        }),
       );
       const stagedBatch = invoke(owner, 'sync.stage_rows', {
         kind: 'enrichment.doctype',
@@ -448,9 +472,11 @@ describe('enrich', () => {
         ],
       });
       const batchId = output<{ batch_id: string }>(stagedBatch).batch_id;
-      const published = output<{ created: number; updated: number; failed: number }>(
-        invoke(owner, 'sync.publish_batch', { batch_id: batchId }),
-      );
+      const published = output<{
+        created: number;
+        updated: number;
+        failed: number;
+      }>(invoke(owner, 'sync.publish_batch', { batch_id: batchId }));
       expect(published.updated).toBe(1);
       expect(published.failed).toBe(1); // the missing content item refused to create
       // never mints a document: the wrapper row count doesn't grow
@@ -480,9 +506,15 @@ describe('enrich', () => {
       // A content item that no core_document wraps yet (e.g. a media asset,
       // or ingest that hasn't gone through core.add_document) keeps the
       // original content-item-scoped filing behavior.
-      const staged = gw.stageBlob(owner, { bytes: PNG_BYTES, filename: 'loose.png' });
+      const staged = gw.stageBlob(owner, {
+        bytes: PNG_BYTES,
+        filename: 'loose.png',
+      });
       const asset = output<{ content_id: string }>(
-        invoke(owner, 'media.add_asset', { staged_sha: staged.sha256, kind: 'photo' }),
+        invoke(owner, 'media.add_asset', {
+          staged_sha: staged.sha256,
+          kind: 'photo',
+        }),
       );
       const stagedBatch = invoke(owner, 'sync.stage_rows', {
         kind: 'enrichment.doctype',
@@ -491,7 +523,11 @@ describe('enrich', () => {
           {
             entity_type: 'core.content_item',
             external_id: `${asset.content_id}:filing`,
-            payload: { content_id: asset.content_id, title: 'Loose scan', folder: 'Inbox' },
+            payload: {
+              content_id: asset.content_id,
+              title: 'Loose scan',
+              folder: 'Inbox',
+            },
           },
         ],
       });
@@ -521,9 +557,15 @@ describe('enrich', () => {
 
   describe('core.set_extracted_text', () => {
     test('writes the text derivative and the OWNING document becomes searchable', () => {
-      const staged = gw.stageBlob(owner, { bytes: PNG_BYTES, filename: 'scanned.png' });
+      const staged = gw.stageBlob(owner, {
+        bytes: PNG_BYTES,
+        filename: 'scanned.png',
+      });
       const doc = output<{ document_id: string; content_id: string }>(
-        invoke(owner, 'core.add_document', { staged_sha: staged.sha256, title: 'scan' }),
+        invoke(owner, 'core.add_document', {
+          staged_sha: staged.sha256,
+          title: 'scan',
+        }),
       );
       const set = invoke(agent, 'core.set_extracted_text', {
         content_id: doc.content_id,
@@ -552,7 +594,10 @@ describe('enrich', () => {
 
   describe('agent content access (the #296 §7 seam)', () => {
     test('text and thumb variants serve size-bounded; originals are structurally unreachable; every fetch receipts', async () => {
-      const original = gw.stageBlob(owner, { bytes: PNG_BYTES, filename: 'photo.png' });
+      const original = gw.stageBlob(owner, {
+        bytes: PNG_BYTES,
+        filename: 'photo.png',
+      });
       gw.stageBlob(owner, {
         bytes: Buffer.from('tiny-thumb-bytes'),
         mediaType: 'image/jpeg',
@@ -574,8 +619,11 @@ describe('enrich', () => {
 
       // Originals are not a spelling this surface has.
       await expect(
-        gw.contentForAgent(agent, { contentId: asset.content_id, variant: 'original' }),
-      ).rejects.toThrow(/derivatives egress, never originals/);
+        gw.contentForAgent(agent, {
+          contentId: asset.content_id,
+          variant: 'original',
+        }),
+      ).rejects.toThrow(/derivatives egress, never originals/u);
 
       // The text variant reads the derivative row.
       invoke(agent, 'core.set_extracted_text', {
@@ -634,7 +682,9 @@ describe('enrich', () => {
       expect(
         (db.vault.prepare('SELECT count(*) AS n FROM enrich_embedding').get() as { n: number }).n,
       ).toBe(1); // upsert, not append
-      const hits = scanEmbeddings(db.vault, 'stub-embedder-v1', [1, 0, 0], { limit: 5 });
+      const hits = scanEmbeddings(db.vault, 'stub-embedder-v1', [1, 0, 0], {
+        limit: 5,
+      });
       expect(hits[0]!.entityId).toBe(assetId);
       expect(hits[0]!.score).toBeGreaterThan(0.9);
       expect(
@@ -725,13 +775,22 @@ describe('enrich', () => {
 
   describe('enrich settings', () => {
     test('default is local; updates persist; junk refused', () => {
-      expect(readEnrichSettings(db)).toStrictEqual({ photos: 'local', docs: 'local' });
+      expect(readEnrichSettings(db)).toStrictEqual({
+        photos: 'local',
+        docs: 'local',
+      });
       updateEnrichSettings(db, { photos: 'model' });
-      expect(readEnrichSettings(db)).toStrictEqual({ photos: 'model', docs: 'local' });
+      expect(readEnrichSettings(db)).toStrictEqual({
+        photos: 'model',
+        docs: 'local',
+      });
       updateEnrichSettings(db, { photos: null, docs: 'off' });
-      expect(readEnrichSettings(db)).toStrictEqual({ photos: 'local', docs: 'off' });
+      expect(readEnrichSettings(db)).toStrictEqual({
+        photos: 'local',
+        docs: 'off',
+      });
       expect(() => updateEnrichSettings(db, { docs: 'sometimes' as never })).toThrow(
-        /must be one of/,
+        /must be one of/u,
       );
     });
 
@@ -778,7 +837,11 @@ describe('enrich', () => {
           {
             entity_type: 'knowledge.annotation',
             external_id: `${assetId}:warmup`,
-            payload: { target_type: 'media.media_asset', target_id: assetId, body: 'warmup' },
+            payload: {
+              target_type: 'media.media_asset',
+              target_id: assetId,
+              body: 'warmup',
+            },
           },
         ],
       });

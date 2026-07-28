@@ -1,11 +1,13 @@
 import { useState, type JSX } from 'react';
-import Icon from '../ui/Icon.js';
-import { cx } from '../ui/cx.js';
+
 import { formatBytes } from '../../format.js';
-import { formatDuration } from '../shell/routes/gatewayData.js';
-import buttonCss from '../ui/Button.module.css';
-import controlsCss from '../styles/controls.module.css';
 import type { StorageMetrics } from '../../storage-metrics.js';
+import { formatDuration } from '../shell/routes/gatewayData.js';
+import { cx } from '../ui/cx.js';
+import Icon from '../ui/Icon.js';
+
+import controlsCss from '../styles/controls.module.css';
+import buttonCss from '../ui/Button.module.css';
 import styles from './BackupCard.module.css';
 
 // The five-metric health surface (issue #436 §6) — the ONE story the Backups

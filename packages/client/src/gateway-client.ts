@@ -23,13 +23,19 @@
  * import everything from `./gateway-client.js`.
  */
 
-import { appSessionUrl, auth, authHeaders, doFetch, enc, readJson } from './gateway-client-core.js';
-import { consumeSse, type TurnStreamEvent } from '@centraid/blueprints/kit/turn-stream.js';
+import {
+  consumeSse,
+  consumeSseFrames,
+  frameData,
+  type TurnStreamEvent,
+} from '@centraid/blueprints/kit/turn-stream.js';
 import {
   isGatewayCapabilities,
   type GatewayCapabilities,
   type GatewayInfo,
 } from '@centraid/protocol';
+
+import { appSessionUrl, auth, authHeaders, doFetch, enc, readJson } from './gateway-client-core.js';
 
 export * from './gateway-client-core.js';
 export * from './gateway-client-automation-compile.js';
@@ -173,7 +179,9 @@ export interface TemplateMetaEntry {
   iconKey: string;
   version: string;
   kind?: 'app' | 'automation';
-  triggerKind?: 'cron' | 'webhook';
+  /** Automation trigger presentation mirrors the bundled app metadata. */
+  triggerKind?: 'cron' | 'webhook' | 'data' | 'condition';
+  triggerLabel?: string;
   /**
    * Whether this bundled app is already installed in the addressed vault
    * (issue #434). Present only when the gateway resolves per-vault install
@@ -511,31 +519,20 @@ export async function streamAutomationTurn(
     if (!res.ok || !res.body) {
       throw new Error(`run events stream failed (HTTP ${res.status})`);
     }
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buf = '';
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buf += decoder.decode(value, { stream: true });
-      let sep: number;
-      while ((sep = buf.indexOf('\n\n')) >= 0) {
-        const frame = buf.slice(0, sep);
-        buf = buf.slice(sep + 2);
-        const data = frame
-          .split('\n')
-          .filter((l) => l.startsWith('data:'))
-          .map((l) => l.slice('data:'.length).trimStart())
-          .join('\n');
-        if (!data) continue;
+    await consumeSseFrames(
+      res.body,
+      (frame) => {
+        const data = frameData(frame);
+        if (!data) return;
         try {
           const evt = JSON.parse(data) as { type?: string };
           if (evt && typeof evt.type === 'string') onEvent(evt as AutomationTurnStreamEvent);
         } catch {
           /* skip a malformed frame rather than abort the stream */
         }
-      }
-    }
+      },
+      { signal },
+    );
   } catch (err) {
     // A caller-initiated abort is a normal teardown, not a failure.
     if (signal.aborted) return;
@@ -557,7 +554,12 @@ export async function streamAutomationConversationTurn(
   /** One approved provider, or every provider approved so far this attempt (#567). */
   providerConsent?: string | string[],
   turn?: {
-    attachments?: Array<{ hash: string; mime: string; sizeBytes: number; filename?: string }>;
+    attachments?: Array<{
+      hash: string;
+      mime: string;
+      sizeBytes: number;
+      filename?: string;
+    }>;
     runnerKind?: string;
     model?: string;
     thinking?: string;

@@ -1,10 +1,12 @@
-import { describe, expect, it } from 'vitest';
-import path from 'node:path';
 import { promises as fs } from 'node:fs';
+import path from 'node:path';
+
 import { tempDir } from '@centraid/test-kit/temp-dir';
-import { compileHydrationPlan, hydrationMessagesFromLedger } from './hydration.js';
-import { ConversationHistoryStore } from './history.js';
+import { describe, expect, it } from 'vitest';
+
 import { makeJournalDbProvider } from '../stores/gateway-db.js';
+import { ConversationHistoryStore } from './history.js';
+import { compileHydrationPlan, hydrationMessagesFromLedger } from './hydration.js';
 
 /** A real history store on a fresh temp vault — the actual hydration producer. */
 async function newHistory(): Promise<ConversationHistoryStore> {
@@ -23,11 +25,17 @@ async function newHistory(): Promise<ConversationHistoryStore> {
   }));
 }
 
-describe('compileHydrationPlan', () => {
+describe(compileHydrationPlan, () => {
   it('keeps prose, summarizes tool calls, and drops tool outputs', () => {
     const plan = compileHydrationPlan(
       [
-        { payload: { kind: 'user', text: 'Find the note', attachments: [{ filename: 'a.png' }] } },
+        {
+          payload: {
+            kind: 'user',
+            text: 'Find the note',
+            attachments: [{ filename: 'a.png' }],
+          },
+        },
         {
           payload: {
             kind: 'tool',
@@ -90,7 +98,10 @@ describe('compileHydrationPlan', () => {
       { payload: { kind: 'user', text: `u${index} ${'x'.repeat(800)}` } },
       { payload: { kind: 'ai', text: `a${index} ${'y'.repeat(800)}` } },
     ]).flat();
-    const plan = compileHydrationPlan(messages, { tokenBudget: 256, minTurns: 2 });
+    const plan = compileHydrationPlan(messages, {
+      tokenBudget: 256,
+      minTurns: 2,
+    });
     expect(plan.includedTurns).toBe(2);
     expect(plan.omittedTurns).toBe(3);
     expect(plan.prompt).toContain('u4');
@@ -165,6 +176,8 @@ describe('compileHydrationPlan', () => {
       () => [],
       0,
     );
-    expect(messages).toEqual([{ payload: { kind: 'ai', text: 'delta answer' }, createdAt: 4 }]);
+    expect(messages).toStrictEqual([
+      { payload: { kind: 'ai', text: 'delta answer' }, createdAt: 4 },
+    ]);
   });
 });

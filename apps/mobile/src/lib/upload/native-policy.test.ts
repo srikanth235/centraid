@@ -3,14 +3,22 @@
 // the pure decision logic runs under node.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
 import { nativeUploadPolicy } from './native-policy';
 
-const network = { getNetworkStateAsync: vi.fn() };
-const battery = { getBatteryStateAsync: vi.fn() };
-const store = { hydrate: vi.fn() };
+type NetworkStateTestSeam = () => Promise<{
+  isConnected: boolean;
+  type: 'WIFI' | 'CELLULAR' | 'OTHER';
+}>;
+type BatteryStateTestSeam = () => Promise<number>;
+type HydrateRulesTestSeam = (key: string, fallback: Rules) => Promise<Rules>;
 
-vi.mock(import('expo-network'), () => ({
-  getNetworkStateAsync: (...args: unknown[]) => network.getNetworkStateAsync(...args),
+const network = { getNetworkStateAsync: vi.fn<NetworkStateTestSeam>() };
+const battery = { getBatteryStateAsync: vi.fn<BatteryStateTestSeam>() };
+const store = { hydrate: vi.fn<HydrateRulesTestSeam>() };
+
+vi.mock(import('expo-network') as Promise<unknown>, () => ({
+  getNetworkStateAsync: () => network.getNetworkStateAsync(),
   // Real string-enum members (`NetworkStateType.WIFI`, …) are a distinct
   // literal type per member — a plain string like `'WIFI'` is never
   // assignable to an enum-typed property without going through the actual
@@ -23,7 +31,7 @@ vi.mock(import('expo-network'), () => ({
   } as unknown as typeof import('expo-network').NetworkStateType,
 }));
 vi.mock(import('expo-battery'), () => ({
-  getBatteryStateAsync: (...args: unknown[]) => battery.getBatteryStateAsync(...args),
+  getBatteryStateAsync: () => battery.getBatteryStateAsync(),
   BatteryState: {
     UNKNOWN: 0,
     UNPLUGGED: 1,
@@ -31,13 +39,13 @@ vi.mock(import('expo-battery'), () => ({
     FULL: 3,
   } as unknown as typeof import('expo-battery').BatteryState,
 }));
-vi.mock(import('../../storage'), () => ({
+vi.mock(import('../../storage') as Promise<unknown>, () => ({
   Store: {
     // Only `hydrate` is exercised here; `get`/`set` are implemented with the
     // real generic signatures (not asserted) since they're trivial to
     // satisfy honestly.
     get: <T>(_key: string, fallback: T): T => fallback,
-    hydrate: (...a: unknown[]) => store.hydrate(...a),
+    hydrate: (key: string, fallback: Rules) => store.hydrate(key, fallback),
     set: <T>(_key: string, _value: T): void => undefined,
   },
 }));
@@ -87,10 +95,16 @@ describe('native-policy', () => {
 
     it('with wifiOnly off, metered cellular needs allowMetered', async () => {
       await expect(
-        scenario({ rules: { wifiOnly: false, allowMetered: false }, type: 'CELLULAR' }),
+        scenario({
+          rules: { wifiOnly: false, allowMetered: false },
+          type: 'CELLULAR',
+        }),
       ).resolves.toBe(false);
       await expect(
-        scenario({ rules: { wifiOnly: false, allowMetered: true }, type: 'CELLULAR' }),
+        scenario({
+          rules: { wifiOnly: false, allowMetered: true },
+          type: 'CELLULAR',
+        }),
       ).resolves.toBe(true);
     });
 

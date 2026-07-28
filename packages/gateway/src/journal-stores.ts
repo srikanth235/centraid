@@ -19,6 +19,7 @@
 
 import path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
+
 import {
   ConversationStore,
   makeJournalDbProvider,

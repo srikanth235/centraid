@@ -8,31 +8,64 @@
 // consent-checked resolution; the bytes themselves live behind db.blobs.
 
 import type { DatabaseSync } from 'node:sqlite';
-import { nowIso, uuidv7 } from '../ids.js';
-import type { VaultDb } from '../db.js';
+
+import { refreshCustodyState, type ReconcileResult } from '../blob/custody.js';
+import { backfillPreviews } from '../blob/preview.js';
 import { resolveServableBlob, liveBlobShas, type BlobResolveOutcome } from '../blob/read.js';
-import { archivedSegmentShas } from '../journal-archive.js';
+import { stageBlobBytes, type StageBlobOptions, type StagedBlob } from '../blob/staging.js';
 import { conversationArchiveShas } from '../conversation-archive-roots.js';
+import type { VaultDb } from '../db.js';
+import { recomputeDuplicateClusters } from '../enrich/clusters.js';
 import {
   AGENT_CONTENT_VARIANTS,
   resolveAgentContent,
   type AgentContentOutcome,
   type AgentContentVariant,
 } from '../enrich/content.js';
-import { recomputeDuplicateClusters } from '../enrich/clusters.js';
 import {
   drainSatisfiedEnrichmentRequests,
   queueMissingDeviceEnrichmentBacklog,
   releaseExpiredEnrichmentLeases,
 } from '../enrich/leases.js';
-import { stageBlobBytes, type StageBlobOptions, type StagedBlob } from '../blob/staging.js';
-import { refreshCustodyState, type ReconcileResult } from '../blob/custody.js';
-import { backfillPreviews } from '../blob/preview.js';
+import { nowIso, uuidv7 } from '../ids.js';
+import { importIcsEvents, importVcardParties, type ImportResult } from '../ingest/import.js';
+import { PUBLISHERS } from '../ingest/publishers.js';
+import { stageFile, type StageFileOptions, type StageFileResult } from '../ingest/stage-file.js';
+import { discardBatch, publishBatch, type PublishResult } from '../ingest/staging.js';
+import { archivedSegmentShas } from '../journal-archive.js';
+import { notifyReplicaCommit } from '../replica/doorbell.js';
+import { transitionReplicaIntentOutcomeInTransaction } from '../replica/intents.js';
+import {
+  reclaimProvenOrdinaryInvocationCommitsInTransaction,
+  stampFinalizedInvocationCommitInTransaction,
+} from '../replica/invocation-commits.js';
+import {
+  deleteDurableParkedPayloadsForGrant,
+  listDurableParkedPayloads,
+  readDurableParkedDenial,
+  readDurableParkedPayload,
+  recordDurableParkedDenial,
+  saveDurableParkedPayload,
+  settleDurableParkedPayload,
+} from '../replica/parked.js';
+import type { ExtTableSpec } from '../schema/ext.js';
 import { ONTOLOGY_VERSION } from '../schema/migrate.js';
+import {
+  isSealedValue,
+  redactCommandInput,
+  sealAad,
+  SEALED_PLACEHOLDER,
+  sealedColumnsOf,
+  stampSealKeyFingerprint,
+  unsealValue,
+} from '../schema/sealed.js';
+import { SEED_DEMO_ACTIVITY } from '../schema/seed.js';
 import { resolveEntity } from '../schema/tables.js';
 import { resolveRefCards, type RefRequest, type ResolveResult } from './cards.js';
 import { evaluateConsent, type ConsentAllow } from './consent.js';
 import { lookupCommand } from './contract.js';
+import { backupVault, checkpointVault, type BackupResult } from './custody.js';
+import { demoStatus, purgeDemoRows, type DemoPurgeResult } from './demo.js';
 import {
   revokeGrantCascade,
   sweepLifecycle,
@@ -50,36 +83,6 @@ import {
   type RegisteredCommand,
 } from './execution.js';
 import {
-  isSealedValue,
-  redactCommandInput,
-  sealAad,
-  SEALED_PLACEHOLDER,
-  sealedColumnsOf,
-  stampSealKeyFingerprint,
-  unsealValue,
-} from '../schema/sealed.js';
-import {
-  applyFieldMask,
-  compileFilters,
-  compileOrderBy,
-  scalarPrimaryKeyColumn,
-} from './filters.js';
-import { authenticate } from './identity.js';
-import { searchEntity } from './search.js';
-import {
-  runReadOnlySql,
-  VAULT_SQL_DEFAULT_ROWS,
-  type VaultSqlRequest,
-  type VaultSqlResult,
-} from './sql.js';
-import { importIcsEvents, importVcardParties, type ImportResult } from '../ingest/import.js';
-import { stageFile, type StageFileOptions, type StageFileResult } from '../ingest/stage-file.js';
-import { discardBatch, publishBatch, type PublishResult } from '../ingest/staging.js';
-import { PUBLISHERS } from '../ingest/publishers.js';
-import { demoStatus, purgeDemoRows, type DemoPurgeResult } from './demo.js';
-import { SEED_DEMO_ACTIVITY } from '../schema/seed.js';
-import { backupVault, checkpointVault, type BackupResult } from './custody.js';
-import {
   applyExtBand,
   dropExtBand,
   extAppIds,
@@ -90,24 +93,21 @@ import {
   seedExtDraft,
   type ExtApplyOutcome,
 } from './ext.js';
-import type { ExtTableSpec } from '../schema/ext.js';
+import {
+  applyFieldMask,
+  compileFilters,
+  compileOrderBy,
+  scalarPrimaryKeyColumn,
+} from './filters.js';
+import { authenticate } from './identity.js';
 import { exportVault, type VaultExport } from './portability.js';
-import { queryAppView, registerAppView, type ViewDefinition, type ViewResult } from './views.js';
+import { searchEntity } from './search.js';
 import {
-  deleteDurableParkedPayloadsForGrant,
-  listDurableParkedPayloads,
-  readDurableParkedDenial,
-  readDurableParkedPayload,
-  recordDurableParkedDenial,
-  saveDurableParkedPayload,
-  settleDurableParkedPayload,
-} from '../replica/parked.js';
-import { transitionReplicaIntentOutcomeInTransaction } from '../replica/intents.js';
-import {
-  reclaimProvenOrdinaryInvocationCommitsInTransaction,
-  stampFinalizedInvocationCommitInTransaction,
-} from '../replica/invocation-commits.js';
-import { notifyReplicaCommit } from '../replica/doorbell.js';
+  runReadOnlySql,
+  VAULT_SQL_DEFAULT_ROWS,
+  type VaultSqlRequest,
+  type VaultSqlResult,
+} from './sql.js';
 import type {
   ChangeEntry,
   ChangesRequest,
@@ -128,6 +128,7 @@ import type {
   SearchResult,
 } from './types.js';
 import { DEFAULT_PURPOSE, GatewayError } from './types.js';
+import { queryAppView, registerAppView, type ViewDefinition, type ViewResult } from './views.js';
 
 /**
  * Structural guard for reading `consent.provenance` (issue #352 phase 3/4 —
@@ -318,16 +319,24 @@ export class Gateway {
   }
 
   /** The discover surface: capabilities visible to any authenticated caller. */
-  discover(
-    cred: Credential,
-  ): { name: string; schema: string; risk: Risk; requiresConfirmation: boolean }[] {
+  discover(cred: Credential): {
+    name: string;
+    schema: string;
+    risk: Risk;
+    requiresConfirmation: boolean;
+  }[] {
     this.identify(cred);
     const rows = this.db.vault
       .prepare(
         `SELECT c.name, c.owner_schema, c.risk, cap.requires_confirmation
            FROM agent_command c JOIN agent_capability cap ON cap.command_id = c.command_id`,
       )
-      .all() as { name: string; owner_schema: string; risk: Risk; requires_confirmation: number }[];
+      .all() as {
+      name: string;
+      owner_schema: string;
+      risk: Risk;
+      requires_confirmation: number;
+    }[];
     return rows.map((r) => ({
       name: r.name,
       schema: r.owner_schema,
@@ -344,7 +353,10 @@ export class Gateway {
   /** Consent-checked read: row filters and field masks applied, receipted. */
   read(cred: Credential, rawRequest: ReadRequest): ReadResult {
     const identity = this.identify(cred);
-    const request = { ...rawRequest, purpose: rawRequest.purpose ?? DEFAULT_PURPOSE };
+    const request = {
+      ...rawRequest,
+      purpose: rawRequest.purpose ?? DEFAULT_PURPOSE,
+    };
     const ref = resolveEntity(request.entity, this.db.vault);
     if (!ref) {
       const receiptId = writeReceipt(this.db.journal, {
@@ -490,7 +502,10 @@ export class Gateway {
    */
   reveal(cred: Credential, rawRequest: RevealRequest): RevealResult {
     const identity = this.identify(cred);
-    const request = { ...rawRequest, purpose: rawRequest.purpose ?? DEFAULT_PURPOSE };
+    const request = {
+      ...rawRequest,
+      purpose: rawRequest.purpose ?? DEFAULT_PURPOSE,
+    };
     let context: { kind: 'fill'; origin: string } | undefined;
     const deny = (failing: string, grantId: string | null = null): never => {
       const receiptId = writeReceipt(this.db.journal, {
@@ -645,7 +660,10 @@ export class Gateway {
    */
   search(cred: Credential, rawRequest: SearchRequest): SearchResult {
     const identity = this.identify(cred);
-    const request = { ...rawRequest, purpose: rawRequest.purpose ?? DEFAULT_PURPOSE };
+    const request = {
+      ...rawRequest,
+      purpose: rawRequest.purpose ?? DEFAULT_PURPOSE,
+    };
     const result = searchEntity(this.db, identity, request);
     // Search-miss prioritization (issue #299 phase 5): an OWNER search that
     // found nothing records what was wanted; enrichers drain the queue
@@ -693,7 +711,10 @@ export class Gateway {
    */
   changes(cred: Credential, rawRequest: ChangesRequest): ChangesResult {
     const identity = this.identify(cred);
-    const request = { ...rawRequest, purpose: rawRequest.purpose ?? DEFAULT_PURPOSE };
+    const request = {
+      ...rawRequest,
+      purpose: rawRequest.purpose ?? DEFAULT_PURPOSE,
+    };
     if (request.entities.length === 0) {
       throw new GatewayError('contract', 'changes needs at least one entity to watch');
     }
@@ -701,7 +722,11 @@ export class Gateway {
       const ref = resolveEntity(entity, this.db.vault);
       const consent = ref
         ? evaluateConsent(this.db.vault, identity, ref.schema, ref.table, 'read', request.purpose)
-        : ({ decision: 'deny', failing: `unknown entity ${entity}`, grantId: null } as const);
+        : ({
+            decision: 'deny',
+            failing: `unknown entity ${entity}`,
+            grantId: null,
+          } as const);
       if (consent.decision === 'deny') {
         const receiptId = writeReceipt(this.db.journal, {
           grantId: consent.grantId,
@@ -777,7 +802,10 @@ export class Gateway {
     const identity = this.identify(cred);
     // Purposes are off the critical path (issue #306 decision 4): a caller
     // that names none rides the default; the journal records what applied.
-    const request = { ...rawRequest, purpose: rawRequest.purpose ?? DEFAULT_PURPOSE };
+    const request = {
+      ...rawRequest,
+      purpose: rawRequest.purpose ?? DEFAULT_PURPOSE,
+    };
     // The demo register is the owner loading a scenario — no app or agent
     // ever mints demo data (a granted caller marking real-looking rows as
     // purgeable would be an integrity hole, not a feature).
@@ -792,7 +820,11 @@ export class Gateway {
         decision: 'deny',
         detail: { failing: 'demo register is owner-only' },
       });
-      return { status: 'denied', receiptId, reason: 'demo register is owner-only' };
+      return {
+        status: 'denied',
+        receiptId,
+        reason: 'demo register is owner-only',
+      };
     }
     const command = lookupCommand(this.db.vault, request.command);
     if (!command || !this.commands.has(request.command)) {
@@ -806,7 +838,11 @@ export class Gateway {
         decision: 'deny',
         detail: { failing: 'unknown command' },
       });
-      return { status: 'denied', receiptId, reason: `unknown command ${request.command}` };
+      return {
+        status: 'denied',
+        receiptId,
+        reason: `unknown command ${request.command}`,
+      };
     }
 
     const consent = evaluateConsent(
@@ -829,7 +865,10 @@ export class Gateway {
         // A refusal is attributed too (issue #599 decisions 7–8): "the
         // assistant, acting for Sid, was refused" is the row a household
         // needs to read, not "some agent was refused".
-        detail: { failing: consent.failing, ...actingMemberDetail(identity, request) },
+        detail: {
+          failing: consent.failing,
+          ...actingMemberDetail(identity, request),
+        },
       });
       return { status: 'denied', receiptId, reason: consent.failing };
     }
@@ -1157,7 +1196,12 @@ export class Gateway {
    */
   registerView(
     cred: Credential,
-    options: { name: string; baseEntity: string; definition: ViewDefinition; appId?: string },
+    options: {
+      name: string;
+      baseEntity: string;
+      definition: ViewDefinition;
+      appId?: string;
+    },
   ): string {
     const identity = this.identify(cred);
     let appId: string;
@@ -1272,7 +1316,9 @@ export class Gateway {
     const owner = this.requireOwner(cred, 'only the owner retires ext bands');
     const retained = retainExtBand(this.db, appId);
     this.deregisterExtCommands(appId);
-    const receiptId = this.receiptExt(owner, appId, 'consent.app_ext_retain', { retained });
+    const receiptId = this.receiptExt(owner, appId, 'consent.app_ext_retain', {
+      retained,
+    });
     return { retained, receiptId };
   }
 
@@ -1281,7 +1327,9 @@ export class Gateway {
     const owner = this.requireOwner(cred, 'only the owner purges ext bands');
     const purged = purgeExtBand(this.db, appId);
     this.deregisterExtCommands(appId);
-    const receiptId = this.receiptExt(owner, appId, 'consent.app_ext_purge', { purged });
+    const receiptId = this.receiptExt(owner, appId, 'consent.app_ext_purge', {
+      purged,
+    });
     return { purged, receiptId };
   }
 
@@ -1455,7 +1503,12 @@ export class Gateway {
    */
   async contentForAgent(
     cred: Credential,
-    request: { contentId: string; variant: string; maxBytes?: number; purpose?: string },
+    request: {
+      contentId: string;
+      variant: string;
+      maxBytes?: number;
+      purpose?: string;
+    },
   ): Promise<AgentContentOutcome & { receiptId: string }> {
     const identity = this.identify(cred);
     const purpose = request.purpose ?? 'dpv:ServiceProvision';
@@ -1482,7 +1535,11 @@ export class Gateway {
         objectId: request.contentId,
         purpose,
         decision: 'deny',
-        detail: { failing: consent.failing, surface: 'agent-content', variant: request.variant },
+        detail: {
+          failing: consent.failing,
+          surface: 'agent-content',
+          variant: request.variant,
+        },
       });
       throw new GatewayError('consent', `deny (receipt ${receiptId}): ${consent.failing}`);
     }
@@ -1639,7 +1696,11 @@ export class Gateway {
   }
 
   /** Standing duty: export & portability — the whole model out, verifiable. */
-  exportVault(cred: Credential): { artifact: VaultExport; exportId: string; receiptId: string } {
+  exportVault(cred: Credential): {
+    artifact: VaultExport;
+    exportId: string;
+    receiptId: string;
+  } {
     const owner = this.identify(cred);
     if (owner.kind !== 'owner-device')
       throw new GatewayError('consent', 'only the owner exports the vault');

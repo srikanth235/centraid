@@ -4,6 +4,7 @@
  */
 import { appendFile, readFile } from 'node:fs/promises';
 import path from 'node:path';
+
 import { renderSummaryMarkdown } from './summary-markdown.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');

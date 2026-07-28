@@ -1,24 +1,25 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
-// The outbox executor (issue #306): the only path from an approved artifact
-// to the network. Scenarios: an approved item drains with the credential
-// injected toward the pinned host; a pending item never drains; a host
-// outside the pin fails terminally with zero egress; a 401 gets one forced
-// refresh; a credential-less connection defers the item instead of failing
-// it; and the blocking/review split surfaces what each side owns.
-
-import { afterEach, describe, expect, test } from 'vitest';
 import http from 'node:http';
-import { openVaultPlane, type VaultPlane } from './vault-plane.js';
-import { configureApiKey, itemRow, stageItem } from './outbox-executor-test-kit.js';
-import { ConnectionBroker } from './connection-broker.js';
-import { OutboxExecutor } from './outbox-executor.js';
 
-const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
+import { forEachSequentially } from '@centraid/test-kit/sequential';
+/** The only approved-artifact-to-network path: credentials, host pins, retries, and review. */
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { afterEach, describe, expect, test } from 'vitest';
+
+import { ConnectionBroker } from './connection-broker.js';
+import { configureApiKey, itemRow, stageItem } from './outbox-executor-test-kit.js';
+import { OutboxExecutor } from './outbox-executor.js';
+import { openVaultPlane, type VaultPlane } from './vault-plane.js';
+
+const silentLogger = {
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+};
 
 const cleanups: Array<() => Promise<void> | void> = [];
 describe('outbox-executor', () => {
   afterEach(async () => {
-    while (cleanups.length > 0) await cleanups.pop()?.();
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
   });
   function openPlane(dir: string): VaultPlane {
     const plane = openVaultPlane({
@@ -34,7 +35,12 @@ describe('outbox-executor', () => {
   /** A recording fetch double for the API host — the executor's fetchImpl. */
   interface FetchDouble {
     impl: typeof fetch;
-    calls: Array<{ url: string; method: string; headers: Record<string, string>; body?: string }>;
+    calls: Array<{
+      url: string;
+      method: string;
+      headers: Record<string, string>;
+      body?: string;
+    }>;
     respond: (status: number, body?: string) => void;
   }
 
@@ -55,15 +61,14 @@ describe('outbox-executor', () => {
       const next = responses.shift() ?? { status: 200, body: '{}' };
       return Promise.resolve(new Response(next.body, { status: next.status }));
     }) as typeof fetch;
-    return { impl, calls, respond: (status, body = '{}') => responses.push({ status, body }) };
+    return {
+      impl,
+      calls,
+      respond: (status, body = '{}') => responses.push({ status, body }),
+    };
   }
 
-  /**
-   * A fetchImpl that never resolves on its own — it only settles when the
-   * caller's AbortSignal fires, exactly like real `fetch` does under
-   * `AbortSignal.timeout` (issue #351: simulates a wedged third-party
-   * endpoint without an actual hung socket).
-   */
+  /** A fetch double that settles only when the caller's AbortSignal fires. */
   function hangingFetch(): typeof fetch {
     return ((_url: string | URL, init?: RequestInit): Promise<Response> => {
       return new Promise((_resolve, reject) => {
@@ -93,7 +98,12 @@ describe('outbox-executor', () => {
     const api = fetchDouble();
     api.respond(200, '{"id":"msg-1"}');
     const report = await executorFor(plane, api).drain(plane);
-    expect(report).toMatchObject({ approved: 1, sent: 1, failed: 0, deferred: 0 });
+    expect(report).toMatchObject({
+      approved: 1,
+      sent: 1,
+      failed: 0,
+      deferred: 0,
+    });
     expect(api.calls).toHaveLength(1);
     expect(api.calls[0]).toMatchObject({
       url: 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send',
@@ -165,7 +175,7 @@ describe('outbox-executor', () => {
     const tokenResponses: Array<Record<string, unknown>> = [
       { access_token: 'fresh-token', expires_in: 3600 },
     ];
-    const tokenServer = http.createServer((req, res) => {
+    const tokenServer = http.createServer((_req, res) => {
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify(tokenResponses.shift() ?? { error: 'unscripted' }));
     });
@@ -190,7 +200,11 @@ describe('outbox-executor', () => {
     const connectionId = (configure as { output: { connection_id: string } }).output.connection_id;
     plane.gateway.invoke(plane.ownerCredential, {
       command: 'sync.store_tokens',
-      input: { connection_id: connectionId, access_token: 'stale-token', refresh_token: 'rt-1' },
+      input: {
+        connection_id: connectionId,
+        access_token: 'stale-token',
+        refresh_token: 'rt-1',
+      },
     });
 
     const itemId = stageItem(plane, {
@@ -228,7 +242,12 @@ describe('outbox-executor', () => {
     const report = await executor.drain(plane);
     // Same disposition as any other network failure (see drainItem's catch):
     // the item stays approved for a later pass, nothing terminal happens.
-    expect(report).toMatchObject({ approved: 1, sent: 0, failed: 0, deferred: 1 });
+    expect(report).toMatchObject({
+      approved: 1,
+      sent: 0,
+      failed: 0,
+      deferred: 1,
+    });
     expect(itemRow(plane, itemId).status).toBe('approved');
   });
 
@@ -245,7 +264,12 @@ describe('outbox-executor', () => {
     await plane.decideOutbox({ itemId, decision: 'approve' });
     const api = fetchDouble();
     const report = await executorFor(plane, api).drain(plane);
-    expect(report).toMatchObject({ approved: 1, deferred: 1, sent: 0, failed: 0 });
+    expect(report).toMatchObject({
+      approved: 1,
+      deferred: 1,
+      sent: 0,
+      failed: 0,
+    });
     expect(api.calls).toHaveLength(0);
     expect(itemRow(plane, itemId).status).toBe('approved');
   });
@@ -261,12 +285,21 @@ describe('outbox-executor', () => {
       .run(new Date(Date.now() - 25 * 3_600_000).toISOString(), itemId);
     const api = fetchDouble();
     const report = await executorFor(plane, api).drain(plane);
-    expect(report).toMatchObject({ approved: 1, sent: 0, failed: 0, reparked: 1 });
+    expect(report).toMatchObject({
+      approved: 1,
+      sent: 0,
+      failed: 0,
+      reparked: 1,
+    });
     // Zero egress; the item waits for a FRESH decision, with the delay named.
     expect(api.calls).toHaveLength(0);
     const row = plane.db.vault
       .prepare('SELECT status, decided_at, note FROM outbox_item WHERE item_id = ?')
-      .get(itemId) as { status: string; decided_at: string | null; note: string };
+      .get(itemId) as {
+      status: string;
+      decided_at: string | null;
+      note: string;
+    };
     expect(row.status).toBe('pending');
     expect(row.decided_at).toBeNull();
     expect(row.note).toContain('expired');
@@ -315,7 +348,10 @@ describe('outbox-executor', () => {
     stageItem(plane);
     const blocking = plane.blocking();
     expect(blocking.outbox).toHaveLength(1);
-    expect(blocking.outbox[0]).toMatchObject({ verb: 'gmail.send', status: 'pending' });
+    expect(blocking.outbox[0]).toMatchObject({
+      verb: 'gmail.send',
+      status: 'pending',
+    });
     expect(blocking.parked).toHaveLength(0);
 
     // needs-auth connections surface with their note.
@@ -442,14 +478,14 @@ describe('outbox-executor', () => {
       grantId,
       decision: 'allow',
       // Owner-device stages refine to owner (or null only if table miss).
-      actorKind: expect.stringMatching(/owner|app|agent|assistant/),
+      actorKind: expect.stringMatching(/owner|app|agent|assistant/u),
     });
     // Null-actor receipts (no invocation) still shape-correct.
-    const nullActor = feed.find((e) => e.actorId === null);
-    if (nullActor) {
-      expect(nullActor.actorKind).toBeNull();
-      expect(nullActor.actor).toBeNull();
-    }
+    expect(
+      feed
+        .filter((entry) => entry.actorId === null)
+        .every((entry) => entry.actorKind === null && entry.actor === null),
+    ).toBe(true);
   });
 });
 

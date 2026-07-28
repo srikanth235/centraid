@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import {
   clearFillMaterial,
   clearSavedPassword,
@@ -27,7 +28,11 @@ describe('credential gesture boundary', () => {
     clearFillMaterial(material);
     expect(material).toStrictEqual({});
 
-    const save = { type: 'locker:save', password: 'new secret', title: 'Login' };
+    const save = {
+      type: 'locker:save',
+      password: 'new secret',
+      title: 'Login',
+    };
     clearSavedPassword(save);
     expect(save).toStrictEqual({ type: 'locker:save', title: 'Login' });
   });

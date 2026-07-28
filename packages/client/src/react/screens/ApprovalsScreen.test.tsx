@@ -2,6 +2,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
 import ApprovalsScreen, {
   type ApprovalsActivityRowDTO,
   type ApprovalsGrantRowDTO,
@@ -42,7 +43,11 @@ const editableOutboxRow: ApprovalsOutboxRowDTO = {
     { key: 'subject', label: 'Subject', value: 'Hi' },
     { key: 'body', label: 'Body', value: 'See you at 6.' },
   ],
-  artifact: { to: ['ravi@example.com', 'asha@example.com'], subject: 'Hi', body: 'See you at 6.' },
+  artifact: {
+    to: ['ravi@example.com', 'asha@example.com'],
+    subject: 'Hi',
+    body: 'See you at 6.',
+  },
 };
 
 const needsAuthRow: ApprovalsNeedsAuthRowDTO = {
@@ -226,14 +231,18 @@ describe('screens/ApprovalsScreen', () => {
 
     it('shows an Assistant badge for an assistant-kind outbox caller', () => {
       const el = mount(
-        makeProps({ outbox: [{ ...outboxRow, caller: 'Assistant', callerKind: 'assistant' }] }),
+        makeProps({
+          outbox: [{ ...outboxRow, caller: 'Assistant', callerKind: 'assistant' }],
+        }),
       );
       expect(el.textContent).toContain('Assistant');
     });
 
     it('shows an App badge for an app-kind outbox caller', () => {
       const el = mount(
-        makeProps({ outbox: [{ ...outboxRow, caller: 'Briefing', callerKind: 'app' }] }),
+        makeProps({
+          outbox: [{ ...outboxRow, caller: 'Briefing', callerKind: 'app' }],
+        }),
       );
       expect(el.textContent).toContain('App');
       expect(el.textContent).toContain('Briefing');
@@ -241,7 +250,9 @@ describe('screens/ApprovalsScreen', () => {
 
     it('shows no kind badge for an owner-staged outbox item, but still shows the caller name', () => {
       const el = mount(
-        makeProps({ outbox: [{ ...outboxRow, caller: 'owner', callerKind: 'owner' }] }),
+        makeProps({
+          outbox: [{ ...outboxRow, caller: 'owner', callerKind: 'owner' }],
+        }),
       );
       expect(el.querySelector('[data-kind]')).toBeNull();
       expect(el.textContent).not.toContain('Automation');
@@ -278,7 +289,13 @@ describe('screens/ApprovalsScreen', () => {
     it('shows an Automation badge for an agent-kind parked caller (automations ride the agent plane)', () => {
       const el = mount(
         makeProps({
-          parked: [{ ...parkedRow, caller: 'E2e Agent Purge Demo', callerKind: 'agent' }],
+          parked: [
+            {
+              ...parkedRow,
+              caller: 'E2e Agent Purge Demo',
+              callerKind: 'agent',
+            },
+          ],
         }),
       );
       expect(el.textContent).toContain('Automation');
@@ -287,7 +304,9 @@ describe('screens/ApprovalsScreen', () => {
 
     it('shows an Assistant badge for an assistant-kind parked caller, distinct from an automation', () => {
       const el = mount(
-        makeProps({ parked: [{ ...parkedRow, caller: 'Assistant', callerKind: 'assistant' }] }),
+        makeProps({
+          parked: [{ ...parkedRow, caller: 'Assistant', callerKind: 'assistant' }],
+        }),
       );
       expect(el.textContent).toContain('Assistant');
       expect(el.textContent).not.toContain('Automation');
@@ -324,8 +343,16 @@ describe('screens/ApprovalsScreen', () => {
       const el = mount(
         makeProps({
           activity: [
-            activityRow({ receiptId: 'a1', decision: 'allow', label: 'Allowed act' }),
-            activityRow({ receiptId: 'a2', decision: 'deny', label: 'Denied act' }),
+            activityRow({
+              receiptId: 'a1',
+              decision: 'allow',
+              label: 'Allowed act',
+            }),
+            activityRow({
+              receiptId: 'a2',
+              decision: 'deny',
+              label: 'Denied act',
+            }),
           ],
         }),
       );
@@ -418,7 +445,13 @@ describe('screens/ApprovalsScreen', () => {
     it('says approved-by-the-owner when attribution is owner', () => {
       const el = mount(
         makeProps({
-          activity: [activityRow({ attribution: 'owner', decision: 'allow', label: 'Owner ok' })],
+          activity: [
+            activityRow({
+              attribution: 'owner',
+              decision: 'allow',
+              label: 'Owner ok',
+            }),
+          ],
         }),
       );
       expect(el.querySelector('[data-testid="activity-attribution-owner"]')?.textContent).toContain(
@@ -429,7 +462,13 @@ describe('screens/ApprovalsScreen', () => {
     it('shows a ×N marker for collapsed adjacent duplicates', () => {
       const el = mount(
         makeProps({
-          activity: [activityRow({ count: 3, label: 'Draft drop', receiptId: 'collapsed' })],
+          activity: [
+            activityRow({
+              count: 3,
+              label: 'Draft drop',
+              receiptId: 'collapsed',
+            }),
+          ],
         }),
       );
       expect(el.querySelector('[data-testid="activity-count"]')?.textContent).toBe('×3');
@@ -457,15 +496,23 @@ describe('screens/ApprovalsScreen', () => {
       expect(detail?.textContent).toContain('cmd-abc123def456');
       expect(detail?.textContent).toContain('agent.command');
       // Absolute timestamp is reachable in the expanded panel.
-      expect(detail?.textContent).toMatch(/2026|Mar|03/);
+      expect(detail?.textContent).toMatch(/2026|Mar|03/u);
     });
 
     it('filters to Denied-only when the Denied chip is active', () => {
       const el = mount(
         makeProps({
           activity: [
-            activityRow({ receiptId: 'ok', decision: 'allow', label: 'Allowed row' }),
-            activityRow({ receiptId: 'no', decision: 'deny', label: 'Denied row' }),
+            activityRow({
+              receiptId: 'ok',
+              decision: 'allow',
+              label: 'Allowed row',
+            }),
+            activityRow({
+              receiptId: 'no',
+              decision: 'deny',
+              label: 'Denied row',
+            }),
           ],
         }),
       );
@@ -504,7 +551,7 @@ describe('screens/ApprovalsScreen', () => {
       act(() => {
         findButton(notEditable, 'Hi').click();
       });
-      expect(() => findButton(notEditable, 'Edit')).toThrow();
+      expect(() => findButton(notEditable, 'Edit')).toThrow(Error);
       expect(notEditable.querySelector('.editNote')?.textContent).toContain('can’t be edited yet');
 
       const editable = mount(makeProps({ outbox: [editableOutboxRow] }));

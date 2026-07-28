@@ -159,7 +159,7 @@ function ebmlVint(bytes: Buffer, at: number, keepMarker: boolean): EbmlVint | nu
   for (let i = 1; i < width; i += 1) {
     const byte = bytes[at + i]!;
     value = value * 256 + byte;
-    allOnes = allOnes && byte === 0xff;
+    allOnes &&= byte === 0xff;
     if (!Number.isSafeInteger(value)) return null;
   }
   return { value, width, unknown: allOnes };

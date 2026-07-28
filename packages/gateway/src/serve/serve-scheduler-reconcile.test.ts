@@ -1,4 +1,4 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import crypto from 'node:crypto';
 /*
  * Scheduler-on-publish reconcile (issue #149). A publish over HTTP must
  * resync the in-process cron scheduler — `serve()` reconciles in onAppLive
@@ -6,14 +6,15 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  * git-store gateway with an injected spy scheduler and asserts a publish
  * triggers a reconcile carrying the scanned automation rows.
  */
-
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
+
 import type * as automation from '@centraid/automation';
-import { serve, type GatewayServeHandle } from './serve.ts';
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+
 import type { GatewayPaths } from '../paths.ts';
+import { serve, type GatewayServeHandle } from './serve.ts';
 
 let dataDir: string;
 let handle: GatewayServeHandle;
@@ -123,10 +124,13 @@ describe('serve-scheduler-reconcile', () => {
 
   async function waitFor(pred: () => boolean | Promise<boolean>, ms = 3000): Promise<void> {
     const start = Date.now();
-    while (!(await pred())) {
+    const poll = async (): Promise<void> => {
+      if (await pred()) return;
       if (Date.now() - start > ms) throw new Error('timeout waiting for condition');
       await new Promise((resolve) => setTimeout(resolve, 25));
-    }
+      return poll();
+    };
+    return poll();
   }
 
   async function publishBrief(manifest = AUTOMATION_JSON, expectedStatus = 201): Promise<Response> {
@@ -135,21 +139,23 @@ describe('serve-scheduler-reconcile', () => {
       headers: { ...auth(), 'Content-Type': 'application/json' },
       body: JSON.stringify({ sessionId: 's1' }),
     });
-    for (const [rel, content] of [
-      ['app.json', APP_JSON],
-      ['automations/brief/automation.json', manifest],
+    await Promise.all(
       [
-        'automations/brief/handler.js',
-        'export default async () => ({ summary: "party change observed" });\n',
-      ],
-    ] as const) {
-      const res = await fetch(`${handle.url}/centraid/_apps/brief/files/${rel}?sessionId=s1`, {
-        method: 'PUT',
-        headers: auth(),
-        body: content,
-      });
-      expect(res.status).toBe(200);
-    }
+        ['app.json', APP_JSON],
+        ['automations/brief/automation.json', manifest],
+        [
+          'automations/brief/handler.js',
+          'export default async () => ({ summary: "party change observed" });\n',
+        ],
+      ].map(async ([rel, content]) => {
+        const res = await fetch(`${handle.url}/centraid/_apps/brief/files/${rel}?sessionId=s1`, {
+          method: 'PUT',
+          headers: auth(),
+          body: content,
+        });
+        expect(res.status).toBe(200);
+      }),
+    );
     const pub = await fetch(`${handle.url}/centraid/_apps/brief/publish`, {
       method: 'POST',
       headers: { ...auth(), 'Content-Type': 'application/json' },
@@ -191,7 +197,10 @@ describe('serve-scheduler-reconcile', () => {
     // Exercise the real scheduler behind a live HTTP gateway, not the spy used
     // by the reconcile test above.
     await handle.close();
-    handle = await serve({ initVaultName: "Owner's vault", paths: pathsUnder(dataDir) });
+    handle = await serve({
+      initVaultName: "Owner's vault",
+      paths: pathsUnder(dataDir),
+    });
     await publishBrief(DATA_AUTOMATION_JSON);
 
     // Publishing awaits reconciliation, including the fresh watcher's
@@ -287,7 +296,10 @@ describe('serve-scheduler-reconcile', () => {
       .get() as { prov_id: string };
     await handle.close();
 
-    handle = await serve({ initVaultName: "Owner's vault", paths: pathsUnder(dataDir) });
+    handle = await serve({
+      initVaultName: "Owner's vault",
+      paths: pathsUnder(dataDir),
+    });
     await waitFor(async () => {
       await refreshRuns();
       return runs.length === 10 && runs.every((run) => run.endedAt !== undefined);

@@ -21,8 +21,15 @@
  *  JetBrains Mono, so we map the same three roles onto those families. Keep
  *  in sync with the `useFonts(...)` call in App.tsx. */
 const FONT_ROLES = {
-  sans: { regular: 'Geist_400Regular', medium: 'Geist_500Medium', semibold: 'Geist_600SemiBold' },
-  title: { medium: 'SpaceGrotesk_500Medium', semibold: 'SpaceGrotesk_600SemiBold' },
+  sans: {
+    regular: 'Geist_400Regular',
+    medium: 'Geist_500Medium',
+    semibold: 'Geist_600SemiBold',
+  },
+  title: {
+    medium: 'SpaceGrotesk_500Medium',
+    semibold: 'SpaceGrotesk_600SemiBold',
+  },
   mono: {
     regular: 'JetBrainsMono_400Regular',
     medium: 'JetBrainsMono_500Medium',
@@ -75,8 +82,8 @@ export function parseTokensCss(css: string): TokenBlocks {
   const light = /:root\s*\{(?<body>[^}]*)\}/u.exec(css)?.groups?.body;
   const dark = /:root\[data-theme='dark'\]\s*\{(?<body>[^}]*)\}/u.exec(css)?.groups?.body;
   return {
-    light: light !== undefined ? parseDeclarations(light) : {},
-    darkOverride: dark !== undefined ? parseDeclarations(dark) : {},
+    light: light === undefined ? {} : parseDeclarations(light),
+    darkOverride: dark === undefined ? {} : parseDeclarations(dark),
   };
 }
 
@@ -139,8 +146,8 @@ function evalCalc(input: string): string {
     const m = re.exec(s);
     if (!m) break;
     const g: Record<string, string | undefined> = m.groups ?? {};
-    const a = parseFloat(g.left ?? '0');
-    const b = parseFloat(g.right ?? '0');
+    const a = Number(g.left ?? '0');
+    const b = Number(g.right ?? '0');
     const unit = g.leftUnit || g.rightUnit || '';
     const val = g.op === '+' ? a + b : a - b;
     s = s.slice(0, m.index) + `${val}${unit}` + s.slice(m.index + m[0].length);
@@ -204,12 +211,12 @@ export function cssColorToRn(resolved: string): string | null {
     const segments = hsl.split('/').map((p) => p.trim());
     const parts = (segments[0] ?? '').split(/[\s,]+/u).filter(Boolean);
     if (parts.length < 3) return null;
-    const h = parseFloat(parts[0] ?? '');
-    const s = parseFloat(parts[1] ?? '') / 100;
-    const l = parseFloat(parts[2] ?? '') / 100;
+    const h = Number(parts[0] ?? '');
+    const s = Number(parts[1] ?? '') / 100;
+    const l = Number(parts[2] ?? '') / 100;
     if ([h, s, l].some((n) => Number.isNaN(n))) return null;
     const alphaPart = segments[1];
-    const alpha = alphaPart !== undefined && alphaPart !== '' ? parseFloat(alphaPart) : 1;
+    const alpha = alphaPart !== undefined && alphaPart !== '' ? Number(alphaPart) : 1;
     const [r, g, b] = hslToRgb(h, s, l);
     if (Number.isNaN(alpha) || alpha >= 1) return toHex(r, g, b);
     return `rgba(${r}, ${g}, ${b}, ${roundAlpha(alpha)})`;
@@ -220,9 +227,9 @@ export function cssColorToRn(resolved: string): string | null {
 /** A resolved length (`14px`, `0.75rem`) → pixels, or null. rem = 16px. */
 export function cssLengthToPx(resolved: string): number | null {
   const px = /^(?<value>-?[\d.]+)px$/u.exec(resolved.trim())?.groups?.value;
-  if (px !== undefined) return parseFloat(px);
+  if (px !== undefined) return Number(px);
   const rem = /^(?<value>-?[\d.]+)rem$/u.exec(resolved.trim())?.groups?.value;
-  if (rem !== undefined) return parseFloat(rem) * 16;
+  if (rem !== undefined) return Number(rem) * 16;
   return null;
 }
 
@@ -289,7 +296,13 @@ export function buildTheme(css: string): GeneratedTheme {
     darkColors[key] = color ?? lightValue;
   }
 
-  return { light: lightColors, dark: darkColors, radii, spacing: SPACING, fonts: FONT_ROLES };
+  return {
+    light: lightColors,
+    dark: darkColors,
+    radii,
+    spacing: SPACING,
+    fonts: FONT_ROLES,
+  };
 }
 
 // ---- Rendering ----
@@ -320,8 +333,7 @@ function renderFonts(indent: string): string {
   for (const [role, weights] of sortedEntries(
     FONT_ROLES as unknown as Record<string, Record<string, string>>,
   )) {
-    lines.push(`${indent}${role}: {`, renderRecord(weights, indent + '  '));
-    lines.push(`${indent}},`);
+    lines.push(`${indent}${role}: {`, renderRecord(weights, indent + '  '), `${indent}},`);
   }
   return lines.join('\n');
 }

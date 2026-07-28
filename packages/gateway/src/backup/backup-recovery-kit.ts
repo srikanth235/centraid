@@ -1,5 +1,6 @@
 import type { Keyring, RecoveryKitDocument, RecoveryKitTarget } from '@centraid/backup';
 import type { KeyStore } from '@centraid/vault';
+
 import type { BackupState } from './backup-state.js';
 
 function targets(state: BackupState, provider: string, keyStore: KeyStore): RecoveryKitTarget[] {

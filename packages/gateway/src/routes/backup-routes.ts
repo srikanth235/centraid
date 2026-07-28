@@ -20,6 +20,7 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
+
 import { AUTHED_DEVICE_HEADER } from '@centraid/app-engine';
 import { parseRecoveryKit, recoveryKitFingerprint, wrapRecoveryKit } from '@centraid/backup';
 import {
@@ -30,13 +31,14 @@ import {
   type BackupPolicy,
   type BackupPolicyPatch,
 } from '@centraid/vault';
-import type { RouteHandler } from '../serve/build-gateway.js';
-import type { VaultRegistry } from '../serve/vault-registry.js';
-import type { BackupService, HomeDiscovery, RecoveryKitState } from '../backup/backup-service.js';
-import type { RecoveryKitStateStore } from '../backup/recovery-kit-state.js';
-import type { EnrollmentStore } from '../serve/enrollment-store.js';
+
 import type { ProviderPolicySyncState } from '../backup/backup-provider-observability.js';
 import type { BackupReconciliationState } from '../backup/backup-reconciliation.js';
+import type { BackupService, HomeDiscovery, RecoveryKitState } from '../backup/backup-service.js';
+import type { RecoveryKitStateStore } from '../backup/recovery-kit-state.js';
+import type { RouteHandler } from '../serve/build-gateway.js';
+import type { EnrollmentStore } from '../serve/enrollment-store.js';
+import type { VaultRegistry } from '../serve/vault-registry.js';
 import { readJson, sendError, sendJson } from './route-helpers.js';
 
 const BACKUP_PATH = '/centraid/_gateway/backup';
@@ -114,7 +116,9 @@ function ownerRequired(req: IncomingMessage, deps: BackupRouteDeps, res: ServerR
 async function buildStatus(deps: BackupRouteDeps): Promise<BackupStatusBody> {
   const { backupService } = deps;
   if (!backupService) {
-    const recoveryKit = (await deps.recoveryKitStore?.status()) ?? { confirmedAt: null };
+    const recoveryKit = (await deps.recoveryKitStore?.status()) ?? {
+      confirmedAt: null,
+    };
     return {
       configured: false,
       vaults: deps.vaults.planesList().map((plane) => vaultStatus(plane, undefined, false)),
@@ -171,7 +175,10 @@ function vaultStatus(
   // Every remote CAS connection is a provider home bundle now (#436 §2).
   const destination: BackupDestinationStatus =
     store.kind === 's3'
-      ? { kind: 'provider', ...(store.connectionId ? { connectionId: store.connectionId } : {}) }
+      ? {
+          kind: 'provider',
+          ...(store.connectionId ? { connectionId: store.connectionId } : {}),
+        }
       : { kind: 'gateway-local' };
   const outbox = plane.db.blobTransfers.status();
   const reconciliation = newestReconciliation(target?.reconciliation, casReconciliation);
@@ -226,7 +233,10 @@ export function makeBackupRouteHandler(deps: BackupRouteDeps): RouteHandler {
 
     if (url.pathname === BACKUP_PATH) {
       if ((req.method ?? 'GET') !== 'GET') {
-        return sendJson(res, 405, { error: 'method_not_allowed', message: 'GET only' });
+        return sendJson(res, 405, {
+          error: 'method_not_allowed',
+          message: 'GET only',
+        });
       }
       try {
         return sendJson(res, 200, await buildStatus(deps));
@@ -238,12 +248,22 @@ export function makeBackupRouteHandler(deps: BackupRouteDeps): RouteHandler {
     if (url.pathname.startsWith(BACKUP_POLICY_PREFIX)) {
       const vaultId = decodeURIComponent(url.pathname.slice(BACKUP_POLICY_PREFIX.length));
       const plane = deps.vaults.get(vaultId);
-      if (!plane) return sendJson(res, 404, { error: 'not_found', message: 'unknown vault' });
+      if (!plane)
+        return sendJson(res, 404, {
+          error: 'not_found',
+          message: 'unknown vault',
+        });
       if ((req.method ?? 'GET') === 'GET') {
-        return sendJson(res, 200, { vaultId, policy: readBackupPolicy(plane.db.vault) });
+        return sendJson(res, 200, {
+          vaultId,
+          policy: readBackupPolicy(plane.db.vault),
+        });
       }
       if ((req.method ?? 'GET') !== 'PUT') {
-        return sendJson(res, 405, { error: 'method_not_allowed', message: 'GET, PUT only' });
+        return sendJson(res, 405, {
+          error: 'method_not_allowed',
+          message: 'GET, PUT only',
+        });
       }
       try {
         const body = await readJson(req);
@@ -280,7 +300,10 @@ export function makeBackupRouteHandler(deps: BackupRouteDeps): RouteHandler {
         return sendJson(res, 200, response);
       } catch (err) {
         if (err instanceof BackupPolicyError) {
-          return sendJson(res, 400, { error: 'invalid_policy', message: err.message });
+          return sendJson(res, 400, {
+            error: 'invalid_policy',
+            message: err.message,
+          });
         }
         return sendError(res, err);
       }
@@ -288,11 +311,17 @@ export function makeBackupRouteHandler(deps: BackupRouteDeps): RouteHandler {
 
     if (url.pathname.startsWith(BACKUP_VERIFY_BUCKET_PREFIX)) {
       if ((req.method ?? 'GET') !== 'POST') {
-        return sendJson(res, 405, { error: 'method_not_allowed', message: 'POST only' });
+        return sendJson(res, 405, {
+          error: 'method_not_allowed',
+          message: 'POST only',
+        });
       }
       const vaultId = decodeURIComponent(url.pathname.slice(BACKUP_VERIFY_BUCKET_PREFIX.length));
       if (!deps.vaults.get(vaultId)) {
-        return sendJson(res, 404, { error: 'not_found', message: 'unknown vault' });
+        return sendJson(res, 404, {
+          error: 'not_found',
+          message: 'unknown vault',
+        });
       }
       const { backupService } = deps;
       if (!backupService) {
@@ -317,7 +346,10 @@ export function makeBackupRouteHandler(deps: BackupRouteDeps): RouteHandler {
 
     if (url.pathname === BACKUP_RUN_PATH) {
       if ((req.method ?? 'GET') !== 'POST') {
-        return sendJson(res, 405, { error: 'method_not_allowed', message: 'POST only' });
+        return sendJson(res, 405, {
+          error: 'method_not_allowed',
+          message: 'POST only',
+        });
       }
       const { backupService } = deps;
       if (
@@ -345,7 +377,10 @@ export function makeBackupRouteHandler(deps: BackupRouteDeps): RouteHandler {
 
     if (url.pathname === BACKUP_VERIFY_PATH) {
       if ((req.method ?? 'GET') !== 'POST') {
-        return sendJson(res, 405, { error: 'method_not_allowed', message: 'POST only' });
+        return sendJson(res, 405, {
+          error: 'method_not_allowed',
+          message: 'POST only',
+        });
       }
       const { backupService } = deps;
       if (
@@ -366,11 +401,17 @@ export function makeBackupRouteHandler(deps: BackupRouteDeps): RouteHandler {
 
     if (url.pathname === BACKUP_KIT_PATH) {
       if ((req.method ?? 'GET') !== 'POST') {
-        return sendJson(res, 405, { error: 'method_not_allowed', message: 'POST only' });
+        return sendJson(res, 405, {
+          error: 'method_not_allowed',
+          message: 'POST only',
+        });
       }
       if (!ownerRequired(req, deps, res)) return true;
       if (!deps.backupService) {
-        return sendJson(res, 409, { error: 'not_configured', message: 'backup is not configured' });
+        return sendJson(res, 409, {
+          error: 'not_configured',
+          message: 'backup is not configured',
+        });
       }
       try {
         const body = await readJson(req);
@@ -392,7 +433,10 @@ export function makeBackupRouteHandler(deps: BackupRouteDeps): RouteHandler {
 
     if (url.pathname === BACKUP_KIT_CONFIRMED_PATH) {
       if ((req.method ?? 'GET') !== 'POST') {
-        return sendJson(res, 405, { error: 'method_not_allowed', message: 'POST only' });
+        return sendJson(res, 405, {
+          error: 'method_not_allowed',
+          message: 'POST only',
+        });
       }
       if (!ownerRequired(req, deps, res)) return true;
       const { recoveryKitStore } = deps;

@@ -1,6 +1,7 @@
+import { apps } from '@centraid/design-tokens';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { apps } from '@centraid/design-tokens';
+
 import AppCard from './AppCard.js';
 
 const app = apps[0];

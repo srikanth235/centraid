@@ -5,6 +5,7 @@
 // gateway-client-contract-fixtures.ts.
 
 import { describe, expect, it } from 'vitest';
+
 import {
   client,
   compile,
@@ -71,7 +72,11 @@ describe('renderer gateway automation contracts', () => {
 
     await client.appLogs({ id: 'daily', limit: 7, sinceTs: 1, level: 'info' });
     await client.appSettings({ id: 'daily' });
-    await client.appSettingWrite({ id: 'daily', key: 'timezone', value: undefined });
+    await client.appSettingWrite({
+      id: 'daily',
+      key: 'timezone',
+      value: undefined,
+    });
     await client.deregisterApp({ id: 'old app' });
     await client.listApps();
     await client.listTemplates();
@@ -106,7 +111,9 @@ describe('renderer gateway automation contracts', () => {
     await client.listAutomationTurns({});
     await client.readAutomationTurn({ turnId: 'turn-1' });
     await client.readAutomationTurnExpanded({ turnId: 'turn-1' });
-    await client.readLatestAutomationTurnExpanded({ automationId: 'daily/daily' });
+    await client.readLatestAutomationTurnExpanded({
+      automationId: 'daily/daily',
+    });
     await client.listAutomationItems({ turnId: 'turn-1' });
 
     const turnEvents: string[] = [];
@@ -184,8 +191,14 @@ describe('renderer gateway automation contracts', () => {
   });
 
   it('covers the automation compile and lifecycle surfaces', async () => {
-    await compile.compileAutomation({ automationId: 'daily/daily', enableOnSuccess: true });
-    await compile.reviseAutomation({ automationId: 'daily/daily', message: 'be concise' });
+    await compile.compileAutomation({
+      automationId: 'daily/daily',
+      enableOnSuccess: true,
+    });
+    await compile.reviseAutomation({
+      automationId: 'daily/daily',
+      message: 'be concise',
+    });
     await compile.readAutomationSource('daily/daily');
 
     const created = await editing.createAutomation({
@@ -203,13 +216,22 @@ describe('renderer gateway automation contracts', () => {
       prompt: 'Run every day',
       triggers: [{ kind: 'webhook' }],
       connections: [{ connectionId: 'connection-1', kind: 'github', label: 'Work' }],
-      connector: { kind: 'github', label: 'Work', connectionId: 'connection-1' },
+      connector: {
+        kind: 'github',
+        label: 'Work',
+        connectionId: 'connection-1',
+      },
       runner: null,
       model: null,
     });
     expect(updated.webhook?.secret).toBe('secret-2');
-    await editing.setAutomationEnabled({ automationId: 'daily/daily', enabled: false });
-    await editing.rotateAutomationWebhookSecret({ automationId: 'daily/daily' });
+    await editing.setAutomationEnabled({
+      automationId: 'daily/daily',
+      enabled: false,
+    });
+    await editing.rotateAutomationWebhookSecret({
+      automationId: 'daily/daily',
+    });
     await editing.deleteAutomation({ automationId: 'daily/daily' });
 
     const paths = transcript().map((request) => request.path);
@@ -226,7 +248,7 @@ describe('renderer gateway automation contracts', () => {
     // renamed or misspelled path must break the suite, not fall through to a
     // permissive `{ ok: true }`.
     expect(() => fetch('https://gateway.test/centraid/_automations/runs?ref=daily/daily')).toThrow(
-      /unrouted gateway path: GET \/centraid\/_automations\/runs/,
+      /unrouted gateway path: GET \/centraid\/_automations\/runs/u,
     );
   });
 });

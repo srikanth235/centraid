@@ -1,4 +1,5 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import { existsSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
 /*
  * `centraid-gateway recover` (issue #439 R6) — the CLI shell over `recover()`.
  * Exercised against the real in-process fake provider server (real HTTP, real
@@ -8,17 +9,22 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  * the api-key.
  */
 
-import { afterEach, describe, expect, test } from 'vitest';
-import { existsSync, writeFileSync } from 'node:fs';
-import path from 'node:path';
 import { startFakeProviderServer } from '@centraid/backup/dist/testing/fake-provider-server.js';
-import { openVaultRegistry } from '../serve/vault-registry.js';
-import { HealthRegistry } from '../serve/health-registry.js';
+import { forEachSequentially } from '@centraid/test-kit/sequential';
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { afterEach, describe, expect, test } from 'vitest';
+
 import { BackupService } from '../backup/backup-service.js';
+import { HealthRegistry } from '../serve/health-registry.js';
+import { openVaultRegistry } from '../serve/vault-registry.js';
 import { daemonLayoutFor } from './paths.js';
 import { commandRecover } from './recover-admin.js';
 
-const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
+const silentLogger = {
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+};
 
 class CliFailError extends Error {
   constructor(
@@ -36,7 +42,7 @@ const fail = (message: string, code = 1): never => {
 const cleanups: Array<() => Promise<void> | void> = [];
 describe('recover-admin', () => {
   afterEach(async () => {
-    while (cleanups.length > 0) await cleanups.pop()?.();
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
   });
 
   /** Capture stdout + stderr around one call. */
@@ -66,7 +72,12 @@ describe('recover-admin', () => {
    *  recovery kit exported to `kitFile`. Returns the kit file + api-key + vaultId. */
   async function seedAndExportKit(
     server: Awaited<ReturnType<typeof startFakeProviderServer>>,
-  ): Promise<{ kitFile: string; passwordFile: string; apiKey: string; vaultId: string }> {
+  ): Promise<{
+    kitFile: string;
+    passwordFile: string;
+    apiKey: string;
+    vaultId: string;
+  }> {
     const vaultRoot = await tempDir('recover-cli-a');
     const backupDir = await tempDir('recover-cli-a-backup');
     const registry = openVaultRegistry({
@@ -80,7 +91,11 @@ describe('recover-admin', () => {
     const service = new BackupService({
       config: {
         enabled: true,
-        provider: { kind: 'remote', endpoint: server.url, apiKey: server.apiKey },
+        provider: {
+          kind: 'remote',
+          endpoint: server.url,
+          apiKey: server.apiKey,
+        },
       },
       cacheDir: backupDir,
       vaults: registry,
@@ -92,7 +107,9 @@ describe('recover-admin', () => {
     const kitFile = path.join(await tempDir('recover-cli-kit'), 'kit.json');
     await service.writeKit(kitFile, 'correct horse battery staple');
     const passwordFile = path.join(await tempDir('recover-cli-password'), 'password.txt');
-    writeFileSync(passwordFile, 'correct horse battery staple\n', { mode: 0o600 });
+    writeFileSync(passwordFile, 'correct horse battery staple\n', {
+      mode: 0o600,
+    });
     return { kitFile, passwordFile, apiKey: server.apiKey, vaultId };
   }
 
@@ -119,9 +136,9 @@ describe('recover-admin', () => {
           ],
           fail,
         ),
-      ).rejects.toThrow(/metered-egress/),
+      ).rejects.toThrow(/metered-egress/u),
     );
-    expect(refused.err).toMatch(/found your vault/);
+    expect(refused.err).toMatch(/found your vault/u);
     expect(existsSync(path.join(daemonLayoutFor(dataDir).vaultDir, vaultId))).toBe(false);
 
     // With --yes: the recovery runs to completion; the JSON report lands on
@@ -152,8 +169,8 @@ describe('recover-admin', () => {
     expect(report.seq).toBe(1);
     expect(report.generation).toBe(2); // old generation 1 + 1 (fenced)
     expect(report.previews.warmed).toBe(false); // headless CLI ⇒ previews on demand
-    expect(done.err).toMatch(/fetching your vault/);
-    expect(done.err).toMatch(/Generation fenced at 2/);
+    expect(done.err).toMatch(/fetching your vault/u);
+    expect(done.err).toMatch(/Generation fenced at 2/u);
     expect(existsSync(path.join(daemonLayoutFor(dataDir).vaultDir, vaultId, 'vault.db'))).toBe(
       true,
     );
@@ -161,7 +178,7 @@ describe('recover-admin', () => {
 
   test('recover refuses missing required flags', async () => {
     await expect(capture(() => commandRecover(['--data-dir', '/tmp/x'], fail))).rejects.toThrow(
-      /usage: recover/,
+      /usage: recover/u,
     );
   });
 });

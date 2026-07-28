@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { describe, expect, test } from 'vitest';
+
 import {
   sealManifest,
   type BackupProvider,
@@ -7,6 +7,8 @@ import {
   type ManifestEntry,
   type SnapshotRow,
 } from '@centraid/backup';
+import { describe, expect, test } from 'vitest';
+
 import { blobShasFromManifestEntries, snapshotReferencedBlobShas } from './snapshot-blob-roots.js';
 
 const VAULT_ID = 'vault-roots';
@@ -16,7 +18,11 @@ function keyring(): Keyring {
     version: 1,
     active: 1,
     epochs: [
-      { epoch: 1, key: randomBytes(32).toString('base64'), createdAt: '2026-07-17T00:00:00.000Z' },
+      {
+        epoch: 1,
+        key: randomBytes(32).toString('base64'),
+        createdAt: '2026-07-17T00:00:00.000Z',
+      },
     ],
   };
 }
@@ -38,7 +44,11 @@ function blobEntry(sha: string): ManifestEntry {
  */
 function fakeProvider(opts: {
   kr: Keyring;
-  snapshots: { seq: number; entries: ManifestEntry[]; prunedAt?: number | null }[];
+  snapshots: {
+    seq: number;
+    entries: ManifestEntry[];
+    prunedAt?: number | null;
+  }[];
 }): { provider: BackupProvider; unpruned: SnapshotRow[] } {
   const store = new Map<string, Uint8Array>();
   const unpruned: SnapshotRow[] = [];
@@ -178,7 +188,12 @@ describe('snapshot-blob-roots', () => {
     } as unknown as BackupProvider;
 
     await expect(
-      snapshotReferencedBlobShas({ provider, targetId: 't', keyring: kr, vaultId: VAULT_ID }),
-    ).rejects.toThrow(/cannot read manifest seq 7/);
+      snapshotReferencedBlobShas({
+        provider,
+        targetId: 't',
+        keyring: kr,
+        vaultId: VAULT_ID,
+      }),
+    ).rejects.toThrow(/cannot read manifest seq 7/u);
   });
 });

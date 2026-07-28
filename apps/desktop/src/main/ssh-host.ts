@@ -11,6 +11,7 @@
  */
 
 import { spawn } from 'node:child_process';
+
 import {
   buildRemoteArgv,
   buildSshArgv,
@@ -178,7 +179,11 @@ export async function sshVersion(profile: SshHostProfile): Promise<SshCommandRes
   }
   const version = parseSshVersionOutput(raw.stdout);
   if (!version)
-    return { ok: false, error: 'bad_output', message: 'no version string in ssh output' };
+    return {
+      ok: false,
+      error: 'bad_output',
+      message: 'no version string in ssh output',
+    };
   return { ok: true, value: version };
 }
 
@@ -197,7 +202,10 @@ export async function sshVaultList(
   const result = await runJsonCommand(profile, { kind: 'vault-list' });
   if (!result.ok) return result;
   const vaults = Array.isArray(result.value.vaults) ? result.value.vaults : [];
-  return { ok: true, value: { vaults: vaults as Array<Record<string, unknown>> } };
+  return {
+    ok: true,
+    value: { vaults: vaults as Array<Record<string, unknown>> },
+  };
 }
 
 /** `centraid-gateway vault create [--name <name>] --json` — the create leg
@@ -206,7 +214,10 @@ export async function sshVaultCreate(
   profile: SshHostProfile,
   name?: string,
 ): Promise<SshCommandResult<{ vaultId: string; name: string }>> {
-  const result = await runJsonCommand(profile, { kind: 'vault-create', ...(name ? { name } : {}) });
+  const result = await runJsonCommand(profile, {
+    kind: 'vault-create',
+    ...(name ? { name } : {}),
+  });
   if (!result.ok) return result;
   const vaultId = result.value.vaultId;
   const vaultName = result.value.name;
@@ -228,9 +239,18 @@ export async function sshPair(
   vaultId: string,
   ttlMinutes?: number,
 ): Promise<
-  SshCommandResult<{ ticket: string; vaultId: string; vaultName: string; expiresAt: string }>
+  SshCommandResult<{
+    ticket: string;
+    vaultId: string;
+    vaultName: string;
+    expiresAt: string;
+  }>
 > {
-  const result = await runJsonCommand(profile, { kind: 'pair', vaultId, ttlMinutes });
+  const result = await runJsonCommand(profile, {
+    kind: 'pair',
+    vaultId,
+    ttlMinutes,
+  });
   if (!result.ok) return result;
   const { ticket, vaultId: mintedVaultId, vaultName, expiresAt } = result.value;
   if (
@@ -245,5 +265,8 @@ export async function sshPair(
       message: 'remote pair response missing expected fields',
     };
   }
-  return { ok: true, value: { ticket, vaultId: mintedVaultId, vaultName, expiresAt } };
+  return {
+    ok: true,
+    value: { ticket, vaultId: mintedVaultId, vaultName, expiresAt },
+  };
 }

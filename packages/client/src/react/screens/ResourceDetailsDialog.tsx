@@ -1,8 +1,10 @@
 import { useEffect, useRef, type JSX } from 'react';
-import styles from './ResourceDialogs.module.css';
-import ResourceCardDetails from './ResourceCardDetails.js';
-import ResourceAdvancedKnobs from './ResourceAdvancedKnobs.js';
+
 import type { ResourceKnobPrefs, ResourceProfileDTO, TunableKnobKey } from './resource-summary.js';
+import ResourceAdvancedKnobs from './ResourceAdvancedKnobs.js';
+import ResourceCardDetails from './ResourceCardDetails.js';
+
+import styles from './ResourceDialogs.module.css';
 
 // "How we sized this" dialog (issue #528 follow-up): the L2 host facts +
 // resolved knobs (ResourceCardDetails, embedded) and the L3 owner-tunable knobs

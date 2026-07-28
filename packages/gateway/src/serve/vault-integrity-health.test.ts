@@ -1,5 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
+
 import { afterEach, describe, expect, it } from 'vitest';
+
 import { createVaultIntegrityHealthProbe } from './vault-integrity-health.js';
 
 const dbs: DatabaseSync[] = [];

@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+
 import { S3TransferStore } from './s3-transfer.js';
 
 const CREDS = () => Promise.resolve({ accessKeyId: 'AK', secretAccessKey: 'SK' });
@@ -85,7 +86,11 @@ describe('s3-transfer', () => {
       const bytes = init?.body
         ? Buffer.from(await new Response(init.body).arrayBuffer())
         : Buffer.alloc(0);
-      calls.push({ method: init?.method ?? 'GET', url, body: bytes.toString() });
+      calls.push({
+        method: init?.method ?? 'GET',
+        url,
+        body: bytes.toString(),
+      });
       if (init?.method === 'POST' && url.searchParams.has('uploads')) {
         return new Response(
           '<InitiateMultipartUploadResult><UploadId>final-upload</UploadId></InitiateMultipartUploadResult>',

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import {
   AVATAR_PALETTE,
   defaultAvatarColor,
@@ -35,9 +36,13 @@ describe(isValidAvatarColor, () => {
 describe(isValidSshBlock, () => {
   it('requires a non-empty destination string', () => {
     expect(isValidSshBlock({ destination: 'user@host' })).toBe(true);
-    expect(isValidSshBlock({ destination: 'user@host', dataDir: '/data', remoteCli: 'c' })).toBe(
-      true,
-    );
+    expect(
+      isValidSshBlock({
+        destination: 'user@host',
+        dataDir: '/data',
+        remoteCli: 'c',
+      }),
+    ).toBe(true);
     expect(isValidSshBlock(null)).toBe(false);
     expect(isValidSshBlock({})).toBe(false);
     expect(isValidSshBlock({ destination: '' })).toBe(false);

@@ -1,11 +1,18 @@
-import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { rmSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { describe, expect, test } from 'vitest';
+
 import { bootstrapVault } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { uuidv7 } from '../ids.js';
+import {
+  deleteReplicaIntentOutcomesForDevice,
+  readReplicaIntentOutcome,
+  recordReplicaIntentOutcome,
+} from './intents.js';
 import {
   ReplicaInvocationRepairError,
   readReplicaInvocationCommit,
@@ -13,11 +20,6 @@ import {
   repairReplicaInvocationCommits,
   type ReplicaInvocationAudit,
 } from './invocation-commits.js';
-import {
-  deleteReplicaIntentOutcomesForDevice,
-  readReplicaIntentOutcome,
-  recordReplicaIntentOutcome,
-} from './intents.js';
 
 function auditFor(invocationId: string): ReplicaInvocationAudit {
   return {
@@ -30,7 +32,10 @@ function auditFor(invocationId: string): ReplicaInvocationAudit {
     postChecks: [],
     writes: [],
     citations: [],
-    provenance: { activity: 'command.test.command', used: { invocation: invocationId } },
+    provenance: {
+      activity: 'command.test.command',
+      used: { invocation: invocationId },
+    },
     receiptDetail: { writes: [], risk: 'low' },
   };
 }
@@ -209,7 +214,9 @@ describe('replica invocation commit receipt', () => {
         status: 'queued',
       });
       recordJournalPrefix(db, 'invocation-intent-reopen');
-      recordCommit(db, 'invocation-intent-reopen', { intentId: 'intent-reopen' });
+      recordCommit(db, 'invocation-intent-reopen', {
+        intentId: 'intent-reopen',
+      });
       recordReplicaIntentOutcome(db.vault, {
         intentId: 'intent-reopen',
         deviceId: 'device-1',
@@ -278,9 +285,13 @@ describe('replica invocation commit receipt', () => {
 
   test('bounded pages repair later proof while retaining and rejecting an unprovable marker', () => {
     const db = openVaultDb();
-    recordCommit(db, 'invocation-missing', { committedAt: '2026-07-15T00:00:00.000Z' });
+    recordCommit(db, 'invocation-missing', {
+      committedAt: '2026-07-15T00:00:00.000Z',
+    });
     recordJournalPrefix(db, 'invocation-provable');
-    recordCommit(db, 'invocation-provable', { committedAt: '2026-07-15T00:00:01.000Z' });
+    recordCommit(db, 'invocation-provable', {
+      committedAt: '2026-07-15T00:00:01.000Z',
+    });
 
     expect(() => repairReplicaInvocationCommits(db, { batchSize: 1 })).toThrow(
       ReplicaInvocationRepairError,

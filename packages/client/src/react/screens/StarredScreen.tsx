@@ -1,8 +1,10 @@
 import type { JSX } from 'react';
+
 import type { HomeAppItemDTO, HomeAutoItemDTO, HomeMenuAnchor } from '../screen-contracts.js';
-import { AppCard, AutoCard } from './HomeScreen.js';
-import styles from './HomeScreen.module.css';
 import { cx } from '../ui/cx.js';
+import { AppCard, AutoCard } from './HomeScreen.js';
+
+import styles from './HomeScreen.module.css';
 
 export interface StarredScreenProps {
   appItems: readonly HomeAppItemDTO[];

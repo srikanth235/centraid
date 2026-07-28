@@ -8,6 +8,7 @@
 // then read synchronously on the render path.
 
 import { palette } from '@centraid/design-tokens';
+
 import { Store } from '../storage';
 
 const PROFILE_NAME_KEY = 'profile.name';

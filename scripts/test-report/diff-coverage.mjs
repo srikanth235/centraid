@@ -180,7 +180,11 @@ export function scoreDiffCoverage(changed, coverageMap, opts = {}) {
  */
 export function evaluateDiffCoverage(score, threshold, approvedDeviation) {
   if (score.total === 0) {
-    return { ok: true, reason: 'no instrumentable changed lines', messages: [] };
+    return {
+      ok: true,
+      reason: 'no instrumentable changed lines',
+      messages: [],
+    };
   }
   if (score.percent + 1e-9 >= threshold) {
     return {

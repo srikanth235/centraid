@@ -5,7 +5,9 @@
 // only from inside the open task's own detail drawer (Things-style) — this
 // bar always adds a top-level task.
 import { useEffect, useRef, useState } from 'react';
+
 import { fmtDay, parseNlDue } from '../format.ts';
+
 import styles from './Capture.module.css';
 import shared from './shared.module.css';
 

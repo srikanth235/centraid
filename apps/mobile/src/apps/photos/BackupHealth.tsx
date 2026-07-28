@@ -1,27 +1,19 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import {
-  Linking,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import * as MediaLibrary from 'expo-media-library';
 import { File } from 'expo-file-system';
+import * as MediaLibrary from 'expo-media-library';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Linking, Platform, Pressable, ScrollView, Switch, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useReplica } from '../../kit/replica/ReplicaProvider';
+import { useTheme } from '../../kit/theme';
 import { authHeader } from '../../lib/gateway';
-import { UploadQueue } from '../../lib/upload/native-queue';
 import { backupDeviceMedia } from '../../lib/upload/media-producer';
 import { LAST_SUCCESSFUL_SYNC_KEY, nativeUploadPolicy } from '../../lib/upload/native-policy';
-import { family, useTheme } from '../../kit/theme';
-import { useReplica } from '../../kit/replica/ReplicaProvider';
-import { Store } from '../../storage';
+import { UploadQueue } from '../../lib/upload/native-queue';
 import type { PhotosScreenProps } from '../../navigation';
+import { Store } from '../../storage';
+import { styles } from './BackupHealth.styles';
 import {
   IN_CLOUD_MESSAGE,
   InCloudOriginalError,
@@ -46,7 +38,11 @@ const DEFAULT_RULES: Rules = {
   selectedAlbums: [],
 };
 
-type PendingUpload = { plaintextSize: number; lastError?: string; filename?: string };
+type PendingUpload = {
+  plaintextSize: number;
+  lastError?: string;
+  filename?: string;
+};
 
 // A one-shot read of the durable upload queue — an external system, opened and
 // closed around the read so the screen never holds the sqlite handle. Lives
@@ -56,7 +52,10 @@ function readPendingUploads(
   gatewayBase: string,
   setPending: (next: PendingUpload[]) => void,
 ): void {
-  const queue = UploadQueue.open({ gatewayBaseUrl: gatewayBase, headers: authHeader });
+  const queue = UploadQueue.open({
+    gatewayBaseUrl: gatewayBase,
+    headers: authHeader,
+  });
   setPending(queue.pending());
   queue.close();
 }
@@ -87,7 +86,12 @@ export default function BackupHealth({
     );
     void MediaLibrary.Album.getAll()
       .then((all) =>
-        Promise.all(all.map(async (album) => ({ id: album.id, title: await album.getTitle() }))),
+        Promise.all(
+          all.map(async (album) => ({
+            id: album.id,
+            title: await album.getTitle(),
+          })),
+        ),
       )
       .then(setAlbums)
       .catch((reason: unknown) =>
@@ -98,7 +102,9 @@ export default function BackupHealth({
     if (!gatewayBase) return;
     readPendingUploads(gatewayBase, setPending);
     if (online)
-      void fetch(`${gatewayBase}/centraid/_gateway/storage/status`, { headers: authHeader() })
+      void fetch(`${gatewayBase}/centraid/_gateway/storage/status`, {
+        headers: authHeader(),
+      })
         .then((response) => response.json())
         .then(
           (body: {
@@ -133,68 +139,78 @@ export default function BackupHealth({
     let skipped = 0;
     setInCloudSkipped(0);
     try {
-      for (const albumId of rules.selectedAlbums) {
-        let offset = 0;
-        const pageSize = 250;
-        for (;;) {
-          // One native round-trip per page for every cheap field; the bytes of
-          // each asset are resolved individually below.
-          const page = await new MediaLibrary.Query()
-            .album(new MediaLibrary.Album(albumId))
-            .within(MediaLibrary.AssetField.MEDIA_TYPE, [
-              MediaLibrary.MediaType.IMAGE,
-              MediaLibrary.MediaType.VIDEO,
-            ])
-            .limit(pageSize)
-            .offset(offset)
-            .exeForMetadata();
-          for (const metadata of page) {
-            const isVideo = metadata.mediaType === MediaLibrary.MediaType.VIDEO;
-            const capturedAt = capturedAtIso(metadata);
-            let original: DeviceOriginal;
-            try {
-              original = await openDeviceOriginal(metadata.id);
-            } catch (reason) {
-              if (!(reason instanceof InCloudOriginalError)) throw reason;
-              // Counted and shown on the screen, never passed over in silence.
-              skipped += 1;
-              setInCloudSkipped(skipped);
-              continue;
-            }
-            // Resolved before the still so both halves share one capture group.
-            const companion = await liveVideoUri(original.asset);
-            await backupDeviceMedia(session, gatewayBase, {
-              localUri: original.uri,
-              ...(metadata.filename ? { filename: metadata.filename } : {}),
-              mediaType: isVideo ? 'video/mp4' : 'image/jpeg',
-              plaintextSize: new File(original.uri).size,
-              kind: isVideo ? 'video' : 'photo',
-              capturedAt,
-              captureGroupId: companion ? `live:${metadata.id}` : undefined,
-              width: metadata.width ?? undefined,
-              height: metadata.height ?? undefined,
-              durationS: durationSeconds(metadata.duration),
-            });
-            if (companion) {
-              const companionFile = new File(companion);
-              await backupDeviceMedia(session, gatewayBase, {
-                localUri: companion,
-                // The Next API extracts the Live Photo's video to a file rather
-                // than exposing a paired asset, so its dimensions and duration
-                // are not on offer — only the name and the bytes.
-                filename: companionFile.name,
-                mediaType: 'video/quicktime',
-                plaintextSize: companionFile.size,
-                kind: 'video',
-                capturedAt,
-                captureGroupId: `live:${metadata.id}`,
-              });
-            }
-          }
-          offset += page.length;
-          if (page.length < pageSize) break;
+      const pageSize = 250;
+      const backupAsset = async (metadata: MediaLibrary.AssetMetadata): Promise<void> => {
+        const isVideo = metadata.mediaType === MediaLibrary.MediaType.VIDEO;
+        const capturedAt = capturedAtIso(metadata);
+        let original: DeviceOriginal;
+        try {
+          original = await openDeviceOriginal(metadata.id);
+        } catch (reason) {
+          if (!(reason instanceof InCloudOriginalError)) throw reason;
+          // Counted and shown on the screen, never passed over in silence.
+          skipped += 1;
+          setInCloudSkipped(skipped);
+          return;
         }
-      }
+        // Resolved before the still so both halves share one capture group.
+        const companion = await liveVideoUri(original.asset);
+        await backupDeviceMedia(session, gatewayBase, {
+          localUri: original.uri,
+          ...(metadata.filename ? { filename: metadata.filename } : {}),
+          mediaType: isVideo ? 'video/mp4' : 'image/jpeg',
+          plaintextSize: new File(original.uri).size,
+          kind: isVideo ? 'video' : 'photo',
+          capturedAt,
+          captureGroupId: companion ? `live:${metadata.id}` : undefined,
+          width: metadata.width ?? undefined,
+          height: metadata.height ?? undefined,
+          durationS: durationSeconds(metadata.duration),
+        });
+        if (companion) {
+          const companionFile = new File(companion);
+          await backupDeviceMedia(session, gatewayBase, {
+            localUri: companion,
+            // The Next API extracts the Live Photo's video to a file rather
+            // than exposing a paired asset, so its dimensions and duration
+            // are not on offer — only the name and the bytes.
+            filename: companionFile.name,
+            mediaType: 'video/quicktime',
+            plaintextSize: companionFile.size,
+            kind: 'video',
+            capturedAt,
+            captureGroupId: `live:${metadata.id}`,
+          });
+        }
+      };
+      const backupAlbumPage = async (albumId: string, offset: number): Promise<void> => {
+        // One native round-trip per page for every cheap field; the bytes of
+        // each asset are resolved individually below.
+        const page = await new MediaLibrary.Query()
+          .album(new MediaLibrary.Album(albumId))
+          .within(MediaLibrary.AssetField.MEDIA_TYPE, [
+            MediaLibrary.MediaType.IMAGE,
+            MediaLibrary.MediaType.VIDEO,
+          ])
+          .limit(pageSize)
+          .offset(offset)
+          .exeForMetadata();
+        const backupPageAsset = async (index: number): Promise<void> => {
+          const metadata = page[index];
+          if (metadata === undefined) return;
+          await backupAsset(metadata);
+          return backupPageAsset(index + 1);
+        };
+        await backupPageAsset(0);
+        if (page.length === pageSize) return backupAlbumPage(albumId, offset + page.length);
+      };
+      const backupAlbum = async (index: number): Promise<void> => {
+        const albumId = rules.selectedAlbums[index];
+        if (albumId === undefined) return;
+        await backupAlbumPage(albumId, 0);
+        return backupAlbum(index + 1);
+      };
+      await backupAlbum(0);
       setLastSuccessfulSync(Store.get<string | undefined>(LAST_SUCCESSFUL_SYNC_KEY, undefined));
     } finally {
       setRunning(false);
@@ -309,7 +325,9 @@ export default function BackupHealth({
           <Text
             style={[
               styles.settingsText,
-              { color: rules.selectedAlbums.length ? colors.onAccent : colors.ink3 },
+              {
+                color: rules.selectedAlbums.length ? colors.onAccent : colors.ink3,
+              },
             ]}
           >
             {running ? 'Backing up selected albums…' : 'Back up selected albums now'}
@@ -378,56 +396,3 @@ function formatSyncTime(value: string): string {
   const timestamp = Date.parse(value);
   return Number.isNaN(timestamp) ? 'Unknown' : new Date(timestamp).toLocaleString();
 }
-
-const styles = StyleSheet.create({
-  content: { padding: 18, paddingBottom: 50 },
-  error: { fontFamily: family.sansRegular, fontSize: 12, marginVertical: 5 },
-  header: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    minHeight: 50,
-    paddingHorizontal: 14,
-  },
-  hero: { alignItems: 'center', borderRadius: 16, borderWidth: 1, padding: 26 },
-  heroValue: { fontFamily: family.displayBold, fontSize: 20, marginTop: 12 },
-  meta: { fontFamily: family.sansRegular, fontSize: 13, marginTop: 5 },
-  rule: {
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    minHeight: 52,
-  },
-  ruleLabel: { fontFamily: family.sansRegular, fontSize: 14 },
-  safe: { flex: 1 },
-  section: {
-    fontFamily: family.monoBold,
-    fontSize: 10,
-    letterSpacing: 1,
-    marginBottom: 6,
-    marginTop: 26,
-  },
-  settings: {
-    alignItems: 'center',
-    borderRadius: 12,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 24,
-    padding: 15,
-  },
-  settingsText: { fontFamily: family.sansMedium, fontSize: 14 },
-  storage: { fontFamily: family.sansRegular, fontSize: 14, lineHeight: 20 },
-  title: { fontFamily: family.displayBold, fontSize: 18 },
-  warning: {
-    alignItems: 'flex-start',
-    borderRadius: 12,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 16,
-    padding: 14,
-  },
-  warningText: { flex: 1, fontFamily: family.sansMedium, fontSize: 13, lineHeight: 19 },
-});

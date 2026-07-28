@@ -11,8 +11,8 @@
  * implementation (`runTurn`) stays in agent-runtime.
  */
 
-import type { TurnStreamEvent } from './runner.js';
 import type { Dispatcher } from '../handlers/dispatcher.js';
+import type { TurnStreamEvent } from './runner.js';
 
 /**
  * Every runner kind the runtime knows how to drive — the single

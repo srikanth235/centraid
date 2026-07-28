@@ -5,12 +5,12 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock(import('./gateway'), () => ({
+vi.mock(import('./gateway') as Promise<unknown>, () => ({
   apiHeaders: () => ({}),
   authHeader: () => ({}),
   // `fetchJson` is generic (`<T>(href, init?) => Promise<T>`); a typed mock erases
   // the type parameter, so `Mock<...>` stops being assignable to the export.
-  fetchJson: vi.fn(),
+  fetchJson: vi.fn<typeof import('./gateway').fetchJson>(),
   requireGatewayBase: vi.fn<typeof import('./gateway').requireGatewayBase>(
     async () => 'http://127.0.0.1:9',
   ),

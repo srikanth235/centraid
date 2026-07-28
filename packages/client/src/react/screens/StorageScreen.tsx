@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
-import BackupCard, { type BackupCardProps } from './BackupCard.js';
-import LocalFootprintCard from './LocalFootprintCard.js';
-import StorageLimitsPanel from './StorageLimitsPanel.js';
-import styles from './StorageScreen.module.css';
+
 import type {
   LocalUsageReportDTO,
   StorageLimitsDTO,
   StorageLimitsPatchDTO,
 } from '../../gateway-client-local-storage.js';
+import BackupCard, { type BackupCardProps } from './BackupCard.js';
+import LocalFootprintCard from './LocalFootprintCard.js';
+import StorageLimitsPanel from './StorageLimitsPanel.js';
+
+import styles from './StorageScreen.module.css';
 
 // The Storage page (issue #544 — this was Backups). It answers the storage
 // question in the order an owner actually asks it:
@@ -68,28 +70,28 @@ export default function StorageScreen(props: StorageScreenProps): JSX.Element {
   // footprint card and the limits panel in agreement — a limit shown beside a
   // total it wasn't evaluated against is worse than no limit shown.
   const refresh = useCallback(
-    (opts: { refresh?: boolean } = {}): Promise<void> =>
-      loadLocalUsage(opts).then(
-        (next) => {
-          if (!mountedRef.current) return;
-          setReport(next);
-          setLimits(next.limits);
-          setFootprintError(null);
-        },
-        (err: unknown) => {
-          if (!mountedRef.current) return;
-          setFootprintError(err instanceof Error ? err.message : String(err));
-        },
-      ),
+    async (opts: { refresh?: boolean } = {}): Promise<void> => {
+      try {
+        const next = await loadLocalUsage(opts);
+        if (!mountedRef.current) return;
+        setReport(next);
+        setLimits(next.limits);
+        setFootprintError(null);
+      } catch (err) {
+        if (!mountedRef.current) return;
+        setFootprintError(err instanceof Error ? err.message : String(err));
+      }
+    },
     [loadLocalUsage],
   );
 
   useEffect(() => {
     mountedRef.current = true;
-    void refresh();
+    const initialRefresh = setTimeout(() => void refresh(), 0);
     const timer = setInterval(() => void refresh(), FOOTPRINT_POLL_MS);
     return () => {
       mountedRef.current = false;
+      clearTimeout(initialRefresh);
       clearInterval(timer);
     };
   }, [refresh]);

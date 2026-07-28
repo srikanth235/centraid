@@ -1,7 +1,9 @@
 // Pure SigV4 unit tests (issue #545 B6) — no live S3 endpoint.
 
 import { createHash, createHmac } from 'node:crypto';
+
 import { describe, expect, test } from 'vitest';
+
 import {
   encodeKeyPath,
   presignS3Request,
@@ -44,18 +46,21 @@ describe('sigv4', () => {
       region: 'us-east-1',
       credentials: CREDS,
       body: Buffer.from('payload'),
-      headers: { 'content-type': 'application/octet-stream', 'x-amz-storage-class': 'STANDARD' },
+      headers: {
+        'content-type': 'application/octet-stream',
+        'x-amz-storage-class': 'STANDARD',
+      },
     };
     const signed = signS3Request(params);
     expect(signed.url.origin).toBe(base.origin);
     expect(signed.url.pathname).toBe('/my-bucket/blobs/sha256/deadbeef');
     expect(signed.headers.host).toBe(base.host);
     expect(signed.headers['x-amz-content-sha256']).toBe(sha256HexOf(Buffer.from('payload')));
-    expect(signed.headers['x-amz-date']).toMatch(/^\d{8}T\d{6}Z$/);
+    expect(signed.headers['x-amz-date']).toMatch(/^\d{8}T\d{6}Z$/u);
     expect(signed.headers['content-type']).toBe('application/octet-stream');
     expect(signed.headers['x-amz-storage-class']).toBe('STANDARD');
     expect(signed.headers.Authorization).toMatch(
-      /^AWS4-HMAC-SHA256 Credential=AKIAEXAMPLE\/\d{8}\/us-east-1\/s3\/aws4_request, SignedHeaders=/,
+      /^AWS4-HMAC-SHA256 Credential=AKIAEXAMPLE\/\d{8}\/us-east-1\/s3\/aws4_request, SignedHeaders=/u,
     );
     expect(signed.headers.Authorization).toContain('Signature=');
     // Every caller header is folded into SignedHeaders (no special casing).
@@ -134,7 +139,7 @@ describe('sigv4', () => {
     expect(url.searchParams.get('X-Amz-Date')).toBe('20240102T030405Z');
     expect(url.searchParams.get('X-Amz-Expires')).toBe('600');
     expect(url.searchParams.get('X-Amz-SignedHeaders')).toBe('host');
-    expect(url.searchParams.get('X-Amz-Signature')).toMatch(/^[0-9a-f]{64}$/);
+    expect(url.searchParams.get('X-Amz-Signature')).toMatch(/^[0-9a-f]{64}$/u);
     expect(url.pathname).toBe('/b/prefix/blobs/sha256/ab');
   });
 

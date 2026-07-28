@@ -6,12 +6,14 @@
 // (issue #337); the "You" row (is_you) gets RSVP controls, other guests show
 // their PARTSTAT.
 import { useEffect, useRef, useState } from 'react';
-import { armConfirm, outcomeMessage, renderAttachments } from '../kit.ts';
+import type { ChangeEvent } from 'react';
+
 import { fmtRange, initials, toIsoUtc, toLocalInput } from '../format.ts';
 import { I } from '../icons.ts';
-import { CalDot, Icon } from './Shared.tsx';
-import type { ChangeEvent } from 'react';
+import { armConfirm, outcomeMessage, renderAttachments } from '../kit.ts';
 import type { ActivityEntry, AgEvent, Attendee } from '../types.ts';
+import { CalDot, Icon } from './Shared.tsx';
+
 import styles from './EventDrawer.module.css';
 import shared from './shared.module.css';
 

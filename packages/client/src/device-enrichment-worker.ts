@@ -97,7 +97,11 @@ export function parseDeviceWorkSource(lease: DeviceEnrichmentLease): DeviceWorkS
     ) {
       return null;
     }
-    return { contentId: value.contentId, sha256: value.sha256, mediaType: value.mediaType };
+    return {
+      contentId: value.contentId,
+      sha256: value.sha256,
+      mediaType: value.mediaType,
+    };
   } catch {
     return null;
   }
@@ -119,9 +123,17 @@ const productionApi: DeviceWorkerApi = {
       mediaType: contribution.mediaType,
     }),
   finish: (vaultId, lease) =>
-    finishGatewayDeviceWork({ vaultId, requestId: lease.requestId, token: lease.token }),
+    finishGatewayDeviceWork({
+      vaultId,
+      requestId: lease.requestId,
+      token: lease.token,
+    }),
   release: (vaultId, lease) =>
-    releaseGatewayDeviceWork({ vaultId, requestId: lease.requestId, token: lease.token }),
+    releaseGatewayDeviceWork({
+      vaultId,
+      requestId: lease.requestId,
+      token: lease.token,
+    }),
 };
 
 /** Run at most one job; the scheduler immediately re-enters after success. */
@@ -135,7 +147,9 @@ export async function runDeviceEnrichmentWorkerOnce(
   );
   if (optedIn.length === 0) return { status: 'disabled' };
 
-  for (const device of optedIn) {
+  async function tryNextDevice(index: number): Promise<DeviceWorkerResult> {
+    const device = optedIn[index];
+    if (!device) return { status: 'idle' };
     let lease: DeviceEnrichmentLease | null = null;
     try {
       // Refresh capability advertisement without changing the existing opt-in.
@@ -143,9 +157,13 @@ export async function runDeviceEnrichmentWorkerOnce(
       const capabilities = WORK_CAPABILITIES.filter(
         (capability) => advertised.compute?.capabilities[capability] === true,
       );
-      if (capabilities.length === 0) continue;
-      lease = await api.lease({ vaultId: device.vaultId, capabilities, ...conditions });
-      if (!lease) continue;
+      if (capabilities.length === 0) return tryNextDevice(index + 1);
+      lease = await api.lease({
+        vaultId: device.vaultId,
+        capabilities,
+        ...conditions,
+      });
+      if (!lease) return tryNextDevice(index + 1);
       const pointer = parseDeviceWorkSource(lease);
       if (!pointer) {
         await api.release(device.vaultId, lease);
@@ -158,18 +176,23 @@ export async function runDeviceEnrichmentWorkerOnce(
         await api.release(device.vaultId, lease);
         return { status: 'released', requestId: lease.requestId };
       }
-      for (const contribution of contributions) {
-        await api.stage(device.vaultId, pointer.sha256, contribution);
-      }
+      // Derivative variants have independent object keys; stage them in one
+      // wave, then close the lease only after every durable write settles.
+      await Promise.all(
+        contributions.map((contribution) =>
+          api.stage(device.vaultId, pointer.sha256, contribution),
+        ),
+      );
       if (await api.finish(device.vaultId, lease)) {
         return { status: 'completed', requestId: lease.requestId };
       }
       return { status: 'released', requestId: lease.requestId };
     } catch {
       if (lease) await api.release(device.vaultId, lease).catch(() => false);
+      return tryNextDevice(index + 1);
     }
   }
-  return { status: 'idle' };
+  return tryNextDevice(0);
 }
 
 let installed = false;

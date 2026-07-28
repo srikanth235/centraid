@@ -1,5 +1,6 @@
-import { assert, describe, expect, test } from 'vitest';
 import { fc } from '@centraid/test-kit/fast-check';
+import { assert, describe, expect, test } from 'vitest';
+
 import {
   GATEWAY_MIN_PROTOCOL_VERSION,
   GATEWAY_PROTOCOL_VERSION,
@@ -24,9 +25,14 @@ describe('protocol handshake property', () => {
         fc.integer({ min: 1, max: 20 }),
         (localProtocol, localMin, peerProtocol, peerMin) => {
           const expected = peerProtocol >= localMin && localProtocol >= peerMin;
-          expect(protocolsCompatible({ localProtocol, localMin, peerProtocol, peerMin })).toBe(
-            expected,
-          );
+          expect(
+            protocolsCompatible({
+              localProtocol,
+              localMin,
+              peerProtocol,
+              peerMin,
+            }),
+          ).toBe(expected);
         },
       ),
       { numRuns: 64, seed: 53270 },

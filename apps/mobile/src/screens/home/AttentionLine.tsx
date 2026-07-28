@@ -11,11 +11,12 @@
 // So a settled, connected home shows one calm line, and a home that needs the
 // owner shows exactly the cards that do.
 
+import type { IconName } from '@centraid/design-tokens';
 import React, { useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+
 import Icon from '../../kit/components/Icon';
 import { family, t, useTheme, type ThemeColors } from '../../kit/theme';
-import type { IconName } from '@centraid/design-tokens';
 
 // Mirrors Home's load state, minus the resolved app payload — this component
 // only needs to know whether the desktop is reachable, not what it returned.
@@ -256,7 +257,12 @@ const makeStyles = (colors: ThemeColors) =>
       justifyContent: 'center',
       width: 42,
     },
-    bannerSub: { ...t('small'), color: colors.ink2, lineHeight: 18, marginTop: 2 },
+    bannerSub: {
+      ...t('small'),
+      color: colors.ink2,
+      lineHeight: 18,
+      marginTop: 2,
+    },
     bannerTitle: { ...t('bodyStrong'), color: colors.ink },
     chip: {
       alignItems: 'center',
@@ -278,7 +284,11 @@ const makeStyles = (colors: ThemeColors) =>
       width: 32,
     },
     chipSub: { ...t('tiny'), color: colors.ink3, marginTop: 1 },
-    chipTitle: { ...t('small'), color: colors.ink, fontFamily: family.sansBold },
+    chipTitle: {
+      ...t('small'),
+      color: colors.ink,
+      fontFamily: family.sansBold,
+    },
     dot: { borderRadius: 3, height: 6, width: 6 },
     pressed: { opacity: 0.85, transform: [{ scale: 0.98 }] },
     strip: { flexDirection: 'row', gap: 10 },

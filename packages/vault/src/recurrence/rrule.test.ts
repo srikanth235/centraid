@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+
 import { expandRrule, nextOccurrence, parseRrule } from './rrule.js';
 
 describe('rrule', () => {

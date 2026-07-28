@@ -1,9 +1,11 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { list, readAppOwned, readAppAt } from './app.js';
+
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
 import type { Manifest } from '../manifest/manifest.js';
+import { list, readAppOwned, readAppAt } from './app.js';
 
 function manifest(over: Partial<Manifest> = {}): Manifest {
   return {

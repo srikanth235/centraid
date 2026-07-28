@@ -17,9 +17,11 @@
  * concern (a different process) and are unaffected by this.
  */
 
-import { app } from 'electron';
 import { appendFileSync, renameSync, statSync } from 'node:fs';
 import path from 'node:path';
+
+import { app } from 'electron';
+
 import { formatCrashLine, shouldRotate, toCrashRecord, type CrashKind } from './crash-log-core.js';
 
 const CRASH_LOG_FILE = 'crash.log';

@@ -1,10 +1,13 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { describe, expect, test } from 'vitest';
+
 import { providerConformanceCases, type ConformanceHarness } from './conformance.js';
 import { LocalBackupProvider } from './local-provider.js';
 import { BackupProviderError } from './provider.js';
+
 async function makeHarness(): Promise<ConformanceHarness> {
   const dir = await tempDir('backup-local-conf-');
   return {
@@ -27,7 +30,9 @@ describe('conformance suite', () => {
 describe('LocalBackupProvider lifecycle edge cases', () => {
   test('unknown target throws not_found', async () => {
     const provider = new LocalBackupProvider({ rootDir: await tempDir() });
-    await expect(provider.getTarget('nope')).rejects.toMatchObject({ code: 'not_found' });
+    await expect(provider.getTarget('nope')).rejects.toMatchObject({
+      code: 'not_found',
+    });
   });
 
   test('registration replay ignores a stale generation on the replay call', async () => {
@@ -46,7 +51,10 @@ describe('LocalBackupProvider lifecycle edge cases', () => {
     const first = await provider.registerSnapshot(targetId, reg);
     // Same idempotencyKey, generation now "stale" relative to currentGeneration (5) —
     // replay must win over fencing (spec-mandated order).
-    const replay = await provider.registerSnapshot(targetId, { ...reg, generation: 1 });
+    const replay = await provider.registerSnapshot(targetId, {
+      ...reg,
+      generation: 1,
+    });
     expect(replay).toStrictEqual(first);
   });
 
@@ -91,7 +99,9 @@ describe('LocalBackupProvider lifecycle edge cases', () => {
       appMeta: {},
     });
     await provider.purgeTarget(targetId);
-    const rows = await provider.listSnapshots(targetId, { includePruned: true });
+    const rows = await provider.listSnapshots(targetId, {
+      includePruned: true,
+    });
     expect(rows).toStrictEqual([]);
     const roAfterPurge = await provider
       .openDataPlane(targetId, 'backup', 'read')
@@ -265,6 +275,9 @@ describe('LocalBackupProvider lifecycle edge cases', () => {
         format: 'centraid-snapshot/2',
         appMeta: {},
       }),
-    ).rejects.toMatchObject({ code: 'conflict_generation', details: { currentGeneration: 2 } });
+    ).rejects.toMatchObject({
+      code: 'conflict_generation',
+      details: { currentGeneration: 2 },
+    });
   });
 });

@@ -1,4 +1,5 @@
 import { assert, beforeEach, describe, expect, test } from 'vitest';
+
 import { bootstrapVault, type BootstrapResult } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { createGateway, Gateway } from '../gateway/gateway.js';
@@ -16,7 +17,11 @@ describe('tasks', () => {
     boot = bootstrapVault(db, { ownerName: 'Priya' });
     gw = createGateway(db);
     registerTaskCommands(gw);
-    owner = { kind: 'device', deviceId: boot.deviceId, deviceKey: boot.deviceKey };
+    owner = {
+      kind: 'device',
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+    };
   });
 
   function addTask(input: Record<string, unknown>): string {
@@ -30,7 +35,11 @@ describe('tasks', () => {
   }
 
   test('add_task creates an open VTODO with defaults and provenance', () => {
-    const taskId = addTask({ title: 'File the GST return', due_at: '2026-07-20', priority: 1 });
+    const taskId = addTask({
+      title: 'File the GST return',
+      due_at: '2026-07-20',
+      priority: 1,
+    });
     const row = db.vault.prepare('SELECT * FROM schedule_task WHERE task_id = ?').get(taskId);
     expect(row).toMatchObject({
       title: 'File the GST return',
@@ -214,7 +223,10 @@ describe('tasks', () => {
   });
 
   test('edit_task sets and clears rrule; setting it on a task with no due_at is refused', () => {
-    const withDue = addTask({ title: 'Weekly review', due_at: '2026-07-06T09:00:00.000Z' });
+    const withDue = addTask({
+      title: 'Weekly review',
+      due_at: '2026-07-06T09:00:00.000Z',
+    });
     const set = gw.invoke(owner, {
       command: 'schedule.edit_task',
       input: { task_id: withDue, rrule: 'FREQ=WEEKLY' },
@@ -251,7 +263,10 @@ describe('tasks', () => {
   });
 
   test('edit_task sets and clears remind_before_min; sending both is refused', () => {
-    const taskId = addTask({ title: 'Call the dentist', due_at: '2026-07-10T09:00:00.000Z' });
+    const taskId = addTask({
+      title: 'Call the dentist',
+      due_at: '2026-07-10T09:00:00.000Z',
+    });
     const set = gw.invoke(owner, {
       command: 'schedule.edit_task',
       input: { task_id: taskId, remind_before_min: 15 },
@@ -302,10 +317,19 @@ describe('tasks', () => {
   });
 
   test('edit_task updates only the fields sent and reads them back', () => {
-    const taskId = addTask({ title: 'Draft the proposal', due_at: '2026-07-10', priority: 5 });
+    const taskId = addTask({
+      title: 'Draft the proposal',
+      due_at: '2026-07-10',
+      priority: 5,
+    });
     const outcome = gw.invoke(owner, {
       command: 'schedule.edit_task',
-      input: { task_id: taskId, title: 'Draft + send the proposal', priority: 1, effort_min: 90 },
+      input: {
+        task_id: taskId,
+        title: 'Draft + send the proposal',
+        priority: 1,
+        effort_min: 90,
+      },
       purpose: 'dpv:ServiceProvision',
     });
     expect(outcome.status).toBe('executed');
@@ -342,7 +366,10 @@ describe('tasks', () => {
   });
 
   test('description rides add_task, edit_task sets it, clear_description removes it', () => {
-    const taskId = addTask({ title: 'Book flights', description: 'Window seat if possible' });
+    const taskId = addTask({
+      title: 'Book flights',
+      description: 'Window seat if possible',
+    });
     let row = db.vault
       .prepare('SELECT description FROM schedule_task WHERE task_id = ?')
       .get(taskId) as { description: string | null };

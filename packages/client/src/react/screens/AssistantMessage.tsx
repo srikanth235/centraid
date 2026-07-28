@@ -3,12 +3,14 @@
 // copy / feedback / regenerate / retry / retry-pager / timestamp affordances.
 
 import { useEffect, useState, type JSX } from 'react';
+
 import type { AsstAttachmentDTO, AsstMsgDTO } from '../screen-contracts.js';
-import styles from './AssistantScreen.module.css';
 import { cx } from '../ui/cx.js';
 import Icon from '../ui/Icon.js';
-import asstPreCss from '../styles/asstPre.module.css';
 import { formatUsageLabel, formatUsageTitle } from './assistantUsage.js';
+
+import asstPreCss from '../styles/asstPre.module.css';
+import styles from './AssistantScreen.module.css';
 
 // Thumbs glyphs — not in the design-tokens icon set, so small local SVGs.
 function ThumbUpGlyph(): JSX.Element {
@@ -52,7 +54,10 @@ function formatBytes(n: number): string {
 
 function formatTime(ms: number): string {
   try {
-    return new Date(ms).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    return new Date(ms).toLocaleTimeString(undefined, {
+      hour: 'numeric',
+      minute: '2-digit',
+    });
   } catch {
     return '';
   }

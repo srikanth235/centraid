@@ -1,6 +1,8 @@
-import { test, expect } from '@playwright/test';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+
+import { test, expect } from '@playwright/test';
+
 import {
   appEntry,
   cleanupEnv,
@@ -139,7 +141,7 @@ test('3.3 — gateway offline: surfaces an error and keeps the tile', async () =
     await expectConfirm(page, 'Delete app?');
     await confirmDelete(page);
 
-    await expect(page.locator('[data-global-toast]')).toContainText(/Could not delete.*gateway/i);
+    await expect(page.locator('[data-global-toast]')).toContainText(/Could not delete.*gateway/iu);
     await expect(page.locator(`[data-app-id="${id}"]`)).toBeVisible();
   } finally {
     await closeApp(app);
@@ -181,7 +183,7 @@ test('3.4 — 404 from the gateway surfaces a delete error (not phantom success)
 
     // Client throws on non-2xx → toast error path; no "Deleted …" success toast.
     await expect(page.locator('[data-global-toast]')).toContainText(
-      /Could not delete|not_found|delete app/i,
+      /Could not delete|not_found|delete app/iu,
       {
         timeout: 10_000,
       },

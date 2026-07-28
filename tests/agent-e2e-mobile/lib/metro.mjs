@@ -82,19 +82,25 @@ export async function prewarmMetroBundle(platform, appId) {
     `http://127.0.0.1:8081/index.bundle?${query}`,
   ];
   const MIN_REAL_BUNDLE_BYTES = 1_000_000;
-  for (const url of candidates) {
+  // Fallback URLs must be tried in priority order; the first complete bundle
+  // establishes the Metro warmup result.
+  const prewarmNext = async (index) => {
+    const url = candidates[index];
+    if (!url) return false;
     const t0 = Date.now();
     try {
       const res = await fetch(url, { signal: AbortSignal.timeout(300_000) });
       // Drain the body: Metro streams the bundle and isn't done building until
       // the last byte is out.
       const bytes = (await res.arrayBuffer()).byteLength;
-      if (!res.ok || bytes < MIN_REAL_BUNDLE_BYTES) continue;
+      if (!res.ok || bytes < MIN_REAL_BUNDLE_BYTES) return prewarmNext(index + 1);
       console.log(`  prewarm : bundle ready in ${Date.now() - t0}ms (${bytes} bytes)`);
-      return;
+      return true;
     } catch (err) {
       console.log(`  prewarm : ${url.split('?')[0]} failed (${err.message ?? err})`);
+      return prewarmNext(index + 1);
     }
-  }
-  console.log('  prewarm : no bundle endpoint matched — flows will pay the cold build');
+  };
+  if (!(await prewarmNext(0)))
+    console.log('  prewarm : no bundle endpoint matched — flows will pay the cold build');
 }

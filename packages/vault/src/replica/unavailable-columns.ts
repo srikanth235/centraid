@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
+
 import { sealedColumnsOf } from '../schema/sealed.js';
 
 /**

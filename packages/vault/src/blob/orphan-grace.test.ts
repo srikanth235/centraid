@@ -5,7 +5,9 @@
 // a blob referenced by no retained manifest.
 
 import { DatabaseSync } from 'node:sqlite';
+
 import { describe, expect, test } from 'vitest';
+
 import { BLOB_CACHE_DDL } from '../schema/blob.js';
 import { reconcileCustody, type ReconcileContext } from './custody-reconcile.js';
 import { MemoryBlobStore } from './local.js';
@@ -162,7 +164,9 @@ describe('orphan-grace', () => {
       replicate: (shas) => Promise.resolve(shas),
     };
 
-    const result = await reconcileCustody(ctx, new Set(), { graceWindowMs: 3 * DAY_MS });
+    const result = await reconcileCustody(ctx, new Set(), {
+      graceWindowMs: 3 * DAY_MS,
+    });
 
     expect(result.orphansGraceHeld).toStrictEqual([orphan]);
     expect(result.orphansDeleted).toStrictEqual([]);

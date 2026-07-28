@@ -4,7 +4,7 @@
 // `adders` is which "+ add" affordances are open. Every write flows out
 // through the `on*` callback props; nothing here calls the vault itself.
 import type { ReactNode } from 'react';
-import { fmtMoney } from '../kit.ts';
+
 import {
   cadence,
   daysSince,
@@ -16,9 +16,8 @@ import {
   statusOf,
 } from '../format.ts';
 import { I } from '../icons.ts';
+import { fmtMoney } from '../kit.ts';
 import type { DetailPerson } from '../types.ts';
-import { Icon } from './Shared.tsx';
-import type { DrawerCallbacks } from './Details.tsx';
 import {
   DateAddRow,
   DebtAddRow,
@@ -27,6 +26,9 @@ import {
   RelationshipAddRow,
   TaskAddRow,
 } from './AddRows.tsx';
+import type { DrawerCallbacks } from './Details.tsx';
+import { Icon } from './Shared.tsx';
+
 import styles from './DetailSections.module.css';
 import shared from './shared.module.css';
 
@@ -234,7 +236,14 @@ export function Sections({
       {dp.met ? (
         <>
           <div className={styles.detailLabel}>How you met</div>
-          <p style={{ margin: 0, font: 'var(--t-body)', color: 'var(--ink-2)', lineHeight: 1.5 }}>
+          <p
+            style={{
+              margin: 0,
+              font: 'var(--t-body)',
+              color: 'var(--ink-2)',
+              lineHeight: 1.5,
+            }}
+          >
             {dp.met}
           </p>
         </>
@@ -269,7 +278,13 @@ export function Sections({
                 {r.pet === 'cat' ? '🐱' : r.pet === 'dog' ? '🐶' : r.name?.[0] || '·'}
               </span>
               <span style={{ flex: 1, font: 'var(--t-body)', fontWeight: 500 }}>{r.name}</span>
-              <span style={{ font: 'var(--t-small)', fontSize: '11.5px', color: 'var(--ink-3)' }}>
+              <span
+                style={{
+                  font: 'var(--t-small)',
+                  fontSize: '11.5px',
+                  color: 'var(--ink-3)',
+                }}
+              >
                 {r.kind}
               </span>
             </div>
@@ -289,7 +304,13 @@ export function Sections({
           {dates.map((d) => (
             <div className={styles.kvRow} key={d.date_id}>
               <span style={{ flex: 1 }}>
-                <span style={{ display: 'block', font: 'var(--t-body)', fontWeight: 500 }}>
+                <span
+                  style={{
+                    display: 'block',
+                    font: 'var(--t-body)',
+                    fontWeight: 500,
+                  }}
+                >
                   {d.label}
                 </span>
                 <span
@@ -433,7 +454,13 @@ export function Sections({
                   <span className={shared.activityLine} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                    }}
+                  >
                     <span className={shared.activityKind} style={{ color: 'var(--ink-2)' }}>
                       {t.kind}
                     </span>

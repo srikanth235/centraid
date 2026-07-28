@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import http from 'node:http';
+
 import {
   paginateAuditEvents,
   paginateInventory,
@@ -55,7 +56,11 @@ function errorBody(
       ? 'conflict_error'
       : 'invalid_request_error';
   res.writeHead(status, { 'content-type': 'application/json' });
-  res.end(JSON.stringify({ error: { message, type, code, ...(details ? { details } : {}) } }));
+  res.end(
+    JSON.stringify({
+      error: { message, type, code, ...(details ? { details } : {}) },
+    }),
+  );
 }
 
 async function readJsonBody(req: http.IncomingMessage): Promise<unknown> {
@@ -85,7 +90,11 @@ export async function startFakeProviderServer(): Promise<FakeProviderServer> {
     kind: ProviderAuditEvent['kind'],
     detail: Record<string, unknown>,
   ): void {
-    (events.get(targetId) ?? []).push({ at: Math.floor(Date.now() / 1000), kind, detail });
+    (events.get(targetId) ?? []).push({
+      at: Math.floor(Date.now() / 1000),
+      kind,
+      detail,
+    });
   }
 
   function usageFor(targetId: string) {

@@ -1,13 +1,20 @@
-import { afterEach, describe, expect, test, vi } from 'vitest';
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import http from 'node:http';
 import crypto from 'node:crypto';
+import http from 'node:http';
 import { Readable } from 'node:stream';
-import { openVaultPlane, type VaultPlane } from '../serve/vault-plane.js';
+
+import { forEachSequentially } from '@centraid/test-kit/sequential';
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { afterEach, describe, expect, test, vi } from 'vitest';
+
 import { DATA_PLANE_RELAY_HEADER } from '../serve/data-plane-handoff.js';
+import { openVaultPlane, type VaultPlane } from '../serve/vault-plane.js';
 import { makeBlobRouteHandler } from './blob-routes.js';
 
-const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
+const silentLogger = {
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+};
 const PNG_BYTES = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
   'base64',
@@ -17,7 +24,7 @@ const cleanups: Array<() => Promise<void> | void> = [];
 describe('blob-routes-hardening', () => {
   afterEach(async () => {
     vi.restoreAllMocks();
-    while (cleanups.length > 0) await cleanups.pop()?.();
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
   });
 
   async function fixture(dataPlane?: {
@@ -47,7 +54,10 @@ describe('blob-routes-hardening', () => {
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     cleanups.push(() => new Promise<void>((resolve) => server.close(() => resolve())));
     const address = server.address() as { port: number };
-    return { base: `http://127.0.0.1:${address.port}/centraid/_vault/blobs`, plane };
+    return {
+      base: `http://127.0.0.1:${address.port}/centraid/_vault/blobs`,
+      plane,
+    };
   }
 
   async function stageAndClaim(base: string, plane: VaultPlane, filename: string): Promise<string> {
@@ -91,15 +101,21 @@ describe('blob-routes-hardening', () => {
       });
       request.once('error', reject);
     });
-    for (let attempt = 0; attempt < 50 && !slow.destroyed; attempt += 1) {
+    const waitForDestroy = async (attempt: number): Promise<void> => {
+      if (attempt >= 50 || slow.destroyed) return;
       await new Promise((resolve) => setTimeout(resolve, 10));
-    }
+      return waitForDestroy(attempt + 1);
+    };
+    await waitForDestroy(0);
     expect(slow.destroyed).toBe(true);
   });
 
   test('redirects only trusted relay requests and never caches the one-use handoff', async () => {
     const secret = 'relay-proof-secret';
-    const { base, plane } = await fixture({ baseUrl: 'http://127.0.0.1:9', secret });
+    const { base, plane } = await fixture({
+      baseUrl: 'http://127.0.0.1:9',
+      secret,
+    });
     const contentId = await stageAndClaim(base, plane, 'handoff.png');
 
     const direct = await fetch(`${base}/${contentId}`, { redirect: 'manual' });
@@ -112,7 +128,7 @@ describe('blob-routes-hardening', () => {
       headers: { [DATA_PLANE_RELAY_HEADER]: secret },
     });
     expect(relayed.status).toBe(307);
-    expect(relayed.headers.get('location')).toMatch(/^http:\/\/127\.0\.0\.1:9\/v1\/blob\?/);
+    expect(relayed.headers.get('location')).toMatch(/^http:\/\/127\.0\.0\.1:9\/v1\/blob\?/u);
     expect(relayed.headers.get('cache-control')).toBe('no-store');
     await expect(relayed.text()).resolves.toBe('');
 
@@ -134,7 +150,9 @@ describe('blob-routes-hardening', () => {
     expect(response.status).toBe(404);
     expect(response.headers.get('cache-control')).toBeNull();
     expect(response.headers.get('content-range')).toBeNull();
-    await expect(response.json()).resolves.toStrictEqual({ error: 'bytes missing from custody' });
+    await expect(response.json()).resolves.toStrictEqual({
+      error: 'bytes missing from custody',
+    });
   });
 
   test('a source error after headers closes only that response and keeps the server alive', async () => {

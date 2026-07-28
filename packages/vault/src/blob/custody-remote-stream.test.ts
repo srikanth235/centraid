@@ -1,5 +1,6 @@
-import { describe, expect, test, vi } from 'vitest';
 import { tempDir } from '@centraid/test-kit/temp-dir';
+import { describe, expect, test, vi } from 'vitest';
+
 import { BlobCustody } from './custody.js';
 import { FsBlobStore, MemoryBlobStore } from './local.js';
 import { sha256OfBytes, type BlobRange } from './store.js';
@@ -43,7 +44,9 @@ describe('remote-only blob streaming', () => {
     const claimedSha = sha256OfBytes(Buffer.from('different'));
     const remote = new MemoryBlobStore();
     await remote.put(claimedSha, bytes);
-    const custody = new BlobCustody(new MemoryBlobStore(), () => ({ store: remote }));
+    const custody = new BlobCustody(new MemoryBlobStore(), () => ({
+      store: remote,
+    }));
 
     const stream = custody.openRemoteReadStream(claimedSha, bytes.length);
 
@@ -56,9 +59,14 @@ describe('remote-only blob streaming', () => {
     const remote = new MemoryBlobStore();
     await remote.put(sha, bytes);
     const get = vi.spyOn(remote, 'get');
-    const custody = new BlobCustody(new MemoryBlobStore(), () => ({ store: remote }));
+    const custody = new BlobCustody(new MemoryBlobStore(), () => ({
+      store: remote,
+    }));
 
-    const stream = custody.openRemoteReadStream(sha, bytes.length, { start: 3, end: 7 });
+    const stream = custody.openRemoteReadStream(sha, bytes.length, {
+      start: 3,
+      end: 7,
+    });
 
     await expect(collect(stream!)).resolves.toStrictEqual(Buffer.from('34567'));
     expect(get).toHaveBeenCalledWith(sha, { start: 3, end: 7 });

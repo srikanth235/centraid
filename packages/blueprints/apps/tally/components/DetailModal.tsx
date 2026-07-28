@@ -3,6 +3,7 @@
 import { MS, cat, first, money, tint, todayKey } from '../format.ts';
 import type { Group, LedgerRow } from '../types.ts';
 import { ArmedButton, KitAvatar, ModalBackdrop } from './Shared.tsx';
+
 import shared from './shared.module.css';
 
 export function DetailModal({
@@ -35,7 +36,12 @@ export function DetailModal({
         <div style={{ display: 'flex', alignItems: 'center', gap: '13px' }}>
           <span
             className={shared.excat}
-            style={{ width: '46px', height: '46px', fontSize: '22px', background: tint(c.color) }}
+            style={{
+              width: '46px',
+              height: '46px',
+              fontSize: '22px',
+              background: tint(c.color),
+            }}
           >
             {c.icon}
           </span>
@@ -74,7 +80,13 @@ export function DetailModal({
               <span style={{ flex: 1, font: 'var(--t-body)', fontSize: '13.5px' }}>
                 {s.party_id === me ? 'You' : s.name}
               </span>
-              <span style={{ font: 'var(--t-mono)', fontSize: '12px', color: 'var(--ink-2)' }}>
+              <span
+                style={{
+                  font: 'var(--t-mono)',
+                  fontSize: '12px',
+                  color: 'var(--ink-2)',
+                }}
+              >
                 {money(s.share_minor, currency)}
               </span>
             </div>

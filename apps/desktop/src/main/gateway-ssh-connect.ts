@@ -13,9 +13,9 @@
  * failure resolves to `{ok:false, error, message}` with a stable code.
  */
 
-import { sshPair, sshVaultCreate, type SshHostProfile } from './ssh-host.js';
 import { redeemGatewayPairing } from './gateway-pairing.js';
 import { updateGatewaySsh } from './gateway-store.js';
+import { sshPair, sshVaultCreate, type SshHostProfile } from './ssh-host.js';
 
 /** The ttl the desktop mints for the ssh-bootstrapped pairing ticket — long
  *  enough for the ssh round trip + the local iroh redemption, short enough

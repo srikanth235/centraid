@@ -4,6 +4,7 @@
 // exercise the exact CAS path a real vault uses.
 
 import { describe, expect, test } from 'vitest';
+
 import { openVaultDb, type VaultDb } from './db.js';
 import { nowIso, sha256Hex, uuidv7 } from './ids.js';
 import {
@@ -96,8 +97,14 @@ function seedInvocationCluster(
 describe('journal-archive', () => {
   test('archives old provenance rows into a CAS segment and drops them from journal.db', () => {
     const db = openVaultDb({});
-    const oldId = seedProvenance(db, { entityId: 'note-1', occurredAt: daysAgoIso(120) });
-    const freshId = seedProvenance(db, { entityId: 'note-2', occurredAt: daysAgoIso(1) });
+    const oldId = seedProvenance(db, {
+      entityId: 'note-1',
+      occurredAt: daysAgoIso(120),
+    });
+    const freshId = seedProvenance(db, {
+      entityId: 'note-2',
+      occurredAt: daysAgoIso(1),
+    });
 
     const result = runJournalArchival(db, { windowDays: 90 });
 
@@ -129,10 +136,17 @@ describe('journal-archive', () => {
 
   test('a provenance row is kept when a live row still chains back to it', () => {
     const db = openVaultDb({});
-    const oldId = seedProvenance(db, { entityId: 'note-1', occurredAt: daysAgoIso(120) });
+    const oldId = seedProvenance(db, {
+      entityId: 'note-1',
+      occurredAt: daysAgoIso(120),
+    });
     // A fresh row points BACK at the old one — deleting the old row would
     // dangle this FK, so the old row must stay this run.
-    seedProvenance(db, { entityId: 'note-1', occurredAt: daysAgoIso(1), prevProvId: oldId });
+    seedProvenance(db, {
+      entityId: 'note-1',
+      occurredAt: daysAgoIso(1),
+      prevProvId: oldId,
+    });
 
     const result = runJournalArchival(db, { windowDays: 90 });
 
@@ -188,7 +202,10 @@ describe('journal-archive', () => {
     const db = openVaultDb({});
     // Invocation is old, but its receipt landed recently (edge case) —
     // archiving the invocation would dangle the receipt's FK, so both stay.
-    seedInvocationCluster(db, { requestedAt: daysAgoIso(120), receiptAt: daysAgoIso(1) });
+    seedInvocationCluster(db, {
+      requestedAt: daysAgoIso(120),
+      receiptAt: daysAgoIso(1),
+    });
 
     const result = runJournalArchival(db, { windowDays: 90 });
 
@@ -200,7 +217,10 @@ describe('journal-archive', () => {
   test('a fresh vault archives nothing (window- and call-gated)', () => {
     const db = openVaultDb({});
     seedProvenance(db, { entityId: 'note-1', occurredAt: daysAgoIso(1) });
-    seedInvocationCluster(db, { requestedAt: daysAgoIso(1), receiptAt: daysAgoIso(1) });
+    seedInvocationCluster(db, {
+      requestedAt: daysAgoIso(1),
+      receiptAt: daysAgoIso(1),
+    });
 
     const result = runJournalArchival(db, { windowDays: 90 });
 
@@ -212,7 +232,10 @@ describe('journal-archive', () => {
     const db = openVaultDb({});
     seedProvenance(db, { entityId: 'note-1', occurredAt: daysAgoIso(120) });
 
-    const first = runJournalArchival(db, { windowDays: 90, now: daysAgoIso(0) });
+    const first = runJournalArchival(db, {
+      windowDays: 90,
+      now: daysAgoIso(0),
+    });
     expect(first.manifests).toHaveLength(1);
 
     seedProvenance(db, { entityId: 'note-2', occurredAt: daysAgoIso(150) });
@@ -249,6 +272,6 @@ describe('journal-archive', () => {
 
   test('rejects a non-positive window', () => {
     const db = openVaultDb({});
-    expect(() => runJournalArchival(db, { windowDays: 0 })).toThrow(/positive/);
+    expect(() => runJournalArchival(db, { windowDays: 0 })).toThrow(/positive/u);
   });
 });

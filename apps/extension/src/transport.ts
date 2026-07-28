@@ -1,4 +1,5 @@
 import { appActionPath, appQueryPath } from '@centraid/protocol';
+
 import initWasm, {
   BrowserEndpoint,
   connect_failure_marker,
@@ -62,7 +63,10 @@ export async function pairOverIroh(input: {
       grantProfile: input.grantProfile,
     }),
   );
-  return { endpointId: node.endpoint_id(), response: JSON.parse(raw) as Record<string, unknown> };
+  return {
+    endpointId: node.endpoint_id(),
+    response: JSON.parse(raw) as Record<string, unknown>,
+  };
 }
 
 async function requestWithRetry(
@@ -73,7 +77,9 @@ async function requestWithRetry(
   headers: Record<string, string>,
   body: Uint8Array,
 ): Promise<BrowserResponse> {
-  for (let attempt = 0; ; attempt += 1) {
+  // Retry state carries the attempt budget and a per-attempt timeout; preserve
+  // that sequence rather than issuing overlapping gateway requests.
+  const requestAttempt = async (attempt: number): Promise<BrowserResponse> => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       const timeout = new Promise<never>((_resolve, reject) => {
@@ -101,10 +107,12 @@ async function requestWithRetry(
         throw error;
       }
       await new Promise((resolve) => setTimeout(resolve, attempt === 0 ? 250 : 750));
+      return requestAttempt(attempt + 1);
     } finally {
       if (timer) clearTimeout(timer);
     }
-  }
+  };
+  return requestAttempt(0);
 }
 
 export async function companionFetch(path: string, init: RequestInit = {}): Promise<Response> {
@@ -138,7 +146,10 @@ export async function companionFetch(path: string, init: RequestInit = {}): Prom
     responseHeaders.delete('content-length');
     responseBody = responseBody.pipeThrough(new DecompressionStream('gzip'));
   }
-  return new Response(responseBody, { status: response.status, headers: responseHeaders });
+  return new Response(responseBody, {
+    status: response.status,
+    headers: responseHeaders,
+  });
 }
 
 export async function companionJson<T>(path: string, init: RequestInit = {}): Promise<T> {

@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+
 // Full-screen slideshow (issue #352 phase 3): its own tiny render
 // orchestrator, same shape as picker.tsx/toolbar.jsx — a small private slice
 // of state (whether it's open) plus one root. Read-only viewing, so unlike
@@ -6,7 +8,6 @@
 // components/Slideshow.tsx (React state, not app.tsx module state).
 import { SlideshowView } from './components/Slideshow.tsx';
 import { $ } from './dom.ts';
-import type { ReactNode } from 'react';
 import type { Asset } from './types.ts';
 
 type Root = { render: (node: ReactNode) => void };

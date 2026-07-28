@@ -7,6 +7,7 @@
 // remains a seam; registration therefore always stores materialized=0.
 
 import type { DatabaseSync } from 'node:sqlite';
+
 import type { VaultDb } from '../db.js';
 import { nowIso, uuidv7 } from '../ids.js';
 import { resolveEntity, type EntityRef } from '../schema/tables.js';
@@ -67,7 +68,12 @@ function requireColumns(
  */
 export function registerAppView(
   db: VaultDb,
-  options: { appId: string; name: string; baseEntity: string; definition: ViewDefinition },
+  options: {
+    appId: string;
+    name: string;
+    baseEntity: string;
+    definition: ViewDefinition;
+  },
 ): string {
   const base = resolveEntity(options.baseEntity, db.vault);
   if (!base || base.file !== 'vault') {

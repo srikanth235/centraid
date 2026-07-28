@@ -21,6 +21,7 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
+
 import type { RouteHandler } from '../serve/build-gateway.js';
 import { MAX_BACKGROUND_PAUSE_MS, type HealthRegistry } from '../serve/health-registry.js';
 import type {
@@ -52,7 +53,10 @@ export function makeResourceRouteHandler(
       return sendJson(res, 200, { paused: state.paused });
     }
     if (method !== 'POST') {
-      return sendJson(res, 405, { error: 'method_not_allowed', message: 'POST, DELETE only' });
+      return sendJson(res, 405, {
+        error: 'method_not_allowed',
+        message: 'POST, DELETE only',
+      });
     }
 
     let body: Record<string, unknown>;
@@ -94,14 +98,20 @@ async function handlePowerContext(
 ): Promise<boolean> {
   const method = req.method ?? 'GET';
   if (!powerContext) {
-    return sendJson(res, 503, { error: 'unavailable', message: 'power context not wired' });
+    return sendJson(res, 503, {
+      error: 'unavailable',
+      message: 'power context not wired',
+    });
   }
   if (method === 'DELETE') {
     powerContext.clearClientPush();
     return sendJson(res, 200, { ok: true });
   }
   if (method !== 'POST') {
-    return sendJson(res, 405, { error: 'method_not_allowed', message: 'POST, DELETE only' });
+    return sendJson(res, 405, {
+      error: 'method_not_allowed',
+      message: 'POST, DELETE only',
+    });
   }
 
   let body: Record<string, unknown>;
@@ -146,7 +156,9 @@ function parsePowerContextBody(
 
   if (body.thermalPressure !== undefined && body.thermalPressure !== null) {
     if (!THERMAL_VALUES.includes(body.thermalPressure as ThermalPressure)) {
-      return { error: `thermalPressure must be one of ${THERMAL_VALUES.join(', ')} or null` };
+      return {
+        error: `thermalPressure must be one of ${THERMAL_VALUES.join(', ')} or null`,
+      };
     }
     push.thermalPressure = body.thermalPressure as ThermalPressure;
   }

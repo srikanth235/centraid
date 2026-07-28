@@ -1,12 +1,13 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import { existsSync, promises as fs } from 'node:fs';
 // governance: allow-repo-hygiene file-size-limit one lifecycle sweep, one spec — the purge matrix (content/note/document/asset/domain-trash × every polymorphic mechanism in poly-refs.ts) is a single table of invariants; splitting it would scatter the completeness argument the registry exists to make
 // Tests for the §10 responsibilities closed after the first pass: polymorphic
 // ref validation (S4), contract version check (S3), retention policy sweeps,
 // the view service, and file custody.
-
-import { existsSync, promises as fs } from 'node:fs';
 import path from 'node:path';
+
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterEach, assert, beforeEach, describe, expect, test } from 'vitest';
+
 import { bootstrapVault, createGrant, enrollApp, type BootstrapResult } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { uuidv7 } from '../ids.js';
@@ -23,7 +24,11 @@ describe('duties', () => {
     db = openVaultDb();
     boot = bootstrapVault(db, { ownerName: 'Priya' });
     gw = createGateway(db);
-    owner = { kind: 'device', deviceId: boot.deviceId, deviceKey: boot.deviceKey };
+    owner = {
+      kind: 'device',
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+    };
   });
 
   // ---- file custody (needs a file-backed vault) ----
@@ -46,7 +51,10 @@ describe('duties', () => {
       inputSchema: {
         type: 'object',
         required: ['target_type', 'target_id'],
-        properties: { target_type: { type: 'string' }, target_id: { type: 'string' } },
+        properties: {
+          target_type: { type: 'string' },
+          target_id: { type: 'string' },
+        },
       },
       outputSchema: { type: 'object', properties: {} },
       preconditions: [],
@@ -509,14 +517,20 @@ describe('duties', () => {
           joins: [{ entity: 'core.place', fk_column: 'summary', columns: ['name'] }], // not an FK
         },
       }),
-    ).toThrow(/not a declared FK/);
+    ).toThrow(/not a declared FK/u);
     const viewId = gw.registerView(cred, {
       name: 'agenda',
       baseEntity: 'core.event',
       definition: {
         columns: ['event_id', 'summary', 'dtstart', 'description'],
         where: [{ column: 'status', op: 'eq', value: 'confirmed' }],
-        joins: [{ entity: 'core.place', fk_column: 'location_place_id', columns: ['name'] }],
+        joins: [
+          {
+            entity: 'core.place',
+            fk_column: 'location_place_id',
+            columns: ['name'],
+          },
+        ],
       },
     });
     expect(viewId).toBeTruthy();
@@ -529,18 +543,31 @@ describe('duties', () => {
       baseEntity: 'core.event',
       definition: {
         columns: ['event_id', 'summary', 'description'], // description exceeds the field mask
-        joins: [{ entity: 'core.place', fk_column: 'location_place_id', columns: ['name'] }],
+        joins: [
+          {
+            entity: 'core.place',
+            fk_column: 'location_place_id',
+            columns: ['name'],
+          },
+        ],
       },
     });
     // The grant covers core.event only — the join to core.place must deny.
-    expect(() => gw.queryView(cred, 'agenda', 'dpv:ServiceProvision')).toThrow(/join core.place/);
+    expect(() => gw.queryView(cred, 'agenda', 'dpv:ServiceProvision')).toThrow(/join core.place/u);
     // Widen the grant to the place table; now it executes, but the field mask
     // still strips `description` — the view cannot over-read.
     createGrant(db, {
       appId,
       purposeConceptId: boot.concepts['dpv:ServiceProvision'] as string,
       grantedByPartyId: boot.ownerPartyId,
-      scopes: [{ schema: 'core', table: 'place', verbs: 'read', fieldMask: ['place_id', 'name'] }],
+      scopes: [
+        {
+          schema: 'core',
+          table: 'place',
+          verbs: 'read',
+          fieldMask: ['place_id', 'name'],
+        },
+      ],
     });
     const result = gw.queryView(cred, 'agenda', 'dpv:ServiceProvision');
     expect(result.rows).toHaveLength(1);
@@ -549,7 +576,10 @@ describe('duties', () => {
       'place_name',
       'summary',
     ]);
-    expect(result.rows[0]).toMatchObject({ summary: 'Cardiology', place_name: 'Clinic' });
+    expect(result.rows[0]).toMatchObject({
+      summary: 'Cardiology',
+      place_name: 'Clinic',
+    });
     // Both the deny and the allow left receipts (same-ms UUIDv7s, so no order).
     const receipts = db.journal
       .prepare(
@@ -562,27 +592,37 @@ describe('duties', () => {
     ]);
   });
 
-  async function fileBackedVault(): Promise<{ gw2: Gateway; owner2: Credential }> {
+  async function fileBackedVault(): Promise<{
+    gw2: Gateway;
+    owner2: Credential;
+  }> {
     custodyDir = await tempDir('vault-custody-');
     fileDb = openVaultDb({ dir: custodyDir });
     const boot2 = bootstrapVault(fileDb, { ownerName: 'Priya' });
     const gw2 = createGateway(fileDb);
     return {
       gw2,
-      owner2: { kind: 'device', deviceId: boot2.deviceId, deviceKey: boot2.deviceKey },
+      owner2: {
+        kind: 'device',
+        deviceId: boot2.deviceId,
+        deviceKey: boot2.deviceKey,
+      },
     };
   }
 
   test('file custody: checkpoint, verifiable backup; ext band retained through revocation', async () => {
     const { gw2, owner2 } = await fileBackedVault();
-    expect(gw2.checkpoint(owner2)).toStrictEqual({ vault: 'truncated', journal: 'truncated' });
+    expect(gw2.checkpoint(owner2)).toStrictEqual({
+      vault: 'truncated',
+      journal: 'truncated',
+    });
 
     const backupDir = path.join(custodyDir, 'backups');
     await fs.mkdir(backupDir);
     const backup = gw2.backup(owner2, backupDir);
     expect(existsSync(backup.vaultPath)).toBe(true);
     expect(existsSync(backup.journalPath)).toBe(true);
-    expect(backup.vaultSha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(backup.vaultSha256).toMatch(/^[0-9a-f]{64}$/u);
 
     // ext band: applied for the app, RETAINED (not dropped) when its last
     // grant is revoked — the data is the owner's; purging is a separate act.
@@ -617,6 +657,6 @@ describe('duties', () => {
   });
 
   test('file custody refuses in-memory vaults', () => {
-    expect(() => gw.checkpoint(owner)).toThrow(/file-backed/);
+    expect(() => gw.checkpoint(owner)).toThrow(/file-backed/u);
   });
 });

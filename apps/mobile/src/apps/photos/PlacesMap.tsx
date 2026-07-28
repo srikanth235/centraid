@@ -1,8 +1,8 @@
+import { Feather } from '@expo/vector-icons';
 import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
 import MapView, { Marker } from 'react-native-maps';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useReplicaQuery } from '../../kit/hooks/useReplicaQuery';
 import { family, useTheme } from '../../kit/theme';
@@ -25,7 +25,14 @@ export default function PlacesMap({
     const latitude = Number(row.latitude ?? row.lat);
     const longitude = Number(row.longitude ?? row.lon ?? row.lng);
     return Number.isFinite(latitude) && Number.isFinite(longitude)
-      ? [{ id: asset.id, latitude, longitude, name: String(row.name ?? 'Place') }]
+      ? [
+          {
+            id: asset.id,
+            latitude,
+            longitude,
+            name: String(row.name ?? 'Place'),
+          },
+        ]
       : [];
   });
   const clusters = [
@@ -81,7 +88,13 @@ export default function PlacesMap({
 
 const styles = StyleSheet.create({
   count: { fontFamily: family.monoMedium, fontSize: 11 },
-  empty: { alignItems: 'center', bottom: 30, left: 20, position: 'absolute', right: 20 },
+  empty: {
+    alignItems: 'center',
+    bottom: 30,
+    left: 20,
+    position: 'absolute',
+    right: 20,
+  },
   emptyText: {
     borderRadius: 12,
     fontFamily: family.sansRegular,

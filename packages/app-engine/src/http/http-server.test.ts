@@ -1,8 +1,10 @@
+import crypto from 'node:crypto';
+import { promises as fs } from 'node:fs';
+import http from 'node:http';
+
 import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { promises as fs } from 'node:fs';
-import crypto from 'node:crypto';
-import http from 'node:http';
+
 import { Runtime } from '../runtime.ts';
 import {
   startRuntimeHttpServer,
@@ -19,7 +21,11 @@ function rawRequest(
     host?: string;
     headers?: Record<string, string>;
   } = {},
-): Promise<{ status: number; headers: http.IncomingHttpHeaders; body: string }> {
+): Promise<{
+  status: number;
+  headers: http.IncomingHttpHeaders;
+  body: string;
+}> {
   const u = new URL(path, baseUrl);
   return new Promise((resolve, reject) => {
     const req = http.request(
@@ -33,7 +39,7 @@ function rawRequest(
         setHost: opts.host === undefined,
         headers: {
           ...opts.headers,
-          ...(opts.host !== undefined ? { host: opts.host } : {}),
+          ...(opts.host === undefined ? {} : { host: opts.host }),
         },
       },
       (res) => {
@@ -70,7 +76,7 @@ describe('http-server', () => {
   });
 
   test('binds to loopback and rejects requests without the bearer token', async () => {
-    expect(server.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
+    expect(server.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/u);
     expect(server.token).toHaveLength(64);
 
     const res = await fetch(`${server.url}/centraid/_apps`);
@@ -106,8 +112,8 @@ describe('http-server', () => {
     });
     expect(res.status).toBe(204);
     expect(res.headers.get('access-control-allow-origin')).toBe('*');
-    expect(res.headers.get('access-control-allow-methods') ?? '').toMatch(/POST/);
-    expect(res.headers.get('access-control-allow-headers') ?? '').toMatch(/authorization/i);
+    expect(res.headers.get('access-control-allow-methods') ?? '').toMatch(/POST/u);
+    expect(res.headers.get('access-control-allow-headers') ?? '').toMatch(/authorization/iu);
   });
 
   test('sets CORS headers on the 401 so the renderer can read the rejection', async () => {
@@ -210,13 +216,15 @@ describe('http-server', () => {
         headers: { Authorization: `Bearer ${guarded.token}` },
       });
       expect(before.status).toBe(500);
-      await expect(before.json()).resolves.toStrictEqual({ error: 'internal_server_error' });
+      await expect(before.json()).resolves.toStrictEqual({
+        error: 'internal_server_error',
+      });
 
       await expect(
         fetch(`${guarded.url}/reject-after`, {
           headers: { Authorization: `Bearer ${guarded.token}` },
         }).then((response) => response.arrayBuffer()),
-      ).rejects.toThrow(/terminated/);
+      ).rejects.toThrow(/terminated/u);
 
       const healthy = await fetch(`${guarded.url}/centraid/_apps`, {
         headers: { Authorization: `Bearer ${guarded.token}` },
@@ -264,7 +272,11 @@ describe('http-server', () => {
         async (req, res) => {
           if ((req.url ?? '') !== '/centraid/_echo-device') return false;
           res.writeHead(200, { 'content-type': 'application/json' });
-          res.end(JSON.stringify({ deviceHeader: req.headers[AUTHED_DEVICE_HEADER] ?? null }));
+          res.end(
+            JSON.stringify({
+              deviceHeader: req.headers[AUTHED_DEVICE_HEADER] ?? null,
+            }),
+          );
           return true;
         },
       ],
@@ -293,15 +305,22 @@ describe('http-server', () => {
         headers: { Authorization: 'Bearer device-secret' },
       });
       expect(device.status).toBe(200);
-      await expect(device.json()).resolves.toStrictEqual({ deviceHeader: 'dev-abc' });
+      await expect(device.json()).resolves.toStrictEqual({
+        deviceHeader: 'dev-abc',
+      });
 
       // A client cannot forge the device header directly — it is always
       // deleted before authorizeBearer decides anything.
       const forged = await fetch(`${pluggableServer.url}/centraid/_echo-device`, {
-        headers: { Authorization: 'Bearer admin-secret', [AUTHED_DEVICE_HEADER]: 'forged-key' },
+        headers: {
+          Authorization: 'Bearer admin-secret',
+          [AUTHED_DEVICE_HEADER]: 'forged-key',
+        },
       });
       expect(forged.status).toBe(200);
-      await expect(forged.json()).resolves.toStrictEqual({ deviceHeader: null });
+      await expect(forged.json()).resolves.toStrictEqual({
+        deviceHeader: null,
+      });
     } finally {
       await pluggableServer.close();
     }
@@ -323,9 +342,14 @@ describe('http-server', () => {
     });
     try {
       // Any slug under the prefix answers with NO Authorization header.
-      const open = await fetch(`${publicServer.url}/_centraid-hook/abc123`, { method: 'POST' });
+      const open = await fetch(`${publicServer.url}/_centraid-hook/abc123`, {
+        method: 'POST',
+      });
       expect(open.status).toBe(200);
-      await expect(open.json()).resolves.toStrictEqual({ ok: true, url: '/_centraid-hook/abc123' });
+      await expect(open.json()).resolves.toStrictEqual({
+        ok: true,
+        url: '/_centraid-hook/abc123',
+      });
       // A path outside the prefix still requires the bearer.
       const other = await fetch(`${publicServer.url}/centraid/_apps`);
       expect(other.status).toBe(401);

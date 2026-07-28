@@ -1,5 +1,7 @@
 import { fileURLToPath } from 'node:url';
+
 import { jsdomProject } from '@centraid/test-kit/vitest';
+
 import { inlineBlueprintAliases } from './src/react/blueprints/inline-vite-aliases.ts';
 
 export default jsdomProject({

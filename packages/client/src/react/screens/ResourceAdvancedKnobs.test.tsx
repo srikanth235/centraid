@@ -1,13 +1,14 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import ResourceAdvancedKnobs, { type ResourceAdvancedKnobsProps } from './ResourceAdvancedKnobs.js';
+
 import {
   knobPrefKey,
   parseResourceKnobPrefs,
   type ResourceKnobPrefs,
   type ResourceProfileDTO,
 } from './resource-summary.js';
+import ResourceAdvancedKnobs, { type ResourceAdvancedKnobsProps } from './ResourceAdvancedKnobs.js';
 
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
@@ -274,7 +275,9 @@ describe('screens/ResourceAdvancedKnobs', () => {
       ) as HTMLButtonElement;
       await act(async () => reset.dispatchEvent(new MouseEvent('click', { bubbles: true })));
 
-      expect(saveKnobPrefs).toHaveBeenCalledWith({ replicationConcurrency: null });
+      expect(saveKnobPrefs).toHaveBeenCalledWith({
+        replicationConcurrency: null,
+      });
       expect(
         el.querySelector('[data-testid="knob-replicationConcurrency"]')?.textContent,
       ).toContain('Linked');

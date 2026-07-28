@@ -1,10 +1,12 @@
+import http from 'node:http';
+
+import { GATEWAY_SCHEMA_EPOCH, GATEWAY_VERSION, ROUTES } from '@centraid/protocol';
 /**
  * Product CLI entry against a real HTTP gateway surface (issue #504).
  * Drives `main()` — the shipped bin path — not a reimplementation of client helpers.
  */
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import http from 'node:http';
-import { GATEWAY_SCHEMA_EPOCH, GATEWAY_VERSION, ROUTES } from '@centraid/protocol';
+
 import { main } from './cli.ts';
 
 let server: http.Server | undefined;

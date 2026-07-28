@@ -1,3 +1,4 @@
+import { checkStats, deriveTitle, previewText } from './format.ts';
 // governance: allow-repo-hygiene file-size-limit cohesive non-visual notes logic module; vault IO, notebook navigation/CRUD, and note commands share the vault predicate translation and parked-write tracking
 // Non-visual business logic: vault IO (write/act), notebook navigation,
 // notebook CRUD with the vault's predicates translated to sentences, the
@@ -8,7 +9,6 @@
 // (`sidebarCounts`/`buildWall`) need no closure and are exported standalone
 // so components can call them too.
 import { debounce, outcomeMessage, toast } from './kit.ts';
-import { checkStats, deriveTitle, previewText } from './format.ts';
 import type { AppData, AppState, LogicDeps, Nav, Note, NotePatch, SidebarCounts } from './types.ts';
 
 type Friendly = Record<string, string>;
@@ -200,7 +200,10 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     if (!note || typeof note.body === 'string') return;
     let res: { body?: unknown; vaultDenied?: unknown } | undefined;
     try {
-      res = await window.centraid.read({ query: 'note', input: { note_id: noteId } });
+      res = await window.centraid.read({
+        query: 'note',
+        input: { note_id: noteId },
+      });
     } catch {
       return;
     }
@@ -253,7 +256,10 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
 
   async function togglePin(note: Note): Promise<VaultOutcome | undefined> {
     const nextPinned = note.pinned === 1 ? 0 : 1;
-    const outcome = await write('edit-note', { note_id: note.note_id, pinned: nextPinned });
+    const outcome = await write('edit-note', {
+      note_id: note.note_id,
+      pinned: nextPinned,
+    });
     if (outcome?.status === 'executed')
       toast(nextPinned ? 'Pinned · receipt' : 'Unpinned · receipt');
     return outcome;
@@ -314,7 +320,10 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
       { friendly: CREATE_NOTEBOOK_FRIENDLY },
     );
     if (outcome?.status === 'executed') {
-      state.nav = { kind: 'notebook', notebookId: String(outcome.output?.notebook_id ?? '') };
+      state.nav = {
+        kind: 'notebook',
+        notebookId: String(outcome.output?.notebook_id ?? ''),
+      };
       state.creatingNotebook = false;
       toast('Notebook created · receipt');
       render();
@@ -537,5 +546,12 @@ export function buildWall(data: AppData, state: AppState) {
     emptySub = 'Take a note above — it lands filed straight into this notebook.';
   }
 
-  return { pinned, others, showPinnedGroup, isEmpty: rows.length === 0, emptyTitle, emptySub };
+  return {
+    pinned,
+    others,
+    showPinnedGroup,
+    isEmpty: rows.length === 0,
+    emptyTitle,
+    emptySub,
+  };
 }

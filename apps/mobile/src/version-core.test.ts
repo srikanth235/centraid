@@ -1,11 +1,12 @@
 import { readFileSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
 import { createRequire } from 'node:module';
+import path from 'node:path';
+
+import { describe, expect, it } from 'vitest';
+
 import { nativeBuildNumber } from './version-core.js';
 
-const here = path.dirname(fileURLToPath(import.meta.url));
+const here = import.meta.dirname;
 const mobileRoot = path.resolve(here, '..');
 const require = createRequire(import.meta.url);
 const { nativeBuildNumber: nativeBuildNumberCjs } = require('./version-core.cjs') as {
@@ -30,7 +31,7 @@ describe('nativeBuildNumber (J6)', () => {
   });
 
   it('rejects garbage', () => {
-    expect(() => nativeBuildNumber('nope')).toThrow(/unparseable/);
+    expect(() => nativeBuildNumber('nope')).toThrow(/unparseable/u);
   });
 
   it('matches the shipped native project numbers for 0.1.0', () => {
@@ -39,15 +40,15 @@ describe('nativeBuildNumber (J6)', () => {
     expect(expected).toBe(1_000);
 
     const gradle = readFileSync(path.join(mobileRoot, 'android/app/build.gradle'), 'utf8');
-    expect(gradle).toMatch(new RegExp(`versionCode\\s+${expected}\\b`));
-    expect(gradle).toMatch(/versionName\s+"0\.1\.0"/);
+    expect(gradle).toMatch(new RegExp(`versionCode\\s+${expected}\\b`, 'u'));
+    expect(gradle).toMatch(/versionName\s+"0\.1\.0"/u);
 
     const pbx = readFileSync(
       path.join(mobileRoot, 'ios/Centraid.xcodeproj/project.pbxproj'),
       'utf8',
     );
     // Every CURRENT_PROJECT_VERSION must equal the formula (no leftover "1").
-    const versions = [...pbx.matchAll(/CURRENT_PROJECT_VERSION = (\d+);/g)]
+    const versions = [...pbx.matchAll(/CURRENT_PROJECT_VERSION = (?<version>\d+);/gu)]
       .map((m) => m[1])
       .filter((v): v is string => v != null);
     expect(versions.length).toBeGreaterThan(0);
@@ -55,7 +56,7 @@ describe('nativeBuildNumber (J6)', () => {
       expect(Number(v)).toBe(expected);
     }
     // MARKETING_VERSION must be the app semver everywhere (no leftover "1.0").
-    const marketing = [...pbx.matchAll(/MARKETING_VERSION = ([^;]+);/g)]
+    const marketing = [...pbx.matchAll(/MARKETING_VERSION = (?<version>[^;]+);/gu)]
       .map((m) => m[1])
       .filter((v): v is string => v != null)
       .map((v) => v.trim());
@@ -67,11 +68,11 @@ describe('nativeBuildNumber (J6)', () => {
     // Info.plist CFBundleVersion must match the formula (not a stale 1000000).
     const infoPlist = readFileSync(path.join(mobileRoot, 'ios/Centraid/Info.plist'), 'utf8');
     const cfBundleVersion = infoPlist.match(
-      /<key>CFBundleVersion<\/key>\s*<string>([^<]+)<\/string>/,
+      /<key>CFBundleVersion<\/key>\s*<string>(?<version>[^<]+)<\/string>/u,
     )?.[1];
     expect(cfBundleVersion).toBe(String(expected));
     const shortVersion = infoPlist.match(
-      /<key>CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/,
+      /<key>CFBundleShortVersionString<\/key>\s*<string>(?<version>[^<]+)<\/string>/u,
     )?.[1];
     expect(shortVersion).toBe('0.1.0');
 
@@ -84,6 +85,6 @@ describe('nativeBuildNumber (J6)', () => {
       .version as string;
     expect(pkgVersion).toBe('0.1.0');
     // Expo CJS resolve — must import the .cjs twin, not extensionless TS.
-    expect(configSrc).toMatch(/from ['"]\.\/src\/version-core\.cjs['"]/);
+    expect(configSrc).toMatch(/from ['"]\.\/src\/version-core\.cjs['"]/u);
   });
 });

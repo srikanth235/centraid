@@ -1,11 +1,12 @@
-import { dirname, join } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
-import { onTestFinished } from 'vitest';
-import type { BuildGatewayOptions, BuiltGateway, GatewayPaths } from '@centraid/gateway';
-import type { OpenVaultOptions, VaultDb } from '@centraid/vault';
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
-const helpersDir = dirname(fileURLToPath(import.meta.url));
+import type { BuildGatewayOptions, BuiltGateway, GatewayPaths } from '@centraid/gateway';
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import type { OpenVaultOptions, VaultDb } from '@centraid/vault';
+import { onTestFinished } from 'vitest';
+
+const helpersDir = import.meta.dirname;
 
 /**
  * Resolve a workspace package's TypeScript entry without requiring a prior
@@ -13,7 +14,8 @@ const helpersDir = dirname(fileURLToPath(import.meta.url));
  * imports of `@centraid/*` fail when `dist/` is absent.
  */
 function workspaceSrc(packageName: string, entry = 'index.ts'): string {
-  return pathToFileURL(join(helpersDir, '..', '..', 'packages', packageName, 'src', entry)).href;
+  return pathToFileURL(path.join(helpersDir, '..', '..', 'packages', packageName, 'src', entry))
+    .href;
 }
 
 export interface CreateTestVaultOptions extends OpenVaultOptions {
@@ -55,7 +57,7 @@ export async function buildTestGateway(
   const { rootDir: providedRoot, paths: pathOverrides, ...gatewayOptions } = options;
   const rootDir = providedRoot ?? (await tempDir('centraid-gateway-test-'));
   const paths: GatewayPaths = {
-    vaultDir: join(rootDir, 'vault'),
+    vaultDir: path.join(rootDir, 'vault'),
     ...pathOverrides,
   };
   const gateway = await buildGateway({ ...gatewayOptions, paths });

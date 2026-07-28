@@ -3,10 +3,11 @@
 // row, "Create event" button and the trust footer line are static HTML in
 // index.html (stable, no per-render data), wired once in chrome.ts.
 import { bucketByDay, colorForCalendar, startOfWeek } from '../format.ts';
-import { localDayKey } from '../kit.ts';
 import { I } from '../icons.ts';
-import { Icon } from './Shared.tsx';
+import { localDayKey } from '../kit.ts';
 import type { AgEvent, Calendar } from '../types.ts';
+import { Icon } from './Shared.tsx';
+
 import styles from './Sidebar.module.css';
 
 const MONDAY = new Date(2024, 0, 1); // a known Monday, for the weekday header labels
@@ -45,7 +46,10 @@ export function MiniMonth({
     <div className={styles.mini}>
       <div className={styles.miniHead}>
         <span className={styles.miniLabel}>
-          {cursor.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+          {cursor.toLocaleDateString(undefined, {
+            month: 'long',
+            year: 'numeric',
+          })}
         </span>
         <div className={styles.miniNav}>
           <button

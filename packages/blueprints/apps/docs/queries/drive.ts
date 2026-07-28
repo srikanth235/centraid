@@ -93,7 +93,13 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
     // an empty drive, not an error.
     const folderConceptIds = schemeConcepts.map((c) => c.concept_id);
     if (folderConceptIds.length === 0) {
-      return { folders, documents: [], root_folder_id: rootFolderId, truncated: false, window };
+      return {
+        folders,
+        documents: [],
+        root_folder_id: rootFolderId,
+        truncated: false,
+        window,
+      };
     }
     const tags = await ctx.vault.read({
       entity: 'core.tag',
@@ -110,7 +116,13 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
     const folderByDoc = new Map<string, string>();
     for (const t of tagRows) folderByDoc.set(t.target_id, t.concept_id);
     if (folderByDoc.size === 0) {
-      return { folders, documents: [], root_folder_id: rootFolderId, truncated: false, window };
+      return {
+        folders,
+        documents: [],
+        root_folder_id: rootFolderId,
+        truncated: false,
+        window,
+      };
     }
 
     // Starred is a flags-scheme tag on the wrapper (issue #274) — one
@@ -135,7 +147,11 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
         ? ctx.vault.read({
             entity: 'core.tag',
             where: [
-              { column: 'concept_id', op: 'eq', value: starredConcept.concept_id },
+              {
+                column: 'concept_id',
+                op: 'eq',
+                value: starredConcept.concept_id,
+              },
               { column: 'target_type', op: 'eq', value: DOCUMENT_TARGET_TYPE },
               { column: 'target_id', op: 'in', value: windowedIds },
             ],
@@ -217,7 +233,13 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
     // A full window means there may be older documents beyond it — the UI
     // offers "Show more" (a re-read with a larger window) and search.
     const truncated = tagRows.length >= window;
-    return { folders, documents, root_folder_id: rootFolderId, truncated, window };
+    return {
+      folders,
+      documents,
+      root_folder_id: rootFolderId,
+      truncated,
+      window,
+    };
   } catch (err) {
     const e = err as { code?: string; message?: string };
     return {

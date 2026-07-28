@@ -27,7 +27,11 @@ const nodeDigest: ReplicaDigest = (input) =>
 describe('intent payload hash identity across platforms', () => {
   test('canonical JSON sorts keys and is the exact hashed string', () => {
     expect(
-      canonicalJson({ action: payload.action, appId: payload.appId, input: payload.input }),
+      canonicalJson({
+        action: payload.action,
+        appId: payload.appId,
+        input: payload.input,
+      }),
     ).toBe(CANONICAL);
   });
 

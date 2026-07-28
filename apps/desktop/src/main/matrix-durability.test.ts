@@ -3,6 +3,7 @@
  * Multi-step patches must not lose vault map / onboarding markers.
  */
 import { describe, expect, test } from 'vitest';
+
 import { mergePersistedSettings } from './settings-merge.ts';
 
 describe('matrix-durability', () => {
@@ -11,9 +12,16 @@ describe('matrix-durability', () => {
       { activeGatewayId: 'local' },
       { activeVaultByGateway: { local: 'v-1', remote: 'v-9' } },
     );
-    state = mergePersistedSettings(state, { remoteTemplatesUrl: 'https://example.test/a.json' });
-    state = mergePersistedSettings(state, { onboardingCompletedAt: '2026-07-01T00:00:00.000Z' });
-    expect(state.activeVaultByGateway).toStrictEqual({ local: 'v-1', remote: 'v-9' });
+    state = mergePersistedSettings(state, {
+      remoteTemplatesUrl: 'https://example.test/a.json',
+    });
+    state = mergePersistedSettings(state, {
+      onboardingCompletedAt: '2026-07-01T00:00:00.000Z',
+    });
+    expect(state.activeVaultByGateway).toStrictEqual({
+      local: 'v-1',
+      remote: 'v-9',
+    });
     expect(state.remoteTemplatesUrl).toBe('https://example.test/a.json');
     expect(state.onboardingCompletedAt).toBe('2026-07-01T00:00:00.000Z');
   });
@@ -27,7 +35,9 @@ describe('matrix-durability', () => {
       },
       {},
     );
-    const next = mergePersistedSettings(base, { activeVaultByGateway: { local: 'v-2' } });
+    const next = mergePersistedSettings(base, {
+      activeVaultByGateway: { local: 'v-2' },
+    });
     expect(next.activeVaultByGateway).toStrictEqual({ local: 'v-2' });
     expect(next.onboardingCompletedAt).toBe('2026-01-01T00:00:00.000Z');
   });

@@ -16,6 +16,7 @@
 //        subresource loads without app-level token plumbing.
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
+
 import { AUTHED_DEVICE_HEADER } from '@centraid/app-engine';
 import {
   DERIVATIVE_VARIANTS,
@@ -24,10 +25,11 @@ import {
   type CommittedBlob,
   type StagedBlob,
 } from '@centraid/vault';
+
 import type { RouteHandler } from '../serve/build-gateway.js';
+import type { DataPlaneHttpOptions } from '../serve/data-plane-handoff.js';
 import { vaultContext } from '../serve/vault-context.js';
 import type { VaultRegistry } from '../serve/vault-registry.js';
-import type { DataPlaneHttpOptions } from '../serve/data-plane-handoff.js';
 import { openBlobCustodyEvents } from './blob-custody-events.js';
 import { serveBlobRead } from './blob-read-route.js';
 import { sendBlobRouteError } from './blob-route-errors.js';
@@ -165,10 +167,12 @@ export function makeBlobRouteHandler(
           return sendCommitted(res, { ...staged, casAck, custody });
         }
         if (variantOf !== undefined) {
-          return sendJson(res, 400, { error: 'variant and variant_of must be supplied together' });
+          return sendJson(res, 400, {
+            error: 'variant and variant_of must be supplied together',
+          });
         }
 
-        mediaType = mediaType ?? (contentType || undefined);
+        mediaType ??= contentType || undefined;
         const expectedSha =
           typeof req.headers['x-content-sha256'] === 'string'
             ? req.headers['x-content-sha256']
@@ -294,7 +298,10 @@ export function makeBlobRouteHandler(
           stagedBy,
           resumable: true,
         });
-        return sendJson(res, result.mode === 'existing' ? 200 : 201, { ...result, casAck });
+        return sendJson(res, result.mode === 'existing' ? 200 : 201, {
+          ...result,
+          casAck,
+        });
       }
 
       if (method === 'PATCH' && segments[0] === 'uploads' && segments.length === 2) {
@@ -316,7 +323,9 @@ export function makeBlobRouteHandler(
       ) {
         const deviceIdentity = authenticatedDevice(req);
         if (!deviceIdentity) {
-          return sendJson(res, 403, { error: 'direct upload requires a paired device' });
+          return sendJson(res, 403, {
+            error: 'direct upload requires a paired device',
+          });
         }
         const body = await readJson(req);
         const completedParts = plane.db.blobTransfers.recordDirectPart(
@@ -347,7 +356,9 @@ export function makeBlobRouteHandler(
       if (method === 'POST' && segments[0] === 'direct' && segments.length === 1) {
         const deviceIdentity = authenticatedDevice(req);
         if (!deviceIdentity) {
-          return sendJson(res, 403, { error: 'direct upload requires a paired device' });
+          return sendJson(res, 403, {
+            error: 'direct upload requires a paired device',
+          });
         }
         const body = await readJson(req);
         if (typeof body.sha256 !== 'string')
@@ -355,7 +366,9 @@ export function makeBlobRouteHandler(
         const plaintextSize = optionalSize(body.plaintextSize, 'plaintextSize');
         const sealedSize = optionalSize(body.sealedSize, 'sealedSize');
         if (plaintextSize === undefined || sealedSize === undefined) {
-          return sendJson(res, 400, { error: 'plaintextSize and sealedSize are required' });
+          return sendJson(res, 400, {
+            error: 'plaintextSize and sealedSize are required',
+          });
         }
         const result = await plane.db.blobTransfers.beginDirect({
           sha256: body.sha256,
@@ -367,7 +380,10 @@ export function makeBlobRouteHandler(
           stagedBy: deviceIdentity,
           deviceId: deviceIdentity,
         });
-        return sendJson(res, result.alreadyPresent ? 200 : 201, { ...result, casAck });
+        return sendJson(res, result.alreadyPresent ? 200 : 201, {
+          ...result,
+          casAck,
+        });
       }
 
       if (
@@ -378,7 +394,9 @@ export function makeBlobRouteHandler(
       ) {
         const deviceIdentity = authenticatedDevice(req);
         if (!deviceIdentity) {
-          return sendJson(res, 403, { error: 'direct upload requires a paired device' });
+          return sendJson(res, 403, {
+            error: 'direct upload requires a paired device',
+          });
         }
         const body = await readJson(req);
         const parts = Array.isArray(body.parts)
@@ -401,7 +419,9 @@ export function makeBlobRouteHandler(
       ) {
         const deviceIdentity = authenticatedDevice(req);
         if (!deviceIdentity) {
-          return sendJson(res, 403, { error: 'direct download requires a paired device' });
+          return sendJson(res, 403, {
+            error: 'direct download requires a paired device',
+          });
         }
         return sendJson(
           res,
@@ -433,6 +453,8 @@ export function makeBlobRouteHandler(
     } catch (error) {
       return sendBlobRouteError(res, error);
     }
-    return sendJson(res, 405, { error: `unsupported ${method} on ${url.pathname}` });
+    return sendJson(res, 405, {
+      error: `unsupported ${method} on ${url.pathname}`,
+    });
   };
 }

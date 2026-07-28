@@ -3,12 +3,29 @@
 // @ts-nocheck -- imported blueprint app code has no declarations; governance: allow-no-unjustified-suppressions JS fixture boundary (#414)
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+
 import { describe, expect, test, vi } from 'vitest';
 
 const docsPdfModuleUrl = pathToFileURL(
   path.resolve(import.meta.dirname, '../apps/docs/pdf-text.ts'),
 ).href;
 const { extractPdfTextWithPdfJs, loadPdfJs } = await import(docsPdfModuleUrl);
+
+type PdfDestroyTestSeam = () => void;
+type PdfGetPageTestSeam = (pageNumber: number) => Promise<{
+  getTextContent: () => Promise<{ items: Array<{ str?: string }> }>;
+}>;
+type PdfGetDocumentTestSeam = (input: {
+  data: Uint8Array;
+  useSystemFonts: boolean;
+  isEvalSupported: boolean;
+}) => {
+  promise: Promise<{
+    numPages: number;
+    getPage: PdfGetPageTestSeam;
+    destroy: PdfDestroyTestSeam;
+  }>;
+};
 
 function realPdf(text) {
   const stream = `BT /F1 18 Tf 72 120 Td (${text}) Tj ET`;
@@ -41,8 +58,8 @@ function arrayBufferOf(bytes) {
 
 describe('Docs device-side PDF text', () => {
   test('extracts normalized page text and tears down the PDF.js document', async () => {
-    const destroy = vi.fn();
-    const getPage = vi.fn(async (pageNo) => ({
+    const destroy = vi.fn<PdfDestroyTestSeam>();
+    const getPage = vi.fn<PdfGetPageTestSeam>(async (pageNo) => ({
       getTextContent: async () => ({
         items:
           pageNo === 1
@@ -50,7 +67,7 @@ describe('Docs device-side PDF text', () => {
             : [{ str: 'Second page' }, { ignored: true }],
       }),
     }));
-    const getDocument = vi.fn(() => ({
+    const getDocument = vi.fn<PdfGetDocumentTestSeam>(() => ({
       promise: Promise.resolve({ numPages: 2, getPage, destroy }),
     }));
     const file = { arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer };

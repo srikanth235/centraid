@@ -38,6 +38,7 @@
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+
 import type {
   ResolvedTemplate,
   TemplateKind,
@@ -181,7 +182,9 @@ export function templateSourceDir(
  * on disk is a build/catalog error and surfaces as a read rejection.
  */
 export async function readTemplateFiles(
-  template: Pick<TemplateMeta, 'id' | 'files' | 'kind'> & { source?: TemplateSource },
+  template: Pick<TemplateMeta, 'id' | 'files' | 'kind'> & {
+    source?: TemplateSource;
+  },
   opts: { cacheDir?: string } = {},
 ): Promise<{ path: string; content: string }[]> {
   const dir = templateSourceDir(template.id, {
@@ -238,12 +241,16 @@ export async function fetchRemoteTemplates(opts: {
   // we'd otherwise resolve to (max of bundle, cache).
   const nextCached: TemplateMeta[] = [...cached.templates];
   let updated = false;
+  const downloaded = await Promise.all(
+    remote.templates.map(async (rt) => {
+      const localBest = bestOf(bundleById.get(rt.id), cachedById.get(rt.id));
+      if (localBest && compareSemver(rt.version, localBest.version) <= 0) return undefined;
+      return (await downloadTemplate(base, cacheDir, rt, doFetch)) ? rt : undefined;
+    }),
+  );
 
-  for (const rt of remote.templates) {
-    const localBest = bestOf(bundleById.get(rt.id), cachedById.get(rt.id));
-    if (localBest && compareSemver(rt.version, localBest.version) <= 0) continue;
-    const ok = await downloadTemplate(base, cacheDir, rt, doFetch);
-    if (!ok) continue;
+  for (const rt of downloaded) {
+    if (!rt) continue;
     const idx = nextCached.findIndex((t) => t.id === rt.id);
     if (idx >= 0) nextCached[idx] = rt;
     else nextCached.push(rt);
@@ -317,25 +324,28 @@ async function downloadTemplate(
   const kindDir = templateKindDir(tmpl.kind);
   const targetDir = path.join(cacheDir, kindDir, tmpl.id);
   await fs.mkdir(targetDir, { recursive: true });
-  for (const rel of tmpl.files) {
-    const url = `${base}/${kindDir}/${encodeURIComponent(tmpl.id)}/${rel
-      .split('/')
-      .map(encodeURIComponent)
-      .join('/')}`;
-    try {
-      const res = await doFetch(url);
-      if (!res.ok) return false;
-      const buf = Buffer.from(await res.arrayBuffer());
-      const dest = path.join(targetDir, rel);
-      await fs.mkdir(path.dirname(dest), { recursive: true });
-      const tmp = `${dest}.tmp`;
-      await fs.writeFile(tmp, buf);
-      await fs.rename(tmp, dest);
-    } catch {
-      return false;
-    }
-  }
-  return true;
+  const fileResults = await Promise.all(
+    tmpl.files.map(async (rel) => {
+      const url = `${base}/${kindDir}/${encodeURIComponent(tmpl.id)}/${rel
+        .split('/')
+        .map(encodeURIComponent)
+        .join('/')}`;
+      try {
+        const res = await doFetch(url);
+        if (!res.ok) return false;
+        const buf = Buffer.from(await res.arrayBuffer());
+        const dest = path.join(targetDir, rel);
+        await fs.mkdir(path.dirname(dest), { recursive: true });
+        const tmp = `${dest}.tmp`;
+        await fs.writeFile(tmp, buf);
+        await fs.rename(tmp, dest);
+        return true;
+      } catch {
+        return false;
+      }
+    }),
+  );
+  return fileResults.every(Boolean);
 }
 
 async function writeManifestAtomic(dir: string, manifest: TemplateManifest): Promise<void> {

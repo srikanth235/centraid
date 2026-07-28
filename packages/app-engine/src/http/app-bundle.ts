@@ -61,11 +61,14 @@
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+
 import * as esbuild from 'esbuild';
-import { resolveStaticPath, SHARED_ASSET_FILES } from './security.js';
-import { compileCssModule } from './css-module.js';
+
 import { computeEtag } from './asset-variants.js';
+import { prepareBundledIndex as prepareBundledIndexWith } from './app-bundled-index.js';
 import { compress, staticQualityForHost, type Encoding } from './compression.js';
+import { compileCssModule } from './css-module.js';
+import { resolveStaticPath, SHARED_ASSET_FILES } from './security.js';
 
 /**
  * Served rel path of a whole-app bundle: `_bundle.<16-hex>.js`. The leading
@@ -135,31 +138,42 @@ async function statOrNull(file: string): Promise<import('node:fs').Stats | null>
 async function computeManifest(appDir: string, sharedAssetsDir?: string): Promise<string> {
   const lines: string[] = [];
   async function walk(rel: string): Promise<void> {
-    const entries = await fs.readdir(path.join(appDir, rel), { withFileTypes: true });
-    for (const e of entries) {
-      if (e.name.startsWith('.')) continue;
-      const r = rel ? `${rel}/${e.name}` : e.name;
-      if (e.isDirectory()) {
-        if (!NON_GRAPH_DIRS.has(e.name)) await walk(r);
-      } else if (
-        r.endsWith('.js') ||
-        r.endsWith('.jsx') ||
-        r.endsWith('.ts') ||
-        r.endsWith('.tsx') ||
-        r.endsWith('.module.css')
-      ) {
+    const entries = await fs.readdir(path.join(appDir, rel), {
+      withFileTypes: true,
+    });
+    await Promise.all(
+      entries.map(async (e) => {
+        if (e.name.startsWith('.')) return;
+        const r = rel ? `${rel}/${e.name}` : e.name;
+        if (e.isDirectory()) {
+          if (!NON_GRAPH_DIRS.has(e.name)) return walk(r);
+          return;
+        }
+        if (
+          !r.endsWith('.js') &&
+          !r.endsWith('.jsx') &&
+          !r.endsWith('.ts') &&
+          !r.endsWith('.tsx') &&
+          !r.endsWith('.module.css')
+        ) {
+          return;
+        }
         const st = await statOrNull(path.join(appDir, r));
         if (st) lines.push(`${r}\0${st.mtimeMs}\0${st.size}`);
-      }
-    }
+      }),
+    );
   }
   await walk('');
   if (sharedAssetsDir) {
-    for (const f of [...SHARED_ASSET_FILES].sort()) {
-      if (!f.endsWith('.js')) continue;
-      const st = await statOrNull(path.join(sharedAssetsDir, f));
-      lines.push(`\0shared:${f}\0${st ? `${st.mtimeMs}\0${st.size}` : 'absent'}`);
-    }
+    await Promise.all(
+      [...SHARED_ASSET_FILES]
+        .sort()
+        .filter((f) => f.endsWith('.js'))
+        .map(async (f) => {
+          const st = await statOrNull(path.join(sharedAssetsDir, f));
+          lines.push(`\0shared:${f}\0${st ? `${st.mtimeMs}\0${st.size}` : 'absent'}`);
+        }),
+    );
   }
   return lines.sort().join('\n');
 }
@@ -204,7 +218,11 @@ function appGraphPlugin(root: string, sharedRoot: string | null): esbuild.Plugin
       // oxlint-disable-next-line require-unicode-regexp
       build.onLoad({ filter: /\.module\.css$/ }, async (args) => {
         const compiled = await compileCssModule(args.path, root);
-        return { contents: compiled.js, loader: 'js', resolveDir: path.dirname(args.path) };
+        return {
+          contents: compiled.js,
+          loader: 'js',
+          resolveDir: path.dirname(args.path),
+        };
       });
 
       // esbuild compiles plugin `filter` patterns with Go's RE2, not the JS engine.
@@ -229,11 +247,15 @@ function appGraphPlugin(root: string, sharedRoot: string | null): esbuild.Plugin
         if (spec === './jsx-runtime' || spec.endsWith('/jsx-runtime')) {
           const own = path.join(root, 'jsx-runtime.js');
           if (await statOrNull(own)) return { path: own };
-          return { errors: [{ text: `jsx-runtime.js not found for "${spec}"` }] };
+          return {
+            errors: [{ text: `jsx-runtime.js not found for "${spec}"` }],
+          };
         }
 
         if (!spec.startsWith('./') && !spec.startsWith('../')) {
-          return { errors: [{ text: `bare import "${spec}" is not servable from an app dir` }] };
+          return {
+            errors: [{ text: `bare import "${spec}" is not servable from an app dir` }],
+          };
         }
 
         const target = path.resolve(servedDir, spec);
@@ -252,7 +274,9 @@ function appGraphPlugin(root: string, sharedRoot: string | null): esbuild.Plugin
         }
         return {
           errors: [
-            { text: `cannot resolve "${spec}" from ${path.relative(root, servedDir) || '.'}` },
+            {
+              text: `cannot resolve "${spec}" from ${path.relative(root, servedDir) || '.'}`,
+            },
           ],
         };
       });
@@ -300,7 +324,10 @@ async function buildBundle(
     const hash = etag.slice(1, 17); // first 16 hex of the sha256, sans quote
     return { ok: true, hash, etag, code, variants: new Map() };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 
@@ -375,40 +402,25 @@ export async function prewarmAppAssets(
       (match) => match.groups?.hash ?? [],
     ),
   );
-  let variants = 0;
-  for (const hash of hashes) {
-    const bundle = findBundleByHash(appDir, hash);
-    if (!bundle) continue;
-    const quality = staticQualityForHost();
-    const [br, gzip] = await Promise.all([
-      compress(bundle.code, 'br', quality),
-      compress(bundle.code, 'gzip', quality),
-    ]);
-    bundle.variants.set('br', br);
-    bundle.variants.set('gzip', gzip);
-    variants += 2;
-  }
+  const variantCounts = await Promise.all(
+    [...hashes].map(async (hash) => {
+      const bundle = findBundleByHash(appDir, hash);
+      if (!bundle) return 0;
+      const quality = staticQualityForHost();
+      const [br, gzip] = await Promise.all([
+        compress(bundle.code, 'br', quality),
+        compress(bundle.code, 'gzip', quality),
+      ]);
+      bundle.variants.set('br', br);
+      bundle.variants.set('gzip', gzip);
+      return 2;
+    }),
+  );
+  const variants = variantCounts.reduce<number>((total, count) => total + count, 0);
   return { bundles: hashes.size, variants };
 }
 
 // --- index.html rewriting ---------------------------------------------------
-
-const SCRIPT_TAG_RE = /<script\b[^>]*>/giu;
-const LINK_TAG_RE = /<link\b[^>]*>/giu;
-
-function attrOf(tag: string, name: string): string | null {
-  const m = new RegExp(`\\b${name}\\s*=\\s*(?:"(?<dq>[^"]*)"|'(?<sq>[^']*)')`, 'iu').exec(tag);
-  return m ? (m.groups?.['dq'] ?? m.groups?.['sq'] ?? '') : null;
-}
-
-/** Root-level relative URL (`x.css`, `./app.jsx`) → bare filename, else null. */
-function rootLevelRel(url: string | null): string | null {
-  if (!url) return null;
-  if (/^[a-z][a-z0-9+.-]*:|^\/\//iu.test(url) || url.startsWith('/')) return null;
-  const stripped = url.replace(/^\.\//u, '');
-  if (stripped.includes('/') || stripped.includes('?') || stripped.includes('#')) return null;
-  return stripped;
-}
 
 /**
  * Rewrite a LIVE app's `index.html` for bundled serving:
@@ -432,51 +444,5 @@ export async function prepareBundledIndex(
   appDir: string,
   sharedAssetsDir?: string,
 ): Promise<string> {
-  let out = html;
-
-  // (a) entry scripts → bundles.
-  const scripts = [...out.matchAll(SCRIPT_TAG_RE)];
-  for (const m of scripts) {
-    const tag = m[0];
-    const type = attrOf(tag, 'type');
-    if (!type || type.toLowerCase() !== 'module') continue;
-    const src = attrOf(tag, 'src');
-    const entryRel = rootLevelRel(src);
-    if (!entryRel || !/\.(?:js|jsx|ts|tsx|mjs)$/iu.test(entryRel)) continue;
-    const bundle = await bundleForEntry(appDir, entryRel, sharedAssetsDir);
-    if (!bundle) continue;
-    const rewritten = tag.replace(src!, `./_bundle.${bundle.hash}.js`);
-    out = out.replace(tag, rewritten);
-  }
-
-  // (b) stylesheet links → one inline <style>.
-  const links = [...out.matchAll(LINK_TAG_RE)];
-  const inlined: { tag: string; css: string }[] = [];
-  for (const m of links) {
-    const tag = m[0];
-    const relAttr = attrOf(tag, 'rel');
-    if (!relAttr || relAttr.toLowerCase() !== 'stylesheet') continue;
-    const name = rootLevelRel(attrOf(tag, 'href'));
-    if (!name || !name.endsWith('.css')) continue;
-    let file = resolveStaticPath(appDir, name);
-    if (!file || !(await statOrNull(file))) {
-      const shared =
-        sharedAssetsDir && SHARED_ASSET_FILES.has(name)
-          ? resolveStaticPath(sharedAssetsDir, name)
-          : null;
-      file = shared && (await statOrNull(shared)) ? shared : null;
-    }
-    if (!file) continue;
-    const css = (await fs.readFile(file)).toString('utf8');
-    if (/<\/style/iu.test(css)) continue;
-    inlined.push({ tag, css: `/* inlined: ${name} */\n${css}` });
-  }
-  if (inlined.length > 0) {
-    const block = `<style data-centraid-inlined-css>\n${inlined
-      .map((x) => x.css)
-      .join('\n')}\n</style>`;
-    out = out.replace(inlined[0]!.tag, block);
-    for (const { tag } of inlined.slice(1)) out = out.replace(tag, '');
-  }
-  return out;
+  return prepareBundledIndexWith(html, appDir, sharedAssetsDir, bundleForEntry);
 }

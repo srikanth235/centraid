@@ -11,12 +11,12 @@
  * in Cloudflare's Git integration, not in a GitHub Actions job.
  */
 import { cp, mkdir, rm, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import path from 'node:path';
 
-const repoRoot = join(import.meta.dirname, '..', '..');
-const docsOut = join(repoRoot, 'dist', 'docs-site');
-const homePublic = join(repoRoot, 'scripts', 'home-site', 'public');
-const siteDir = join(repoRoot, 'dist', 'site');
+const repoRoot = path.join(import.meta.dirname, '..', '..');
+const docsOut = path.join(repoRoot, 'dist', 'docs-site');
+const homePublic = path.join(repoRoot, 'scripts', 'home-site', 'public');
+const siteDir = path.join(repoRoot, 'dist', 'site');
 
 // Cloudflare Workers static assets reads ONE _headers at the assets root; its
 // rules are site-absolute, so they must carry the /docs/ prefix of the combined
@@ -40,8 +40,8 @@ const headers = `# Pagefind search bundle — hashed filenames, safe to pin fore
 `;
 
 await rm(siteDir, { recursive: true, force: true });
-await mkdir(join(siteDir, 'docs'), { recursive: true });
+await mkdir(path.join(siteDir, 'docs'), { recursive: true });
 await cp(homePublic, siteDir, { recursive: true });
-await cp(docsOut, join(siteDir, 'docs'), { recursive: true });
-await writeFile(join(siteDir, '_headers'), headers, 'utf8');
+await cp(docsOut, path.join(siteDir, 'docs'), { recursive: true });
+await writeFile(path.join(siteDir, '_headers'), headers, 'utf8');
 console.log('docs-site bundle: assembled dist/site (home + /docs) with _headers');

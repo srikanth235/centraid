@@ -1,3 +1,9 @@
+import type { InlineQueryModule } from '@centraid/blueprints/apps/inline-types';
+
+import type {
+  ShellReplicaReadRequest,
+  ShellReplicaSearchRequest,
+} from '../../replica/shell-session.js';
 // Reproduce the served bridge's local-query execution (packages/app-engine
 // bridge-script.ts `runLocalQuery` / `localVault`, lines ~158-263) for the
 // INLINE path — but backed directly by the shell replica session instead of the
@@ -13,11 +19,6 @@ import type {
   ReplicaSearchWireResult,
   ReplicaValue,
 } from '../../replica/types.js';
-import type {
-  ShellReplicaReadRequest,
-  ShellReplicaSearchRequest,
-} from '../../replica/shell-session.js';
-import type { InlineQueryModule } from '@centraid/blueprints/apps/inline-types';
 
 /** The slice of the replica session an inline query context needs. */
 export interface InlineReplicaSession {

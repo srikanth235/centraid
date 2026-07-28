@@ -18,10 +18,10 @@
  *   - Retention runs at end-of-run per `manifest.history.keep`.
  */
 
-import path from 'node:path';
-import { existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import { fileURLToPath } from 'node:url';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+
 import {
   appendLogs,
   type LogEntry,
@@ -36,8 +36,9 @@ import {
   workerPoolSizeFromEnv,
   workerResourceLimitsFromEnv,
 } from '@centraid/app-engine';
-import type { HistoryConfig, OutputSchema } from '../manifest/manifest.js';
+
 import { validateOutputAgainstSchema } from '../manifest/manifest-output.js';
+import type { HistoryConfig, OutputSchema } from '../manifest/manifest.js';
 import {
   applyRetention,
   extractReturnEnvelope,
@@ -56,7 +57,7 @@ import {
 function resolveWorkerFile(): string {
   // `here` is the dir of this module (`src/handler` → `dist/handler` once
   // built); the worker runner lives one level up under `worker/`.
-  const here = path.dirname(fileURLToPath(import.meta.url));
+  const here = import.meta.dirname;
   const jsPath = path.join(here, '..', 'worker', 'runner.js');
   if (existsSync(jsPath)) return jsPath;
   // Running tests via tsx from src/ where .js isn't emitted — fall back to
@@ -290,10 +291,10 @@ export function isBrokerReadOnlyPost(
     // Erring closed here is preferable to letting a connector smuggle a
     // GraphQL mutation through the read-only POST exception.
     const document = (parsed as { query: string }).query
-      .replace(/#[^\r\n]*/g, '')
-      .replace(/"""[\s\S]*?"""/g, '""')
-      .replace(/"(?:\\.|[^"\\])*"/g, '""');
-    return !/\b(?:mutation|subscription)\b/i.test(document);
+      .replace(/#[^\r\n]*/gu, '')
+      .replace(/"""[\s\S]*?"""/gu, '""')
+      .replace(/"(?:\\.|[^"\\])*"/gu, '""');
+    return !/\b(?:mutation|subscription)\b/iu.test(document);
   } catch {
     return false;
   }
@@ -346,12 +347,23 @@ type WorkerToParentMessage =
     }
   | { type: 'fetch'; id: number; spec: FetchSpecWire }
   | { type: 'connector-open'; id: number; principal: string }
-  | { type: 'state'; id: number; method: 'get' | 'set' | 'delete'; key: string; value?: unknown }
+  | {
+      type: 'state';
+      id: number;
+      method: 'get' | 'set' | 'delete';
+      key: string;
+      value?: unknown;
+    }
   | {
       type: 'runs';
       id: number;
       method: 'last' | 'list';
-      filter: { automationId?: string; status?: 'ok' | 'error'; since?: number; limit?: number };
+      filter: {
+        automationId?: string;
+        status?: 'ok' | 'error';
+        since?: number;
+        limit?: number;
+      };
     }
   | { type: 'vault'; id: number; op: VaultOp; payload: Record<string, unknown> }
   | { type: 'log'; level: 'info' | 'warn' | 'error'; msg: string }
@@ -359,12 +371,27 @@ type WorkerToParentMessage =
 
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
 
+/**
+ * Handler actions mutate one run's durable state and must remain in author
+ * order. Independent work belongs behind an explicit concurrent helper.
+ */
+function applyInOrder<T>(
+  values: Iterable<T>,
+  apply: (value: T, index: number) => void | PromiseLike<void>,
+): Promise<void> {
+  let index = 0;
+  return Array.from(values).reduce<Promise<void>>(
+    (sequence, value) => sequence.then(() => apply(value, index++)),
+    Promise.resolve(),
+  );
+}
+
 export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcome> {
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   const logs: HandlerOutcome['logs'] = [];
   const persistedEntries: LogEntry[] = [];
-  const handlerName = path.basename(opts.handlerFile).replace(/\.js$/, '');
+  const handlerName = path.basename(opts.handlerFile).replace(/\.js$/u, '');
 
   const abortController = new AbortController();
   const dispatchCtx: DispatchContext = {
@@ -393,8 +420,8 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
     }
     return out;
   };
-  const SECRET_REF_RE = /\{\{secret:([^}]+)\}\}/g;
-  const CONNECTION_REF_RE = /\{\{connection:([a-z_]+)\}\}/g;
+  const SECRET_REF_RE = /\{\{secret:(?<ref>[^}]+)\}\}/gu;
+  const CONNECTION_REF_RE = /\{\{connection:(?<name>[a-z_]+)\}\}/gu;
   const substituteSecrets = async (
     spec: FetchSpecWire,
     connectionValues: Readonly<Record<string, string>>,
@@ -403,9 +430,9 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
     const resolved = new Map<string, string>();
     let injected = false;
     const substitute = async (text: string): Promise<string> => {
-      const refs = [...text.matchAll(SECRET_REF_RE)].map((m) => m[1]!);
+      const refs = [...text.matchAll(SECRET_REF_RE)].map((match) => match.groups!.ref!);
       let out = text;
-      for (const ref of refs) {
+      await applyInOrder(refs, async (ref) => {
         if (!allow.has(ref)) {
           throw new Error(
             `secret "${ref}" is outside this connector's requires.secrets allowlist (issue #293)`,
@@ -418,13 +445,13 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
           resolvedSecretValues.add(value);
         }
         out = out.replaceAll(`{{secret:${ref}}}`, resolved.get(ref)!);
-      }
+      });
       // Broker-injected connection values (issue #304): the placeholder
       // names what the credential carries (`access_token` / `api_key`);
       // an unknown name — or no broker credential at all — is a handler
       // bug surfaced as an error, never an empty substitution.
-      for (const m of out.matchAll(CONNECTION_REF_RE)) {
-        const name = m[1]!;
+      for (const match of out.matchAll(CONNECTION_REF_RE)) {
+        const name = match.groups!.name!;
         const value = connectionValues[name];
         if (value === undefined) {
           throw new Error(
@@ -440,13 +467,15 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
       return out;
     };
     const headers: Record<string, string> = {};
-    for (const [k, v] of Object.entries(spec.headers ?? {})) headers[k] = await substitute(v);
+    await applyInOrder(Object.entries(spec.headers ?? {}), async ([key, value]) => {
+      headers[key] = await substitute(value);
+    });
     return {
       spec: {
         url: await substitute(spec.url),
         ...(spec.method ? { method: spec.method } : {}),
         ...(spec.headers ? { headers } : {}),
-        ...(spec.body !== undefined ? { body: await substitute(spec.body) } : {}),
+        ...(spec.body === undefined ? {} : { body: await substitute(spec.body) }),
       },
       injected,
     };
@@ -508,7 +537,9 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
         clearTimeout(t);
         dispatchCtx.abortSignal.removeEventListener('abort', onAbort);
       };
-      dispatchCtx.abortSignal.addEventListener('abort', onAbort, { once: true });
+      dispatchCtx.abortSignal.addEventListener('abort', onAbort, {
+        once: true,
+      });
     });
 
   interface FetchWireResult {
@@ -524,7 +555,7 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
     const response = await fetch(spec.url, {
       method: spec.method ?? 'GET',
       ...(spec.headers ? { headers: spec.headers } : {}),
-      ...(spec.body !== undefined ? { body: spec.body } : {}),
+      ...(spec.body === undefined ? {} : { body: spec.body }),
       ...(injected ? { redirect: 'manual' as const } : {}),
       signal: dispatchCtx.abortSignal,
     });
@@ -560,7 +591,7 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
     const retryDelays = opts.fetchRetryDelaysMs ?? [1000, 4000];
     let transientRetries = 0;
     let refreshed = false;
-    for (;;) {
+    const attempt = async (): Promise<FetchWireResult> => {
       const result = await gated(spec);
       if (result.status === 429 || result.status >= 500) {
         if (transientRetries >= retryDelays.length) return result;
@@ -573,7 +604,7 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
           ),
         );
         transientRetries += 1;
-        continue;
+        return attempt();
       }
       if (result.status === 401 && auth.refresh && !refreshed) {
         refreshed = true;
@@ -581,7 +612,7 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
         // thrown message is what the run records.
         const values = await auth.refresh();
         ({ spec } = await substituteSecrets(rawSpec, values));
-        continue;
+        return attempt();
       }
       if (result.status === 401) {
         await auth
@@ -591,7 +622,7 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
       }
       if (
         result.status === 403 &&
-        /insufficient.{0,4}(scope|permission)|invalid_scope/i.test(result.text)
+        /insufficient.{0,4}(?:scope|permission)|invalid_scope/iu.test(result.text)
       ) {
         await auth
           .onAuthDead?.(
@@ -601,7 +632,8 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
         return result;
       }
       return result;
-    }
+    };
+    return attempt();
   };
 
   const emit = opts.onRunEvent ?? noopRunEventSink;
@@ -765,8 +797,10 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
     let staged = 0;
     let published = 0;
     try {
-      for (let i = 0; i < rows.length; i += 500) {
-        const chunk = rows.slice(i, i + 500);
+      const chunks = Array.from({ length: Math.ceil(rows.length / 500) }, (_, index) =>
+        rows.slice(index * 500, (index + 1) * 500),
+      );
+      await applyInOrder(chunks, async (chunk) => {
         const outcome = await invokeConnectorCommand('sync.stage_rows', {
           connection_id: connectorConnectionId,
           rows: chunk,
@@ -774,9 +808,9 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
         staged += chunk.length;
         const counts = outcome.published as { created?: number; updated?: number } | undefined;
         published += (counts?.created ?? 0) + (counts?.updated ?? 0);
-      }
+      });
       const cursors = Array.isArray(pull.cursors) ? pull.cursors : [];
-      for (const entry of cursors) {
+      await applyInOrder(cursors, async (entry) => {
         if (!Array.isArray(entry) || typeof entry[0] !== 'string') {
           throw new Error('pull connector returned an invalid cursor update');
         }
@@ -785,7 +819,7 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
           key: entry[0],
           value: entry[1],
         });
-      }
+      });
       await closeConnectorRun(true, { staged, published });
       return {
         ...(typeof pull.summary === 'string' ? { summary: pull.summary } : {}),
@@ -801,7 +835,8 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
   return await new Promise<HandlerOutcome>((resolve) => {
     const state: PendingState = { resolve, resolved: false };
 
-    const finish = (outcome: HandlerOutcome): void => {
+    const finish = (initialOutcome: HandlerOutcome): void => {
+      let outcome = initialOutcome;
       if (state.resolved) return;
       state.resolved = true;
       if (timeoutHandle) clearTimeout(timeoutHandle);
@@ -834,9 +869,9 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
               ? { error: `turn finalization failed: ${finalizationError}` }
               : {}),
           ...(outcome.summary ? { summary: outcome.summary } : {}),
-          ...(outcome.output !== undefined
-            ? { outputJson: truncateForAudit(outcome.output) ?? '' }
-            : {}),
+          ...(outcome.output === undefined
+            ? {}
+            : { outputJson: truncateForAudit(outcome.output) ?? '' }),
         });
       };
       try {
@@ -943,7 +978,10 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
           });
           return;
         }
-        logs.push({ level: 'info', msg: `fetch ${msg.spec.method ?? 'GET'} ${msg.spec.url}` });
+        logs.push({
+          level: 'info',
+          msg: `fetch ${msg.spec.method ?? 'GET'} ${msg.spec.url}`,
+        });
         void executeFetch(msg.spec)
           .then((result) => {
             send({ type: 'fetch-reply', id: msg.id, ok: true, result });
@@ -970,7 +1008,12 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
         }
         void openConnectorRun(msg.principal)
           .then((result) => {
-            send({ type: 'connector-open-reply', id: msg.id, ok: true, result });
+            send({
+              type: 'connector-open-reply',
+              id: msg.id,
+              ok: true,
+              result,
+            });
           })
           .catch((err: unknown) => {
             send({
@@ -1072,9 +1115,9 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
             finish({
               ok: outcomeOk,
               value: envelope.value,
-              ...(envelope.summary !== undefined ? { summary: envelope.summary } : {}),
-              ...(envelope.output !== undefined ? { output: envelope.output } : {}),
-              ...(outcomeError !== undefined ? { error: outcomeError } : {}),
+              ...(envelope.summary === undefined ? {} : { summary: envelope.summary }),
+              ...(envelope.output === undefined ? {} : { output: envelope.output }),
+              ...(outcomeError === undefined ? {} : { error: outcomeError }),
               logs,
               toolBatches,
               agentCalls,

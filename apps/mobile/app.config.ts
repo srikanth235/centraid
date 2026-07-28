@@ -1,10 +1,12 @@
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
+
 /**
  * Expo config — single-sources version + native build numbers (issue #468 J6).
  * Build numbers come from {@link nativeBuildNumber} so app.json hardcodes cannot drift.
  */
 import type { ExpoConfig, ConfigContext } from 'expo/config';
-import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+
 // Expo evaluates app.config via Node CJS resolve (require-from-string). An
 // extensionless TS import of `./src/version-core` fails with MODULE_NOT_FOUND
 // on CI; the .cjs twin is the same formula and resolves under plain require.
@@ -20,14 +22,17 @@ import { nativeBuildNumber } from './src/version-core.cjs';
  */
 function readMobilePackageVersion(): string {
   const candidates = [
-    join(process.cwd(), 'package.json'),
-    join(process.cwd(), '..', 'package.json'), // apps/mobile/android → apps/mobile
-    join(process.cwd(), 'apps', 'mobile', 'package.json'),
+    path.join(process.cwd(), 'package.json'),
+    path.join(process.cwd(), '..', 'package.json'), // apps/mobile/android → apps/mobile
+    path.join(process.cwd(), 'apps', 'mobile', 'package.json'),
   ];
   for (const p of candidates) {
     if (!existsSync(p)) continue;
     try {
-      const j = JSON.parse(readFileSync(p, 'utf8')) as { name?: string; version?: string };
+      const j = JSON.parse(readFileSync(p, 'utf8')) as {
+        name?: string;
+        version?: string;
+      };
       if (j.name === '@centraid/mobile' && typeof j.version === 'string') return j.version;
     } catch {
       /* try next */

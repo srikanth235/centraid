@@ -16,7 +16,7 @@
  */
 
 import { type DatabaseSync, type StatementSync } from 'node:sqlite';
-import type { AdapterUsageSnapshot } from './turn.js';
+
 import type {
   Conversation,
   Turn,
@@ -28,6 +28,7 @@ import type {
   ItemKind,
   RunKind,
 } from './schema.js';
+import type { AdapterUsageSnapshot } from './turn.js';
 
 export interface RawConversation {
   id: string;
@@ -139,14 +140,14 @@ export function conversationFromRaw(raw: RawConversation): Conversation {
     id: raw.id,
     kind: raw.kind as RunKind,
     userId: raw.user_id,
-    ...(raw.app_id !== null ? { appId: raw.app_id } : {}),
-    ...(raw.automation_id !== null ? { automationId: raw.automation_id } : {}),
+    ...(raw.app_id === null ? {} : { appId: raw.app_id }),
+    ...(raw.automation_id === null ? {} : { automationId: raw.automation_id }),
     title: raw.title,
-    ...(raw.adapter_kind !== null ? { adapterKind: raw.adapter_kind } : {}),
-    ...(raw.adapter_session_id !== null ? { adapterSessionId: raw.adapter_session_id } : {}),
+    ...(raw.adapter_kind === null ? {} : { adapterKind: raw.adapter_kind }),
+    ...(raw.adapter_session_id === null ? {} : { adapterSessionId: raw.adapter_session_id }),
     ...(adapterUsageSnapshot ? { adapterUsageSnapshot } : {}),
     hydrationCount: Number(raw.hydration_count ?? 0),
-    ...(raw.last_hydrated_at != null ? { lastHydratedAt: raw.last_hydrated_at } : {}),
+    ...(raw.last_hydrated_at == null ? {} : { lastHydratedAt: raw.last_hydrated_at }),
     turnCount: Number(raw.turn_count),
     pinned: raw.pinned !== 0,
     archived: raw.archived !== 0,
@@ -160,34 +161,34 @@ export function turnFromRaw(raw: RawTurn): Turn {
     turnId: raw.id,
     conversationId: raw.conversation_id,
     seq: raw.seq,
-    ...(raw.parent_turn_id !== null ? { parentTurnId: raw.parent_turn_id } : {}),
+    ...(raw.parent_turn_id === null ? {} : { parentTurnId: raw.parent_turn_id }),
     triggerKind: raw.trigger as AutomationTriggerKind,
-    ...(raw.trigger_origin !== null
-      ? { triggerOrigin: raw.trigger_origin as AutomationTriggerOrigin }
-      : {}),
-    ...(raw.note !== null ? { note: raw.note } : {}),
-    ...(raw.retry_of !== null ? { retryOf: raw.retry_of } : {}),
-    ...(raw.idempotency_key !== null ? { idempotencyKey: raw.idempotency_key } : {}),
-    ...(raw.hydration_tokens != null ? { hydrationTokens: raw.hydration_tokens } : {}),
+    ...(raw.trigger_origin === null
+      ? {}
+      : { triggerOrigin: raw.trigger_origin as AutomationTriggerOrigin }),
+    ...(raw.note === null ? {} : { note: raw.note }),
+    ...(raw.retry_of === null ? {} : { retryOf: raw.retry_of }),
+    ...(raw.idempotency_key === null ? {} : { idempotencyKey: raw.idempotency_key }),
+    ...(raw.hydration_tokens == null ? {} : { hydrationTokens: raw.hydration_tokens }),
     startedAt: raw.started_at,
-    ...(raw.ended_at !== null ? { endedAt: raw.ended_at } : {}),
+    ...(raw.ended_at === null ? {} : { endedAt: raw.ended_at }),
     ok: raw.ok !== 0,
-    ...(raw.error !== null ? { error: raw.error } : {}),
+    ...(raw.error === null ? {} : { error: raw.error }),
     ...(raw.feedback === 'up' || raw.feedback === 'down' ? { feedback: raw.feedback } : {}),
-    ...(raw.summary !== null ? { summary: raw.summary } : {}),
-    ...(raw.output_json !== null ? { outputJson: raw.output_json } : {}),
+    ...(raw.summary === null ? {} : { summary: raw.summary }),
+    ...(raw.output_json === null ? {} : { outputJson: raw.output_json }),
     pinned: raw.pinned !== 0,
-    ...(raw.total_input_tokens !== null ? { totalInputTokens: raw.total_input_tokens } : {}),
-    ...(raw.total_output_tokens !== null ? { totalOutputTokens: raw.total_output_tokens } : {}),
-    ...(raw.total_cache_read_tokens !== null
-      ? { totalCacheReadTokens: raw.total_cache_read_tokens }
-      : {}),
-    ...(raw.total_cache_write_tokens !== null
-      ? { totalCacheWriteTokens: raw.total_cache_write_tokens }
-      : {}),
-    ...(raw.total_cost_usd !== null ? { totalCostUsd: raw.total_cost_usd } : {}),
-    ...(raw.step_count !== null ? { stepCount: raw.step_count } : {}),
-    ...(raw.tool_count !== null ? { toolCount: raw.tool_count } : {}),
+    ...(raw.total_input_tokens === null ? {} : { totalInputTokens: raw.total_input_tokens }),
+    ...(raw.total_output_tokens === null ? {} : { totalOutputTokens: raw.total_output_tokens }),
+    ...(raw.total_cache_read_tokens === null
+      ? {}
+      : { totalCacheReadTokens: raw.total_cache_read_tokens }),
+    ...(raw.total_cache_write_tokens === null
+      ? {}
+      : { totalCacheWriteTokens: raw.total_cache_write_tokens }),
+    ...(raw.total_cost_usd === null ? {} : { totalCostUsd: raw.total_cost_usd }),
+    ...(raw.step_count === null ? {} : { stepCount: raw.step_count }),
+    ...(raw.tool_count === null ? {} : { toolCount: raw.tool_count }),
   };
 }
 
@@ -196,33 +197,33 @@ export function itemFromRaw(raw: RawItem): Item {
     itemId: raw.id,
     turnId: raw.turn_id,
     ordinal: raw.ordinal,
-    ...(raw.call_id !== null ? { callId: raw.call_id } : {}),
-    ...(raw.batch_id !== null ? { batchId: raw.batch_id } : {}),
+    ...(raw.call_id === null ? {} : { callId: raw.call_id }),
+    ...(raw.batch_id === null ? {} : { batchId: raw.batch_id }),
     kind: raw.kind as ItemKind,
-    ...(raw.role !== null ? { role: raw.role as 'user' | 'assistant' } : {}),
-    ...(raw.text !== null ? { text: raw.text } : {}),
-    ...(raw.name !== null ? { name: raw.name } : {}),
-    ...(raw.args_json !== null ? { argsJson: raw.args_json } : {}),
-    ...(raw.output_json !== null ? { outputJson: raw.output_json } : {}),
-    ...(raw.raw_json !== null ? { rawJson: raw.raw_json } : {}),
+    ...(raw.role === null ? {} : { role: raw.role as 'user' | 'assistant' }),
+    ...(raw.text === null ? {} : { text: raw.text }),
+    ...(raw.name === null ? {} : { name: raw.name }),
+    ...(raw.args_json === null ? {} : { argsJson: raw.args_json }),
+    ...(raw.output_json === null ? {} : { outputJson: raw.output_json }),
+    ...(raw.raw_json === null ? {} : { rawJson: raw.raw_json }),
     ok: raw.ok !== 0,
-    ...(raw.error !== null ? { error: raw.error } : {}),
+    ...(raw.error === null ? {} : { error: raw.error }),
     startedAt: raw.started_at,
-    ...(raw.ended_at !== null ? { endedAt: raw.ended_at } : {}),
-    ...(raw.duration_ms !== null ? { durationMs: raw.duration_ms } : {}),
-    ...(raw.input_tokens !== null ? { inputTokens: raw.input_tokens } : {}),
-    ...(raw.output_tokens !== null ? { outputTokens: raw.output_tokens } : {}),
-    ...(raw.cache_read_tokens !== null ? { cacheReadTokens: raw.cache_read_tokens } : {}),
-    ...(raw.cache_write_tokens !== null ? { cacheWriteTokens: raw.cache_write_tokens } : {}),
-    ...(raw.model !== null ? { model: raw.model } : {}),
-    ...(raw.provider !== null ? { provider: raw.provider } : {}),
-    ...(raw.effort !== null ? { effort: raw.effort } : {}),
-    ...(raw.cost_usd !== null ? { costUsd: raw.cost_usd } : {}),
+    ...(raw.ended_at === null ? {} : { endedAt: raw.ended_at }),
+    ...(raw.duration_ms === null ? {} : { durationMs: raw.duration_ms }),
+    ...(raw.input_tokens === null ? {} : { inputTokens: raw.input_tokens }),
+    ...(raw.output_tokens === null ? {} : { outputTokens: raw.output_tokens }),
+    ...(raw.cache_read_tokens === null ? {} : { cacheReadTokens: raw.cache_read_tokens }),
+    ...(raw.cache_write_tokens === null ? {} : { cacheWriteTokens: raw.cache_write_tokens }),
+    ...(raw.model === null ? {} : { model: raw.model }),
+    ...(raw.provider === null ? {} : { provider: raw.provider }),
+    ...(raw.effort === null ? {} : { effort: raw.effort }),
+    ...(raw.cost_usd === null ? {} : { costUsd: raw.cost_usd }),
     ...(raw.cost_source === 'agent' || raw.cost_source === 'estimated'
       ? { costSource: raw.cost_source }
       : {}),
-    ...(raw.app_id !== null ? { appId: raw.app_id } : {}),
-    ...(raw.child_turn_id !== null ? { childTurnId: raw.child_turn_id } : {}),
+    ...(raw.app_id === null ? {} : { appId: raw.app_id }),
+    ...(raw.child_turn_id === null ? {} : { childTurnId: raw.child_turn_id }),
   };
 }
 
@@ -233,9 +234,9 @@ export function attachmentFromRaw(raw: RawAttachment): Attachment {
     hash: raw.hash,
     mime: raw.mime,
     sizeBytes: raw.size_bytes,
-    ...(raw.source !== null ? { source: raw.source } : {}),
-    ...(raw.filename !== null ? { filename: raw.filename } : {}),
-    ...(raw.workspace_path !== null ? { workspacePath: raw.workspace_path } : {}),
+    ...(raw.source === null ? {} : { source: raw.source }),
+    ...(raw.filename === null ? {} : { filename: raw.filename }),
+    ...(raw.workspace_path === null ? {} : { workspacePath: raw.workspace_path }),
     createdAt: raw.created_at,
   };
 }

@@ -1,4 +1,3 @@
-import { beforeEach, describe, expect, test } from 'vitest';
 import {
   bootstrapVault,
   createGateway,
@@ -7,6 +6,8 @@ import {
   registerTaskCommands,
 } from '@centraid/vault';
 import type { Gateway, Credential, VaultDb } from '@centraid/vault';
+import { beforeEach, describe, expect, test } from 'vitest';
+
 import { computeDueReminders } from './due-reminders.js';
 
 let db: VaultDb;
@@ -21,7 +22,11 @@ describe('due-reminders', () => {
     gw = createGateway(db);
     registerTaskCommands(gw);
     registerScheduleCommands(gw);
-    owner = { kind: 'device', deviceId: boot.deviceId, deviceKey: boot.deviceKey };
+    owner = {
+      kind: 'device',
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+    };
     calendarId = 'cal-1';
     db.vault
       .prepare(
@@ -32,7 +37,11 @@ describe('due-reminders', () => {
   });
 
   function invoke(command: string, input: Record<string, unknown>) {
-    return gw.invoke(owner, { command, input, purpose: 'dpv:ServiceProvision' });
+    return gw.invoke(owner, {
+      command,
+      input,
+      purpose: 'dpv:ServiceProvision',
+    });
   }
 
   test('a task reminder fires once now reaches due_at minus remind_before_min', () => {
@@ -59,7 +68,10 @@ describe('due-reminders', () => {
       remind_before_min: 15,
     });
     const taskId = (outcome as { output: { task_id: string } }).output.task_id;
-    invoke('schedule.set_task_status', { task_id: taskId, status: 'completed' });
+    invoke('schedule.set_task_status', {
+      task_id: taskId,
+      status: 'completed',
+    });
     expect(computeDueReminders(db, '2026-07-10T09:00:00.000Z')).toStrictEqual([]);
   });
 
@@ -85,7 +97,11 @@ describe('due-reminders', () => {
 
     const tenMinBefore = computeDueReminders(db, '2026-07-06T08:50:00.000Z');
     expect(tenMinBefore).toHaveLength(1);
-    expect(tenMinBefore[0]).toMatchObject({ kind: 'event', id: eventId, minutesBefore: 10 });
+    expect(tenMinBefore[0]).toMatchObject({
+      kind: 'event',
+      id: eventId,
+      minutesBefore: 10,
+    });
 
     const atStart = computeDueReminders(db, '2026-07-06T09:00:00.000Z');
     expect(atStart).toHaveLength(2);

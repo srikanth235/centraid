@@ -10,8 +10,8 @@
 // session exposes `read`/`subscribe` directly) so it needs no React tree of its
 // own and survives screen mount/unmount — the hook API is unchanged.
 
-import * as MediaLibrary from 'expo-media-library';
 import type { ReplicaRow } from '@centraid/client/replica/native';
+import * as MediaLibrary from 'expo-media-library';
 
 import { authHeader } from '../../lib/gateway';
 import type { NativeReplicaSession } from '../../lib/replica/native-session';
@@ -143,7 +143,10 @@ class PhotoTimelineEngine {
     const base = this.#gatewayBase;
     let next = new Map<string, UploadEntry>();
     if (base) {
-      const queue = UploadQueue.open({ gatewayBaseUrl: base, headers: authHeader });
+      const queue = UploadQueue.open({
+        gatewayBaseUrl: base,
+        headers: authHeader,
+      });
       try {
         next = new Map(
           queue
@@ -207,16 +210,17 @@ class PhotoTimelineEngine {
         return;
       }
       const rows: PhotoAsset[] = [];
-      let offset = 0;
       // A small first page paints the grid fast; the rest walk in bigger bites.
-      let pageSize = 250;
-      for (;;) {
+      const loadPage = async (offset: number, pageSize: number): Promise<void> => {
         const page = await new MediaLibrary.Query()
           .within(MediaLibrary.AssetField.MEDIA_TYPE, [
             MediaLibrary.MediaType.IMAGE,
             MediaLibrary.MediaType.VIDEO,
           ])
-          .orderBy({ key: MediaLibrary.AssetField.CREATION_TIME, ascending: false })
+          .orderBy({
+            key: MediaLibrary.AssetField.CREATION_TIME,
+            ascending: false,
+          })
           .limit(pageSize)
           .offset(offset)
           // ONE native round-trip per page, as the legacy paged read was.
@@ -257,11 +261,11 @@ class PhotoTimelineEngine {
         this.#deviceRows = [...rows];
         if (offset === 0) this.#deviceLoading = false;
         this.recompute();
-        offset += page.length;
         // A short page is the last page: the query has no cursor to run out of.
-        if (page.length < pageSize) break;
-        pageSize = 1_000;
-      }
+        if (page.length < pageSize) return;
+        return loadPage(offset + page.length, 1_000);
+      };
+      await loadPage(0, 250);
     } catch (reason) {
       if (generation !== this.#generation) return;
       this.#error = reason instanceof Error ? reason.message : String(reason);

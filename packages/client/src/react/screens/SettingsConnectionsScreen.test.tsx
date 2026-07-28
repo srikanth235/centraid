@@ -1,6 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import SettingsConnectionsScreen, {
   type ConnectionRowDTO,
   type ProviderOptionDTO,
@@ -46,8 +47,16 @@ function makeProvider(over: Partial<ProviderOptionDTO> = {}): ProviderOptionDTO 
       ],
     },
     connectors: [
-      { kind: 'pull.gmail', scope: 'gmail.readonly', templateId: 'google-gmail-pull' },
-      { kind: 'pull.gcal', scope: 'calendar.readonly', templateId: 'google-calendar-pull' },
+      {
+        kind: 'pull.gmail',
+        scope: 'gmail.readonly',
+        templateId: 'google-gmail-pull',
+      },
+      {
+        kind: 'pull.gcal',
+        scope: 'calendar.readonly',
+        templateId: 'google-calendar-pull',
+      },
     ],
     credKind: 'oauth2',
     id: 'google',
@@ -125,7 +134,7 @@ describe('screens/SettingsConnectionsScreen', () => {
       const el = await mount(makeProps());
       expect(el.textContent).toContain('Connectors');
       expect(el.textContent).toContain('Featured');
-      expect(el.textContent).toMatch(/connections/i);
+      expect(el.textContent).toMatch(/connections/iu);
       expect(el.querySelectorAll('[data-testid="connector-row"]')).toHaveLength(1);
       expect(el.textContent).toContain('Google · Gmail');
       expect(el.textContent).toContain('Needs authorization');
@@ -445,7 +454,7 @@ describe('screens/SettingsConnectionsScreen', () => {
       expect(labelInput?.value).not.toBe('Google · Gmail');
       expect(labelInput?.value.startsWith('Google · Gmail')).toBe(true);
       // …and the owner is told why. The redundant in-form auth banner is gone.
-      expect(wizard?.textContent).toMatch(/already have 1 account/i);
+      expect(wizard?.textContent).toMatch(/already have 1 account/iu);
       expect(wizard?.textContent).not.toContain('Use your own client ID and secret (BYO)');
     });
 

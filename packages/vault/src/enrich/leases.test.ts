@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, test } from 'vitest';
-import { openVaultDb, type VaultDb } from '../db.js';
+
 import { promoteStagedBlob } from '../blob/promote.js';
 import { stageBlobBytes } from '../blob/staging.js';
+import { openVaultDb, type VaultDb } from '../db.js';
 import {
   completeEnrichmentLease,
   enrichmentQueueDepth,
@@ -37,7 +38,11 @@ describe('leases', () => {
   });
 
   test('capability matching leases only compatible work and reports queue depth', () => {
-    expect(enrichmentQueueDepth(db.vault, T0)).toStrictEqual({ total: 2, available: 2, leased: 0 });
+    expect(enrichmentQueueDepth(db.vault, T0)).toStrictEqual({
+      total: 2,
+      available: 2,
+      leased: 0,
+    });
     const transcript = leaseNextEnrichmentRequest(db.vault, {
       deviceId: 'phone',
       capabilities: ['transcript'],
@@ -52,7 +57,11 @@ describe('leases', () => {
       token: 'phone-token',
       attempt: 1,
     });
-    expect(enrichmentQueueDepth(db.vault, T0)).toStrictEqual({ total: 2, available: 1, leased: 1 });
+    expect(enrichmentQueueDepth(db.vault, T0)).toStrictEqual({
+      total: 2,
+      available: 1,
+      leased: 1,
+    });
     expect(
       leaseNextEnrichmentRequest(db.vault, {
         deviceId: 'browser',
@@ -142,7 +151,11 @@ describe('leases', () => {
         now: '2026-07-15T00:00:21.000Z',
       }),
     ).toBe(false);
-    expect(enrichmentQueueDepth(db.vault, T0)).toStrictEqual({ total: 1, available: 1, leased: 0 });
+    expect(enrichmentQueueDepth(db.vault, T0)).toStrictEqual({
+      total: 1,
+      available: 1,
+      leased: 0,
+    });
   });
 
   test('completion without the promised derivative releases the buggy client lease', () => {
@@ -278,7 +291,11 @@ describe('leases', () => {
         now: '2026-07-15T00:00:30.000Z',
         token: 'replacement-token',
       }),
-    ).toMatchObject({ requestId: 'backfill-1', deviceId: 'night-laptop', attempt: 2 });
+    ).toMatchObject({
+      requestId: 'backfill-1',
+      deviceId: 'night-laptop',
+      attempt: 2,
+    });
   });
 
   test('bounded backfill skips satisfied rows instead of starving later content', () => {

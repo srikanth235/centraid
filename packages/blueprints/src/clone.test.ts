@@ -1,7 +1,9 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
 import {
   cloneTemplate,
   suggestAppId,
@@ -162,8 +164,8 @@ describe('cloneTemplate index.html <title> rewrite', () => {
       newName: 'Hydrate 2',
     });
     const html = await fs.readFile(path.join(appsDir, 'hydrate-2', 'index.html'), 'utf8');
-    expect(html).toMatch(/<title>Hydrate 2<\/title>/);
-    expect(html).not.toMatch(/>Hydrate</);
+    expect(html).toMatch(/<title>Hydrate 2<\/title>/u);
+    expect(html).not.toMatch(/>Hydrate</u);
   });
 
   it('HTML-escapes special characters in the new name', async () => {
@@ -174,7 +176,7 @@ describe('cloneTemplate index.html <title> rewrite', () => {
       newName: 'Foo & <Bar>',
     });
     const html = await fs.readFile(path.join(appsDir, 'spicy-1', 'index.html'), 'utf8');
-    expect(html).toMatch(/<title>Foo &amp; &lt;Bar&gt;<\/title>/);
+    expect(html).toMatch(/<title>Foo &amp; &lt;Bar&gt;<\/title>/u);
   });
 
   it('backfills the catalog tile identity into app.json (template copy predates the keys)', async () => {
@@ -196,7 +198,12 @@ describe('cloneTemplate index.html <title> rewrite', () => {
   it('keeps the template app.json tile identity over the catalog entry', async () => {
     await fs.writeFile(
       path.join(templateDir, 'app.json'),
-      JSON.stringify({ name: 'Hydrate', version: '0.1.0', iconKey: 'Todo', colorKey: 'indigo' }),
+      JSON.stringify({
+        name: 'Hydrate',
+        version: '0.1.0',
+        iconKey: 'Todo',
+        colorKey: 'indigo',
+      }),
     );
     await cloneTemplate({
       appsDir,
@@ -235,7 +242,9 @@ describe('cloneTemplate index.html <title> rewrite', () => {
       path.join(templateDir, 'app.json'),
       JSON.stringify({ name: 'Briefing', version: '0.1.0' }, null, 2),
     );
-    await fs.mkdir(path.join(templateDir, 'automations', 'briefing'), { recursive: true });
+    await fs.mkdir(path.join(templateDir, 'automations', 'briefing'), {
+      recursive: true,
+    });
     await fs.writeFile(
       path.join(templateDir, 'automations', 'briefing', 'automation.json'),
       JSON.stringify(
@@ -247,7 +256,10 @@ describe('cloneTemplate index.html <title> rewrite', () => {
           triggers: [{ kind: 'cron', expr: '0 18 * * 1-5' }],
           requires: {},
           history: { keep: { count: 100 } },
-          generated: { by: 'centraid-template', at: '2026-01-01T00:00:00.000Z' },
+          generated: {
+            by: 'centraid-template',
+            at: '2026-01-01T00:00:00.000Z',
+          },
         },
         null,
         2,
@@ -273,7 +285,7 @@ describe('cloneTemplate index.html <title> rewrite', () => {
     );
     expect(mf.name).toBe('Briefing 2');
     expect(mf.generated.by).toBe('centraid-builder');
-    expect(mf.generated.at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(mf.generated.at).toMatch(/^\d{4}-\d{2}-\d{2}T/u);
     // Other fields carry through unchanged.
     expect(mf.prompt).toBe('do the thing');
     expect(mf.triggers).toStrictEqual([{ kind: 'cron', expr: '0 18 * * 1-5' }]);

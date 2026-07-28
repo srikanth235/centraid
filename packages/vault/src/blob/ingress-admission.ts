@@ -1,9 +1,9 @@
 import type { BackupPolicy } from '../backup-policy.js';
 import { VaultBlobBackpressureError } from '../errors.js';
 import type { BlobCache } from './cache.js';
-import type { BlobTransferState } from './transfer-state.js';
 import type { RemoteTier } from './custody-types.js';
 import type { RemoteBlobTransfer } from './remote-transfer.js';
+import type { BlobTransferState } from './transfer-state.js';
 
 const AVAILABILITY_PROBE_SHA = '0'.repeat(64);
 

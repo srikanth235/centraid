@@ -1,4 +1,5 @@
 import http from 'node:http';
+
 import { makeBlobRouteHandler } from '../../../packages/gateway/dist/routes/blob-routes.js';
 import { openVaultPlane } from '../../../packages/gateway/dist/serve/vault-plane.js';
 
@@ -11,7 +12,11 @@ if (!directory || !contentId || !Number.isSafeInteger(size) || size <= 0) {
 
 const plane = openVaultPlane({
   dir: directory,
-  logger: { info: () => undefined, warn: () => undefined, error: () => undefined },
+  logger: {
+    info: () => undefined,
+    warn: () => undefined,
+    error: () => undefined,
+  },
   ownerName: 'Perf owner',
 });
 // This fresh process opens a vault seeded by its parent. It has never allocated

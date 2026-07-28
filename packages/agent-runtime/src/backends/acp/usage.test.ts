@@ -4,6 +4,7 @@
 // backend.model-usage.test.ts; this file pins the arithmetic itself.
 
 import { describe, expect, it } from 'vitest';
+
 import { buildUsageEvent, deltaCumulativeUsage, readCost, readTokenUsage } from './usage.js';
 
 describe(deltaCumulativeUsage, () => {
@@ -15,9 +16,19 @@ describe(deltaCumulativeUsage, () => {
 
   it('books cumulative-minus-baseline on a resumed session', () => {
     const d = deltaCumulativeUsage(
-      { inputTokens: 100, outputTokens: 50, cacheReadTokens: 20, cacheWriteTokens: 5 },
+      {
+        inputTokens: 100,
+        outputTokens: 50,
+        cacheReadTokens: 20,
+        cacheWriteTokens: 5,
+      },
       undefined,
-      { inputTokens: 40, outputTokens: 20, cacheReadTokens: 8, cacheWriteTokens: 2 },
+      {
+        inputTokens: 40,
+        outputTokens: 20,
+        cacheReadTokens: 8,
+        cacheWriteTokens: 2,
+      },
     );
     expect(d.tokens).toStrictEqual({
       inputTokens: 60,
@@ -30,7 +41,9 @@ describe(deltaCumulativeUsage, () => {
   it('treats a counter regression as a reset and charges the current value in full', () => {
     // The agent restarted its session counters behind our back. Subtracting a
     // larger baseline would book a NEGATIVE delta and credit spend back.
-    const d = deltaCumulativeUsage({ inputTokens: 10 }, undefined, { inputTokens: 400 });
+    const d = deltaCumulativeUsage({ inputTokens: 10 }, undefined, {
+      inputTokens: 400,
+    });
     expect(d.tokens.inputTokens).toBe(10);
     expect(d.snapshot?.inputTokens).toBe(10);
   });
@@ -93,7 +106,10 @@ describe(deltaCumulativeUsage, () => {
   it('preserves the prior snapshot when the agent reports nothing at all', () => {
     // Returning no snapshot here would CLEAR the persisted baseline and make
     // the next turn book the whole session total a second time.
-    const d = deltaCumulativeUsage({}, undefined, { inputTokens: 40, outputTokens: 20 });
+    const d = deltaCumulativeUsage({}, undefined, {
+      inputTokens: 40,
+      outputTokens: 20,
+    });
     expect(d.tokens).toStrictEqual({});
     expect(d.snapshot).toStrictEqual({ inputTokens: 40, outputTokens: 20 });
   });
@@ -107,9 +123,19 @@ describe('readTokenUsage / readCost', () => {
   it('reads the spec spelling, nested under `usage` or flat', () => {
     expect(
       readTokenUsage({
-        usage: { inputTokens: 1, outputTokens: 2, cachedReadTokens: 3, cachedWriteTokens: 4 },
+        usage: {
+          inputTokens: 1,
+          outputTokens: 2,
+          cachedReadTokens: 3,
+          cachedWriteTokens: 4,
+        },
       }),
-    ).toStrictEqual({ inputTokens: 1, outputTokens: 2, cacheReadTokens: 3, cacheWriteTokens: 4 });
+    ).toStrictEqual({
+      inputTokens: 1,
+      outputTokens: 2,
+      cacheReadTokens: 3,
+      cacheWriteTokens: 4,
+    });
   });
 
   it('accepts the snake_case / promptTokens spellings older agents emit', () => {
@@ -146,7 +172,12 @@ describe(buildUsageEvent, () => {
       { inputTokens: 5 },
       { amount: 3, currency: 'EUR' },
     );
-    expect(event).toMatchObject({ type: 'usage', provider: 'acp', model: 'm', inputTokens: 5 });
+    expect(event).toMatchObject({
+      type: 'usage',
+      provider: 'acp',
+      model: 'm',
+      inputTokens: 5,
+    });
     expect(event).toMatchObject({ effort: 'high' });
     expect(event && 'costUsd' in event).toBe(false);
   });

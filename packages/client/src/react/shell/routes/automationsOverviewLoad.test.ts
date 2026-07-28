@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
 import {
   getBlocking,
   listAgents,
@@ -6,35 +7,38 @@ import {
   listOutboxGrants,
   listTemplates,
 } from '../../../gateway-client.js';
+import type { ShellActions } from '../actions.js';
 import { openWebhookReveal } from '../webhookReveal.js';
 import { collectAutomationRuns } from './automationsData.js';
 import { adoptOverviewSuggestion, loadAutomationsOverviewData } from './automationsOverviewLoad.js';
 import { cloneAutomationTemplate, surfaceMintedWebhook } from './templatesData.js';
 
 vi.mock(import('../../../gateway-client.js'), () => ({
-  listAutomations: vi.fn(),
-  listAutomationTurns: vi.fn(),
-  getBlocking: vi.fn(),
-  listOutboxGrants: vi.fn(),
-  listAgents: vi.fn(),
-  listTemplates: vi.fn(),
+  listAutomations: vi.fn<typeof import('../../../gateway-client.js').listAutomations>(),
+  listAutomationTurns: vi.fn<typeof import('../../../gateway-client.js').listAutomationTurns>(),
+  getBlocking: vi.fn<typeof import('../../../gateway-client.js').getBlocking>(),
+  listOutboxGrants: vi.fn<typeof import('../../../gateway-client.js').listOutboxGrants>(),
+  listAgents: vi.fn<typeof import('../../../gateway-client.js').listAgents>(),
+  listTemplates: vi.fn<typeof import('../../../gateway-client.js').listTemplates>(),
 }));
 
 vi.mock(import('./automationsData.js'), async (importOriginal) => {
   const actual = await importOriginal<typeof import('./automationsData.js')>();
   return {
     ...actual,
-    collectAutomationRuns: vi.fn(),
+    collectAutomationRuns: vi.fn<typeof import('./automationsData.js').collectAutomationRuns>(),
   };
 });
 
 vi.mock(import('./templatesData.js'), () => ({
-  cloneAutomationTemplate: vi.fn(),
-  surfaceMintedWebhook: vi.fn(),
+  cloneAutomationTemplate: vi.fn<typeof import('./templatesData.js').cloneAutomationTemplate>(),
+  surfaceMintedWebhook: vi.fn<typeof import('./templatesData.js').surfaceMintedWebhook>(),
 }));
 
 vi.mock(import('../webhookReveal.js'), () => ({
-  openWebhookReveal: vi.fn().mockResolvedValue(undefined),
+  openWebhookReveal: vi
+    .fn<typeof import('../webhookReveal.js').openWebhookReveal>()
+    .mockResolvedValue(undefined),
 }));
 
 const listAutomationsMock = listAutomations as unknown as ReturnType<typeof vi.fn>;
@@ -131,8 +135,8 @@ describe('automationsOverviewLoad', () => {
   describe(adoptOverviewSuggestion, () => {
     it('toasts when the template id is missing from the catalog', async () => {
       listTemplatesMock.mockResolvedValue([]);
-      const navigate = vi.fn();
-      const showToast = vi.fn();
+      const navigate = vi.fn<ShellActions['navigate']>();
+      const showToast = vi.fn<ShellActions['showToast']>();
       await adoptOverviewSuggestion('missing-tmpl', { navigate, showToast });
       expect(showToast).toHaveBeenCalledWith(expect.stringContaining('no longer available'));
       expect(navigate).toHaveBeenCalledTimes(0);
@@ -145,20 +149,32 @@ describe('automationsOverviewLoad', () => {
         ref: 'auto.x/y',
         webhooks: [{ url: 'https://h/1', secret: 's' }],
       });
-      const navigate = vi.fn();
-      const showToast = vi.fn();
-      await adoptOverviewSuggestion('obligation-extractor', { navigate, showToast });
+      const navigate = vi.fn<ShellActions['navigate']>();
+      const showToast = vi.fn<ShellActions['showToast']>();
+      await adoptOverviewSuggestion('obligation-extractor', {
+        navigate,
+        showToast,
+      });
       expect(cloneMock).toHaveBeenCalledExactlyOnceWith(tmpl);
-      expect(surfaceMock).toHaveBeenCalledWith({ url: 'https://h/1', secret: 's' });
-      expect(revealMock).toHaveBeenCalledWith({ url: 'https://h/1', secret: 's' });
-      expect(navigate).toHaveBeenCalledWith({ kind: 'automation-view', automationId: 'auto.x/y' });
+      expect(surfaceMock).toHaveBeenCalledWith({
+        url: 'https://h/1',
+        secret: 's',
+      });
+      expect(revealMock).toHaveBeenCalledWith({
+        url: 'https://h/1',
+        secret: 's',
+      });
+      expect(navigate).toHaveBeenCalledWith({
+        kind: 'automation-view',
+        automationId: 'auto.x/y',
+      });
     });
 
     it('falls back to the automations list when clone returns no ref', async () => {
       listTemplatesMock.mockResolvedValue([{ id: 't1', name: 'T', desc: 'd' }]);
       cloneMock.mockResolvedValue({ ref: null, webhooks: [] });
-      const navigate = vi.fn();
-      const showToast = vi.fn();
+      const navigate = vi.fn<ShellActions['navigate']>();
+      const showToast = vi.fn<ShellActions['showToast']>();
       await adoptOverviewSuggestion('t1', { navigate, showToast });
       expect(navigate).toHaveBeenCalledWith({ kind: 'automations' });
     });
@@ -166,8 +182,8 @@ describe('automationsOverviewLoad', () => {
     it('toasts on clone failure', async () => {
       listTemplatesMock.mockResolvedValue([{ id: 't1', name: 'T', desc: 'd' }]);
       cloneMock.mockRejectedValue(new Error('clone boom'));
-      const navigate = vi.fn();
-      const showToast = vi.fn();
+      const navigate = vi.fn<ShellActions['navigate']>();
+      const showToast = vi.fn<ShellActions['showToast']>();
       await adoptOverviewSuggestion('t1', { navigate, showToast });
       expect(showToast).toHaveBeenCalledWith(expect.stringContaining('clone boom'));
       expect(navigate).toHaveBeenCalledTimes(0);

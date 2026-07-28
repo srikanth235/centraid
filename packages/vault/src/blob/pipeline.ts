@@ -16,7 +16,11 @@ import { extractPdfText } from './pdf-text.js';
 /** Magic-byte table: prefix (at offset) → media type. Order matters. */
 const MAGIC: { offset: number; bytes: number[]; type: string }[] = [
   { offset: 0, bytes: [0xff, 0xd8, 0xff], type: 'image/jpeg' },
-  { offset: 0, bytes: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], type: 'image/png' },
+  {
+    offset: 0,
+    bytes: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
+    type: 'image/png',
+  },
   { offset: 0, bytes: [0x47, 0x49, 0x46, 0x38], type: 'image/gif' },
   { offset: 0, bytes: [0x25, 0x50, 0x44, 0x46], type: 'application/pdf' }, // %PDF
   { offset: 0, bytes: [0x50, 0x4b, 0x03, 0x04], type: 'application/zip' },
@@ -212,7 +216,10 @@ function jpegDimensions(bytes: Buffer): Pick<BlobMeta, 'width' | 'height'> {
     if (bytes[i] !== 0xff) break;
     const marker = bytes[i + 1]!;
     if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)) {
-      return { height: bytes.readUInt16BE(i + 5), width: bytes.readUInt16BE(i + 7) };
+      return {
+        height: bytes.readUInt16BE(i + 5),
+        width: bytes.readUInt16BE(i + 7),
+      };
     }
     i += 2 + bytes.readUInt16BE(i + 2);
   }
@@ -264,7 +271,12 @@ function parseJpegExif(bytes: Buffer): JpegExif {
     for (let e = 0; e < n; e += 1) {
       const at = abs + 2 + e * 12;
       if (at + 12 > bytes.length) break;
-      entries.push({ tag: u16(at), type: u16(at + 2), count: u32(at + 4), valueOffset: at + 8 });
+      entries.push({
+        tag: u16(at),
+        type: u16(at + 2),
+        count: u32(at + 4),
+        valueOffset: at + 8,
+      });
     }
     return entries;
   };

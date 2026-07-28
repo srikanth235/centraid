@@ -65,7 +65,10 @@ function ensureDetachedCleanup(): void {
       }
     }
   });
-  detachedMediaObserver.observe(document.documentElement, { childList: true, subtree: true });
+  detachedMediaObserver.observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+  });
 }
 
 export function stopNextScreenObservation(img: HTMLImageElement): void {

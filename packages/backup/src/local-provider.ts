@@ -37,7 +37,9 @@
 import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+
 import { FsObjectStore, type ObjectStore } from './object-store.js';
+import { emptyRegistry, type Registry, type RegistryTarget } from './local-provider-registry.js';
 import {
   inventoryFromFilesystem,
   paginateAuditEvents,
@@ -47,7 +49,6 @@ import {
   BackupProviderError,
   type AccountStatus,
   type BackupProvider,
-  type ProviderAuditEvent,
   type ProviderAuditPage,
   type ProviderAuditQuery,
   type ProviderCapabilities,
@@ -65,29 +66,6 @@ import {
   type Usage,
   type UsageByStore,
 } from './provider.js';
-
-interface RegistryTarget {
-  id: string;
-  name: string;
-  status: 'active' | 'deleted';
-  currentGeneration: number;
-  createdAt: string;
-  deletedAt: string | null;
-  purgedAt: string | null;
-}
-
-interface Registry {
-  targets: Record<string, RegistryTarget>;
-  snapshots: Record<string, SnapshotRow[]>;
-  idempotency: Record<string, Record<string, SnapshotRow>>;
-  nextSeq: Record<string, number>;
-  policies: Record<string, ProviderPolicy>;
-  events: Record<string, ProviderAuditEvent[]>;
-}
-
-function emptyRegistry(): Registry {
-  return { targets: {}, snapshots: {}, idempotency: {}, nextSeq: {}, policies: {}, events: {} };
-}
 
 const SOFT_DELETE_WINDOW_DAYS = 14;
 const CAPABILITIES: ProviderCapabilities = {
@@ -183,7 +161,9 @@ export class LocalBackupProvider implements BackupProvider {
     this.writeChain = this.writeChain.then(async () => {
       await fs.mkdir(this.rootDir, { recursive: true });
       const tmp = `${this.registryFile}.${process.pid}.${Date.now()}.tmp`;
-      await fs.writeFile(tmp, `${JSON.stringify(registry, null, 2)}\n`, { mode: 0o600 });
+      await fs.writeFile(tmp, `${JSON.stringify(registry, null, 2)}\n`, {
+        mode: 0o600,
+      });
       await fs.rename(tmp, this.registryFile);
     });
     await this.writeChain;
@@ -277,11 +257,14 @@ export class LocalBackupProvider implements BackupProvider {
     // module header). A remote provider MUST reject this with 403.
     const registry = await this.load();
     const target = this.requireTargetIn(registry, targetId);
-    await fs.rm(path.join(this.objectsRoot, targetId), { recursive: true, force: true });
+    await fs.rm(path.join(this.objectsRoot, targetId), {
+      recursive: true,
+      force: true,
+    });
     registry.snapshots[targetId] = [];
     registry.idempotency[targetId] = {};
     target.status = 'deleted';
-    target.deletedAt = target.deletedAt ?? new Date().toISOString();
+    target.deletedAt ??= new Date().toISOString();
     target.purgedAt = new Date().toISOString();
     this.appendEvent(registry, targetId, 'purge', { targetId });
     await this.persist(registry);
@@ -325,7 +308,7 @@ export class LocalBackupProvider implements BackupProvider {
       });
     }
 
-    const rows = registry.snapshots[targetId] ?? (registry.snapshots[targetId] = []);
+    const rows = (registry.snapshots[targetId] ??= []);
     const prevManifestHash = rows[0]?.manifestHash ?? null; // newest-first
     const seq = registry.nextSeq[targetId] ?? 1;
     registry.nextSeq[targetId] = seq + 1;
@@ -344,8 +327,7 @@ export class LocalBackupProvider implements BackupProvider {
     };
     rows.unshift(row); // newest-first
     target.currentGeneration = Math.max(target.currentGeneration, reg.generation);
-    (registry.idempotency[targetId] ?? (registry.idempotency[targetId] = {}))[reg.idempotencyKey] =
-      row;
+    (registry.idempotency[targetId] ??= {})[reg.idempotencyKey] = row;
     await this.persist(registry);
     return row;
   }
@@ -426,24 +408,29 @@ export class LocalBackupProvider implements BackupProvider {
     const target = this.requireTargetIn(registry, targetId);
     const start = Math.floor(new Date(target.createdAt).getTime() / 1000);
     const end = Math.floor(Date.now() / 1000);
-    const out: UsageByStore = {};
-    for (const store of STORE_CLASSES) {
-      const { bytesStored, objectCount } = await this.countStore(targetId, store);
-      const report: StoreUsageReport = {
-        bytesStored,
-        objectCount,
-        quotaBytes: null,
-        period: { start, end },
-      };
-      out[store] = report;
-    }
+    const reports = await Promise.all(
+      STORE_CLASSES.map(async (store) => {
+        const { bytesStored, objectCount } = await this.countStore(targetId, store);
+        const report: StoreUsageReport = {
+          bytesStored,
+          objectCount,
+          quotaBytes: null,
+          period: { start, end },
+        };
+        return [store, report] as const;
+      }),
+    );
+    const out: UsageByStore = Object.fromEntries(reports);
     return out;
   }
 
   async putPolicy(targetId: string, input: ProviderPolicyDeclaration): Promise<ProviderPolicy> {
     const registry = await this.load();
     this.requireTargetIn(registry, targetId);
-    const policy = { ...validateProviderPolicy(input), declaredAt: Math.floor(Date.now() / 1000) };
+    const policy = {
+      ...validateProviderPolicy(input),
+      declaredAt: Math.floor(Date.now() / 1000),
+    };
     registry.policies[targetId] = policy;
     this.appendEvent(registry, targetId, 'policy-changed', { policy });
     await this.persist(registry);

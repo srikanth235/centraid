@@ -1,4 +1,6 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import crypto from 'node:crypto';
+
+import { S3TestServer } from '@centraid/backup/dist/testing/s3-test-server.js';
 /*
  * `VaultPlane`'s blob-sweep scheduling (issue #367 §C5/§C6/§C9): the
  * failure-backoff decision (pure function, unit tests) plus a real S3-backed
@@ -6,19 +8,23 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  * resumability. Uses the same committed `S3TestServer` the storage-e2e
  * suite (`../backup/storage-e2e.test.ts`) does — no mocked fetch.
  */
-
-import { afterAll, describe, expect, test } from 'vitest';
-import crypto from 'node:crypto';
-import { S3TestServer } from '@centraid/backup/dist/testing/s3-test-server.js';
+import { forEachSequentially } from '@centraid/test-kit/sequential';
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { blobUriFor, updateBlobStoreSettings, uuidv7 } from '@centraid/vault';
+import { afterAll, describe, expect, test } from 'vitest';
+
 import { blobSweepBackoff, openVaultPlane, type VaultPlane } from './vault-plane.js';
 
-const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
+const silentLogger = {
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+};
 
 const cleanups: Array<() => Promise<void> | void> = [];
 describe('vault-plane-blob-sweep', () => {
   afterAll(async () => {
-    while (cleanups.length > 0) await cleanups.pop()?.();
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
   });
   async function startServer(): Promise<S3TestServer> {
     const server = await S3TestServer.start();
@@ -28,10 +34,13 @@ describe('vault-plane-blob-sweep', () => {
 
   async function until(check: () => boolean | Promise<boolean>, timeoutMs = 3000): Promise<void> {
     const deadline = Date.now() + timeoutMs;
-    while (!(await check())) {
+    async function poll(): Promise<void> {
+      if (await check()) return;
       if (Date.now() > deadline) throw new Error('timed out waiting for condition');
       await new Promise((resolve) => setTimeout(resolve, 15));
+      return poll();
     }
+    return poll();
   }
 
   /**
@@ -41,11 +50,13 @@ describe('vault-plane-blob-sweep', () => {
    */
   async function heldThroughout(check: () => boolean, holdMs: number): Promise<boolean> {
     const deadline = Date.now() + holdMs;
-    while (Date.now() < deadline) {
+    async function poll(): Promise<boolean> {
+      if (Date.now() >= deadline) return check();
       if (!check()) return false;
       await new Promise((resolve) => setTimeout(resolve, 15));
+      return poll();
     }
-    return check();
+    return poll();
   }
 
   describe('blobSweepBackoff (pure)', () => {
@@ -61,7 +72,10 @@ describe('vault-plane-blob-sweep', () => {
     test('one failure, just attempted — skips, retry window > 0', () => {
       const now = Date.now();
       const result = blobSweepBackoff(
-        { consecutiveFailures: 1, lastAttemptedAt: new Date(now).toISOString() },
+        {
+          consecutiveFailures: 1,
+          lastAttemptedAt: new Date(now).toISOString(),
+        },
         now,
       );
       expect(result.skip).toBe(true);
@@ -99,7 +113,10 @@ describe('vault-plane-blob-sweep', () => {
         ownerName: 'Priya',
         sweepIntervalMs: 25, // fast tick for the test
         skipOrphanDelete: opts.skipOrphanDelete,
-        s3Credentials: async () => ({ accessKeyId: 'AKIA_TEST', secretAccessKey: 'secret_test' }),
+        s3Credentials: async () => ({
+          accessKeyId: 'AKIA_TEST',
+          secretAccessKey: 'secret_test',
+        }),
       });
       updateBlobStoreSettings(plane.db, {
         blob_store: {
@@ -118,7 +135,10 @@ describe('vault-plane-blob-sweep', () => {
       const server = await startServer();
       const dir = await tempDir();
       let conflicted = true;
-      const plane = openPlane(dir, { endpoint: server.url, skipOrphanDelete: () => conflicted });
+      const plane = openPlane(dir, {
+        endpoint: server.url,
+        skipOrphanDelete: () => conflicted,
+      });
 
       const orphanSha = crypto.createHash('sha256').update('writer-risk-orphan').digest('hex');
       server.putObjectDirect('b', `p/blobs/sha256/${orphanSha}`, Buffer.from('orphan'));
@@ -136,7 +156,10 @@ describe('vault-plane-blob-sweep', () => {
     test('sweep is resumable after a restart — a fresh VaultPlane over the same dir picks the backlog straight back up', async () => {
       const server = await startServer();
       const dir = await tempDir();
-      const plane1 = openPlane(dir, { endpoint: server.url, skipOrphanDelete: () => false });
+      const plane1 = openPlane(dir, {
+        endpoint: server.url,
+        skipOrphanDelete: () => false,
+      });
 
       // Ingest local bytes but stop BEFORE the sweep clock (25ms) has a chance
       // to replicate them — proves the backlog survives as on-disk custody
@@ -156,7 +179,10 @@ describe('vault-plane-blob-sweep', () => {
 
       // A brand-new VaultPlane instance (simulating a gateway restart) over
       // the SAME directory: nothing in-process carried over, only the files.
-      const plane2 = openPlane(dir, { endpoint: server.url, skipOrphanDelete: () => false });
+      const plane2 = openPlane(dir, {
+        endpoint: server.url,
+        skipOrphanDelete: () => false,
+      });
       plane2.start();
       await until(async () => (await makeS3List(server)).includes(sha), 3000);
       expect(plane2.db.blobs.hasSync(sha)).toBe(true);
@@ -165,7 +191,10 @@ describe('vault-plane-blob-sweep', () => {
     test('a retained-snapshot GC root survives the sweep; a genuine orphan does not (issue #436 §6)', async () => {
       const server = await startServer();
       const dir = await tempDir();
-      const plane = openPlane(dir, { endpoint: server.url, skipOrphanDelete: () => false });
+      const plane = openPlane(dir, {
+        endpoint: server.url,
+        skipOrphanDelete: () => false,
+      });
 
       const pinnedSha = crypto.createHash('sha256').update('snapshot-referenced').digest('hex');
       const straySha = crypto.createHash('sha256').update('true-orphan').digest('hex');
@@ -184,7 +213,10 @@ describe('vault-plane-blob-sweep', () => {
     test('when the snapshot-roots supplier throws, orphan-delete fails safe — nothing is deleted (issue #436 §6)', async () => {
       const server = await startServer();
       const dir = await tempDir();
-      const plane = openPlane(dir, { endpoint: server.url, skipOrphanDelete: () => false });
+      const plane = openPlane(dir, {
+        endpoint: server.url,
+        skipOrphanDelete: () => false,
+      });
 
       const orphanSha = crypto.createHash('sha256').update('unprovable-reachability').digest('hex');
       server.putObjectDirect('b', `p/blobs/sha256/${orphanSha}`, Buffer.from('orphan'));
@@ -210,7 +242,10 @@ async function makeS3List(server: S3TestServer): Promise<string[]> {
     bucket: 'b',
     region: 'us-east-1',
     prefix: 'p',
-    credentials: async () => ({ accessKeyId: 'AKIA_TEST', secretAccessKey: 'secret_test' }),
+    credentials: async () => ({
+      accessKeyId: 'AKIA_TEST',
+      secretAccessKey: 'secret_test',
+    }),
   });
   return s3.list();
 }

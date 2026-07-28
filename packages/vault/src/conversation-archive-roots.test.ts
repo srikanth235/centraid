@@ -3,11 +3,13 @@
 // read as reachable so the reconcile sweep never deletes the only durable copy
 // of pruned rows. Also covers the missing-table guard.
 
-import { describe, expect, test } from 'vitest';
 import type { DatabaseSync } from 'node:sqlite';
-import { openVaultDb } from './db.js';
-import { conversationArchiveShas } from './conversation-archive-roots.js';
+
+import { describe, expect, test } from 'vitest';
+
 import { sha256OfBytes } from './blob/store.js';
+import { conversationArchiveShas } from './conversation-archive-roots.js';
+import { openVaultDb } from './db.js';
 
 // Minimal slice of the app-engine-owned band the roots reader touches. Inlined
 // (not imported from @centraid/app-engine) because the vault package must never

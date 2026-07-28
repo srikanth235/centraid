@@ -2,6 +2,7 @@
 // file covers the pack's own additions, starting with cancel_event.
 
 import { assert, beforeEach, describe, expect, test } from 'vitest';
+
 import { bootstrapVault, type BootstrapResult } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { createGateway, Gateway } from '../gateway/gateway.js';
@@ -21,7 +22,11 @@ describe('schedule', () => {
     boot = bootstrapVault(db, { ownerName: 'Priya' });
     gw = createGateway(db);
     registerScheduleCommands(gw);
-    owner = { kind: 'device', deviceId: boot.deviceId, deviceKey: boot.deviceKey };
+    owner = {
+      kind: 'device',
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+    };
     calendarId = uuidv7();
     db.vault
       .prepare(
@@ -32,7 +37,11 @@ describe('schedule', () => {
   });
 
   function invoke(command: string, input: Record<string, unknown>) {
-    return gw.invoke(owner, { command, input, purpose: 'dpv:ServiceProvision' });
+    return gw.invoke(owner, {
+      command,
+      input,
+      purpose: 'dpv:ServiceProvision',
+    });
   }
 
   function proposeEvent(): string {
@@ -64,7 +73,10 @@ describe('schedule', () => {
       .get(eventId) as { start_tz: string; rrule: string };
     // node:sqlite hands back null-prototype rows; spreading compares the column
     // data (which is the contract) without asserting the driver's prototype.
-    expect({ ...event }).toStrictEqual({ start_tz: 'Asia/Kolkata', rrule: 'FREQ=WEEKLY;BYDAY=MO' });
+    expect({ ...event }).toStrictEqual({
+      start_tz: 'Asia/Kolkata',
+      rrule: 'FREQ=WEEKLY;BYDAY=MO',
+    });
     const ext = db.vault
       .prepare('SELECT conferencing_uri, reminders_json FROM schedule_event_ext WHERE event_id = ?')
       .get(eventId) as { conferencing_uri: string; reminders_json: string };
@@ -107,7 +119,7 @@ describe('schedule', () => {
          VALUES (?, ?, ?, 'chair', 'accepted')`,
         )
         .run(uuidv7(), eventId, otherPartyId),
-    ).toThrow(/must match the event organizer/);
+    ).toThrow(/must match the event organizer/u);
 
     db.vault
       .prepare(
@@ -120,7 +132,7 @@ describe('schedule', () => {
       db.vault
         .prepare('UPDATE core_event SET organizer_party_id = ? WHERE event_id = ?')
         .run(otherPartyId, eventId),
-    ).toThrow(/must match its chair attendee/);
+    ).toThrow(/must match its chair attendee/u);
   });
 
   test('cancel_event marks the event cancelled as a SEQUENCE revision, not a vanish', () => {
@@ -144,7 +156,9 @@ describe('schedule', () => {
     expect(again.status).toBe('failed');
     assert(again.status === 'failed');
     expect(again.predicate).toContain('event_exists_not_cancelled');
-    const missing = invoke('schedule.cancel_event', { event_id: 'no-such-event' });
+    const missing = invoke('schedule.cancel_event', {
+      event_id: 'no-such-event',
+    });
     expect(missing.status).toBe('failed');
   });
 });

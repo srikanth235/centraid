@@ -1,5 +1,7 @@
-import { describe, expect, it, test } from 'vitest';
 import { fc } from '@centraid/test-kit/fast-check';
+import { describe, expect, it, test } from 'vitest';
+
+import type { Trigger } from '../manifest/manifest.js';
 import {
   computeMissedWindows,
   parseSchedulerLedgerSnapshot,
@@ -9,7 +11,6 @@ import {
   SCHEDULER_LEDGER_KEY,
   type MissedWindowEntry,
 } from './scheduler-ledger.js';
-import type { Trigger } from '../manifest/manifest.js';
 
 const at = (h: number, mi: number, day = 1): Date => new Date(2026, 0, day, h, mi, 0, 0);
 
@@ -95,7 +96,7 @@ describe(computeMissedWindows, () => {
         fc.integer({ min: 5, max: 180 }),
         fc.array(
           fc.tuple(
-            fc.stringMatching(/^[a-z]{1,8}$/),
+            fc.stringMatching(/^[a-z]{1,8}$/u),
             fc.constantFrom('* * * * *', '*/5 * * * *', '0 * * * *'),
           ),
           { minLength: 1, maxLength: 6 },
@@ -104,7 +105,10 @@ describe(computeMissedWindows, () => {
           // Deduplicate refs so the model matches product identity.
           const seen = new Set<string>();
           const entries = rawEntries
-            .map(([id, cron]) => ({ ref: `a/${id}`, crons: [cron] as string[] }))
+            .map(([id, cron]) => ({
+              ref: `a/${id}`,
+              crons: [cron] as string[],
+            }))
             .filter((e) => {
               if (seen.has(e.ref)) return false;
               seen.add(e.ref);
@@ -200,9 +204,13 @@ describe(computeMissedWindows, () => {
 
 describe(parseSchedulerLedgerSnapshot, () => {
   it('returns an empty snapshot for absent/malformed input', () => {
-    expect(parseSchedulerLedgerSnapshot(undefined)).toStrictEqual({ missed: [] });
+    expect(parseSchedulerLedgerSnapshot(undefined)).toStrictEqual({
+      missed: [],
+    });
     expect(parseSchedulerLedgerSnapshot(null)).toStrictEqual({ missed: [] });
-    expect(parseSchedulerLedgerSnapshot('not json')).toStrictEqual({ missed: [] });
+    expect(parseSchedulerLedgerSnapshot('not json')).toStrictEqual({
+      missed: [],
+    });
     expect(parseSchedulerLedgerSnapshot('42')).toStrictEqual({ missed: [] });
   });
 
@@ -213,7 +221,10 @@ describe(parseSchedulerLedgerSnapshot, () => {
       recordedAt: at(8, 10).toISOString(),
       reason: 'gateway-down',
     };
-    const json = JSON.stringify({ lastTickAt: at(8, 10).toISOString(), missed: [entry] });
+    const json = JSON.stringify({
+      lastTickAt: at(8, 10).toISOString(),
+      missed: [entry],
+    });
     expect(parseSchedulerLedgerSnapshot(json)).toStrictEqual({
       lastTickAt: at(8, 10).toISOString(),
       missed: [entry],
@@ -257,7 +268,10 @@ describe(SchedulerLedgerStore, () => {
     expect(store.load().missed).toStrictEqual([entry]);
     // recordTick after doesn't clobber missed entries.
     store.recordTick(at(8, 11));
-    expect(store.load()).toStrictEqual({ lastTickAt: at(8, 11).toISOString(), missed: [entry] });
+    expect(store.load()).toStrictEqual({
+      lastTickAt: at(8, 11).toISOString(),
+      missed: [entry],
+    });
   });
 
   it('bounds the missed-entry ring buffer', () => {
@@ -293,7 +307,10 @@ describe(SchedulerLedgerStore, () => {
       missed: [],
     });
     store.setDormant(false, at(12, 0));
-    expect(store.load()).toStrictEqual({ lastTickAt: at(12, 0).toISOString(), missed: [] });
+    expect(store.load()).toStrictEqual({
+      lastTickAt: at(12, 0).toISOString(),
+      missed: [],
+    });
   });
 });
 
@@ -314,7 +331,11 @@ describe(recordSchedulerTick, () => {
   it('records nothing across ordinary consecutive ticks', () => {
     const ledger = new SchedulerLedgerStore(fakeConversationStore());
     recordSchedulerTick({ ledger, now: at(8, 0), automations: [] });
-    const missed = recordSchedulerTick({ ledger, now: at(8, 1), automations: [] });
+    const missed = recordSchedulerTick({
+      ledger,
+      now: at(8, 1),
+      automations: [],
+    });
     expect(missed).toStrictEqual([]);
   });
 

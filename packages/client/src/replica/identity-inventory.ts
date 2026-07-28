@@ -151,7 +151,13 @@ function inventoryRow(
   purgeAttempts: number,
   retryAt: number,
 ): ReplicaInventoryRow {
-  return { key: identityKey(identity), ...identity, state, purgeAttempts, retryAt };
+  return {
+    key: identityKey(identity),
+    ...identity,
+    state,
+    purgeAttempts,
+    retryAt,
+  };
 }
 
 function stripInventoryKey({

@@ -1,11 +1,11 @@
 import { listVaults } from '../../../gateway-client.js';
-import { connectGateway, friendlyGatewayError } from './gatewayModals.js';
 import {
   type ConnectFlowResult,
   type ConnectFlowState,
   type ConnectTestInput,
   type ConnectivityReport,
 } from './connectFlow-core.js';
+import { connectGateway, friendlyGatewayError } from './gatewayModals.js';
 
 /*
  * Impure IO for ConnectFlow (issue #382) — mirrors the
@@ -121,9 +121,15 @@ async function commitLocal(state: ConnectFlowState): Promise<ConnectFlowResult> 
   await ensureLocalGatewayActive();
   if (state.vaultChoice.kind === 'create') {
     const name = state.newVaultName.trim();
-    const created = await window.CentraidApi.createVault({ name: name || undefined });
+    const created = await window.CentraidApi.createVault({
+      name: name || undefined,
+    });
     await window.CentraidApi.setActiveVault({ vaultId: created.vaultId });
-    return { displayLabel: 'This Mac', gatewayId: 'local', vaultId: created.vaultId };
+    return {
+      displayLabel: 'This Mac',
+      gatewayId: 'local',
+      vaultId: created.vaultId,
+    };
   }
   const { vaultId } = state.vaultChoice;
   await window.CentraidApi.setActiveVault({ vaultId });
@@ -139,7 +145,11 @@ async function commitGateway(state: ConnectFlowState): Promise<ConnectFlowResult
     ticket: state.ticket.trim(),
   });
   if (!result.ok) throw new Error(result.message);
-  return { displayLabel: result.label, gatewayId: result.gatewayId, vaultId: result.vaultId ?? '' };
+  return {
+    displayLabel: result.label,
+    gatewayId: result.gatewayId,
+    vaultId: result.vaultId ?? '',
+  };
 }
 
 async function commitSsh(state: ConnectFlowState): Promise<ConnectFlowResult> {

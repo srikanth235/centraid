@@ -3,9 +3,10 @@
 // same picker (issue #498). The selected swatch reads with a ring + check; the
 // value is a raw hex string, matching how both callers store it.
 
+import { Feather } from '@expo/vector-icons';
 import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+
 import { useTheme, type ThemeColors } from '../../kit/theme';
 
 export interface ColorSwatchRowProps {
@@ -34,7 +35,10 @@ export default function ColorSwatchRow({
             onPress={() => onChange(hex)}
             style={({ pressed }) => [
               styles.swatch,
-              { backgroundColor: hex, borderColor: active ? colors.ink : 'transparent' },
+              {
+                backgroundColor: hex,
+                borderColor: active ? colors.ink : 'transparent',
+              },
               pressed && styles.pressed,
             ]}
           >

@@ -1,10 +1,12 @@
 import { palette } from '@centraid/design-tokens';
+
 import type { TemplateEntry, TemplateVaultBlock } from '../../app-shell-context.js';
+import { cx } from '../ui/cx.js';
 import { iconSvg } from './iconSvg.js';
+
+import modalCss from '../styles/modal.module.css';
 import buttonCss from '../ui/Button.module.css';
 import styles from './templatePreview.module.css';
-import { cx } from '../ui/cx.js';
-import modalCss from '../styles/modal.module.css';
 
 // App install sheet (issue #434) — the consent surface. Shows an app's
 // identity + blurb and, rendered straight from its `app.json` `vault` block,
@@ -30,7 +32,10 @@ function scopeNoun(scope: TemplateVaultBlock['scopes'][number]): string {
 // Verb code → owner-facing lead. Apps declare `read` (projection) and `act`
 // (typed commands that mutate). Anything else falls back to the raw verb so a
 // new verb never renders blank.
-const VERB_LABEL: Record<string, string> = { read: 'Read', act: 'Add & change' };
+const VERB_LABEL: Record<string, string> = {
+  read: 'Read',
+  act: 'Add & change',
+};
 
 /**
  * Turn the raw `vault.scopes` into a short list of owner-facing sentences,

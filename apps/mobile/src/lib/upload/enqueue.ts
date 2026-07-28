@@ -59,14 +59,17 @@ export async function sha256OfFile(
   const source = await openFile(localUri);
   try {
     const hash = createDigest();
-    for (let offset = 0; offset < source.size; offset += HASH_CHUNK_BYTES) {
+    const hashNextChunk = async (offset: number): Promise<void> => {
+      if (offset >= source.size) return;
       const length = Math.min(HASH_CHUNK_BYTES, source.size - offset);
       const chunk = await source.read(offset, length);
       if (chunk.byteLength !== length) {
         throw new Error(`read ${chunk.byteLength} bytes at ${offset}, expected ${length}`);
       }
       hash.update(chunk);
-    }
+      return hashNextChunk(offset + HASH_CHUNK_BYTES);
+    };
+    await hashNextChunk(0);
     return { sha256: hash.digestHex(), size: source.size };
   } finally {
     source.close();

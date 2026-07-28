@@ -7,8 +7,9 @@
 // file-size cap); the "+ add" mini-forms live in AddRows.tsx.
 import { I } from '../icons.ts';
 import type { DetailPerson } from '../types.ts';
-import { Icon, KitAvatar } from './Shared.tsx';
 import { Sections } from './DetailSections.tsx';
+import { Icon, KitAvatar } from './Shared.tsx';
+
 import styles from './Details.module.css';
 import shared from './shared.module.css';
 
@@ -62,7 +63,13 @@ export function Details({
           </button>
         </div>
         <div className={styles.detailsBody}>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+            }}
+          >
             <span
               style={{
                 display: 'inline-flex',

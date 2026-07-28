@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type CSSProperties, type JSX } from 'react';
-import ConnectFlow from '../shell/routes/ConnectFlow.js';
+
 import type { ConnectFlowResult } from '../shell/routes/connectFlow-core.js';
+import ConnectFlow from '../shell/routes/ConnectFlow.js';
+
 import a11y from '../styles/a11y.module.css';
 import styles from './OnboardingScreen.module.css';
 

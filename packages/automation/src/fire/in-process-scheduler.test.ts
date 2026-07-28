@@ -1,38 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { InProcessScheduler } from './in-process-scheduler.js';
+
 import type { Row } from '../scaffold/app.js';
-import type { Manifest } from '../manifest/manifest.js';
-
-const manifest = (enabled: boolean): Manifest => ({
-  name: 'x',
-  version: '0.1.0',
-  enabled,
-  prompt: 'do it',
-  triggers: [],
-  requires: {},
-  history: { keep: 'all' },
-  generated: { by: 'test', at: '2026-01-01T00:00:00.000Z' },
-});
-
-function row(ref: string, enabled: boolean, exprs: readonly string[]): Row {
-  const [ownerApp, id] = ref.split('/') as [string, string];
-  return {
-    id,
-    dir: `/tmp/${id}`,
-    name: id,
-    ownerApp,
-    ref,
-    enabled,
-    triggers: exprs.map((expr) => ({ kind: 'cron', expr })),
-    manifest: manifest(enabled),
-  };
-}
-
-const at = (h: number, mi: number): Date => new Date(2026, 0, 1, h, mi, 0, 0);
-
-async function settle(): Promise<void> {
-  await new Promise<void>((resolve) => setTimeout(resolve, 0));
-}
+import { InProcessScheduler } from './in-process-scheduler.js';
+import { at, manifest, row, settle } from './in-process-scheduler.test-kit.js';
 
 describe('InProcessScheduler.reconcile', () => {
   it('diffs added / updated / removed and tracks only enabled cron rows', async () => {
@@ -75,7 +45,10 @@ describe('InProcessScheduler.tick', () => {
   it('fires each due cron once and catches the latest missed instant', async () => {
     const fired: string[] = [];
     let clock = at(8, 0);
-    const s = new InProcessScheduler({ fire: (ref) => void fired.push(ref), now: () => clock });
+    const s = new InProcessScheduler({
+      fire: (ref) => void fired.push(ref),
+      now: () => clock,
+    });
     await s.reconcile([
       row('a/morning', true, ['0 8 * * *']),
       row('a/evening', true, ['0 20 * * *']),
@@ -106,7 +79,10 @@ describe('InProcessScheduler.tick', () => {
   it('fires every registered automation whose cron matches the minute', async () => {
     const fired: string[] = [];
     const clock = at(8, 0);
-    const s = new InProcessScheduler({ fire: (ref) => void fired.push(ref), now: () => clock });
+    const s = new InProcessScheduler({
+      fire: (ref) => void fired.push(ref),
+      now: () => clock,
+    });
     await s.reconcile([
       row('a/one', true, ['0 8 * * *']),
       row('b/two', true, ['*/15 * * * *']), // also matches :00
@@ -126,7 +102,7 @@ describe('condition-trigger watches', () => {
       {
         kind: 'condition' as const,
         entity: 'business.invoice',
-        ...(every !== undefined ? { every } : {}),
+        ...(every === undefined ? {} : { every }),
       },
     ];
     return {
@@ -491,7 +467,10 @@ describe('InProcessScheduler onTick hook (issue #351)', () => {
 
   it('onTick is optional — omitting it changes nothing about firing', async () => {
     const fired: string[] = [];
-    const s = new InProcessScheduler({ fire: (ref) => void fired.push(ref), now: () => at(8, 0) });
+    const s = new InProcessScheduler({
+      fire: (ref) => void fired.push(ref),
+      now: () => at(8, 0),
+    });
     await s.reconcile([row('a/one', true, ['0 8 * * *'])]);
     expect(() => s.tick()).not.toThrow();
     expect(fired).toStrictEqual(['a/one']);

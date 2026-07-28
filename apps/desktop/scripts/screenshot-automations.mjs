@@ -1,4 +1,10 @@
 #!/usr/bin/env node
+import crypto from 'node:crypto';
+import { promises as fs } from 'node:fs';
+import http from 'node:http';
+import os from 'node:os';
+import path from 'node:path';
+
 /**
  * One-off visual capture of the redesigned Automations surfaces, driven
  * through the real Electron renderer via Playwright's `_electron` driver
@@ -12,11 +18,6 @@
  *   bun run apps/desktop/scripts/screenshot-automations.mjs
  */
 import { _electron } from 'playwright';
-import http from 'node:http';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import os from 'node:os';
-import crypto from 'node:crypto';
 
 const __filename = import.meta.filename;
 const __dirname = import.meta.dirname;
@@ -157,7 +158,10 @@ const NODES = {
       endedAt: now + 700,
       durationMs: 700,
       argsJson: JSON.stringify({ repo: 'acme/web', since: '24h' }),
-      outputJson: JSON.stringify({ count: 6, prs: [481, 480, 478, 475, 472, 470] }),
+      outputJson: JSON.stringify({
+        count: 6,
+        prs: [481, 480, 478, 475, 472, 470],
+      }),
     },
     {
       nodeId: 'run_001:2',
@@ -202,7 +206,11 @@ const NODES = {
       endedAt: now + 800,
       durationMs: 800,
       argsJson: JSON.stringify({ owner: 'acme', repo: 'web', number: 482 }),
-      outputJson: JSON.stringify({ title: 'Migrate sessions table', files: 7, additions: 240 }),
+      outputJson: JSON.stringify({
+        title: 'Migrate sessions table',
+        files: 7,
+        additions: 240,
+      }),
     },
     {
       nodeId: 'run_003:2',
@@ -231,7 +239,10 @@ const NODES = {
       startedAt: now + 4200,
       endedAt: now + 4700,
       durationMs: 500,
-      argsJson: JSON.stringify({ issue: 'ENG-1182', body: 'Flagged risky migration in PR #482.' }),
+      argsJson: JSON.stringify({
+        issue: 'ENG-1182',
+        body: 'Flagged risky migration in PR #482.',
+      }),
       outputJson: JSON.stringify({ ok: true }),
     },
   ],
@@ -298,7 +309,11 @@ function json(res, body, status = 200) {
 const asTurn = (run) => ({ ...run, turnId: run.runId });
 /** Fixture node → native turn item. */
 const itemsFor = (turnId) =>
-  (NODES[turnId] ?? []).map((node) => ({ ...node, itemId: node.nodeId, turnId: node.runId }));
+  (NODES[turnId] ?? []).map((node) => ({
+    ...node,
+    itemId: node.nodeId,
+    turnId: node.runId,
+  }));
 
 async function startSeedServer() {
   const server = http.createServer((req, res) => {

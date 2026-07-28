@@ -2,11 +2,17 @@
 
 import sharp from 'sharp';
 import { describe, expect, test } from 'vitest';
+
 import { createWasmImagePreviewCodec } from './wasm-codec.js';
 
 async function png(w: number, h: number): Promise<Buffer> {
   return sharp({
-    create: { width: w, height: h, channels: 3, background: { r: 40, g: 120, b: 200 } },
+    create: {
+      width: w,
+      height: h,
+      channels: 3,
+      background: { r: 40, g: 120, b: 200 },
+    },
   })
     .png()
     .toBuffer();

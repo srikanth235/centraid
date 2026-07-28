@@ -17,7 +17,9 @@
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+
 import type { ExtApplyOutcome, ExtTableSpec } from '@centraid/vault';
+
 import type { WorktreeStore } from '../worktree-store/index.js';
 
 /** The slice of the vault plane the lifecycle needs — injected, testable. */

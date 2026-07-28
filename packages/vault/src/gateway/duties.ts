@@ -7,16 +7,16 @@
 // Gateway (the pause is gateway state); the view service in views.ts; file
 // custody in custody.ts; export & portability in portability.ts.
 
-import type { VaultDb } from '../db.js';
-import { nowIso } from '../ids.js';
 import { sweepBlobStaging } from '../blob/staging.js';
 import { shaOfBlobUri } from '../blob/store.js';
 import { RELATIONS_SCHEME_URI } from '../commands/links.js';
+import type { VaultDb } from '../db.js';
+import { nowIso } from '../ids.js';
+import { writeScopeTombstones } from '../install-memory.js';
 import { cleanupPolyRefs } from '../schema/poly-refs.js';
 import { resolveEntity } from '../schema/tables.js';
-import { retainExtBand } from './ext.js';
-import { writeScopeTombstones } from '../install-memory.js';
 import { writeProvenance, writeReceipt } from './evidence.js';
+import { retainExtBand } from './ext.js';
 import { tableColumns } from './filters.js';
 import type { FilterClause, Identity } from './types.js';
 
@@ -52,7 +52,11 @@ export function revokeGrantCascade(
       'SELECT grant_id, app_id, grantee_party_id FROM consent_access_grant WHERE grant_id = ?',
     )
     .get(grantId) as
-    | { grant_id: string; app_id: string | null; grantee_party_id: string | null }
+    | {
+        grant_id: string;
+        app_id: string | null;
+        grantee_party_id: string | null;
+      }
     | undefined;
   if (!grant) throw new Error(`no grant ${grantId}`);
   db.vault
@@ -124,10 +128,23 @@ export function revokeGrantCascade(
     objectId: grantId,
     purpose: null,
     decision: 'allow',
-    detail: { viewsRevoked, parkedDropped, extRetained, tombstoned, revokedBy: owner.partyId },
+    detail: {
+      viewsRevoked,
+      parkedDropped,
+      extRetained,
+      tombstoned,
+      revokedBy: owner.partyId,
+    },
   });
   writeProvenance(db.journal, owner, 'consent.access_grant', grantId, 'owner.revoke');
-  return { grantId, appId: centraidAppId, viewsRevoked, parkedDropped, extRetained, receiptId };
+  return {
+    grantId,
+    appId: centraidAppId,
+    viewsRevoked,
+    parkedDropped,
+    extRetained,
+    receiptId,
+  };
 }
 
 export interface SweepResult {
@@ -360,11 +377,27 @@ function purgeContentItem(db: VaultDb, owner: Identity, now: string, contentId: 
  * FK children with ON DELETE CASCADE (tally_expense_split) go automatically —
  * PRAGMA foreign_keys is ON (db.ts) — so no child needs manual deletion here.
  */
-const DOMAIN_TRASH_TABLES: readonly { physical: string; idCol: string; entity: string }[] = [
-  { physical: 'people_important_date', idCol: 'date_id', entity: 'people.important_date' },
+const DOMAIN_TRASH_TABLES: readonly {
+  physical: string;
+  idCol: string;
+  entity: string;
+}[] = [
+  {
+    physical: 'people_important_date',
+    idCol: 'date_id',
+    entity: 'people.important_date',
+  },
   { physical: 'tally_expense', idCol: 'expense_id', entity: 'tally.expense' },
-  { physical: 'tally_settlement', idCol: 'settlement_id', entity: 'tally.settlement' },
-  { physical: 'tally_obligation', idCol: 'obligation_id', entity: 'tally.obligation' },
+  {
+    physical: 'tally_settlement',
+    idCol: 'settlement_id',
+    entity: 'tally.settlement',
+  },
+  {
+    physical: 'tally_obligation',
+    idCol: 'obligation_id',
+    entity: 'tally.obligation',
+  },
 ];
 
 /**

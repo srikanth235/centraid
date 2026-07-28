@@ -1,3 +1,4 @@
+import { first, resolveSplits, toCents, todayKey } from './format.ts';
 // governance: allow-repo-hygiene file-size-limit (#408) pre-existing cohesive Tally business-logic module; the TS conversion only adds type annotations to the existing boundary and does not expand its behavior
 // Non-visual business logic: vault IO (write/act/read), navigation, the
 // people directory, and every modal's open/patch/save/close flow (expense,
@@ -13,7 +14,6 @@
 // tracks it (no React `useState` needed for these, no Lit `live()` needed
 // either: a full re-render already keeps the DOM in sync on every keystroke).
 import { debounce, outcomeMessage, toast } from './kit.ts';
-import { first, resolveSplits, toCents, todayKey } from './format.ts';
 import type {
   AddFriendModel,
   ExpenseModel,
@@ -106,12 +106,22 @@ export function createLogic({
       if (state.viewData.friend) put(state.viewData.friend);
     }
     if (dash.me && !map.has(dash.me))
-      map.set(dash.me, { party_id: dash.me, name: 'You', color: '#0FA678', initials: 'You' });
+      map.set(dash.me, {
+        party_id: dash.me,
+        name: 'You',
+        color: '#0FA678',
+        initials: 'You',
+      });
     return map;
   }
   function personOf(pid: string): Person {
     return (
-      directory().get(pid) || { party_id: pid, name: 'Someone', color: '#5C677D', initials: '?' }
+      directory().get(pid) || {
+        party_id: pid,
+        name: 'Someone',
+        color: '#5C677D',
+        initials: '?',
+      }
     );
   }
   function displayName(pid: string): string {
@@ -296,7 +306,7 @@ export function createLogic({
     const exp = state.expense!;
     const cents = toCents(exp.amount);
     const splits = resolveSplits(exp, cents, state.modalMembers);
-    if (!exp.desc.trim() || !(cents > 0) || !splits) return;
+    if (!exp.desc.trim() || cents <= 0 || !splits) return;
     const base: ExpenseBase = {
       description: exp.desc.trim(),
       amount_minor: cents,
@@ -308,7 +318,10 @@ export function createLogic({
     if (exp.mode === 'edit') {
       // Edit is the cold path — patching a fetched row in place is not worth
       // the divergence risk, so it keeps the plain write→narrate→refresh flow.
-      const outcome = await act('edit-expense', { expense_id: exp.expense_id, ...base });
+      const outcome = await act('edit-expense', {
+        expense_id: exp.expense_id,
+        ...base,
+      });
       if (!narrate(outcome)) return;
       toast('Expense updated · receipted.');
       closeExpense();
@@ -328,7 +341,10 @@ export function createLogic({
     state.pendingExpenses.push(row);
     closeExpense();
     render();
-    const outcome = await act('add-expense', { group_id: exp.groupId, ...base });
+    const outcome = await act('add-expense', {
+      group_id: exp.groupId,
+      ...base,
+    });
     if (outcome?.status === 'executed') {
       notice('');
       toast('Expense added · receipted.');
@@ -383,7 +399,13 @@ export function createLogic({
     } else if (state.view === 'friend' && state.viewData?.friend) {
       const f = state.viewData.friend;
       state.modalMembers = [
-        { party_id: dash.me ?? '', name: 'You', color: '#0FA678', initials: 'You', is_me: true },
+        {
+          party_id: dash.me ?? '',
+          name: 'You',
+          color: '#0FA678',
+          initials: 'You',
+          is_me: true,
+        },
         f,
       ];
       state.settle = {
@@ -410,7 +432,7 @@ export function createLogic({
   async function saveSettle() {
     const st = state.settle!;
     const cents = toCents(st.amount);
-    if (!(cents > 0) || st.from === st.to) return;
+    if (cents <= 0 || st.from === st.to) return;
     const input: Record<string, unknown> = {
       from_party: st.from,
       to_party: st.to,

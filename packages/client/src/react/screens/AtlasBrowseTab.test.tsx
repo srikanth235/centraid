@@ -1,6 +1,8 @@
+import { forEachSequentially } from '@centraid/test-kit/sequential';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import AtlasBrowseTab from './AtlasBrowseTab.js';
 
 // The Browse tab self-fetches through the vault client (its only prop is the
@@ -91,7 +93,11 @@ const PARTY_COLS = {
   columns: [
     col('party_id', { pk: 1, notnull: true }),
     col('display_name', { notnull: true }),
-    col('home_place_id', { fkTable: 'core_place', fkColumn: 'place_id', fkLogical: 'core.place' }),
+    col('home_place_id', {
+      fkTable: 'core_place',
+      fkColumn: 'place_id',
+      fkLogical: 'core.place',
+    }),
     col('secret', { sealed: true }),
   ],
 };
@@ -170,12 +176,11 @@ describe('screens/AtlasBrowseTab', () => {
   });
 
   async function settle(n = 6): Promise<void> {
-    for (let i = 0; i < n; i += 1) {
-      // eslint-disable-next-line no-await-in-loop -- (#441) deliberate sequential microtask drain
+    await forEachSequentially(Array.from({ length: n }), async () => {
       await act(async () => {
         await Promise.resolve();
       });
-    }
+    });
   }
 
   async function mount(initialTable?: string): Promise<HTMLDivElement> {
@@ -346,7 +351,12 @@ describe('screens/AtlasBrowseTab', () => {
         physical: 'core_party',
         id: 'p1',
         dependents: [
-          { table: 'knowledge_note', via: 'author_party_id', count: 12, mechanism: 'fk' },
+          {
+            table: 'knowledge_note',
+            via: 'author_party_id',
+            count: 12,
+            mechanism: 'fk',
+          },
           { table: 'core_tag', via: 'target_id', count: 3, mechanism: 'poly' },
         ],
         hasEngineDependents: true,
@@ -391,7 +401,10 @@ describe('screens/AtlasBrowseTab', () => {
       const confirm = $(el, '[data-testid="atlas-delete-confirm"]') as HTMLButtonElement;
       expect(confirm.disabled).toBe(false);
       await click(confirm);
-      expect(browseDeleteRowMock).toHaveBeenCalledWith({ table: 'core.party', id: 'p1' });
+      expect(browseDeleteRowMock).toHaveBeenCalledWith({
+        table: 'core.party',
+        id: 'p1',
+      });
     });
   });
 

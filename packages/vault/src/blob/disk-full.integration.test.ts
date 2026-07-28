@@ -1,4 +1,4 @@
-import { tempDirSync } from '@centraid/test-kit/temp-dir';
+import { execFileSync } from 'node:child_process';
 /*
  * REAL disk-full round-trip (issue #351 wave 4). The rest of this package's
  * disk-full coverage (../errors.test.ts) induces failures via `PRAGMA
@@ -15,11 +15,12 @@ import { tempDirSync } from '@centraid/test-kit/temp-dir';
  * files under `os.tmpdir()`, always cleaned up (detach + rm) in a `finally`
  * even when an assertion throws.
  */
-
-import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
+
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { describe, expect, test, vi } from 'vitest';
+
 import { VaultDiskFullError } from '../errors.js';
 import { FsBlobStore } from './local.js';
 

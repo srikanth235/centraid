@@ -6,6 +6,13 @@
 
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import type { KeyboardEvent, ReactElement } from 'react';
+
+import type { InlineAppProps } from '../inline-types.ts';
+import { Chrome } from './Chrome.tsx';
+import { Editor } from './components/Editor.tsx';
+import { SidebarFoot, SidebarNav } from './components/Sidebar.tsx';
+import { Toolbar } from './components/Toolbar.tsx';
+import { Wall } from './components/Wall.tsx';
 import {
   observeWidth,
   onDataChange,
@@ -21,13 +28,7 @@ import {
   sidebarCounts,
   tagNoteCounts,
 } from './logic.ts';
-import { SidebarFoot, SidebarNav } from './components/Sidebar.tsx';
-import { Toolbar } from './components/Toolbar.tsx';
-import { Wall } from './components/Wall.tsx';
-import { Editor } from './components/Editor.tsx';
-import { Chrome } from './Chrome.tsx';
 import type { AppData, AppState, Note, Notebook, SidebarTag } from './types.ts';
-import type { InlineAppProps } from '../inline-types.ts';
 
 export const CHANGE_TABLES = [
   'knowledge.note',
@@ -80,7 +81,12 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
   const [narrow, setNarrow] = useState(false);
   const [sideOpen, setSideOpen] = useState(false);
   const rootElRef = useRef<HTMLDivElement | null>(null);
-  const dataRef = useRef<AppData>({ notes: [], notebooks: [], tags: [], window: 200 });
+  const dataRef = useRef<AppData>({
+    notes: [],
+    notebooks: [],
+    tags: [],
+    window: 200,
+  });
   const stateRef = useRef<AppState>(makeState(initialView(null)));
   const logicRef = useRef<ReturnType<typeof createLogic> | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -299,7 +305,13 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     // component-width narrow observer wrongly flips to the phone drawer layout.
     <div
       ref={setRoot}
-      style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, minHeight: 0 }}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        flex: 1,
+        minWidth: 0,
+        minHeight: 0,
+      }}
     >
       <Chrome
         narrow={narrow}

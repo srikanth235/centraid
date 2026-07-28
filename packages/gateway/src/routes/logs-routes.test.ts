@@ -4,8 +4,10 @@
  * run-events-sse.test.ts.
  */
 
-import { beforeEach, describe, expect, test } from 'vitest';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+
+import { beforeEach, describe, expect, test } from 'vitest';
+
 import { GatewayLogStore, type GatewayLogEntry } from '../serve/gateway-log-store.ts';
 import { makeLogsRouteHandler } from './logs-routes.ts';
 import { SseSubscriberCap } from './sse-cap.ts';

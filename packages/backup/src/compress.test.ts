@@ -5,9 +5,11 @@
  * lives in engine.test.ts, where framing rides inside the seal.
  */
 
-import zlib from 'node:zlib';
 import { randomBytes } from 'node:crypto';
+import zlib from 'node:zlib';
+
 import { describe, expect, test } from 'vitest';
+
 import {
   ALGO_DEFLATE,
   ALGO_STORE,
@@ -109,11 +111,11 @@ describe('frameChunkPayload / unframeChunkPayload', () => {
   });
 
   test('unframe rejects an empty frame (missing id byte)', () => {
-    expect(() => unframeChunkPayload(new Uint8Array(0))).toThrow(/empty frame/);
+    expect(() => unframeChunkPayload(new Uint8Array(0))).toThrow(/empty frame/u);
   });
 
   test('unframe rejects an unknown algorithm id', () => {
     const framed = new Uint8Array([0x7f, 1, 2, 3]);
-    expect(() => unframeChunkPayload(framed)).toThrow(/unknown frame algorithm id 0x7f/);
+    expect(() => unframeChunkPayload(framed)).toThrow(/unknown frame algorithm id 0x7f/u);
   });
 });

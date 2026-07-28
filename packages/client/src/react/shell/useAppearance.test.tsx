@@ -1,12 +1,14 @@
-import { act } from 'react';
+import { act, useEffect } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const getUserPrefs = vi.fn();
-const saveUserPrefs = vi.fn();
-vi.mock(import('../../gateway-client.js'), () => ({
-  getUserPrefs: () => getUserPrefs(),
-  saveUserPrefs: (p: unknown) => saveUserPrefs(p),
+const { getUserPrefs, saveUserPrefs } = vi.hoisted(() => ({
+  getUserPrefs: vi.fn<typeof import('../../gateway-client.js').getUserPrefs>(),
+  saveUserPrefs: vi.fn<typeof import('../../gateway-client.js').saveUserPrefs>(),
+}));
+vi.mock(import('../../gateway-client.js') as Promise<unknown>, () => ({
+  getUserPrefs,
+  saveUserPrefs,
 }));
 
 let useAppearance: typeof import('./useAppearance.js').useAppearance;
@@ -25,7 +27,7 @@ describe('useAppearance', () => {
   beforeEach(async () => {
     store.clear();
     getUserPrefs.mockReset().mockResolvedValue({});
-    saveUserPrefs.mockReset().mockResolvedValue(undefined);
+    saveUserPrefs.mockReset().mockResolvedValue({});
     ({ useAppearance } = await import('./useAppearance.js'));
   });
 
@@ -38,7 +40,10 @@ describe('useAppearance', () => {
 
   let ctl: ReturnType<typeof useAppearance>;
   function Harness(): null {
-    ctl = useAppearance();
+    const nextController = useAppearance();
+    useEffect(() => {
+      ctl = nextController;
+    }, [nextController]);
     return null;
   }
 

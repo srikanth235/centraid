@@ -13,9 +13,11 @@
  * the cap exact instead of approximate.
  */
 
-import { app } from 'electron';
 import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+
+import { app } from 'electron';
+
 import {
   capOutageLog,
   formatOutageLogLine,

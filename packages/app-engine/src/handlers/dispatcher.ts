@@ -10,11 +10,13 @@
  * HTTP shim maps `structuredContent.code` to a 4xx/5xx status.
  */
 
-import { promises as fs } from 'node:fs';
 import { createHash } from 'node:crypto';
+import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { runHandler } from './handler-runner.js';
-import type { Registry } from '../registry/registry.js';
+
+import type { ValidateFunction } from 'ajv';
+
+import { appDataDir } from '../registry/app-paths.js';
 import {
   APP_MANIFEST_FILE,
   ManifestError,
@@ -26,9 +28,9 @@ import {
   type ManifestActionEntry,
   type ManifestQueryEntry,
 } from '../registry/manifest.js';
-import { appDataDir } from '../registry/app-paths.js';
+import type { Registry } from '../registry/registry.js';
 import type { RegistryEntry } from '../types.js';
-import type { ValidateFunction } from 'ajv';
+import { runHandler } from './handler-runner.js';
 import type { VaultBridge } from './vault-bridge.js';
 
 // Result envelopes — MCP-shaped (see header comment).
@@ -223,27 +225,23 @@ export class Dispatcher {
     const { app, action, query } = input;
     if (app === undefined) {
       // No filter — return all apps.
-      const out: Array<{
-        id: string;
-        manifest?: Manifest;
-        error?: string;
-      }> = [];
-      for (const entry of this.registry.list()) {
-        try {
-          const codeDir = await this.resolveCodeDir(entry);
-          if (!codeDir) {
-            out.push({ id: entry.id, error: 'no_active_version' });
-            continue;
+      const out = await Promise.all(
+        this.registry.list().map(async (entry) => {
+          try {
+            const codeDir = await this.resolveCodeDir(entry);
+            if (!codeDir) {
+              return { id: entry.id, error: 'no_active_version' };
+            }
+            const manifest = await this.loadManifest(codeDir);
+            return { id: entry.id, manifest };
+          } catch (err) {
+            return {
+              id: entry.id,
+              error: err instanceof Error ? err.message : String(err),
+            };
           }
-          const manifest = await this.loadManifest(codeDir);
-          out.push({ id: entry.id, manifest });
-        } catch (err) {
-          out.push({
-            id: entry.id,
-            error: err instanceof Error ? err.message : String(err),
-          });
-        }
-      }
+        }),
+      );
       return successResult({ apps: out });
     }
 
@@ -274,7 +272,11 @@ export class Dispatcher {
         return errorResult('UNKNOWN_ACTION', `app "${app}" has no action "${action}"`);
       }
       return successResult({
-        app: { id: manifest.id, name: manifest.name, version: manifest.version },
+        app: {
+          id: manifest.id,
+          name: manifest.name,
+          version: manifest.version,
+        },
         action: a,
       });
     }
@@ -284,7 +286,11 @@ export class Dispatcher {
         return errorResult('UNKNOWN_QUERY', `app "${app}" has no query "${query}"`);
       }
       return successResult({
-        app: { id: manifest.id, name: manifest.name, version: manifest.version },
+        app: {
+          id: manifest.id,
+          name: manifest.name,
+          version: manifest.version,
+        },
         query: q,
       });
     }
@@ -356,7 +362,10 @@ export class Dispatcher {
     // the caller gets the substantive payload — non-2xx becomes a
     // HANDLER_ERROR so the chat / HTTP shim treats it as a failure
     // rather than silently passing the error JSON through.
-    const result = (outcome.value ?? null) as { status?: number; body?: unknown } | null;
+    const result = (outcome.value ?? null) as {
+      status?: number;
+      body?: unknown;
+    } | null;
     if (
       result &&
       typeof result === 'object' &&

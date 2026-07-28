@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+
 import {
   ASSIST_DEVELOPMENT_WORKER_ORIGIN,
   ASSIST_PRODUCTION_CALLBACK_URL,
@@ -15,8 +16,10 @@ describe('Assist host configuration', () => {
   test('is absent unless both public coordinates are configured', () => {
     expect(assistOAuthFromEnvironment({})).toBeUndefined();
     expect(() =>
-      assistOAuthFromEnvironment({ CENTRAID_ASSIST_GOOGLE_CLIENT_ID: CLIENT_ID }),
-    ).toThrow(/requires both/);
+      assistOAuthFromEnvironment({
+        CENTRAID_ASSIST_GOOGLE_CLIENT_ID: CLIENT_ID,
+      }),
+    ).toThrow(/requires both/u);
   });
 
   test('accepts the production origin and exact loopback development origins only', () => {
@@ -48,7 +51,7 @@ describe('Assist host configuration', () => {
           googleClientId: CLIENT_ID,
           restrictedScopesEnabled: false,
         }),
-      ).toThrow(/must be https:\/\/oauth\.centraid\.dev/);
+      ).toThrow(/must be https:\/\/oauth\.centraid\.dev/u);
     }
   });
 });
@@ -73,9 +76,9 @@ describe('Assist scope tiers', () => {
       'https://www.googleapis.com/auth/calendar.readonly',
       'https://www.googleapis.com/auth/contacts.readonly',
     ]);
-    expect(() => assistScopes(['openid'], config)).toThrow(/not part of a Centraid Assist tier/);
+    expect(() => assistScopes(['openid'], config)).toThrow(/not part of a Centraid Assist tier/u);
     expect(() => assistScopes(['https://www.googleapis.com/auth/gmail.readonly'], config)).toThrow(
-      /verification/,
+      /verification/u,
     );
   });
 

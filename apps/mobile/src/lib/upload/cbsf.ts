@@ -172,7 +172,10 @@ export async function sealPart(input: SealPartInput): Promise<Uint8Array> {
   const last = Math.min(frameCount, first + FRAMES_PER_PART);
   const body: Uint8Array[] = [];
   if (partIndex === 0) body.push(encodeHeader(sha256));
-  for (let index = first; index < last; index += 1) {
+  // A part's bytes are an ordered authenticated frame sequence; append one
+  // frame before constructing the next so the output is deterministic.
+  const sealNextFrame = async (index: number): Promise<void> => {
+    if (index >= last) return;
     const offset = index * FRAME_BYTES;
     const length = Math.min(FRAME_BYTES, plaintextSize - offset);
     const plain = await input.read(offset, length);
@@ -180,7 +183,9 @@ export async function sealPart(input: SealPartInput): Promise<Uint8Array> {
       throw new Error(`frame ${index} read ${plain.byteLength} bytes, expected ${length}`);
     }
     body.push(await sealFrame(crypto, key, sha256, index, frameCount, plain));
-  }
+    return sealNextFrame(index + 1);
+  };
+  await sealNextFrame(first);
   if (last === frameCount) body.push(directory, encodeTrailer(directory.byteLength, frameCount));
   return concatBytes(body);
 }

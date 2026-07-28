@@ -13,8 +13,8 @@
  */
 
 import { EnrollmentStore } from '../serve/enrollment-store.js';
-import { MemberStore } from '../serve/member-store.js';
 import { GatewayDatabase, GatewayLockError } from '../serve/gateway-db.js';
+import { MemberStore } from '../serve/member-store.js';
 
 interface MemberArgs {
   dataDir?: string;
@@ -28,20 +28,20 @@ function parseMemberArgs(args: string[], fail: (msg: string, code?: number) => n
   for (let i = 0; i < args.length; i++) {
     const flag = args[i];
     if (flag === undefined) continue;
-    const next = (): string => {
+    const readValue = (): string => {
       const value = args[++i];
       if (value === undefined) fail(`flag "${flag}" requires a value`, 2);
       return value;
     };
     switch (flag) {
       case '--data-dir':
-        out.dataDir = next();
+        out.dataDir = readValue();
         break;
       case '--label':
-        out.label = next();
+        out.label = readValue();
         break;
       case '--confirm-last-admin':
-        out.confirmLastAdmin = next();
+        out.confirmLastAdmin = readValue();
         break;
       default:
         if (flag.startsWith('--')) fail(`unknown flag "${flag}"`, 2);

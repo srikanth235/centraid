@@ -3,7 +3,11 @@ import type { AutomationAgentEditorData } from './automationEditorAgentData.js';
 
 /** Pure create-mode DTO builder for template/watch-entity prefills. */
 export function buildCreateAutomationEditorData(opts: {
-  template?: { name: string; desc: string; triggerKind?: 'cron' | 'webhook' };
+  template?: {
+    name: string;
+    desc: string;
+    triggerKind?: 'cron' | 'webhook' | 'data' | 'condition';
+  };
   watchEntity?: string;
   instructions: string;
   name: string;

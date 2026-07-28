@@ -1,4 +1,5 @@
 import { openRemoteBackupProvider, type BackupProvider } from '@centraid/backup';
+
 import type { BackupConfig, BackupProviderConfig } from './backup-config.js';
 import type { StorageConnectionStore } from './storage-connections.js';
 
@@ -20,7 +21,12 @@ export async function resolveBackupBackend(opts: {
 }): Promise<ResolvedBackupBackend | undefined> {
   if (opts.config && opts.provider) {
     const label = backupProviderLabel(opts.config.provider);
-    return { provider: opts.provider, providerRef: `static:${label}`, label, dynamic: false };
+    return {
+      provider: opts.provider,
+      providerRef: `static:${label}`,
+      label,
+      dynamic: false,
+    };
   }
   if (!opts.storageConnections) return undefined;
   // One home connection (#436 §7): a provider connection is the full home
@@ -32,7 +38,10 @@ export async function resolveBackupBackend(opts: {
   const connection = matches[0]!;
   const apiKey = await opts.storageConnections.resolveProviderApiKey(connection.id);
   return {
-    provider: openRemoteBackupProvider({ baseUrl: connection.baseUrl!, apiKey }),
+    provider: openRemoteBackupProvider({
+      baseUrl: connection.baseUrl!,
+      apiKey,
+    }),
     providerRef: `connection:${connection.id}:${connection.baseUrl!}`,
     label: connection.baseUrl!,
     dynamic: true,

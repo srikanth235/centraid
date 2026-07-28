@@ -49,7 +49,10 @@ export function validateSshDestination(destination: string): DestinationValidati
   const trimmed = destination.trim();
   if (trimmed.length === 0) return { ok: false, reason: 'ssh destination is empty' };
   if (trimmed !== destination) {
-    return { ok: false, reason: 'ssh destination must not have leading/trailing whitespace' };
+    return {
+      ok: false,
+      reason: 'ssh destination must not have leading/trailing whitespace',
+    };
   }
   if (!DESTINATION_RE.test(trimmed)) {
     return {
@@ -208,7 +211,10 @@ function textDetail(result: SshRunResult): string {
  * from "couldn't connect at all", same tradeoff `handshakeGateway` makes
  * for HTTP status text.
  */
-export function mapSshFailure(result: SshRunResult): { code: SshFailureCode; detail: string } {
+export function mapSshFailure(result: SshRunResult): {
+  code: SshFailureCode;
+  detail: string;
+} {
   if (result.spawnError) return { code: 'ssh_unreachable', detail: result.spawnError };
   if (result.timedOut) {
     return {

@@ -269,7 +269,13 @@ export default async function boardHandler({ input, ctx }: HandlerArgs) {
       linkRows.length > 0
         ? ctx.vault.read({
             entity: 'core.link_anchor',
-            where: [{ column: 'link_id', op: 'in', value: linkRows.map((l) => l.link_id) }],
+            where: [
+              {
+                column: 'link_id',
+                op: 'in',
+                value: linkRows.map((l) => l.link_id),
+              },
+            ],
             purpose,
           })
         : Promise.resolve({ rows: [] as Record<string, unknown>[] }),

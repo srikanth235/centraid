@@ -1,23 +1,26 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
-// The consent ceremony over HTTP (issue #304 phase 2): configure a BYO
-// oauth2 credential, start the PKCE authorize, land the provider's redirect
-// on the (bearer-free) callback, and watch the connection flip to active
-// with sealed tokens — plus the health list never leaking a secret cell.
-
-import { afterEach, describe, expect, test, vi } from 'vitest';
 import crypto from 'node:crypto';
 import http from 'node:http';
-import { openVaultRegistry } from '../serve/vault-registry.js';
-import { ConnectionBroker } from '../serve/connection-broker.js';
+/** BYO OAuth PKCE ceremony over HTTP, including sealed tokens and safe health output. */
+
+import { forEachSequentially } from '@centraid/test-kit/sequential';
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { afterEach, describe, expect, test, vi } from 'vitest';
+
 import { ASSIST_DEVELOPMENT_WORKER_ORIGIN } from '../serve/assist-oauth.js';
+import { ConnectionBroker } from '../serve/connection-broker.js';
+import { openVaultRegistry } from '../serve/vault-registry.js';
 import { makeConnectionsRouteHandler } from './connections-routes.js';
 
-const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
+const silentLogger = {
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+};
 
 const cleanups: Array<() => Promise<void> | void> = [];
 describe('connections-routes', () => {
   afterEach(async () => {
-    while (cleanups.length > 0) await cleanups.pop()?.();
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
   });
   async function startHandlerServer(
     handler: (req: http.IncomingMessage, res: http.ServerResponse) => Promise<boolean>,
@@ -54,7 +57,10 @@ describe('connections-routes', () => {
       });
       req.on('end', () => {
         requests.push(Object.fromEntries(new URLSearchParams(raw)));
-        const next = responses.shift() ?? { status: 500, body: { error: 'unscripted' } };
+        const next = responses.shift() ?? {
+          status: 500,
+          body: { error: 'unscripted' },
+        };
         res.writeHead(next.status, { 'content-type': 'application/json' });
         res.end(JSON.stringify(next.body));
       });
@@ -74,7 +80,11 @@ describe('connections-routes', () => {
 
   test('the whole ceremony: configure → authorize → callback → active with sealed tokens', async () => {
     const dir = await tempDir();
-    const registry = openVaultRegistry({ rootDir: dir, logger: silentLogger, ownerName: 'Priya' });
+    const registry = openVaultRegistry({
+      rootDir: dir,
+      logger: silentLogger,
+      ownerName: 'Priya',
+    });
     registry.create('Personal');
     cleanups.push(() => registry.stop());
     const broker = new ConnectionBroker(() => registry.current());
@@ -89,9 +99,7 @@ describe('connections-routes', () => {
           kind: 'pull.gmail',
           label: 'personal',
           cred_kind: 'oauth2',
-          // Custom provider id keeps this local token-server integration on
-          // the free-form BYO lane. Known catalog ids are pinned to their
-          // production OAuth endpoints by the broker.
+          // A custom provider keeps this test on the free-form BYO lane.
           provider: 'test-oauth',
           auth_url: 'https://accounts.google.com/o/oauth2/v2/auth',
           token_url: tokens.url,
@@ -105,7 +113,6 @@ describe('connections-routes', () => {
     expect(configured).toMatchObject({ ok: true, status: 'needs-auth' });
     const connectionId = configured.connection_id as string;
 
-    // 2. The health list shows the pending state and NEVER a secret cell.
     const listing = (await (await fetch(`${base}/centraid/_vault/connections`)).json()) as {
       connections: Array<Record<string, unknown>>;
     };
@@ -121,7 +128,6 @@ describe('connections-routes', () => {
     expect(JSON.stringify(listing)).not.toContain('GOCSPX');
     expect(JSON.stringify(listing)).not.toContain('sealed:v1:');
 
-    // 3. Start the authorize — PKCE parameters on the consent URL.
     const authorize = (await (
       await fetch(`${base}/centraid/_vault/connections/${connectionId}/authorize`, {
         method: 'POST',
@@ -137,7 +143,6 @@ describe('connections-routes', () => {
     const state = authUrl.searchParams.get('state')!;
     expect(authorize.redirect_uri).toContain('/centraid/_vault/oauth/callback');
 
-    // 4. The provider bounces the browser back with code + state.
     tokens.respond(200, {
       access_token: 'ya29.ceremony',
       refresh_token: '1//ceremony',
@@ -150,7 +155,6 @@ describe('connections-routes', () => {
     expect(callback.status).toBe(200);
     await expect(callback.text()).resolves.toContain('Connected');
 
-    // The code exchange carried PKCE verifier + the client pair.
     expect(tokens.requests).toHaveLength(1);
     expect(tokens.requests[0]).toMatchObject({
       grant_type: 'authorization_code',
@@ -163,7 +167,6 @@ describe('connections-routes', () => {
       authUrl.searchParams.get('code_challenge'),
     );
 
-    // 5. The connection is live, tokens sealed on the sidecar.
     const after = (await (await fetch(`${base}/centraid/_vault/connections`)).json()) as {
       connections: Array<Record<string, unknown>>;
     };
@@ -176,10 +179,9 @@ describe('connections-routes', () => {
     const cred = plane.db.vault
       .prepare('SELECT access_token, refresh_token FROM sync_connection_credential')
       .get() as { access_token: string; refresh_token: string };
-    expect(cred.access_token).toMatch(/^sealed:v1:/);
-    expect(cred.refresh_token).toMatch(/^sealed:v1:/);
+    expect(cred.access_token).toMatch(/^sealed:v1:/u);
+    expect(cred.refresh_token).toMatch(/^sealed:v1:/u);
 
-    // 6. The state is single-use — a replayed callback fails loudly.
     const replay = await fetch(
       `${base}/centraid/_vault/oauth/callback?state=${state}&code=auth-code-1`,
     );
@@ -189,7 +191,11 @@ describe('connections-routes', () => {
 
   test('a declined consent screen lands a readable page and consumes the state', async () => {
     const dir = await tempDir();
-    const registry = openVaultRegistry({ rootDir: dir, logger: silentLogger, ownerName: 'Priya' });
+    const registry = openVaultRegistry({
+      rootDir: dir,
+      logger: silentLogger,
+      ownerName: 'Priya',
+    });
     registry.create('Personal');
     cleanups.push(() => registry.stop());
     const broker = new ConnectionBroker(() => registry.current());
@@ -222,17 +228,23 @@ describe('connections-routes', () => {
     );
     expect(denied.status).toBe(400);
     await expect(denied.text()).resolves.toContain('declined');
-    // The state died with the denial.
     const replay = await fetch(`${base}/centraid/_vault/oauth/callback?state=${state}&code=x`);
     await expect(replay.text()).resolves.toContain('unknown or expired');
   });
 
   test('Assist config → bound courier handoff → Worker exchange stores tokens without a public gateway callback', async () => {
     const dir = await tempDir();
-    const registry = openVaultRegistry({ rootDir: dir, logger: silentLogger, ownerName: 'Priya' });
+    const registry = openVaultRegistry({
+      rootDir: dir,
+      logger: silentLogger,
+      ownerName: 'Priya',
+    });
     registry.create('Personal');
     cleanups.push(() => registry.stop());
-    const workerRequests: Array<{ path: string; body: Record<string, unknown> }> = [];
+    const workerRequests: Array<{
+      path: string;
+      body: Record<string, unknown>;
+    }> = [];
     const workerFetch = vi.fn<typeof fetch>(
       async (input: string | URL | Request, init?: RequestInit) => {
         workerRequests.push({
@@ -269,7 +281,9 @@ describe('connections-routes', () => {
       }),
     });
     expect(gated.status).toBe(400);
-    await expect(gated.json()).resolves.toMatchObject({ error: 'invalid_assist_scopes' });
+    await expect(gated.json()).resolves.toMatchObject({
+      error: 'invalid_assist_scopes',
+    });
 
     const configured = (await (
       await fetch(`${base}/centraid/_vault/connections/assist`, {
@@ -300,7 +314,7 @@ describe('connections-routes', () => {
     const startUrl = new URL(authorize.auth_url as string);
     expect(startUrl.origin + startUrl.pathname).toBe(`${ASSIST_DEVELOPMENT_WORKER_ORIGIN}/start`);
     const startFragment = new URLSearchParams(startUrl.hash.slice(1));
-    expect(startFragment.get('browser_binding')).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(startFragment.get('browser_binding')).toMatch(/^[A-Za-z0-9_-]{43}$/u);
     const authUrl = new URL(startFragment.get('authorization_url')!);
     expect(authUrl.searchParams.get('client_id')).toBe(
       'centraid-shared.apps.googleusercontent.com',
@@ -351,14 +365,22 @@ describe('connections-routes', () => {
         WHERE c.connection_id = ?`,
       )
       .get(connectionId) as Record<string, unknown>;
-    expect(row).toMatchObject({ status: 'active', oauth_mode: 'assist', client_secret: null });
-    expect(String(row.access_token)).toMatch(/^sealed:v1:/);
-    expect(String(row.refresh_token)).toMatch(/^sealed:v1:/);
+    expect(row).toMatchObject({
+      status: 'active',
+      oauth_mode: 'assist',
+      client_secret: null,
+    });
+    expect(String(row.access_token)).toMatch(/^sealed:v1:/u);
+    expect(String(row.refresh_token)).toMatch(/^sealed:v1:/u);
   });
 
   test('pause and resume ride PATCH; providers expose the BYO wizard with the Google traps', async () => {
     const dir = await tempDir();
-    const registry = openVaultRegistry({ rootDir: dir, logger: silentLogger, ownerName: 'Priya' });
+    const registry = openVaultRegistry({
+      rootDir: dir,
+      logger: silentLogger,
+      ownerName: 'Priya',
+    });
     registry.create('Personal');
     cleanups.push(() => registry.stop());
     const broker = new ConnectionBroker(() => registry.current());
@@ -390,15 +412,13 @@ describe('connections-routes', () => {
     const google = (providers.providers as { id: string; setup: string[] }[]).find(
       (p) => p.id === 'google',
     )!;
-    // The two known traps are IN the wizard, not tribal knowledge.
-    expect(google.setup.join('\n')).toMatch(/In production.*not Testing|Testing status/);
-    expect(google.setup.join('\n')).toMatch(/Photos/);
+    expect(google.setup.join('\n')).toMatch(/In production.*not Testing|Testing status/u);
+    expect(google.setup.join('\n')).toMatch(/Photos/u);
     const github = (providers.providers as { id: string; credKind: string }[]).find(
       (p) => p.id === 'github',
     )!;
     expect(github.credKind).toBe('api_key');
     const ids = (providers.providers as { id: string }[]).map((p) => p.id);
-    // Wave-2 personal-vault catalog (Microsoft parity + eng/notes/tasks/chat/files).
     for (const id of ['microsoft', 'gitlab', 'linear', 'notion', 'todoist', 'slack', 'dropbox']) {
       expect(ids).toContain(id);
     }
@@ -406,7 +426,11 @@ describe('connections-routes', () => {
 
   test('DELETE removes a connection with no history, 409s on a real refusal, 404s an unknown id', async () => {
     const dir = await tempDir();
-    const registry = openVaultRegistry({ rootDir: dir, logger: silentLogger, ownerName: 'Priya' });
+    const registry = openVaultRegistry({
+      rootDir: dir,
+      logger: silentLogger,
+      ownerName: 'Priya',
+    });
     registry.create('Personal');
     cleanups.push(() => registry.stop());
     const broker = new ConnectionBroker(() => registry.current());
@@ -426,13 +450,11 @@ describe('connections-routes', () => {
     ).json()) as Record<string, unknown>;
     const connectionId = configured.connection_id as string;
 
-    // Unknown id: 404, not a 400/409 (the command never even runs).
     const unknown = await fetch(`${base}/centraid/_vault/connections/no-such-connection`, {
       method: 'DELETE',
     });
     expect(unknown.status).toBe(404);
 
-    // A real refusal (undecided outbox history) maps to 409 with the reason.
     const plane = registry.current();
     const now = new Date().toISOString();
     plane.db.vault
@@ -448,10 +470,12 @@ describe('connections-routes', () => {
       method: 'DELETE',
     });
     expect(blocked.status).toBe(409);
-    const blockedBody = (await blocked.json()) as { ok: boolean; error: string };
+    const blockedBody = (await blocked.json()) as {
+      ok: boolean;
+      error: string;
+    };
     expect(blockedBody.ok).toBe(false);
-    expect(blockedBody.error).toMatch(/awaiting a decision/);
-    // Nothing moved — the connection survives the refusal.
+    expect(blockedBody.error).toMatch(/awaiting a decision/u);
     const stillListed = (await (await fetch(`${base}/centraid/_vault/connections`)).json()) as {
       connections: unknown[];
     };
@@ -464,7 +488,10 @@ describe('connections-routes', () => {
     });
     expect(removed.status).toBe(200);
     const removedBody = (await removed.json()) as Record<string, unknown>;
-    expect(removedBody).toMatchObject({ ok: true, connection_id: connectionId });
+    expect(removedBody).toMatchObject({
+      ok: true,
+      connection_id: connectionId,
+    });
     const after = (await (await fetch(`${base}/centraid/_vault/connections`)).json()) as {
       connections: unknown[];
     };

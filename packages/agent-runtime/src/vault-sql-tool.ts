@@ -45,7 +45,10 @@ export const VAULT_INVOKE_TOOL = {
         type: 'string',
         description: 'Registered command name, e.g. schedule.propose_event.',
       },
-      input: { type: 'object', description: 'Input matching the command schema.' },
+      input: {
+        type: 'object',
+        description: 'Input matching the command schema.',
+      },
     },
     additionalProperties: false,
   },
@@ -63,7 +66,10 @@ export const VAULT_CONTENT_TOOL = {
     type: 'object',
     required: ['content_id'],
     properties: {
-      content_id: { type: 'string', description: 'core_content_item.content_id to read.' },
+      content_id: {
+        type: 'string',
+        description: 'core_content_item.content_id to read.',
+      },
     },
     additionalProperties: false,
   },
@@ -77,15 +83,24 @@ export async function runVaultContentTool(
   args: unknown,
 ): Promise<VaultSqlToolOutcome> {
   if (!ctx.vaultContent)
-    return { ok: false, errorText: 'vault_content is not available on this turn' };
+    return {
+      ok: false,
+      errorText: 'vault_content is not available on this turn',
+    };
   const a = (args ?? {}) as { content_id?: unknown };
   if (typeof a.content_id !== 'string' || a.content_id.trim() === '') {
     return { ok: false, errorText: 'vault_content requires { content_id }' };
   }
   try {
-    return { ok: true, result: await ctx.vaultContent({ contentId: a.content_id }) };
+    return {
+      ok: true,
+      result: await ctx.vaultContent({ contentId: a.content_id }),
+    };
   } catch (err) {
-    return { ok: false, errorText: err instanceof Error ? err.message : String(err) };
+    return {
+      ok: false,
+      errorText: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 
@@ -95,7 +110,10 @@ export async function runVaultInvokeTool(
   args: unknown,
 ): Promise<VaultSqlToolOutcome> {
   if (!ctx.vaultInvoke)
-    return { ok: false, errorText: 'vault_invoke is not available on this turn' };
+    return {
+      ok: false,
+      errorText: 'vault_invoke is not available on this turn',
+    };
   const a = (args ?? {}) as { command?: unknown; input?: unknown };
   if (typeof a.command !== 'string' || a.command.trim() === '') {
     return { ok: false, errorText: 'vault_invoke requires { command, input }' };
@@ -105,9 +123,15 @@ export async function runVaultInvokeTool(
       ? (a.input as Record<string, unknown>)
       : {};
   try {
-    return { ok: true, result: await ctx.vaultInvoke({ command: a.command, input }) };
+    return {
+      ok: true,
+      result: await ctx.vaultInvoke({ command: a.command, input }),
+    };
   } catch (err) {
-    return { ok: false, errorText: err instanceof Error ? err.message : String(err) };
+    return {
+      ok: false,
+      errorText: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 
@@ -118,11 +142,17 @@ export async function runVaultSqlTool(
 ): Promise<VaultSqlToolOutcome> {
   if (!ctx.vaultSql) return { ok: false, errorText: 'vault_sql is not available on this turn' };
   if (typeof sql !== 'string' || sql.trim() === '') {
-    return { ok: false, errorText: 'vault_sql requires { sql: "<single read-only statement>" }' };
+    return {
+      ok: false,
+      errorText: 'vault_sql requires { sql: "<single read-only statement>" }',
+    };
   }
   try {
     return { ok: true, result: await ctx.vaultSql(sql) };
   } catch (err) {
-    return { ok: false, errorText: err instanceof Error ? err.message : String(err) };
+    return {
+      ok: false,
+      errorText: err instanceof Error ? err.message : String(err),
+    };
   }
 }

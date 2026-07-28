@@ -12,6 +12,7 @@
 // is always present when a trigger fires.
 
 import type { DatabaseSync } from 'node:sqlite';
+
 import { sealedColumnsOf } from './sealed.js';
 
 /** Decoded text of a canonical body, or null for anything non-text. */

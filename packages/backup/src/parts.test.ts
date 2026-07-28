@@ -9,6 +9,7 @@
  */
 
 import { describe, expect, test } from 'vitest';
+
 import { PART_BYTES, partBuffer, partStream } from './parts.js';
 
 async function collect(
@@ -103,9 +104,9 @@ describe('partStream boundary math', () => {
   });
 
   test('rejects invalid part sizes', async () => {
-    await expect(collect(pieces(seq(1)), 0)).rejects.toThrow(/invalid part size/);
-    await expect(collect(pieces(seq(1)), -64)).rejects.toThrow(/invalid part size/);
-    await expect(collect(pieces(seq(1)), 1.5)).rejects.toThrow(/invalid part size/);
+    await expect(collect(pieces(seq(1)), 0)).rejects.toThrow(/invalid part size/u);
+    await expect(collect(pieces(seq(1)), -64)).rejects.toThrow(/invalid part size/u);
+    await expect(collect(pieces(seq(1)), 1.5)).rejects.toThrow(/invalid part size/u);
   });
 });
 

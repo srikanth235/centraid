@@ -13,6 +13,15 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+
+import type { InlineAppProps } from '../inline-types.ts';
+import { Chrome } from './Chrome.tsx';
+import { LockerDetail } from './components/Detail.tsx';
+import { EditModal } from './components/EditModal.tsx';
+import { Generator } from './components/Generator.tsx';
+import { LockerList } from './components/List.tsx';
+import { LockScreen } from './components/LockScreen.tsx';
+import { LockerSidebar } from './components/Sidebar.tsx';
 import { observeWidth, onDataChange, onFocusRefresh, readFailed } from './kit.ts';
 import {
   copy,
@@ -23,15 +32,7 @@ import {
   sidebarCounts,
   sidebarTags,
 } from './logic.ts';
-import { LockerSidebar } from './components/Sidebar.tsx';
-import { LockerList } from './components/List.tsx';
-import { LockerDetail } from './components/Detail.tsx';
-import { LockScreen } from './components/LockScreen.tsx';
-import { Generator } from './components/Generator.tsx';
-import { EditModal } from './components/EditModal.tsx';
-import { Chrome } from './Chrome.tsx';
 import type { AppData, AppState, LockerDetail as DetailItem, LockerRow } from './types.ts';
-import type { InlineAppProps } from '../inline-types.ts';
 
 // Vault entities this app's queries read — the doorbell filter re-derives only
 // when a change names one of these (or names none, i.e. "this app acted").
@@ -92,7 +93,12 @@ interface ItemsPayload {
   items?: LockerRow[];
   truncated?: boolean;
   vaultDenied?: { code?: string; message?: string };
-  watchtower?: { compromised?: number; weak?: number; reused?: number; items?: LockerRow[] };
+  watchtower?: {
+    compromised?: number;
+    weak?: number;
+    reused?: number;
+    items?: LockerRow[];
+  };
 }
 
 export function Root({ rootRef }: InlineAppProps): ReactNode {
@@ -114,7 +120,10 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     const logic = logicRef.current!;
     let next: ItemsPayload;
     try {
-      next = await window.centraid.read<ItemsPayload>({ query: 'items', input: { limit: 300 } });
+      next = await window.centraid.read<ItemsPayload>({
+        query: 'items',
+        input: { limit: 300 },
+      });
     } catch {
       readFailed(document.querySelector<HTMLElement>('#noticeBanner'));
       state.readFailedShown = true;
@@ -147,7 +156,9 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
       };
     }
     await window.centraid
-      .read<{ items?: AppData['items']; vaultDenied?: unknown }>({ query: 'trash' })
+      .read<{ items?: AppData['items']; vaultDenied?: unknown }>({
+        query: 'trash',
+      })
       .then((r) => {
         if (r && !r.vaultDenied) state.trashRows = r.items ?? [];
       })
@@ -316,7 +327,13 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     // component-width narrow observer wrongly flips to the phone drawer layout.
     <div
       ref={setRoot}
-      style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, minHeight: 0 }}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        flex: 1,
+        minWidth: 0,
+        minHeight: 0,
+      }}
     >
       <Chrome
         narrow={state.narrow}

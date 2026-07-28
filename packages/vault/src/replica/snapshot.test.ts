@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from 'vitest';
+
 import { openVaultDb, type VaultDb } from '../db.js';
 import { readReplicaChanges } from './change-log.js';
 import { readReplicaRow, readReplicaRows, withReplicaSnapshot } from './snapshot.js';
@@ -51,7 +52,10 @@ describe('snapshot', () => {
     expect(snapshot.rows).toStrictEqual([
       expect.objectContaining({
         rowId: 'credential-app',
-        values: expect.objectContaining({ app_id: 'credential-app', name: 'credential-app' }),
+        values: expect.objectContaining({
+          app_id: 'credential-app',
+          name: 'credential-app',
+        }),
       }),
     ]);
     expect(snapshot.rows[0]?.values).not.toHaveProperty('signing_key');
@@ -100,6 +104,6 @@ describe('snapshot', () => {
   test('protocol intent rows are not exposed by the generic ontology snapshot helper', () => {
     db = openVaultDb();
     const vault = db.vault;
-    expect(() => readReplicaRows(vault, 'replica.intent')).toThrow(/unknown replica entity/);
+    expect(() => readReplicaRows(vault, 'replica.intent')).toThrow(/unknown replica entity/u);
   });
 });

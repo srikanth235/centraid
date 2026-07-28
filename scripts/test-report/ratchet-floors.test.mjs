@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+
 import {
   diffCoverageFloors,
   diffMinimumTests,
@@ -85,20 +86,24 @@ describe('diffMinimumTests', () => {
   test('flags removal of minimumTests key', () => {
     const base = { flows: [{ id: 'a', minimumTests: 10 }] };
     const head = { flows: [{ id: 'a' }] };
-    expect(diffMinimumTests(base, head).join('')).toMatch(/minimumTests removed/);
+    expect(diffMinimumTests(base, head).join('')).toMatch(/minimumTests removed/u);
   });
 
   test('flags deletion of a flow that had minimumTests', () => {
     const base = { flows: [{ id: 'a', minimumTests: 10 }] };
     const head = { flows: [] };
-    expect(diffMinimumTests(base, head).join('')).toMatch(/flow "a" removed/);
+    expect(diffMinimumTests(base, head).join('')).toMatch(/flow "a" removed/u);
   });
 
   test('allows decrease with approvedMinimumTestsDeviation', () => {
     const base = { flows: [{ id: 'a', minimumTests: 10 }] };
     const head = {
       flows: [
-        { id: 'a', minimumTests: 8, approvedMinimumTestsDeviation: 'issue #999 consolidation' },
+        {
+          id: 'a',
+          minimumTests: 8,
+          approvedMinimumTestsDeviation: 'issue #999 consolidation',
+        },
       ],
     };
     expect(diffMinimumTests(base, head)).toEqual([]);
@@ -181,7 +186,10 @@ describe('ratchetFloors', () => {
   test('waives floor decreases when approvedDeviation is set', () => {
     const { errors, waived } = ratchetFloors({
       baseFloors: { lines: 30 },
-      headFloors: { lines: 20, approvedDeviation: 'constitutional exception for #1' },
+      headFloors: {
+        lines: 20,
+        approvedDeviation: 'constitutional exception for #1',
+      },
       baseMatrix: { flows: [] },
       headMatrix: { flows: [] },
     });

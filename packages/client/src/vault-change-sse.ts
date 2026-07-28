@@ -63,7 +63,11 @@ export function parseCursor(value: unknown): VaultChangeCursor | undefined {
     return { epoch: value.slice(0, separator), seq };
   }
   if (!value || typeof value !== 'object') return undefined;
-  const candidate = value as { epoch?: unknown; seq?: unknown; cursor?: unknown };
+  const candidate = value as {
+    epoch?: unknown;
+    seq?: unknown;
+    cursor?: unknown;
+  };
   if (candidate.cursor) return parseCursor(candidate.cursor);
   if (typeof candidate.epoch !== 'string') return undefined;
   const seq = typeof candidate.seq === 'number' ? candidate.seq : Number(candidate.seq);
@@ -114,26 +118,30 @@ export async function consumeVaultChangeSse(
     void reader.cancel().catch(() => undefined);
   };
   signal?.addEventListener('abort', abort, { once: true });
-  try {
-    for (;;) {
-      if (signal?.aborted) return;
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      for (;;) {
-        const boundary = frameBoundary(buffer);
-        if (!boundary) break;
-        const raw = buffer.slice(0, boundary.index);
-        buffer = buffer.slice(boundary.index + boundary.length);
-        const frame = decodeFrame(raw);
+  async function readNextFrame(): Promise<void> {
+    if (signal?.aborted) return;
+    const { done, value } = await reader.read();
+    if (done) {
+      buffer += decoder.decode();
+      if (!signal?.aborted && buffer.trim()) {
+        const frame = decodeFrame(buffer);
         if (frame) onFrame(frame);
       }
+      return;
     }
-    buffer += decoder.decode();
-    if (!signal?.aborted && buffer.trim()) {
-      const frame = decodeFrame(buffer);
+    buffer += decoder.decode(value, { stream: true });
+    for (;;) {
+      const boundary = frameBoundary(buffer);
+      if (!boundary) break;
+      const raw = buffer.slice(0, boundary.index);
+      buffer = buffer.slice(boundary.index + boundary.length);
+      const frame = decodeFrame(raw);
       if (frame) onFrame(frame);
     }
+    return await readNextFrame();
+  }
+  try {
+    return await readNextFrame();
   } finally {
     signal?.removeEventListener('abort', abort);
     reader.releaseLock();

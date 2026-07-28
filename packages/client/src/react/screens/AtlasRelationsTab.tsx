@@ -1,11 +1,9 @@
 import { useCallback, useMemo, useState, type JSX } from 'react';
+
 import type { AtlasAuthoredLink, AtlasFkEdge, AtlasGraphPayload } from '../../gateway-client.js';
 import Icon from '../ui/Icon.js';
-import AtlasOrreryChart, { type AtlasHighlight, type Readout } from './AtlasOrreryChart.js';
-import AtlasOrreryPanel from './AtlasOrreryPanel.js';
 import { useOrreryCamera } from './atlasOrreryCamera.js';
-import { useRecenterAnimation, usePrefersReducedMotion } from './atlasOrreryMotion.js';
-import { useSampleRows, type SampleRowsFetcher } from './atlasSampleRows.js';
+import AtlasOrreryChart, { type AtlasHighlight, type Readout } from './AtlasOrreryChart.js';
 import {
   type AtlasDetailLevel,
   aggregateRelationChips,
@@ -20,7 +18,11 @@ import {
   sortedPacks,
   visibleAtLevel,
 } from './atlasOrreryGeometry.js';
+import { useRecenterAnimation, usePrefersReducedMotion } from './atlasOrreryMotion.js';
+import AtlasOrreryPanel from './AtlasOrreryPanel.js';
 import { LEVELS, QUESTIONS, fmt, type QuestionKey } from './atlasRelationsMeta.js';
+import { useSampleRows, type SampleRowsFetcher } from './atlasSampleRows.js';
+
 import styles from './AtlasRelationsTab.module.css';
 
 // Relations tab — the orrery (issue #441 B2, "Map" redesign #519). A
@@ -215,7 +217,10 @@ export default function AtlasRelationsTab({
       const threshold = max * 0.4;
       const lit = new Set<string>();
       for (const [t, v] of rows) if (v > 0 && v >= threshold) lit.add(t);
-      return { lit, edgeLit: (e: AtlasFkEdge) => lit.has(e.fromTable) && lit.has(e.toTable) };
+      return {
+        lit,
+        edgeLit: (e: AtlasFkEdge) => lit.has(e.fromTable) && lit.has(e.toTable),
+      };
     }
     // unused — ghost edges + kinds with zero or unknown row counts.
     const lit = new Set<string>();
@@ -300,7 +305,11 @@ export default function AtlasRelationsTab({
           level === 'simple' ? 'kinds hidden (empty or plumbing)' : 'plumbing kinds beyond reach',
       });
     if (hiddenEdges > 0)
-      lensExtras.push({ key: 'hidden-edges', num: hiddenEdges, label: 'connections hidden' });
+      lensExtras.push({
+        key: 'hidden-edges',
+        num: hiddenEdges,
+        label: 'connections hidden',
+      });
   }
 
   const rootFriendly = nodeByPhysical.get(graph.center)?.friendly ?? graph.center;

@@ -1,7 +1,8 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import type { AppRef } from '../types.js';
+
 import { appendLogs, type LogEntry } from '../data/log-store.js';
+import type { AppRef } from '../types.js';
 import type { VaultBridge, VaultOp } from './vault-bridge.js';
 import { sharedWorkerAdmission, type WorkerAdmission } from './worker-admission.js';
 import { WorkerPool, workerPoolSizeFromEnv, workerResourceLimitsFromEnv } from './worker-pool.js';
@@ -196,7 +197,10 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
           worker.postMessage({ type: 'vault-reply', id: call.id, ...reply });
         })();
       } else if (msg.type === 'log') {
-        const m = msg as unknown as { level: 'info' | 'warn' | 'error'; msg: string };
+        const m = msg as unknown as {
+          level: 'info' | 'warn' | 'error';
+          msg: string;
+        };
         logs.push({ level: m.level, msg: m.msg });
         persistedEntries.push({
           ts: Date.now(),
@@ -206,7 +210,11 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
           handler: handlerName,
         });
       } else if (msg.type === 'result') {
-        const r = msg as unknown as { ok: boolean; value?: unknown; error?: string };
+        const r = msg as unknown as {
+          ok: boolean;
+          value?: unknown;
+          error?: string;
+        };
         // If the handler failed, also persist an error log so the Logs panel
         // surfaces the failure even when the user didn't call `log.error`.
         if (!r.ok && r.error) {

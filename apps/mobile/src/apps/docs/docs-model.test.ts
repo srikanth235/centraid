@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+
 import { buildDrive } from './docs-model';
 
 describe('docs-model', () => {
@@ -69,8 +70,18 @@ describe('docs-model', () => {
           broader_concept_id: 'ghost',
         },
         // A two-node cycle: b ↔ c.
-        { concept_id: 'b', scheme_id: 'folders', pref_label: 'B', broader_concept_id: 'c' },
-        { concept_id: 'c', scheme_id: 'folders', pref_label: 'C', broader_concept_id: 'b' },
+        {
+          concept_id: 'b',
+          scheme_id: 'folders',
+          pref_label: 'B',
+          broader_concept_id: 'c',
+        },
+        {
+          concept_id: 'c',
+          scheme_id: 'folders',
+          pref_label: 'C',
+          broader_concept_id: 'b',
+        },
       ],
       [{ scheme_id: 'folders', uri: 'https://centraid.dev/schemes/folders' }],
       [],

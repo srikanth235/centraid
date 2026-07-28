@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
 import { DiskFullTracker } from '@centraid/vault';
+import { describe, expect, it } from 'vitest';
+
 import {
   createDiskHealthProbe,
   DISK_DEGRADED_BELOW_BYTES,

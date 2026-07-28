@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
 import {
   CRON_DEFAULT_TIMEZONE_PREF,
   loadDefaultCronTimeZone,
@@ -27,7 +28,9 @@ describe('settingsCronTimezoneData', () => {
 
   describe('settingsCronTimezoneData', () => {
     it('loads the gateway default cron timezone pref', async () => {
-      getUserPrefs.mockResolvedValue({ [CRON_DEFAULT_TIMEZONE_PREF]: 'America/New_York' });
+      getUserPrefs.mockResolvedValue({
+        [CRON_DEFAULT_TIMEZONE_PREF]: 'America/New_York',
+      });
       await expect(loadDefaultCronTimeZone()).resolves.toBe('America/New_York');
     });
 
@@ -51,7 +54,7 @@ describe('settingsCronTimezoneData', () => {
 
     it('refuses an unknown IANA name without writing', async () => {
       const err = await saveDefaultCronTimeZone('Not/A_Zone');
-      expect(err).toMatch(/not a known IANA timezone/);
+      expect(err).toMatch(/not a known IANA timezone/u);
       expect(saveUserPrefs).not.toHaveBeenCalled();
     });
   });

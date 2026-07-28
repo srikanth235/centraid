@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import type { TemplateEntry } from '../../app-shell-context.js';
 import { describeScopes, openTemplatePreview } from './templatePreview.js';
 
@@ -81,7 +82,7 @@ describe('templatePreview', () => {
     });
 
     it('fires onInstall with the template and closes when "Install" is clicked', () => {
-      const onInstall = vi.fn();
+      const onInstall = vi.fn<Parameters<typeof openTemplatePreview>[1]>();
       openTemplatePreview(tmpl, onInstall);
       const installBtn = [...document.querySelectorAll('.primary')].find((b) =>
         b.textContent?.includes('Install'),
@@ -92,7 +93,7 @@ describe('templatePreview', () => {
     });
 
     it('closes on Cancel, backdrop click, and Escape without firing onInstall', () => {
-      const onInstall = vi.fn();
+      const onInstall = vi.fn<Parameters<typeof openTemplatePreview>[1]>();
       openTemplatePreview(tmpl, onInstall);
       (document.querySelector('.ghost') as HTMLButtonElement).click();
       expect(document.querySelector('.tmplPreview')).toBeNull();

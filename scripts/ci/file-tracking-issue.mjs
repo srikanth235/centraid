@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { spawnSync } from 'node:child_process';
 /**
  * Open-or-update a tracking issue for a red scheduled lane (#557).
  *
@@ -22,7 +23,6 @@
  * is the exact failure #556 was.
  */
 import { readFileSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
 
 /** Parse `--flag value` pairs. Unknown flags are an error, not a silent no-op. */
 export function parseArgs(argv) {
@@ -92,7 +92,12 @@ export function fileTrackingIssue({ run, title, search, body, label, runUrl }) {
   if (existing !== null) {
     const commented = run(['issue', 'comment', String(existing), '--body', body]);
     if (commented.status !== 0) {
-      return { ok: false, action: 'comment', number: existing, error: commented.stderr };
+      return {
+        ok: false,
+        action: 'comment',
+        number: existing,
+        error: commented.stderr,
+      };
     }
     return { ok: true, action: 'comment', number: existing };
   }
@@ -115,7 +120,11 @@ function main() {
   const body = readFileSync(args['body-file'], 'utf8');
   const run = (argv) => {
     const result = spawnSync('gh', argv, { encoding: 'utf8' });
-    return { status: result.status, stdout: result.stdout ?? '', stderr: result.stderr ?? '' };
+    return {
+      status: result.status,
+      stdout: result.stdout ?? '',
+      stderr: result.stderr ?? '',
+    };
   };
 
   const result = fileTrackingIssue({

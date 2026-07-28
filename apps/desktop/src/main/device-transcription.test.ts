@@ -1,4 +1,5 @@
 import { describe, expect, test, vi } from 'vitest';
+
 import {
   deviceTranscriptionAvailable,
   readDeviceAsrConfig,
@@ -9,7 +10,9 @@ describe('device-transcription', () => {
   test('device ASR configuration is explicit and loopback-only', () => {
     expect(readDeviceAsrConfig({})).toBeNull();
     expect(
-      readDeviceAsrConfig({ CENTRAID_DEVICE_ASR_URL: 'https://asr.example.test/v1' }),
+      readDeviceAsrConfig({
+        CENTRAID_DEVICE_ASR_URL: 'https://asr.example.test/v1',
+      }),
     ).toBeNull();
     expect(
       readDeviceAsrConfig({
@@ -60,7 +63,11 @@ describe('device-transcription', () => {
       expect(form.get('model')).toBe('device-model');
       const file = form.get('file');
       expect(file).toBeInstanceOf(File);
-      expect(file).toMatchObject({ name: 'voice.wav', type: 'audio/wav', size: 10 });
+      expect(file).toMatchObject({
+        name: 'voice.wav',
+        type: 'audio/wav',
+        size: 10,
+      });
       return Response.json({ text: '  searchable starlight phrase  ' });
     });
 

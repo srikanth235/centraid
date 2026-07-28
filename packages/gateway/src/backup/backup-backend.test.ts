@@ -1,7 +1,8 @@
-import { describe, expect, it, vi } from 'vitest';
 import type { BackupProvider } from '@centraid/backup';
-import type { StorageConnectionStore } from './storage-connections.js';
+import { describe, expect, it, vi } from 'vitest';
+
 import { resolveBackupBackend } from './backup-backend.js';
+import type { StorageConnectionStore } from './storage-connections.js';
 
 describe(resolveBackupBackend, () => {
   it('keeps an explicit daemon provider authoritative', async () => {
@@ -9,7 +10,11 @@ describe(resolveBackupBackend, () => {
     const backend = await resolveBackupBackend({
       config: {
         enabled: true,
-        provider: { kind: 'remote', endpoint: 'https://static.example', apiKey: 'secret' },
+        provider: {
+          kind: 'remote',
+          endpoint: 'https://static.example',
+          apiKey: 'secret',
+        },
       },
       provider,
     });

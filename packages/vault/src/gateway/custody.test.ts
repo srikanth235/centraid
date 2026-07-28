@@ -1,15 +1,16 @@
-import { tempDirSync } from '@centraid/test-kit/temp-dir';
+import { createHash } from 'node:crypto';
 // File custody (§10): `backupVault` is the user-facing export ramp — VACUUM
 // INTO copies of the two SQLite files plus the blob CAS, hashed so the copy
 // is verifiable with standard tools. (`stageVaultDbs`, the old offsite
 // staging half, left with issue #408 — the backup path ships WAL segments
 // via wal-shipper.ts instead of rewriting the database per snapshot.)
-
-import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+
 import { bootstrapVault } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { backupVault, checkpointVault, sha256File } from './custody.js';
@@ -74,7 +75,7 @@ describe('custody', () => {
   test('backupVault refuses an in-memory vault (no files to copy)', () => {
     const mem = openVaultDb();
     try {
-      expect(() => backupVault(mem, root)).toThrow(/file-backed vault/);
+      expect(() => backupVault(mem, root)).toThrow(/file-backed vault/u);
     } finally {
       mem.close();
     }

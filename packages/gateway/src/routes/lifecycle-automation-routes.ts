@@ -5,13 +5,14 @@
 // dispatched from `makeLifecycleRouteHandler` there. Webhook secrets are
 // minted here — the plaintext is returned once, only the hash persists.
 
-import { promises as fs } from 'node:fs';
 import crypto from 'node:crypto';
-import nodePath from 'node:path';
+import { promises as fs } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { AppScaffoldError, listTemplates, type ScaffoldFile } from '@centraid/blueprints';
+import nodePath from 'node:path';
+
 import * as automation from '@centraid/automation';
-import { readFileMap, readJson, sendJson } from './route-helpers.js';
+import { AppScaffoldError, listTemplates, type ScaffoldFile } from '@centraid/blueprints';
+
 import {
   defaultSessionId,
   deleteAppAndReconcile,
@@ -22,6 +23,7 @@ import {
   webhookUrl,
   type LifecycleRouteOptions,
 } from '../lifecycle/lifecycle-shared.js';
+import { readFileMap, readJson, sendJson } from './route-helpers.js';
 
 // ---- POST /centraid/_automations/compile?ref= (hidden builder compile) ----
 
@@ -33,9 +35,16 @@ export async function handleAutomationCompile(
 ): Promise<boolean> {
   const rawRef = url.searchParams.get('ref') ?? '';
   const ref = automation.parseRef(rawRef);
-  if (!ref) return sendJson(res, 400, { error: 'bad_request', message: 'compile needs ?ref=' });
+  if (!ref)
+    return sendJson(res, 400, {
+      error: 'bad_request',
+      message: 'compile needs ?ref=',
+    });
   if (!opts.compileAutomation) {
-    return sendJson(res, 503, { error: 'unavailable', message: 'compile runner unavailable' });
+    return sendJson(res, 503, {
+      error: 'unavailable',
+      message: 'compile runner unavailable',
+    });
   }
   const body = await readJson(req);
   const row = await automation
@@ -66,9 +75,16 @@ export async function handleAutomationRevise(
 ): Promise<boolean> {
   const rawRef = url.searchParams.get('ref') ?? '';
   const ref = automation.parseRef(rawRef);
-  if (!ref) return sendJson(res, 400, { error: 'bad_request', message: 'revise needs ?ref=' });
+  if (!ref)
+    return sendJson(res, 400, {
+      error: 'bad_request',
+      message: 'revise needs ?ref=',
+    });
   if (!opts.reviseAutomation) {
-    return sendJson(res, 503, { error: 'unavailable', message: 'revision runner unavailable' });
+    return sendJson(res, 503, {
+      error: 'unavailable',
+      message: 'revision runner unavailable',
+    });
   }
   const body = await readJson(req);
   const steering = typeof body.message === 'string' ? body.message.trim() : '';
@@ -103,7 +119,11 @@ export async function handleAutomationCreate(
 ): Promise<boolean> {
   const body = await readJson(req);
   const id = typeof body.id === 'string' ? body.id : '';
-  if (!id) return sendJson(res, 400, { error: 'bad_request', message: 'create needs { id }' });
+  if (!id)
+    return sendJson(res, 400, {
+      error: 'bad_request',
+      message: 'create needs { id }',
+    });
   const publish = body.publish === true;
   const explicitSession =
     typeof body.sessionId === 'string' && body.sessionId ? body.sessionId : '';
@@ -143,7 +163,11 @@ export async function handleAutomationCreate(
       const wid = automation.generateWebhookId();
       const secret = automation.generateWebhookSecret();
       webhook = { id: wid, secret, url: webhookUrl(req, wid) };
-      return { kind: 'webhook', id: wid, secretHash: automation.hashWebhookSecret(secret) };
+      return {
+        kind: 'webhook',
+        id: wid,
+        secretHash: automation.hashWebhookSecret(secret),
+      };
     }
     if (t.kind === 'condition') {
       return {
@@ -228,7 +252,12 @@ export async function handleAutomationCreate(
     const { rows } = await automation.list(opts.codeAppsDir());
     row = rows.find((r) => r.ownerApp === id) ?? null;
   }
-  return sendJson(res, 201, { row, sessionId, staged: !publish, ...(webhook ? { webhook } : {}) });
+  return sendJson(res, 201, {
+    row,
+    sessionId,
+    staged: !publish,
+    ...(webhook ? { webhook } : {}),
+  });
 }
 
 // ---- POST /centraid/_automations/set-enabled?ref= (toggle enabled) ----
@@ -240,11 +269,19 @@ export async function handleAutomationSetEnabled(
   url: URL,
 ): Promise<boolean> {
   const ref = automation.parseRef(url.searchParams.get('ref') ?? '');
-  if (!ref) return sendJson(res, 400, { error: 'bad_request', message: 'set-enabled needs ?ref=' });
+  if (!ref)
+    return sendJson(res, 400, {
+      error: 'bad_request',
+      message: 'set-enabled needs ?ref=',
+    });
   const body = await readJson(req);
   if (typeof body.enabled !== 'boolean') {
-    return sendJson(res, 400, { error: 'bad_request', message: 'set-enabled needs { enabled }' });
+    return sendJson(res, 400, {
+      error: 'bad_request',
+      message: 'set-enabled needs { enabled }',
+    });
   }
+
   const publish = body.publish === true;
   const explicitSession =
     typeof body.sessionId === 'string' && body.sessionId ? body.sessionId : '';
@@ -306,7 +343,11 @@ export async function handleAutomationUpdate(
 ): Promise<boolean> {
   const rawRef = url.searchParams.get('ref') ?? '';
   const ref = automation.parseRef(rawRef);
-  if (!ref) return sendJson(res, 400, { error: 'bad_request', message: 'update needs ?ref=' });
+  if (!ref)
+    return sendJson(res, 400, {
+      error: 'bad_request',
+      message: 'update needs ?ref=',
+    });
   const body = await readJson(req);
 
   const nameInput = typeof body.name === 'string' ? body.name : undefined;
@@ -406,7 +447,11 @@ export async function handleAutomationUpdate(
         const wid = automation.generateWebhookId();
         const secret = automation.generateWebhookSecret();
         webhook = { id: wid, secret, url: webhookUrl(req, wid) };
-        return { kind: 'webhook', id: wid, secretHash: automation.hashWebhookSecret(secret) };
+        return {
+          kind: 'webhook',
+          id: wid,
+          secretHash: automation.hashWebhookSecret(secret),
+        };
       }
       if (t.kind === 'condition') {
         return {
@@ -504,7 +549,11 @@ export async function handleAutomationUpdate(
     const wantRef = `${ref.appId}/${ref.automationId}`;
     row = rows.find((r) => r.ref === wantRef) ?? null;
   }
-  return sendJson(res, 200, { row, staged: !publish, ...(webhook ? { webhook } : {}) });
+  return sendJson(res, 200, {
+    row,
+    staged: !publish,
+    ...(webhook ? { webhook } : {}),
+  });
 }
 
 // ---- POST /centraid/_automations/rotate-webhook?ref= (mint a fresh secret) ----
@@ -529,7 +578,10 @@ export async function handleAutomationRotateWebhook(
   const rawRef = url.searchParams.get('ref') ?? '';
   const ref = automation.parseRef(rawRef);
   if (!ref) {
-    return sendJson(res, 400, { error: 'bad_request', message: 'rotate-webhook needs ?ref=' });
+    return sendJson(res, 400, {
+      error: 'bad_request',
+      message: 'rotate-webhook needs ?ref=',
+    });
   }
   const body = await readJson(req);
   const publish = body.publish === true;
@@ -599,32 +651,38 @@ export async function handleEnrichmentToggle(
 ): Promise<boolean> {
   const body = await readJson(req);
   if (typeof body.enabled !== 'boolean') {
-    return sendJson(res, 400, { error: 'bad_request', message: 'enrichment needs { enabled }' });
+    return sendJson(res, 400, {
+      error: 'bad_request',
+      message: 'enrichment needs { enabled }',
+    });
   }
+  const enabled = body.enabled;
   const enricherIds = new Set(
     (await listTemplates()).filter((t) => t.category === 'Enrichment').map((t) => t.id),
   );
   const { rows } = await automation.list(opts.codeAppsDir());
   const toggled: string[] = [];
   const unchanged: string[] = [];
-  for (const row of rows) {
-    if (!enricherIds.has(row.ownerApp)) continue;
-    if (row.enabled === body.enabled) {
+  async function toggleNext(index: number): Promise<void> {
+    const row = rows[index];
+    if (!row) return;
+    if (!enricherIds.has(row.ownerApp)) return toggleNext(index + 1);
+    if (row.enabled === enabled) {
       unchanged.push(row.ref);
-      continue;
+      return toggleNext(index + 1);
     }
     const sessionId = defaultSessionId(row.ownerApp);
     await prepareLifecycleSession(opts.store, sessionId, true);
     const appDir = await opts.store.snapshotSessionAppDir(sessionId, row.ownerApp);
     const current = await readFileMap(appDir);
-    const changed = automation.setEnabledInFiles(current as ScaffoldFile[], row.id, body.enabled);
+    const changed = automation.setEnabledInFiles(current as ScaffoldFile[], row.id, enabled);
     if (changed.length > 0) {
       await stageAndMaybePublish(opts, {
         appId: row.ownerApp,
         sessionId,
         files: changed,
         publish: true,
-        message: `${body.enabled ? 'enable' : 'disable'} enrichment (${row.id})`,
+        message: `${enabled ? 'enable' : 'disable'} enrichment (${row.id})`,
         ephemeralSession: true,
       });
       toggled.push(row.ref);
@@ -632,8 +690,11 @@ export async function handleEnrichmentToggle(
       await opts.store.closeSession(sessionId);
       unchanged.push(row.ref);
     }
+    return toggleNext(index + 1);
   }
-  return sendJson(res, 200, { ok: true, enabled: body.enabled, toggled, unchanged });
+  // Rows can share an owner app/session; mutate and publish them in order.
+  await toggleNext(0);
+  return sendJson(res, 200, { ok: true, enabled, toggled, unchanged });
 }
 
 // ---- DELETE /centraid/_automations?ref=&publish= (remove an automation) ----
@@ -645,7 +706,11 @@ export async function handleAutomationDelete(
   url: URL,
 ): Promise<boolean> {
   const ref = automation.parseRef(url.searchParams.get('ref') ?? '');
-  if (!ref) return sendJson(res, 400, { error: 'bad_request', message: 'delete needs ?ref=' });
+  if (!ref)
+    return sendJson(res, 400, {
+      error: 'bad_request',
+      message: 'delete needs ?ref=',
+    });
   const publish = url.searchParams.get('publish') === 'true';
 
   // A whole automation app (`kind: 'automation'`) is removed wholesale;

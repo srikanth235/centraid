@@ -1,4 +1,5 @@
 import { assert, describe, expect, it } from 'vitest';
+
 import { parseRoute, parseWithDraft } from './router.js';
 
 describe('parseRoute — app RPC routes (issue #505)', () => {
@@ -155,7 +156,9 @@ describe('parseWithDraft — draft-preview prefix (issue #141)', () => {
   it('preserves the query string when rewriting', () => {
     const { route } = parseWithDraft('GET', '/centraid/_draft/s1/todos?theme=dark');
     expect(route.kind).toBe('app-index');
-    expect((route as { query: Record<string, string> }).query).toStrictEqual({ theme: 'dark' });
+    expect((route as { query: Record<string, string> }).query).toStrictEqual({
+      theme: 'dark',
+    });
   });
 
   it('a draft prefix with no session id is not-found', () => {

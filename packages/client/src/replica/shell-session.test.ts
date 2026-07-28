@@ -1,7 +1,8 @@
 // governance: allow-repo-hygiene file-size-limit pre-existing cohesive session regression suite; decomposition is outside issue #417
 import { beforeAll, describe, expect, test, vi } from 'vitest';
 
-import type { ShellReplicaCoordinator } from './shell-session.js';
+import type { ReplicaShellSessionOptions, ShellReplicaCoordinator } from './shell-session.js';
+import type { ReplicaFetcher } from './shell-transport.js';
 import { listRememberedReplicaIdentities, rememberReplicaIdentity } from './storage-manifest.js';
 import type { ReplicaIntent, ReplicaInvalidation, ReplicaShape } from './types.js';
 
@@ -33,19 +34,37 @@ describe('shell-session', () => {
       shapeId: 'shape-todos',
       appId: 'todos',
       purpose: 'dpv:ServiceProvision',
-      entities: [{ entity: 'core.task', primaryKey: 'task_id', columns: ['task_id', 'title'] }],
+      entities: [
+        {
+          entity: 'core.task',
+          primaryKey: 'task_id',
+          columns: ['task_id', 'title'],
+        },
+      ],
     },
     {
       shapeId: 'shape-notes',
       appId: 'notes',
       purpose: 'dpv:ServiceProvision',
-      entities: [{ entity: 'core.note', primaryKey: 'note_id', columns: ['note_id', 'title'] }],
+      entities: [
+        {
+          entity: 'core.note',
+          primaryKey: 'note_id',
+          columns: ['note_id', 'title'],
+        },
+      ],
     },
     {
       shapeId: 'shape-todos-billing',
       appId: 'todos',
       purpose: 'dpv:Billing',
-      entities: [{ entity: 'core.task', primaryKey: 'task_id', columns: ['task_id', 'cost'] }],
+      entities: [
+        {
+          entity: 'core.task',
+          primaryKey: 'task_id',
+          columns: ['task_id', 'cost'],
+        },
+      ],
     },
   ];
 
@@ -67,29 +86,43 @@ describe('shell-session', () => {
     overrides: Partial<ShellReplicaCoordinator> = {},
   ): ShellReplicaCoordinator {
     return {
-      bootstrap: vi.fn().mockResolvedValue({ epoch: 'e', seq: 1 }),
-      status: vi.fn().mockResolvedValue({ mode: 'memory', cursor: null, schemaEpoch: null }),
-      catalog: vi.fn().mockResolvedValue(shapes),
-      readWire: vi.fn().mockResolvedValue({
+      bootstrap: vi
+        .fn<ShellReplicaCoordinator['bootstrap']>()
+        .mockResolvedValue({ epoch: 'e', seq: 1 }),
+      status: vi
+        .fn<ShellReplicaCoordinator['status']>()
+        .mockResolvedValue({ mode: 'memory', cursor: null, schemaEpoch: null }),
+      catalog: vi.fn<ShellReplicaCoordinator['catalog']>().mockResolvedValue(shapes),
+      readWire: vi.fn<ShellReplicaCoordinator['readWire']>().mockResolvedValue({
         rows: [],
         cursor: { epoch: 'e', seq: 1 },
         dependency: { shapeId: 'shape-todos', entity: 'core.task' },
       }),
-      searchWire: vi.fn().mockResolvedValue({
+      searchWire: vi.fn<ShellReplicaCoordinator['searchWire']>().mockResolvedValue({
         rows: [],
         cursor: { epoch: 'e', seq: 1 },
         dependency: { shapeId: 'shape-todos', entity: 'core.task' },
       }),
-      enqueue: vi.fn().mockResolvedValue(intent()),
-      claimNextIntent: vi.fn().mockResolvedValue(undefined),
-      markIntentTransportFailed: vi.fn().mockResolvedValue(intent()),
-      markIntentAwaitingChange: vi.fn().mockResolvedValue(intent()),
-      applyIntentOutcome: vi.fn().mockResolvedValue(intent()),
-      recoverSending: vi.fn().mockResolvedValue([]),
-      pendingIntents: vi.fn().mockResolvedValue([]),
-      subscribeInvalidations: vi.fn().mockReturnValue(() => undefined),
-      close: vi.fn().mockResolvedValue(undefined),
-      purge: vi.fn().mockResolvedValue(undefined),
+      enqueue: vi.fn<ShellReplicaCoordinator['enqueue']>().mockResolvedValue(intent()),
+      claimNextIntent: vi
+        .fn<ShellReplicaCoordinator['claimNextIntent']>()
+        .mockResolvedValue(undefined),
+      markIntentTransportFailed: vi
+        .fn<ShellReplicaCoordinator['markIntentTransportFailed']>()
+        .mockResolvedValue(intent()),
+      markIntentAwaitingChange: vi
+        .fn<ShellReplicaCoordinator['markIntentAwaitingChange']>()
+        .mockResolvedValue(intent()),
+      applyIntentOutcome: vi
+        .fn<ShellReplicaCoordinator['applyIntentOutcome']>()
+        .mockResolvedValue(intent()),
+      recoverSending: vi.fn<ShellReplicaCoordinator['recoverSending']>().mockResolvedValue([]),
+      pendingIntents: vi.fn<ShellReplicaCoordinator['pendingIntents']>().mockResolvedValue([]),
+      subscribeInvalidations: vi
+        .fn<ShellReplicaCoordinator['subscribeInvalidations']>()
+        .mockReturnValue(() => undefined),
+      close: vi.fn<ShellReplicaCoordinator['close']>().mockResolvedValue(undefined),
+      purge: vi.fn<ShellReplicaCoordinator['purge']>().mockResolvedValue(undefined),
       ...overrides,
     };
   }
@@ -108,19 +141,24 @@ describe('shell-session', () => {
           baseUrl: 'https://EXAMPLE.test/root/?temporary=1',
           vaultId: 'vault',
         }),
-      ).toStrictEqual({ gatewayId: 'url:https://example.test/root', vaultId: 'vault' });
+      ).toStrictEqual({
+        gatewayId: 'url:https://example.test/root',
+        vaultId: 'vault',
+      });
     });
 
     test('self-revoke cleanup eagerly purges browser replica caches without an open session', async () => {
       localStorage.clear();
-      const deleteCache = vi.fn().mockResolvedValue(true);
-      const postMessage = vi.fn();
+      const deleteCache = vi.fn<(cacheName: string) => Promise<boolean>>().mockResolvedValue(true);
+      const postMessage = vi.fn<(message: unknown) => void>();
       const priorCaches = Object.getOwnPropertyDescriptor(globalThis, 'caches');
       const priorServiceWorker = Object.getOwnPropertyDescriptor(navigator, 'serviceWorker');
       Object.defineProperty(globalThis, 'caches', {
         configurable: true,
         value: {
-          keys: vi.fn().mockResolvedValue(['centraid-tunnel-assets-device', 'unrelated-cache']),
+          keys: vi
+            .fn<() => Promise<string[]>>()
+            .mockResolvedValue(['centraid-tunnel-assets-device', 'unrelated-cache']),
           delete: deleteCache,
         },
       });
@@ -134,7 +172,9 @@ describe('shell-session', () => {
           expect(deleteCache).toHaveBeenCalledWith('centraid-tunnel-assets-device'),
         );
         expect(deleteCache).not.toHaveBeenCalledWith('unrelated-cache');
-        expect(postMessage).toHaveBeenCalledWith({ type: 'centraid:purge-tunnel-cache' });
+        expect(postMessage).toHaveBeenCalledWith({
+          type: 'centraid:purge-tunnel-cache',
+        });
       } finally {
         if (priorCaches) Object.defineProperty(globalThis, 'caches', priorCaches);
         else Reflect.deleteProperty(globalThis, 'caches');
@@ -158,7 +198,11 @@ describe('shell-session', () => {
           rememberDevice: true,
         },
         coordinator,
-        { eventTarget: new EventTarget(), isOnline: () => false, rememberStorage: true },
+        {
+          eventTarget: new EventTarget(),
+          isOnline: () => false,
+          rememberStorage: true,
+        },
       );
 
       await session.close();
@@ -184,7 +228,11 @@ describe('shell-session', () => {
           rememberDevice: true,
         },
         coordinator,
-        { eventTarget: new EventTarget(), isOnline: () => false, rememberStorage: true },
+        {
+          eventTarget: new EventTarget(),
+          isOnline: () => false,
+          rememberStorage: true,
+        },
       );
 
       await session.purge();
@@ -206,7 +254,11 @@ describe('shell-session', () => {
           rememberDevice: false,
         },
         coordinator,
-        { eventTarget: new EventTarget(), isOnline: () => false, rememberStorage: false },
+        {
+          eventTarget: new EventTarget(),
+          isOnline: () => false,
+          rememberStorage: false,
+        },
       );
 
       await session.close();
@@ -226,8 +278,16 @@ describe('shell-session', () => {
           vaultId: identity.vaultId,
           rememberDevice: true,
         },
-        fakeCoordinator({ purge: vi.fn().mockRejectedValue(new Error('OPFS busy')) }),
-        { eventTarget: new EventTarget(), isOnline: () => false, rememberStorage: true },
+        fakeCoordinator({
+          purge: vi
+            .fn<ShellReplicaCoordinator['purge']>()
+            .mockRejectedValue(new Error('OPFS busy')),
+        }),
+        {
+          eventTarget: new EventTarget(),
+          isOnline: () => false,
+          rememberStorage: true,
+        },
       );
 
       await expect(session.purge()).rejects.toThrow('OPFS busy');
@@ -237,15 +297,19 @@ describe('shell-session', () => {
 
     test('reuses a warm catalog, maps app entities and filters subscription invalidations', async () => {
       let emit: ((values: readonly ReplicaInvalidation[]) => void) | undefined;
-      const listener = vi.fn();
+      const listener = vi.fn<(invalidations: readonly ReplicaInvalidation[]) => void>();
       const coordinator = fakeCoordinator({
-        subscribeInvalidations: vi.fn((next) => {
+        subscribeInvalidations: vi.fn<ShellReplicaCoordinator['subscribeInvalidations']>((next) => {
           emit = next;
           return () => undefined;
         }),
       });
       const session = new ReplicaShellSession(
-        { baseUrl: 'https://gateway.example', vaultId: 'vault', rememberDevice: true },
+        {
+          baseUrl: 'https://gateway.example',
+          vaultId: 'vault',
+          rememberDevice: true,
+        },
         coordinator,
         { eventTarget: new EventTarget(), isOnline: () => false },
       );
@@ -260,7 +324,10 @@ describe('shell-session', () => {
         shapeId: 'shape-todos',
         entity: 'core.task',
       });
-      await session.read('todos', { entity: 'core.task', purpose: 'dpv:Billing' });
+      await session.read('todos', {
+        entity: 'core.task',
+        purpose: 'dpv:Billing',
+      });
       expect(coordinator.readWire).toHaveBeenLastCalledWith({
         shapeId: 'shape-todos-billing',
         entity: 'core.task',
@@ -276,14 +343,22 @@ describe('shell-session', () => {
       session.subscribe('todos', [{ entity: 'core.task' }], listener);
       emit?.([
         { shapeId: 'shape-notes', entity: 'core.note', source: 'canonical' },
-        { shapeId: 'shape-todos-billing', entity: 'core.task', source: 'canonical' },
+        {
+          shapeId: 'shape-todos-billing',
+          entity: 'core.task',
+          source: 'canonical',
+        },
         { shapeId: 'shape-todos', entity: 'core.task', source: 'canonical' },
       ]);
       expect(listener).toHaveBeenCalledWith([
-        { shapeId: 'shape-todos-billing', entity: 'core.task', source: 'canonical' },
+        {
+          shapeId: 'shape-todos-billing',
+          entity: 'core.task',
+          source: 'canonical',
+        },
         { shapeId: 'shape-todos', entity: 'core.task', source: 'canonical' },
       ]);
-      const billingListener = vi.fn();
+      const billingListener = vi.fn<(invalidations: readonly ReplicaInvalidation[]) => void>();
       session.subscribe(
         'todos',
         [{ shapeId: 'shape-todos-billing', entity: 'core.task' }],
@@ -291,10 +366,18 @@ describe('shell-session', () => {
       );
       emit?.([
         { shapeId: 'shape-todos', entity: 'core.task', source: 'canonical' },
-        { shapeId: 'shape-todos-billing', entity: 'core.task', source: 'canonical' },
+        {
+          shapeId: 'shape-todos-billing',
+          entity: 'core.task',
+          source: 'canonical',
+        },
       ]);
       expect(billingListener).toHaveBeenCalledWith([
-        { shapeId: 'shape-todos-billing', entity: 'core.task', source: 'canonical' },
+        {
+          shapeId: 'shape-todos-billing',
+          entity: 'core.task',
+          source: 'canonical',
+        },
       ]);
       await session.purge();
     });
@@ -304,7 +387,7 @@ describe('shell-session', () => {
       try {
         const coordinator = fakeCoordinator();
         const fetcher = vi
-          .fn()
+          .fn<ReplicaFetcher>()
           .mockResolvedValueOnce(
             new Response(JSON.stringify({ error: 'gateway_error' }), {
               status: 503,
@@ -327,10 +410,19 @@ describe('shell-session', () => {
         const session = new ReplicaShellSession(
           { baseUrl: 'https://gateway.example', vaultId: 'vault' },
           coordinator,
-          { fetcher, eventTarget: new EventTarget(), isOnline: () => true, retryDelayMs: 10 },
+          {
+            fetcher,
+            eventTarget: new EventTarget(),
+            isOnline: () => true,
+            retryDelayMs: 10,
+          },
         );
 
-        await session.start({ mode: 'memory', cursor: null, schemaEpoch: null });
+        await session.start({
+          mode: 'memory',
+          cursor: null,
+          schemaEpoch: null,
+        });
         expect(coordinator.bootstrap).toHaveBeenCalledTimes(0);
         await vi.advanceTimersByTimeAsync(10);
         await vi.waitFor(() => expect(coordinator.bootstrap).toHaveBeenCalledOnce());
@@ -348,7 +440,7 @@ describe('shell-session', () => {
         .mockResolvedValueOnce(queued)
         .mockResolvedValue(undefined);
       const coordinator = fakeCoordinator({ claimNextIntent });
-      const fetcher = vi.fn().mockResolvedValue(
+      const fetcher = vi.fn<ReplicaFetcher>().mockResolvedValue(
         new Response(
           JSON.stringify({
             protocolVersion: 1,
@@ -362,7 +454,11 @@ describe('shell-session', () => {
         coordinator,
         { fetcher, eventTarget: new EventTarget(), isOnline: () => true },
       );
-      await session.start({ mode: 'memory', cursor: { epoch: 'e', seq: 1 }, schemaEpoch: 's' });
+      await session.start({
+        mode: 'memory',
+        cursor: { epoch: 'e', seq: 1 },
+        schemaEpoch: 's',
+      });
       await session.flushIntents();
       expect(JSON.parse(String(fetcher.mock.calls[0]![2].body))).toStrictEqual({
         intentId: queued.intentId,
@@ -383,7 +479,11 @@ describe('shell-session', () => {
         coordinator,
         { eventTarget: new EventTarget(), isOnline: () => false },
       );
-      await session.start({ mode: 'memory', cursor: { epoch: 'e', seq: 1 }, schemaEpoch: 's' });
+      await session.start({
+        mode: 'memory',
+        cursor: { epoch: 'e', seq: 1 },
+        schemaEpoch: 's',
+      });
 
       await expect(
         session.write('todos', {
@@ -441,22 +541,33 @@ describe('shell-session', () => {
         {
           eventTarget: new EventTarget(),
           isOnline: () => online,
-          fetcher: vi.fn().mockResolvedValue(
+          fetcher: vi.fn<ReplicaFetcher>().mockResolvedValue(
             new Response(
               JSON.stringify({
                 protocolVersion: 1,
-                outcome: { intentId: queued.intentId, status: 'parked', reason: 'confirm first' },
+                outcome: {
+                  intentId: queued.intentId,
+                  status: 'parked',
+                  reason: 'confirm first',
+                },
               }),
               { status: 200, headers: { 'content-type': 'application/json' } },
             ),
           ),
         },
       );
-      await session.start({ mode: 'memory', cursor: { epoch: 'e', seq: 1 }, schemaEpoch: 's' });
+      await session.start({
+        mode: 'memory',
+        cursor: { epoch: 'e', seq: 1 },
+        schemaEpoch: 's',
+      });
       online = true;
 
       await expect(
-        session.write('todos', { action: 'complete', input: { taskId: 'task-1' } }),
+        session.write('todos', {
+          action: 'complete',
+          input: { taskId: 'task-1' },
+        }),
       ).resolves.toStrictEqual({
         intentId: 'intent-1',
         status: 'parked',
@@ -478,7 +589,11 @@ describe('shell-session', () => {
         coordinator,
         { eventTarget: events, isOnline: () => true },
       );
-      await session.start({ mode: 'memory', cursor: { epoch: 'warm', seq: 7 }, schemaEpoch: 's' });
+      await session.start({
+        mode: 'memory',
+        cursor: { epoch: 'warm', seq: 7 },
+        schemaEpoch: 's',
+      });
 
       events.dispatchEvent(new Event('online'));
       await Promise.resolve();
@@ -498,11 +613,15 @@ describe('shell-session', () => {
         .mockResolvedValueOnce(queued)
         .mockResolvedValue(undefined);
       const coordinator = fakeCoordinator({ claimNextIntent });
-      const fetcher = vi.fn().mockResolvedValue(
+      const fetcher = vi.fn<ReplicaFetcher>().mockResolvedValue(
         new Response(
           JSON.stringify({
             protocolVersion: 1,
-            outcome: { intentId: queued.intentId, status: 'parked', reason: 'confirm first' },
+            outcome: {
+              intentId: queued.intentId,
+              status: 'parked',
+              reason: 'confirm first',
+            },
           }),
           { status: 200, headers: { 'content-type': 'application/json' } },
         ),
@@ -512,7 +631,11 @@ describe('shell-session', () => {
         coordinator,
         { fetcher, eventTarget: new EventTarget(), isOnline: () => true },
       );
-      await session.start({ mode: 'memory', cursor: { epoch: 'e', seq: 1 }, schemaEpoch: 's' });
+      await session.start({
+        mode: 'memory',
+        cursor: { epoch: 'e', seq: 1 },
+        schemaEpoch: 's',
+      });
       expect(claimNextIntent).toHaveBeenCalledOnce();
 
       const result = session.write('todos', {
@@ -538,12 +661,12 @@ describe('shell-session', () => {
           .mockResolvedValueOnce(intent())
           .mockResolvedValue(undefined),
       });
-      const revoked = vi.fn();
+      const revoked = vi.fn<NonNullable<ReplicaShellSessionOptions['onAuthorizationRevoked']>>();
       const session = new ReplicaShellSession(
         { baseUrl: 'https://gateway.example', vaultId: 'vault' },
         coordinator,
         {
-          fetcher: vi.fn().mockResolvedValue(
+          fetcher: vi.fn<ReplicaFetcher>().mockResolvedValue(
             new Response(JSON.stringify({ error: 'replica_device_not_enrolled' }), {
               status: 403,
             }),
@@ -553,7 +676,11 @@ describe('shell-session', () => {
           onAuthorizationRevoked: revoked,
         },
       );
-      await session.start({ mode: 'memory', cursor: { epoch: 'e', seq: 1 }, schemaEpoch: 's' });
+      await session.start({
+        mode: 'memory',
+        cursor: { epoch: 'e', seq: 1 },
+        schemaEpoch: 's',
+      });
       await session.flushIntents();
       expect(revoked).toHaveBeenCalledWith(session);
       expect(coordinator.purge).toHaveBeenCalledOnce();

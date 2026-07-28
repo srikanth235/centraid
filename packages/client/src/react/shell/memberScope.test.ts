@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { canWrite, roleBadge, roleSentence } from './memberScope.js';
 
 // The words a member reads for their access (issue #599, Decision 14). The wire
@@ -19,8 +20,8 @@ describe('ownership words', () => {
   it('says what the role lets you do, without wire words or "vault"', () => {
     for (const role of ['admin', 'write', 'read']) {
       const sentence = roleSentence(role);
-      expect(sentence).not.toMatch(/\bvault\b/i);
-      expect(sentence).not.toMatch(/\badmin\b/);
+      expect(sentence).not.toMatch(/\bvault\b/iu);
+      expect(sentence).not.toMatch(/\badmin\b/u);
       expect(sentence.startsWith('You ')).toBe(true);
     }
     expect(roleSentence('read')).toContain('not change');

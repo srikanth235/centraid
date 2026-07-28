@@ -14,8 +14,8 @@ import {
 } from './storage-manifest.js';
 import { TerminalReplicaPurgeRetryLoop } from './terminal-purge-retry.js';
 import type { ReplicaIdentity } from './types.js';
-import type { ReplicaWorkerRequest, ReplicaWorkerResponse } from './worker-protocol.js';
 import type { ReplicaWorkerLike } from './worker-client.js';
+import type { ReplicaWorkerRequest, ReplicaWorkerResponse } from './worker-protocol.js';
 
 /** The `purgeIdentity` test seam every purge/retry option bag accepts. */
 type PurgeIdentity = NonNullable<ReplicaStoragePurgeOptions['purgeIdentity']>;
@@ -96,7 +96,9 @@ class SuccessfulPurgeWorker implements ReplicaWorkerLike {
           }
         : { id: request.id, ok: true, result: undefined };
     queueMicrotask(() => {
-      const event = new MessageEvent<ReplicaWorkerResponse>('message', { data: response });
+      const event = new MessageEvent<ReplicaWorkerResponse>('message', {
+        data: response,
+      });
       for (const listener of this.#messages) listener(event);
     });
   }
@@ -132,7 +134,10 @@ class SuccessfulPurgeWorker implements ReplicaWorkerLike {
 
 const first: ReplicaIdentity = { gatewayId: 'gateway-a', vaultId: 'vault-1' };
 const second: ReplicaIdentity = { gatewayId: 'gateway-a', vaultId: 'vault-2' };
-const inactive: ReplicaIdentity = { gatewayId: 'gateway-b', vaultId: 'vault-3' };
+const inactive: ReplicaIdentity = {
+  gatewayId: 'gateway-b',
+  vaultId: 'vault-3',
+};
 
 describe('remembered replica manifest', () => {
   test('deduplicates identities and forgets only the exact gateway/vault scope', () => {
@@ -206,7 +211,10 @@ describe('remembered replica manifest', () => {
         inventory,
         purgeIdentity,
         retryBaseDelayMs: 10,
-        purgeSelector: { kind: 'gateway' as const, gatewayId: inactive.gatewayId },
+        purgeSelector: {
+          kind: 'gateway' as const,
+          gatewayId: inactive.gatewayId,
+        },
       };
 
       // Lifecycle dispatch deliberately does not surface async failures. The
@@ -260,7 +268,12 @@ describe('remembered replica manifest', () => {
       }),
     ).rejects.toThrow('Could not purge replica');
     await expect(inventory.list()).resolves.toStrictEqual([
-      { ...first, state: 'terminal-pending', purgeAttempts: 1, retryAt: expect.any(Number) },
+      {
+        ...first,
+        state: 'terminal-pending',
+        purgeAttempts: 1,
+        retryAt: expect.any(Number),
+      },
     ]);
   });
 
@@ -370,7 +383,12 @@ describe('remembered replica manifest', () => {
         .mockRejectedValueOnce(new Error('OPFS busy'))
         .mockRejectedValueOnce(new Error('OPFS still busy'))
         .mockResolvedValue(undefined);
-      const options = { storage, inventory, purgeIdentity, retryBaseDelayMs: 10 };
+      const options = {
+        storage,
+        inventory,
+        purgeIdentity,
+        retryBaseDelayMs: 10,
+      };
 
       await expect(purgeReplicaIdentityStorage(inactive, options)).rejects.toThrow(
         'Could not purge replica',

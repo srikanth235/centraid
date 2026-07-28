@@ -14,7 +14,9 @@ export async function trashDuplicateAssets(
   let queued = 0;
   let failed = 0;
   let lastBad: VaultOutcome | undefined = undefined;
-  for (const id of ids) {
+  const trashNext = async (index: number): Promise<void> => {
+    const id = ids[index];
+    if (id === undefined) return;
     const outcome = await act('delete-asset', { asset_id: id }, scope);
     if (outcome?.status === 'executed') ok += 1;
     else if (outcome?.status === 'parked') parked += 1;
@@ -23,7 +25,9 @@ export async function trashDuplicateAssets(
       failed += 1;
       lastBad = outcome;
     }
-  }
+    return trashNext(index + 1);
+  };
+  await trashNext(0);
   await refresh();
   const parts: string[] = [];
   if (ok > 0) parts.push(`Moved ${ok} duplicate${ok === 1 ? '' : 's'} to trash`);

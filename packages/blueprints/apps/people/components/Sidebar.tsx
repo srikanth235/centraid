@@ -5,11 +5,13 @@
 // top-level components rather than one. The static containers stay global in
 // app.css; the JSX-only rows moved into Sidebar.module.css.
 import { useEffect, useRef } from 'react';
-import { armConfirm } from '../kit.ts';
-import { I } from '../icons.ts';
+
 import { listColor, daysSince } from '../format.ts';
+import { I } from '../icons.ts';
+import { armConfirm } from '../kit.ts';
 import type { Nav, Person, PersonList } from '../types.ts';
 import { Icon } from './Shared.tsx';
+
 import styles from './Sidebar.module.css';
 
 function NavItem({

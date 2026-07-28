@@ -6,6 +6,7 @@
 
 import { act } from 'react';
 import { describe, expect, it } from 'vitest';
+
 import {
   byText,
   installThreadHarness,
@@ -291,7 +292,11 @@ describe('AutomationThreadScreen', () => {
     const props = makeProps(
       {},
       makeData({
-        plan: { detail: 'handler.js: unexpected token', label: 'Compile failed', state: 'failed' },
+        plan: {
+          detail: 'handler.js: unexpected token',
+          label: 'Compile failed',
+          state: 'failed',
+        },
       }),
     );
     const el = await mount(props);
@@ -312,7 +317,12 @@ describe('AutomationThreadScreen', () => {
 
   it('offers no remedy while a compile is in flight', async () => {
     const el = await mount(
-      makeProps({}, makeData({ plan: { detail: null, label: 'Compiling…', state: 'compiling' } })),
+      makeProps(
+        {},
+        makeData({
+          plan: { detail: null, label: 'Compiling…', state: 'compiling' },
+        }),
+      ),
     );
     expect(el.querySelector('[data-testid="plan-banner"]')?.textContent).toContain('Compiling…');
     expect(el.querySelector('[data-testid="plan-open-compiler"]')).toBeNull();

@@ -6,6 +6,7 @@ import { catOf, monoOf, subOf } from '../format.ts';
 import type { LockerDetail as DetailItem, LockerRow, WatchState } from '../types.ts';
 import { ItemPane } from './ItemFields.tsx';
 import { Icon } from './Shared.tsx';
+
 import styles from './Detail.module.css';
 import shared from './shared.module.css';
 
@@ -31,8 +32,16 @@ function WatchItemRow({ item, onSelect }: { item: LockerRow; onSelect: (id: stri
         c: 'var(--danger)',
       }
     : item.weak
-      ? { t: 'Weak', bg: 'color-mix(in oklab, var(--warn) 16%, transparent)', c: 'var(--warn)' }
-      : { t: 'Reused', bg: 'color-mix(in oklab, var(--warn) 16%, transparent)', c: 'var(--warn)' };
+      ? {
+          t: 'Weak',
+          bg: 'color-mix(in oklab, var(--warn) 16%, transparent)',
+          c: 'var(--warn)',
+        }
+      : {
+          t: 'Reused',
+          bg: 'color-mix(in oklab, var(--warn) 16%, transparent)',
+          c: 'var(--warn)',
+        };
   return (
     <button type="button" className={styles.wtItem} onClick={() => onSelect(item.item_id)}>
       <span

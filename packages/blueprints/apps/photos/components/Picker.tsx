@@ -1,10 +1,12 @@
+import type { MouseEvent } from 'react';
+
 // The album picker ("Add photos" from inside an album). `onCancel`/`onSubmit`
 // are picker.tsx's `closePicker`/`submitPicker` — both touch app-owned
 // picker state (`pickerAlbum`/`pickerPicked`), so they stay there and are
 // passed straight through.
 import { mountMedia } from '../media.ts';
-import type { MouseEvent } from 'react';
 import type { Album, Asset } from '../types.ts';
+
 import styles from './Picker.module.css';
 
 function PickerTile({

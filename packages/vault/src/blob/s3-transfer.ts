@@ -1,15 +1,15 @@
 // Restartable/direct S3 transfer surface (issue #414). Kept out of s3.ts so
 // the ordinary CAS driver remains below the repository's 500-line ceiling.
 
-import { assertSha, type BlobRange, type BlobStat } from './store.js';
-import { encodeKeyPath, presignS3Request } from './sigv4.js';
-import type { S3BlobStoreOptions } from './s3.js';
-import { S3RequestPipeline } from './s3-pipeline.js';
 import type {
   MultipartPart,
   RemoteBlobTransfer,
   TemporaryMultipartUpload,
 } from './remote-transfer.js';
+import { S3RequestPipeline } from './s3-pipeline.js';
+import type { S3BlobStoreOptions } from './s3.js';
+import { encodeKeyPath, presignS3Request } from './sigv4.js';
+import { assertSha, type BlobRange, type BlobStat } from './store.js';
 
 const PART_BYTES = 16 * 1024 * 1024;
 const MULTIPART_AT = 32 * 1024 * 1024;
@@ -79,7 +79,11 @@ export class S3TransferStore implements RemoteBlobTransfer {
   private async request(
     method: string,
     key: string,
-    input: { body?: Buffer; query?: Record<string, string>; headers?: Record<string, string> } = {},
+    input: {
+      body?: Buffer;
+      query?: Record<string, string>;
+      headers?: Record<string, string>;
+    } = {},
   ): Promise<Response> {
     return this.pipeline.request(method, key, input);
   }
@@ -87,7 +91,11 @@ export class S3TransferStore implements RemoteBlobTransfer {
   private async send(
     method: string,
     key: string,
-    input: { body?: Buffer; query?: Record<string, string>; headers?: Record<string, string> } = {},
+    input: {
+      body?: Buffer;
+      query?: Record<string, string>;
+      headers?: Record<string, string>;
+    } = {},
   ): Promise<Response> {
     return this.pipeline.send(method, key, input);
   }
@@ -169,9 +177,7 @@ export class S3TransferStore implements RemoteBlobTransfer {
   async listTemporaryUploads(): Promise<TemporaryMultipartUpload[]> {
     const prefix = `${this.prefix()}tmp/blobs/`;
     const uploads: TemporaryMultipartUpload[] = [];
-    let keyMarker: string | undefined;
-    let uploadIdMarker: string | undefined;
-    for (;;) {
+    const listPage = async (keyMarker?: string, uploadIdMarker?: string): Promise<void> => {
       const query: Record<string, string> = {
         uploads: '',
         prefix,
@@ -203,15 +209,18 @@ export class S3TransferStore implements RemoteBlobTransfer {
           initiatedAt: xmlUnescape(rawInitiated),
         });
       }
-      if (!/<IsTruncated>true<\/IsTruncated>/u.test(xml)) break;
+      if (!/<IsTruncated>true<\/IsTruncated>/u.test(xml)) return;
       const nextKey = xmlValue(xml, 'NextKeyMarker');
       const nextUploadId = xmlValue(xml, 'NextUploadIdMarker');
       if (!nextKey || (nextKey === keyMarker && nextUploadId === uploadIdMarker)) {
         throw new Error('s3 list temporary uploads: invalid pagination markers');
       }
-      keyMarker = decodeURIComponent(xmlUnescape(nextKey));
-      uploadIdMarker = nextUploadId ? xmlUnescape(nextUploadId) : undefined;
-    }
+      return listPage(
+        decodeURIComponent(xmlUnescape(nextKey)),
+        nextUploadId ? xmlUnescape(nextUploadId) : undefined,
+      );
+    };
+    await listPage();
     return uploads;
   }
 

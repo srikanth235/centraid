@@ -1,12 +1,10 @@
-import { tempDirSync } from '@centraid/test-kit/temp-dir';
+import { createHash } from 'node:crypto';
 // governance: allow-repo-hygiene file-size-limit (#408) one real-vault capture suite — every case drives the same openVaultDb + bootstrapVault + real-WAL fixture through a different guarantee; sharding it would clone that fixture per file and let the copies drift
 // WAL shipper capture correctness (issue #408): G1/G2/G3 capture, G4
 // backpressure, rollover + closers, and the end-to-end capture→seal→replay
 // round-trip over a REAL vault (openVaultDb + bootstrapVault, real
 // node:sqlite, real files — no mocks). Detector (G5), crash-ordering (G7)
 // and generation-lifecycle tests live in wal-shipper-detectors.test.ts.
-
-import { createHash } from 'node:crypto';
 import {
   chmodSync,
   copyFileSync,
@@ -18,7 +16,7 @@ import {
 } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+
 import {
   FsObjectStore,
   replayWalSegments,
@@ -28,6 +26,9 @@ import {
   walGroupCloserKey,
   type WalDbName,
 } from '@centraid/backup';
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+
 import { bootstrapVault } from './bootstrap.js';
 import { openVaultDb, type VaultDb } from './db.js';
 import { WalShipper, type UploadableWalFile, type WalShipperOptions } from './wal-shipper.js';
@@ -270,7 +271,7 @@ describe('wal-shipper', () => {
       const r = shipper.tick();
       const err = r.errors.find((e) => e.db === 'vault');
       expect(err).toBeDefined();
-      expect(err!.message).toMatch(/segment write failed/);
+      expect(err!.message).toMatch(/segment write failed/u);
       expect(r.shipped.filter((k) => k.startsWith('wal/vault/'))).toStrictEqual([]);
       expect(r.markers).toStrictEqual([]); // a one-sided/error cut is never certified
       // Offset did not advance, and the WAL keeps every byte (no checkpoint).
@@ -329,7 +330,12 @@ describe('wal-shipper', () => {
       .filter((i) => i.kind === 'closer' && i.closer!.db === 'vault');
     expect(closers).toHaveLength(1);
     expect(closers[0]!.key).toBe(
-      walGroupCloserKey({ db: 'vault', generation: gen, group: 0, endOffset: rolled!.endOffset }),
+      walGroupCloserKey({
+        db: 'vault',
+        generation: gen,
+        group: 0,
+        endOffset: rolled!.endOffset,
+      }),
     );
     // The closed group's segments end exactly at the closer's offset.
     const group0 = segsOf(shipper, 'vault').filter((s) => s.addr!.group === 0);
@@ -482,17 +488,17 @@ describe('wal-shipper', () => {
     // Pair markers ride the same drain — without them the restore has no
     // coordinated point to cut at and lands on the base pair.
     expect(uploadables.filter((i) => i.kind === 'marker').length).toBeGreaterThan(0);
-    for (const item of uploadables) {
-      let sealed: Uint8Array;
-      if (item.kind === 'segment') {
-        sealed = sealWalSegment(dataKey, 'v1', item.addr!, readFileSync(item.file));
-      } else if (item.kind === 'closer') {
-        sealed = sealWalCloser(dataKey, 'v1', item.closer!);
-      } else {
-        sealed = sealWalPairMarker(dataKey, 'v1', item.marker!);
-      }
-      await store.put(item.key, sealed);
-    }
+    await Promise.all(
+      uploadables.map((item) => {
+        const sealed =
+          item.kind === 'segment'
+            ? sealWalSegment(dataKey, 'v1', item.addr!, readFileSync(item.file))
+            : item.kind === 'closer'
+              ? sealWalCloser(dataKey, 'v1', item.closer!)
+              : sealWalPairMarker(dataKey, 'v1', item.marker!);
+        return store.put(item.key, sealed);
+      }),
+    );
 
     // Materialize the bases into a fresh directory and let SQLite replay.
     const destDir = path.join(root, 'restore');
@@ -517,8 +523,12 @@ describe('wal-shipper', () => {
     expect(outcome.perDb.vault.foreignKeyViolations).toBe(0);
     expect(outcome.perDb.vault.segmentsApplied).toBeGreaterThan(0);
 
-    const restored = new DatabaseSync(path.join(destDir, 'vault.db'), { readOnly: true });
-    const restoredJournal = new DatabaseSync(path.join(destDir, 'journal.db'), { readOnly: true });
+    const restored = new DatabaseSync(path.join(destDir, 'vault.db'), {
+      readOnly: true,
+    });
+    const restoredJournal = new DatabaseSync(path.join(destDir, 'journal.db'), {
+      readOnly: true,
+    });
     try {
       expect(restored.prepare('SELECT id, v FROM _walship_probe ORDER BY id').all()).toStrictEqual(
         liveVaultRows,

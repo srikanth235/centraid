@@ -1,4 +1,5 @@
 import { assert, beforeEach, describe, expect, test } from 'vitest';
+
 import {
   bootstrapVault,
   createGrant,
@@ -25,7 +26,11 @@ describe('social', () => {
     boot = bootstrapVault(db, { ownerName: 'Priya' });
     gw = createGateway(db);
     registerSocialCommands(gw);
-    owner = { kind: 'device', deviceId: boot.deviceId, deviceKey: boot.deviceKey };
+    owner = {
+      kind: 'device',
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+    };
     raviId = uuidv7();
     const now = new Date().toISOString();
     db.vault
@@ -60,7 +65,10 @@ describe('social', () => {
     const message = db.vault
       .prepare('SELECT delivery, sender_party_id FROM social_message WHERE message_id = ?')
       .get(messageId);
-    expect(message).toMatchObject({ delivery: 'draft', sender_party_id: boot.ownerPartyId });
+    expect(message).toMatchObject({
+      delivery: 'draft',
+      sender_party_id: boot.ownerPartyId,
+    });
     const participants = db.vault
       .prepare('SELECT count(*) AS n FROM social_thread_participant WHERE thread_id = ?')
       .get(threadId) as { n: number };
@@ -185,12 +193,18 @@ describe('social', () => {
     });
     expect(outcome.status).toBe('executed');
     if (outcome.status !== 'executed') return;
-    expect(outcome.output).toMatchObject({ participants_resolved: 1, messages_resolved: 1 });
+    expect(outcome.output).toMatchObject({
+      participants_resolved: 1,
+      messages_resolved: 1,
+    });
     const message = db.vault
       .prepare('SELECT sender_party_id, sender_handle FROM social_message WHERE thread_id = ?')
       .get(threadId);
     // Identity backfilled; the raw handle stays for audit.
-    expect(message).toMatchObject({ sender_party_id: raviId, sender_handle: 'ravi@example.com' });
+    expect(message).toMatchObject({
+      sender_party_id: raviId,
+      sender_handle: 'ravi@example.com',
+    });
   });
 
   test('resolve_identity refuses a handle claimed by a different party (no identity forks)', () => {

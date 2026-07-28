@@ -6,8 +6,9 @@
 
 import type { AutomationTriggerCursor } from '@centraid/app-engine';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { dueInstants, floorMinute, readCronCursor } from './cron-cursor.js';
+
 import { wallClockFields } from '../cron-timezone.js';
+import { dueInstants, floorMinute, readCronCursor } from './cron-cursor.js';
 
 function cursorAt(positionJson: string): AutomationTriggerCursor {
   return {

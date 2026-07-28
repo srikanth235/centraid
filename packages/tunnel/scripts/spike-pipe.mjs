@@ -11,6 +11,7 @@
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
+
 import {
   createTunnelClient,
   DeviceStore,
@@ -72,7 +73,10 @@ async function serve() {
     const server = await startDemoGateway();
     const { port } = server.address();
     log(`[serve] demo gateway on 127.0.0.1:${port}`);
-    upstream = () => ({ baseUrl: `http://127.0.0.1:${port}`, token: DEMO_TOKEN });
+    upstream = () => ({
+      baseUrl: `http://127.0.0.1:${port}`,
+      token: DEMO_TOKEN,
+    });
   }
   const store = DeviceStore.open(path.join(os.tmpdir(), 'centraid-spike-devices.json'));
   const desktop = await startDesktopTunnel({

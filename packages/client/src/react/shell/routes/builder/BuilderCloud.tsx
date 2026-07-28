@@ -1,5 +1,7 @@
 // governance: allow-repo-hygiene file-size-limit (#363) single cohesive builder-tab panel (cloud/publish surface); splitting would fragment one visual unit
 import { type JSX, useCallback, useEffect, useRef, useState } from 'react';
+
+import { relativeWhen } from '../../../../format.js';
 import {
   appLiveUrl,
   appLogs,
@@ -10,12 +12,12 @@ import {
   runAutomationNow,
   setAutomationEnabled,
 } from '../../../../gateway-client.js';
-import { relativeWhen } from '../../../../format.js';
-import { iconSvg } from '../../iconSvg.js';
 import { cx } from '../../../ui/cx.js';
+import { iconSvg } from '../../iconSvg.js';
+
+import toastCss from '../../../styles/toast.module.css';
 import buttonCss from '../../../ui/Button.module.css';
 import styles from './BuilderCloud.module.css';
-import toastCss from '../../../styles/toast.module.css';
 
 // React port of the vanilla builder's Cloud tab (builder.ts `renderCloud`,
 // ~lines 1722–2463). Renders the same global `.cloud-*` class names — the
@@ -83,7 +85,13 @@ type AutomationsCache = CentraidAutomationRow[] | undefined | 'pending' | 'error
 type RunState =
   | { kind: 'idle' }
   | { kind: 'running' }
-  | { kind: 'done'; ok: boolean; durationMs: number; error?: string; finishedAt: number };
+  | {
+      kind: 'done';
+      ok: boolean;
+      durationMs: number;
+      error?: string;
+      finishedAt: number;
+    };
 
 function pad2(n: number): string {
   return n < 10 ? `0${n}` : String(n);
@@ -121,12 +129,14 @@ function showToast(text: string): void {
 // `waitForAutomationRun`).
 async function waitForAutomationRun(runId: string): Promise<CentraidAutomationTurnRecord> {
   const deadline = Date.now() + 6 * 60 * 1000;
-  while (Date.now() < deadline) {
+  const poll = async (): Promise<CentraidAutomationTurnRecord> => {
     const rec = await readAutomationTurn({ turnId: runId });
     if (rec && rec.endedAt !== undefined) return rec;
+    if (Date.now() >= deadline) throw new Error('run did not finish within 6 minutes');
     await new Promise((resolve) => setTimeout(resolve, 1500));
-  }
-  throw new Error('run did not finish within 6 minutes');
+    return poll();
+  };
+  return poll();
 }
 
 export interface BuilderCloudProps {
@@ -394,7 +404,9 @@ export default function BuilderCloud({ appId }: BuilderCloudProps): JSX.Element 
                 className={cx(buttonCss.btn, buttonCss.ghost, styles.refreshBtn)}
                 title="Refresh logs"
                 onClick={() => void refreshLogs()}
-                dangerouslySetInnerHTML={{ __html: `${refreshIconSvg(13)}<span>Refresh</span>` }}
+                dangerouslySetInnerHTML={{
+                  __html: `${refreshIconSvg(13)}<span>Refresh</span>`,
+                }}
               />
             )}
             {active === 'automations' && (
@@ -404,7 +416,9 @@ export default function BuilderCloud({ appId }: BuilderCloudProps): JSX.Element 
                 className={cx(buttonCss.btn, buttonCss.ghost, styles.refreshBtn)}
                 title="Refresh automations"
                 onClick={() => void refreshAutomations()}
-                dangerouslySetInnerHTML={{ __html: `${refreshIconSvg(13)}<span>Refresh</span>` }}
+                dangerouslySetInnerHTML={{
+                  __html: `${refreshIconSvg(13)}<span>Refresh</span>`,
+                }}
               />
             )}
           </div>

@@ -1,10 +1,10 @@
+import { colorForCalendar } from './format.ts';
 // Non-visual business logic: vault IO (write/act), calendar coloring, the
 // session activity log and parked-write tracking, and search. `createLogic`
 // closes over app.tsx's own `state`/`data` (mutated in place, never
 // reassigned) plus the render/refresh entry points app.tsx defines — the
 // same factory shape tasks/logic.ts and notes/logic.ts use.
 import { debounce, outcomeMessage, toast } from './kit.ts';
-import { colorForCalendar } from './format.ts';
 import {
   clearPendingState,
   reconcilePendingChange,
@@ -53,7 +53,11 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   ): void {
     if (!eventId) return;
     const list = state.activityLog.get(eventId) ?? [];
-    list.unshift({ text, when: 'Today', receiptId: outcome?.receiptId ?? null });
+    list.unshift({
+      text,
+      when: 'Today',
+      receiptId: outcome?.receiptId ?? null,
+    });
     state.activityLog.set(eventId, list.slice(0, 20));
   }
 
@@ -140,7 +144,11 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     dtstart: string,
     dtend: string,
   ): Promise<VaultOutcome | undefined> {
-    const outcome = await write('reschedule', { event_id: eventId, dtstart, dtend });
+    const outcome = await write('reschedule', {
+      event_id: eventId,
+      dtstart,
+      dtend,
+    });
     if (outcome?.status === 'executed') {
       logActivity(eventId, 'Rescheduled', outcome);
       toast('Event moved · receipt');

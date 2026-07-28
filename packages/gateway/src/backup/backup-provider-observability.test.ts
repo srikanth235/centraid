@@ -1,4 +1,3 @@
-import { describe, expect, test } from 'vitest';
 import {
   BackupProviderError,
   type BackupProvider,
@@ -6,6 +5,8 @@ import {
   type ProviderCapabilities,
   type ProviderInventoryObject,
 } from '@centraid/backup';
+import { describe, expect, test } from 'vitest';
+
 import {
   collectInventory,
   pushProviderPolicy,
@@ -34,11 +35,11 @@ function listStore(
   return {
     put: async () => undefined,
     get: async () => new Uint8Array(),
-    getStream: async function* () {
+    async *getStream() {
       yield new Uint8Array();
     },
     head: async () => null,
-    list: async function* () {
+    async *list() {
       for (const key of keys) yield { key, size: sizeFor(key), etagOrHash: key };
     },
     delete: async () => undefined,

@@ -1,13 +1,12 @@
-// Proves SqliteIntentStore matches the durable-outbox spec by running the same
-// conformance corpus against it and the reference MemoryIntentStore.
-import { describe, expect, test } from 'vitest';
-
 import {
   MemoryIntentStore,
   ReplicaProtocolError,
   type IntentRecordStore,
   type NewStoredIntent,
 } from '@centraid/client/replica/native';
+// Proves SqliteIntentStore matches the durable-outbox spec by running the same
+// conformance corpus against it and the reference MemoryIntentStore.
+import { describe, expect, test } from 'vitest';
 
 import { NodeSqliteDriver } from './node-sqlite-driver';
 import { SqliteIntentStore } from './sqlite-intent-store';
@@ -71,7 +70,10 @@ function runIntentStoreConformance(makeStore: () => IntentRecordStore): void {
     const store = makeStore();
     await store.add(newIntent());
     await store.claimNext();
-    await store.transition('intent-1', ['sending'], { state: 'queued', reason: 'network' });
+    await store.transition('intent-1', ['sending'], {
+      state: 'queued',
+      reason: 'network',
+    });
     expect((await store.get('intent-1'))?.reason).toBe('network');
     await store.claimNext();
     const cleared = await store.transition('intent-1', ['sending'], {

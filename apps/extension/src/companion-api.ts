@@ -1,8 +1,10 @@
 import { ROUTES } from '@centraid/protocol';
+
+import { anchoredCaptureText, documentCaptureTitle } from './capture.js';
 import { isEligiblePageUrl, matchesOrigin } from './origin-matching.js';
-import { closeTransport, appRead, appWrite, companionJson, pairOverIroh } from './transport.js';
-import { decodePairingTicket } from './ticket.js';
 import { isLocked, loadPairing, purgeCompanionState, savePairing, setLocked } from './storage.js';
+import { decodePairingTicket } from './ticket.js';
+import { closeTransport, appRead, appWrite, companionJson, pairOverIroh } from './transport.js';
 import type {
   CompanionModule,
   CompanionRequest,
@@ -12,7 +14,6 @@ import type {
   PairingState,
 } from './types.js';
 import { COMPANION_MODULE_CATALOG } from './types.js';
-import { anchoredCaptureText, documentCaptureTitle } from './capture.js';
 
 interface CompanionModulesResponse {
   modules?: Array<{ id: CompanionModule; state: ModuleStatus['state'] }>;

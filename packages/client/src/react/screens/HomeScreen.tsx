@@ -1,7 +1,8 @@
+import type { IconName } from '@centraid/design-tokens';
 // governance: allow-repo-hygiene file-size-limit (#363) single cohesive screen component for the Home surface (apps grid + drafts + templates); splitting would fragment one visual unit
 import { useRef, useState, type JSX } from 'react';
-import { Icon, KindBadge, StatusPill } from '../ui/index.js';
-import type { IconName } from '@centraid/design-tokens';
+
+import { INTEGRATION_HUES } from '../format.js';
 import type {
   AuStatusKind,
   HomeAppItemDTO,
@@ -9,13 +10,14 @@ import type {
   HomeBridgeProps,
   HomeMenuAnchor,
 } from '../screen-contracts.js';
-import { INTEGRATION_HUES } from '../format.js';
-import styles from './HomeScreen.module.css';
 import { cx } from '../ui/cx.js';
+import { Icon, KindBadge, StatusPill } from '../ui/index.js';
+
 import au from '../styles/automation.module.css';
-import cardCss from '../ui/AppCard.module.css';
-import libCss from '../styles/library.module.css';
 import controlsCss from '../styles/controls.module.css';
+import libCss from '../styles/library.module.css';
+import cardCss from '../ui/AppCard.module.css';
+import styles from './HomeScreen.module.css';
 
 const STATUS_ICON: Record<AuStatusKind, IconName> = {
   active: 'Power',
@@ -235,7 +237,9 @@ export function AutoCard({
                   key={name}
                   className={au.auOvDot}
                   title={name}
-                  style={{ background: `var(--c-${INTEGRATION_HUES[name] ?? 'slate'})` }}
+                  style={{
+                    background: `var(--c-${INTEGRATION_HUES[name] ?? 'slate'})`,
+                  }}
                 />
               ))}
             </div>
@@ -351,7 +355,12 @@ export default function HomeScreen({
 
   const segDefs = [
     { k: 'all' as const, label: 'All', count: counts.all, icon: null },
-    { k: 'app' as const, label: 'Apps', count: counts.apps, icon: 'Home' as IconName },
+    {
+      k: 'app' as const,
+      label: 'Apps',
+      count: counts.apps,
+      icon: 'Home' as IconName,
+    },
     {
       k: 'automation' as const,
       label: 'Automations',

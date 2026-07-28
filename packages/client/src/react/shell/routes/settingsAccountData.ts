@@ -1,4 +1,5 @@
 import type { IconName } from '@centraid/design-tokens';
+
 import {
   listVaults,
   vaultConnections,
@@ -86,9 +87,9 @@ export function phoneCallbacks(showToast: (m: string) => void): PhoneBridgeProps
       };
     },
     revoke: async (deviceId) => {
-      const result = await window.CentraidApi.revokePhoneDevice({ deviceId }).catch(
-        () => undefined,
-      );
+      const result = await window.CentraidApi.revokePhoneDevice({
+        deviceId,
+      }).catch(() => undefined);
       return !!result?.removed;
     },
   };

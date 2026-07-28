@@ -53,6 +53,8 @@
  * Requires `bun run build` in packages/backup AND packages/vault first.
  */
 
+import { execFileSync } from 'node:child_process';
+import { createHash, randomBytes } from 'node:crypto';
 import {
   createReadStream,
   createWriteStream,
@@ -64,8 +66,6 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { createHash, randomBytes } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 import { pipeline } from 'node:stream/promises';
 
@@ -263,7 +263,8 @@ let segments = 0;
 let rowBytes = 0;
 const stmt = db.prepare('INSERT INTO day (v) VALUES (?)');
 const tDay = performance.now();
-for (let tick = 0; tick < DAY_TICKS; tick++) {
+const captureNextTick = async (tick) => {
+  if (tick >= DAY_TICKS) return;
   db.exec('BEGIN');
   for (let r = 0; r < ROWS_PER_TICK; r++) {
     const v = randomBytes(ROW_BYTES / 2).toString('hex');
@@ -273,23 +274,34 @@ for (let tick = 0; tick < DAY_TICKS; tick++) {
   db.exec('COMMIT');
   tickMs += 60_000;
   const head = statSync(walPath).size;
-  if (head < 32 || head <= offset) continue;
-  const buf = readFileSync(walPath);
-  pageSize ??= walPageSize(buf.subarray(0, 32));
-  const boundary = lastCommitBoundary(buf.subarray(offset), offset, pageSize);
-  if (boundary <= offset) continue;
-  const plain = buf.subarray(offset, boundary);
-  const addr = { db: 'vault', generation, group, startOffset: offset, endOffset: boundary, tickMs };
-  const sealed = sealWalSegment(dataKey, vaultId, addr, plain);
-  await store.put(
-    `wal/vault/${generation}/${String(group).padStart(8, '0')}/${String(offset).padStart(12, '0')}-${String(boundary).padStart(12, '0')}-${String(tickMs).padStart(13, '0')}`,
-    sealed,
-  );
-  localBytes += plain.length;
-  wireBytes += sealed.length;
-  segments++;
-  offset = boundary;
-  if (head > THRESHOLD) {
+  let captured = false;
+  if (head >= 32 && head > offset) {
+    const buf = readFileSync(walPath);
+    pageSize ??= walPageSize(buf.subarray(0, 32));
+    const boundary = lastCommitBoundary(buf.subarray(offset), offset, pageSize);
+    if (boundary > offset) {
+      const plain = buf.subarray(offset, boundary);
+      const addr = {
+        db: 'vault',
+        generation,
+        group,
+        startOffset: offset,
+        endOffset: boundary,
+        tickMs,
+      };
+      const sealed = sealWalSegment(dataKey, vaultId, addr, plain);
+      await store.put(
+        `wal/vault/${generation}/${String(group).padStart(8, '0')}/${String(offset).padStart(12, '0')}-${String(boundary).padStart(12, '0')}-${String(tickMs).padStart(13, '0')}`,
+        sealed,
+      );
+      localBytes += plain.length;
+      wireBytes += sealed.length;
+      segments++;
+      offset = boundary;
+      captured = true;
+    }
+  }
+  if (captured && head > THRESHOLD) {
     db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
     const closer = { db: 'vault', generation, group, endOffset: offset };
     const sealedCloser = sealWalCloser(dataKey, vaultId, closer);
@@ -301,7 +313,9 @@ for (let tick = 0; tick < DAY_TICKS; tick++) {
     group++;
     offset = 0;
   }
-}
+  return captureNextTick(tick + 1);
+};
+await captureNextTick(0);
 const captureSecs = secs(tDay);
 const dayEndSize = statSync(dbPath).size;
 // Everything the day added to the volume: sealed segment objects in the store,
@@ -350,12 +364,16 @@ const destDb = path.join(restoreDir, 'vault.db');
 const tMaterialize = performance.now();
 {
   const out = createWriteStream(destDb);
-  for (const id of baseAChunks) {
+  const materializeNextChunk = async (index) => {
+    const id = baseAChunks[index];
+    if (id === undefined) return;
     const sealed = await store.get(`chunks/${id}`);
     const plain = decrypt(dataKey, sealed);
     if (!out.write(Buffer.from(plain))) await new Promise((resolve) => out.once('drain', resolve));
     await store.delete(`chunks/${id}`); // remote store => no local footprint
-  }
+    return materializeNextChunk(index + 1);
+  };
+  await materializeNextChunk(0);
   await new Promise((resolve) => out.end(resolve));
 }
 const materializeSecs = secs(tMaterialize);

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { ResourceAccounting } from './resource-accounting.js';
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -33,10 +34,22 @@ describe(ResourceAccounting, () => {
     const { acc } = makeAccounting({ start: 5_000 });
     const snap = acc.snapshot();
     expect(snap.sinceMs).toBe(5_000);
-    expect(snap.subsystems.replication).toStrictEqual({ passes: 0, bytesReplicated: 0, busyMs: 0 });
-    expect(snap.subsystems.backup).toStrictEqual({ drains: 0, bytesUploaded: 0, busyMs: 0 });
+    expect(snap.subsystems.replication).toStrictEqual({
+      passes: 0,
+      bytesReplicated: 0,
+      busyMs: 0,
+    });
+    expect(snap.subsystems.backup).toStrictEqual({
+      drains: 0,
+      bytesUploaded: 0,
+      busyMs: 0,
+    });
     expect(snap.subsystems.sweeps).toStrictEqual({ passes: 0, busyMs: 0 });
-    expect(snap.subsystems.agentRuns).toStrictEqual({ runs: 0, busyMs: 0, cpuSeconds: null });
+    expect(snap.subsystems.agentRuns).toStrictEqual({
+      runs: 0,
+      busyMs: 0,
+      cpuSeconds: null,
+    });
   });
 
   it('accumulates replication, backup, sweep, and agent-run counters', () => {
@@ -54,9 +67,17 @@ describe(ResourceAccounting, () => {
       bytesReplicated: 150,
       busyMs: 15,
     });
-    expect(snap.subsystems.backup).toStrictEqual({ drains: 1, bytesUploaded: 2_048, busyMs: 40 });
+    expect(snap.subsystems.backup).toStrictEqual({
+      drains: 1,
+      bytesUploaded: 2_048,
+      busyMs: 40,
+    });
     expect(snap.subsystems.sweeps).toStrictEqual({ passes: 2, busyMs: 10 });
-    expect(snap.subsystems.agentRuns).toStrictEqual({ runs: 1, busyMs: 1_200, cpuSeconds: null });
+    expect(snap.subsystems.agentRuns).toStrictEqual({
+      runs: 1,
+      busyMs: 1_200,
+      cpuSeconds: null,
+    });
   });
 
   it('agentRuns.cpuSeconds stays null (no fabricated child rusage)', () => {
@@ -71,7 +92,11 @@ describe(ResourceAccounting, () => {
     acc.recordReplicationPass({ bytesReplicated: -10, durationMs: -5 });
     acc.recordAgentRun({ durationMs: -100 });
     const snap = acc.snapshot();
-    expect(snap.subsystems.replication).toStrictEqual({ passes: 1, bytesReplicated: 0, busyMs: 0 });
+    expect(snap.subsystems.replication).toStrictEqual({
+      passes: 1,
+      bytesReplicated: 0,
+      busyMs: 0,
+    });
     expect(snap.subsystems.agentRuns.busyMs).toBe(0);
   });
 
@@ -100,8 +125,13 @@ describe(ResourceAccounting, () => {
   });
 
   it('reads worker-pool actuals live from the injected stats getter', () => {
-    const { acc } = makeAccounting({ worker: () => ({ tasks: 12, busyMs: 3_400 }) });
-    expect(acc.snapshot().subsystems.workerPool).toStrictEqual({ tasks: 12, busyMs: 3_400 });
+    const { acc } = makeAccounting({
+      worker: () => ({ tasks: 12, busyMs: 3_400 }),
+    });
+    expect(acc.snapshot().subsystems.workerPool).toStrictEqual({
+      tasks: 12,
+      busyMs: 3_400,
+    });
   });
 
   describe('backgroundTimerFiresLastHour', () => {

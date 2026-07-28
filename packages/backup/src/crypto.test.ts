@@ -1,7 +1,9 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { describe, expect, test } from 'vitest';
+
 import {
   activeMasterKey,
   chunkId,
@@ -18,6 +20,7 @@ import {
   saveKeyring,
   type Keyring,
 } from './crypto.js';
+
 describe('encrypt/decrypt', () => {
   test('roundtrips', () => {
     const key = new Uint8Array(32).fill(7);
@@ -45,7 +48,7 @@ describe('encrypt/decrypt', () => {
     const midpoint = Math.floor(tampered.length / 2);
     tampered[midpoint] = (tampered[midpoint]! ^ 0xff) & 0xff;
     expect(() => decrypt(key, tampered)).toThrow(
-      /unsupported state or unable to authenticate data/i,
+      /unsupported state or unable to authenticate data/iu,
     );
   });
 
@@ -56,7 +59,7 @@ describe('encrypt/decrypt', () => {
     const lastByte = tampered.length - 1;
     tampered[lastByte] = (tampered[lastByte]! ^ 0xff) & 0xff;
     expect(() => decrypt(key, tampered)).toThrow(
-      /unsupported state or unable to authenticate data/i,
+      /unsupported state or unable to authenticate data/iu,
     );
   });
 
@@ -65,7 +68,7 @@ describe('encrypt/decrypt', () => {
     const wrongKey = new Uint8Array(32).fill(2);
     const blob = encrypt(key, new TextEncoder().encode('secret'));
     expect(() => decrypt(wrongKey, blob)).toThrow(
-      /unsupported state or unable to authenticate data/i,
+      /unsupported state or unable to authenticate data/iu,
     );
   });
 
@@ -124,21 +127,21 @@ describe('deriveNonce / encryptWithNonce (deterministic sealing — /1, issue #4
     const blob = encryptWithNonce(key, nonce, plain, aad);
     const otherAad = new TextEncoder().encode('centraid-wal/1:vault-1:vault:g:1:0:17');
     expect(() => decrypt(key, blob, otherAad)).toThrow(
-      /unsupported state or unable to authenticate data/i,
+      /unsupported state or unable to authenticate data/iu,
     );
     // Dropping the AAD entirely must fail too.
-    expect(() => decrypt(key, blob)).toThrow(/unsupported state or unable to authenticate data/i);
+    expect(() => decrypt(key, blob)).toThrow(/unsupported state or unable to authenticate data/iu);
     // And supplying an AAD for a blob sealed without one.
     const noAadBlob = encryptWithNonce(key, nonce, plain);
     expect(() => decrypt(key, noAadBlob, aad)).toThrow(
-      /unsupported state or unable to authenticate data/i,
+      /unsupported state or unable to authenticate data/iu,
     );
   });
 
   test('encryptWithNonce rejects a nonce that is not 12 bytes', () => {
     const plain = new TextEncoder().encode('x');
-    expect(() => encryptWithNonce(key, new Uint8Array(11), plain)).toThrow(/12 bytes/);
-    expect(() => encryptWithNonce(key, new Uint8Array(16), plain)).toThrow(/12 bytes/);
+    expect(() => encryptWithNonce(key, new Uint8Array(11), plain)).toThrow(/12 bytes/u);
+    expect(() => encryptWithNonce(key, new Uint8Array(16), plain)).toThrow(/12 bytes/u);
   });
 });
 
@@ -180,7 +183,7 @@ describe('HKDF derivation', () => {
     const id1 = chunkId(dedupKey, plain);
     const id2 = chunkId(dedupKey, plain);
     expect(id1).toBe(id2);
-    expect(id1).toMatch(/^[0-9a-f]{64}$/);
+    expect(id1).toMatch(/^[0-9a-f]{64}$/u);
     const otherKey = new Uint8Array(32).fill(6);
     expect(chunkId(otherKey, plain)).not.toBe(id1);
   });
@@ -202,7 +205,7 @@ describe('keyring', () => {
     const dir = await tempDir();
     const file = path.join(dir, 'keyring.json');
     await createKeyring(file);
-    await expect(createKeyring(file)).rejects.toThrow(/already exists/);
+    await expect(createKeyring(file)).rejects.toThrow(/already exists/u);
   });
 
   test('load/save roundtrip', async () => {

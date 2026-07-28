@@ -6,6 +6,7 @@
 // rollups, so Insights/Executions are unaffected.
 
 import type { DatabaseSync } from 'node:sqlite';
+
 import type { CustodyProven } from './types.js';
 
 interface PendingArchiveRow {

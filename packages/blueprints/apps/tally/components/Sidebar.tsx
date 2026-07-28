@@ -8,8 +8,9 @@ import { balLabelFriend, balLabelGroup, tint } from '../format.ts';
 import { I } from '../icons.ts';
 import type { BalLabel, Friend, Group, NavPatch, View } from '../types.ts';
 import { Icon, KitAvatar } from './Shared.tsx';
-import styles from './Sidebar.module.css';
+
 import shared from './shared.module.css';
+import styles from './Sidebar.module.css';
 
 // The money-tone modifier for a balance label — an explicit lookup map keyed by
 // the `cls` the format helpers return (never a computed styles[expr]).

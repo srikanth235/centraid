@@ -78,7 +78,10 @@ function cacheKey(seed: string, step: number): string {
  * once-a-second countdown never disturbs the sidebar/list/overlays the
  * owner might be mid-interaction with (typing in search, editing a modal).
  */
-export function useTotp(seed: string | null | undefined): { code: string | null; offset: number } {
+export function useTotp(seed: string | null | undefined): {
+  code: string | null;
+  offset: number;
+} {
   // The code is derived during render, never synced into state by an effect
   // (#573). `computed` carries the last value this hook resolved asynchronously,
   // so a fresh 30s step keeps showing the previous code until its replacement

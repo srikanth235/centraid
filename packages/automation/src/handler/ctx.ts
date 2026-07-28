@@ -7,13 +7,13 @@
  * matches the worker's expected wire shape.
  */
 
-import type { AgentAttachment, AgentDispatcher, DispatchContext } from './runner.js';
 import type {
   ConversationStore,
   TurnStreamEvent,
   VaultBridge,
   VaultOp,
 } from '@centraid/app-engine';
+
 import {
   closeRunNode,
   openRunNode,
@@ -21,6 +21,7 @@ import {
   usageCloseFields,
   type RunEventSink,
 } from './audit.js';
+import type { AgentAttachment, AgentDispatcher, DispatchContext } from './runner.js';
 
 export interface AuditState {
   store: ConversationStore;
@@ -64,43 +65,45 @@ async function resolveAgentAttachments(
       'ctx.agent content refs need a vault surface — the host mounted no vault plane',
     );
   }
-  const attachments: AgentAttachment[] = [];
-  for (const [i, ref] of refs.entries()) {
-    const reply = await vault({
-      op: 'content',
-      payload: {
-        contentId: ref.contentId,
-        variant: ref.variant,
-        ...(ref.maxBytes === undefined ? {} : { maxBytes: ref.maxBytes }),
-      },
-    });
-    if (!reply.ok) {
-      throw new Error(`ctx.agent content[${i}] (${ref.contentId} ${ref.variant}): ${reply.error}`);
-    }
-    const out = reply.result as
-      | { status: 'ok'; kind: 'bytes'; mediaType: string; base64: string }
-      | { status: 'ok'; kind: 'text'; mediaType: string; text: string }
-      | { status: string };
-    if (out.status !== 'ok') {
-      throw new Error(
-        `ctx.agent content[${i}] (${ref.contentId} ${ref.variant}) did not resolve: ${out.status}`,
-      );
-    }
-    const resolved = out as {
-      kind: 'bytes' | 'text';
-      mediaType: string;
-      base64?: string;
-      text?: string;
-    };
-    const ext = resolved.kind === 'text' ? 'txt' : (resolved.mediaType.split('/')[1] ?? 'bin');
-    attachments.push({
-      name: `content-${i}-${ref.contentId.slice(0, 8)}.${ext}`,
-      mediaType: resolved.mediaType,
-      ...(resolved.base64 === undefined ? {} : { base64: resolved.base64 }),
-      ...(resolved.text === undefined ? {} : { text: resolved.text }),
-    });
-  }
-  return attachments;
+  return Promise.all(
+    refs.map(async (ref, i) => {
+      const reply = await vault({
+        op: 'content',
+        payload: {
+          contentId: ref.contentId,
+          variant: ref.variant,
+          ...(ref.maxBytes === undefined ? {} : { maxBytes: ref.maxBytes }),
+        },
+      });
+      if (!reply.ok) {
+        throw new Error(
+          `ctx.agent content[${i}] (${ref.contentId} ${ref.variant}): ${reply.error}`,
+        );
+      }
+      const out = reply.result as
+        | { status: 'ok'; kind: 'bytes'; mediaType: string; base64: string }
+        | { status: 'ok'; kind: 'text'; mediaType: string; text: string }
+        | { status: string };
+      if (out.status !== 'ok') {
+        throw new Error(
+          `ctx.agent content[${i}] (${ref.contentId} ${ref.variant}) did not resolve: ${out.status}`,
+        );
+      }
+      const resolved = out as {
+        kind: 'bytes' | 'text';
+        mediaType: string;
+        base64?: string;
+        text?: string;
+      };
+      const ext = resolved.kind === 'text' ? 'txt' : (resolved.mediaType.split('/')[1] ?? 'bin');
+      return {
+        name: `content-${i}-${ref.contentId.slice(0, 8)}.${ext}`,
+        mediaType: resolved.mediaType,
+        ...(resolved.base64 === undefined ? {} : { base64: resolved.base64 }),
+        ...(resolved.text === undefined ? {} : { text: resolved.text }),
+      };
+    }),
+  );
 }
 
 /**
@@ -336,7 +339,10 @@ export async function handleVaultMessage(
     }
     return settle({ ok: true, result: result.result });
   } catch (err) {
-    return settle({ ok: false, error: err instanceof Error ? err.message : String(err) });
+    return settle({
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 }
 
@@ -367,14 +373,22 @@ export function handleStateMessage(
     }
     return { ok: false, error: `unknown state method: ${String(method)}` };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 
 export function handleRunsMessage(
   audit: AuditState,
   method: 'last' | 'list',
-  filter: { automationId?: string; status?: 'ok' | 'error'; since?: number; limit?: number },
+  filter: {
+    automationId?: string;
+    status?: 'ok' | 'error';
+    since?: number;
+    limit?: number;
+  },
 ): CtxReply {
   try {
     // An automation's runs are the turns of its stable ref-keyed conversation.
@@ -398,6 +412,9 @@ export function handleRunsMessage(
     }
     return { ok: true, result: rows.map(toRef) };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
 }

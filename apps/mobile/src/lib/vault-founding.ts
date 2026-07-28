@@ -8,16 +8,17 @@
  */
 
 import { Platform } from 'react-native';
+
 import {
   generateSecretKey,
   isTunnelAvailable,
   startTunnel,
   stopTunnel,
 } from '../../modules/centraid-tunnel';
-import { getSecure, setSecure } from './secure-storage';
-import { LINK_SECRET_KEY, addSpace } from './spaces';
 import { hydratePhoneLink } from './phone-link';
 import { parsePairingInput } from './phone-link-parse';
+import { getSecure, setSecure } from './secure-storage';
+import { LINK_SECRET_KEY, addSpace } from './spaces';
 
 const INFO_PATH = '/centraid/_gateway/info';
 const INITIALIZE_PATH = '/centraid/_vault/vaults:initialize';
@@ -175,7 +176,9 @@ export async function rememberRestoredVaults(
   session: MobileFoundingSession,
   restored: MobileRestoreResult,
 ): Promise<void> {
-  for (const [index, report] of restored.reports.entries()) {
+  const rememberNext = async (index: number): Promise<void> => {
+    const report = restored.reports[index];
+    if (!report) return;
     const enrollment = restored.enrollments.find((row) => row.vaultId === report.vaultId);
     await addSpace({
       gatewayId: session.gatewayId,
@@ -185,5 +188,7 @@ export async function rememberRestoredVaults(
       vaultId: report.vaultId,
       vaultName: restored.reports.length === 1 ? 'Restored vault' : `Restored vault ${index + 1}`,
     });
-  }
+    return rememberNext(index + 1);
+  };
+  return rememberNext(0);
 }

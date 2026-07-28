@@ -18,6 +18,7 @@
 import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+
 import { defaultRunId, writeFlowVerdict } from '../../agent-e2e-shared/harness.mjs';
 import { DISMISS_KEYBOARD_ONBOARDING, skipOnboarding } from './first-run.mjs';
 import { metroReachable, prewarmMetroBundle } from './metro.mjs';

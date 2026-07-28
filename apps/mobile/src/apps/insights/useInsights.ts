@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { GatewayError, resolveGatewayBase } from '../../lib/gateway';
-import { subscribeSpaces } from '../../lib/spaces';
 import {
   fetchGatewayHealth,
   fetchInsightsSummary,
   type GatewayHealth,
   type InsightsSummary,
 } from '../../lib/insights';
+import { subscribeSpaces } from '../../lib/spaces';
 
 // The Insights screen mirrors TWO independent gateway surfaces — health
 // (gateway-wide) and usage (vault-scoped) — that can be available on different
@@ -62,7 +62,10 @@ async function loadInsights(setState: (next: InsightsState) => void): Promise<vo
   // Both failing is a real error (the gateway is reachable but answering
   // nothing useful) — surface it rather than an empty page.
   if (!health && !summary) {
-    setState({ kind: 'error', message: messageOf((healthRes as PromiseRejectedResult).reason) });
+    setState({
+      kind: 'error',
+      message: messageOf((healthRes as PromiseRejectedResult).reason),
+    });
     return;
   }
   setState({

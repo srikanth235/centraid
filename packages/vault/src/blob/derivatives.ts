@@ -156,7 +156,14 @@ function validateRaster(
   ) {
     throw new Error(`${variant} derivative has no plausible decodable dimensions`);
   }
-  return { variant, storage: 'cas', mediaType, byteSize: bytes.length, width, height };
+  return {
+    variant,
+    storage: 'cas',
+    mediaType,
+    byteSize: bytes.length,
+    width,
+    height,
+  };
 }
 
 function canonicalEmbedding(bytes: Buffer): string {
@@ -165,7 +172,9 @@ function canonicalEmbedding(bytes: Buffer): string {
     parsed = JSON.parse(decodeUtf8(bytes, 'embedding'));
   } catch (error) {
     if (error instanceof SyntaxError) {
-      throw new Error('embedding derivative must be valid JSON', { cause: error });
+      throw new Error('embedding derivative must be valid JSON', {
+        cause: error,
+      });
     }
     throw error;
   }

@@ -1,12 +1,14 @@
 import { useState, type JSX } from 'react';
+
 import type { CentraidGatewayDevice, GatewayVaultGrant } from '../../gateway-client.js';
-import Icon from '../ui/Icon.js';
 import { cx } from '../ui/cx.js';
-import buttonCss from '../ui/Button.module.css';
-import controlsCss from '../styles/controls.module.css';
-import styles from './DevicesCard.module.css';
-import DeviceRow, { ageLabel } from './DeviceRow.js';
+import Icon from '../ui/Icon.js';
 import { lastAdminSpace, roleLabel } from './device-roles.js';
+import DeviceRow, { ageLabel } from './DeviceRow.js';
+
+import controlsCss from '../styles/controls.module.css';
+import buttonCss from '../ui/Button.module.css';
+import styles from './DevicesCard.module.css';
 
 /*
  * One person and the devices acting as them (issue #599 L2 / Decision 10).

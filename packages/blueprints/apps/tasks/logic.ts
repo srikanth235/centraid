@@ -1,3 +1,4 @@
+import { BUCKETS, VIEW_BUCKETS, bucketFor, parseNlDue, plusDays, todayStr } from './format.ts';
 // Non-visual business logic: vault IO (write/act), the board-section
 // derivation, sidebar counts, the session activity log and parked-write
 // tracking. `createLogic` closes over app.tsx's own `state`/`data` (mutated
@@ -6,7 +7,6 @@
 // derivation helpers (`buildSections`/`sidebarCounts`/`todayProgress`) need
 // no closure and are exported standalone so components can call them too.
 import { debounce, outcomeMessage, toast } from './kit.ts';
-import { BUCKETS, VIEW_BUCKETS, bucketFor, parseNlDue, plusDays, todayStr } from './format.ts';
 import type {
   AppState,
   BoardData,
@@ -84,7 +84,11 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   ) {
     if (!taskId) return;
     const list = state.activityLog.get(taskId) ?? [];
-    list.unshift({ text, when: 'Today', receiptId: outcome?.receiptId ?? null });
+    list.unshift({
+      text,
+      when: 'Today',
+      receiptId: outcome?.receiptId ?? null,
+    });
     state.activityLog.set(taskId, list.slice(0, 20));
   }
 
@@ -179,7 +183,10 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   ): Promise<VaultOutcome | undefined | null> {
     const raw = String(title ?? '').trim();
     if (!raw) return null;
-    const outcome = await write('add', { title: raw, parent_task_id: parentTaskId });
+    const outcome = await write('add', {
+      title: raw,
+      parent_task_id: parentTaskId,
+    });
     if (outcome?.status === 'executed') {
       logActivity(parentTaskId, `Added subtask "${raw}"`, outcome);
       toast('Subtask added · receipt');
@@ -223,7 +230,10 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
         toast(`Completed “${task.title}”`, {
           undoLabel: 'Undo',
           onUndo: () => {
-            void write('set-status', { task_id: task.task_id, status: prevStatus });
+            void write('set-status', {
+              task_id: task.task_id,
+              status: prevStatus,
+            });
           },
         });
       }
@@ -242,13 +252,19 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
 
   async function cancelTask(task: Task): Promise<VaultOutcome | undefined> {
     const prevStatus = task.status;
-    const outcome = await write('set-status', { task_id: task.task_id, status: 'cancelled' });
+    const outcome = await write('set-status', {
+      task_id: task.task_id,
+      status: 'cancelled',
+    });
     if (outcome?.status === 'executed') {
       logActivity(task.task_id, 'Cancelled', outcome);
       toast(`Cancelled “${task.title}”`, {
         undoLabel: 'Undo',
         onUndo: () => {
-          void write('set-status', { task_id: task.task_id, status: prevStatus });
+          void write('set-status', {
+            task_id: task.task_id,
+            status: prevStatus,
+          });
         },
       });
     }
@@ -395,7 +411,15 @@ export function buildSections(
     if (searching) rows = rows.filter((t) => matched.has(t.task_id));
     return {
       sections: rows.length
-        ? [{ key: 'log', label: 'Logbook', tone: 'muted', count: rows.length, rows }]
+        ? [
+            {
+              key: 'log',
+              label: 'Logbook',
+              tone: 'muted',
+              count: rows.length,
+              rows,
+            },
+          ]
         : [],
       isEmpty: rows.length === 0,
     };
@@ -469,5 +493,8 @@ export function todayProgress(data: BoardData): TodayProgress {
   ).length;
   const total = doneToday + counts.today;
   const pct = total ? Math.round((doneToday / total) * 100) : 0;
-  return { pct, label: total === 0 ? 'Nothing due today' : `${doneToday} of ${total} done` };
+  return {
+    pct,
+    label: total === 0 ? 'Nothing due today' : `${doneToday} of ${total} done`,
+  };
 }

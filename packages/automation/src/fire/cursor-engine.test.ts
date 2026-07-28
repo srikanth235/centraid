@@ -1,7 +1,9 @@
+import path from 'node:path';
+
 import { AutomationTriggerStore, makeJournalDbProvider } from '@centraid/app-engine';
 import { tempDirSync } from '@centraid/test-kit/temp-dir';
-import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
+
 import type { Manifest } from '../manifest/manifest.js';
 import type { Row } from '../scaffold/app.js';
 import {
@@ -37,7 +39,7 @@ function row(ref: string, triggers: Manifest['triggers']): Row {
 
 function store(): AutomationTriggerStore {
   return new AutomationTriggerStore(
-    makeJournalDbProvider(join(tempDirSync('centraid-cursor-engine-'), 'journal.db')),
+    makeJournalDbProvider(path.join(tempDirSync('centraid-cursor-engine-'), 'journal.db')),
   );
 }
 
@@ -114,7 +116,9 @@ describe(VaultCursorEngine, () => {
 
     expect(fired).toStrictEqual([
       expect.objectContaining({
-        element: expect.objectContaining({ occurredAt: new Date(2026, 0, 1, 9, 0).getTime() }),
+        element: expect.objectContaining({
+          occurredAt: new Date(2026, 0, 1, 9, 0).getTime(),
+        }),
       }),
     ]);
     expect(cursors.getCursor('clock/daily', 0)?.positionJson).toBe(JSON.stringify(at.getTime()));
@@ -355,12 +359,12 @@ describe(VaultCursorEngine, () => {
       kind: 'condition' as const,
       entity: 'trigger_ingress',
     };
-    expect(() => assertTriggerCursorAllowed(denied)).toThrow(/loop-sensitive runtime table/);
+    expect(() => assertTriggerCursorAllowed(denied)).toThrow(/loop-sensitive runtime table/u);
     const engine = new VaultCursorEngine({
       fire: vi.fn<VaultCursorEngineOptions['fire']>(),
     });
     await expect(engine.reconcile([row('bad/loop', [denied])])).rejects.toThrow(
-      /loop-sensitive runtime table/,
+      /loop-sensitive runtime table/u,
     );
   });
 });

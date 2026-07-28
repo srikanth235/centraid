@@ -1,8 +1,9 @@
 // governance: allow-repo-hygiene file-size-limit (#406) trigger generation, cursor reads, and retention share one transactional log invariant
 import { createHash, randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import { listVaultEntities, resolveEntity } from '../schema/tables.js';
+
 import { REPLICA_SCHEMA_EPOCH } from '../schema/replica.js';
+import { listVaultEntities, resolveEntity } from '../schema/tables.js';
 import {
   formatReplicaCursor,
   parseReplicaCursor,
@@ -174,7 +175,9 @@ function normalizeSql(sql: string): string {
 }
 
 function sqliteSchemaVersion(vault: DatabaseSync): number {
-  const row = vault.prepare('PRAGMA schema_version').get() as { schema_version: number };
+  const row = vault.prepare('PRAGMA schema_version').get() as {
+    schema_version: number;
+  };
   return row.schema_version;
 }
 
@@ -409,7 +412,11 @@ export function bumpReplicaEpoch(
   const now = (options.now ?? new Date()).toISOString();
   vault.exec('BEGIN IMMEDIATE');
   try {
-    bumpReplicaEpochInTransaction(vault, { ...options, epoch, now: new Date(now) });
+    bumpReplicaEpochInTransaction(vault, {
+      ...options,
+      epoch,
+      now: new Date(now),
+    });
     vault.exec('COMMIT');
   } catch (error) {
     vault.exec('ROLLBACK');

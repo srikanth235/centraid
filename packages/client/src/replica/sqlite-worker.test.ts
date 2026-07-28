@@ -58,7 +58,7 @@ describe('sqlite-worker', () => {
       };
       expect(res.id).toBe(1);
       expect(res.ok).toBe(false);
-      expect(res.error?.message).toMatch(/not been opened|not initialized/i);
+      expect(res.error?.message).toMatch(/not been opened|not initialized/iu);
     });
   });
 });

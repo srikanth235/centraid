@@ -1,13 +1,15 @@
-import { useState, type JSX } from 'react';
 import type { IconName } from '@centraid/design-tokens';
+import { useState, type JSX } from 'react';
+
 import type { CentraidGatewayDevice } from '../../gateway-client.js';
-import Icon from '../ui/Icon.js';
-import { cx } from '../ui/cx.js';
 import { formatDuration } from '../shell/routes/gatewayData.js';
-import buttonCss from '../ui/Button.module.css';
-import controlsCss from '../styles/controls.module.css';
-import styles from './DevicesCard.module.css';
+import { cx } from '../ui/cx.js';
+import Icon from '../ui/Icon.js';
 import { lastAdminSpace } from './device-roles.js';
+
+import controlsCss from '../styles/controls.module.css';
+import buttonCss from '../ui/Button.module.css';
+import styles from './DevicesCard.module.css';
 
 /*
  * One hardware binding inside a person's group (issue #599).
@@ -28,9 +30,9 @@ export interface DeviceRowProps {
 
 export function platformGlyph(device: CentraidGatewayDevice): IconName {
   const platform = (device.platform ?? '').toLowerCase();
-  if (/ios|android|iphone|ipad|mobile|phone/.test(platform)) return 'Phone';
-  if (/web|browser|chrome|safari|firefox|edge/.test(platform)) return 'Globe';
-  if (/mac|win|linux|desktop|electron/.test(platform)) return 'Monitor';
+  if (/ios|android|iphone|ipad|mobile|phone/u.test(platform)) return 'Phone';
+  if (/web|browser|chrome|safari|firefox|edge/u.test(platform)) return 'Globe';
+  if (/mac|win|linux|desktop|electron/u.test(platform)) return 'Monitor';
   // Every gateway device is admitted by its iroh identity.
   return 'Globe';
 }
@@ -124,7 +126,7 @@ export default function DeviceRow({
           {lastSeen ? <span>active {lastSeen}</span> : <span data-quiet="true">never used</span>}
           {paired ? <span data-quiet="true">paired {paired}</span> : null}
         </div>
-        {device.grantProfile !== undefined ? (
+        {device.grantProfile === undefined ? null : (
           <div className={styles.grantProfile} aria-label="Companion module grants">
             <span>Companion</span>
             {device.grantProfile.length > 0 ? (
@@ -133,7 +135,7 @@ export default function DeviceRow({
               <span>no modules</span>
             )}
           </div>
-        ) : null}
+        )}
         {onUpdateCompute ? (
           <label className={styles.computeToggle}>
             <input

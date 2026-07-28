@@ -11,10 +11,12 @@
 // while `kit-viewer-nav`/`prev`/`next` are kit.css vocabulary (global).
 import { useEffect, useRef, useState } from 'react';
 import type { FC } from 'react';
+
 import { isRenderableUri, isVideoAsset } from '../format.ts';
 import { ChevronLeftIcon, ChevronRightIcon, CloseIcon, PauseIcon, PlayIcon } from '../icons.tsx';
 import { scopeAttr } from '../scopes.ts';
 import type { Asset } from '../types.ts';
+
 import styles from './Slideshow.module.css';
 
 const ADVANCE_MS = 4000;
@@ -50,7 +52,7 @@ export function SlideshowView({
     timerRef.current = setTimeout(() => step(1), ADVANCE_MS);
     return () => clearTimeout(timerRef.current);
     // (#360) `step`/`photos.length` are stable for the component's lifetime (the list is a snapshot passed in at open time)
-  }, [idx, paused]);
+  }, [idx, paused, step, photos.length]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -68,7 +70,7 @@ export function SlideshowView({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
     // (#360) `onClose`/`step` are stable for this mount (the whole tree remounts fresh on every openSlideshow() call)
-  }, []);
+  }, [step, onClose]);
 
   if (photos.length === 0) {
     return (

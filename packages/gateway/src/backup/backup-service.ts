@@ -6,10 +6,12 @@
  * manual runs and the scheduler intentionally share the same code path.
  */
 
+import { randomBytes } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { randomBytes } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
+
+import type { RuntimeLogger } from '@centraid/app-engine';
 import {
   BackupProviderError,
   createSnapshot,
@@ -46,27 +48,19 @@ import {
   type BackupPolicy,
   type RemoteTier,
 } from '@centraid/vault';
-import { warmPreviewTinies, type PreviewsWarmResult } from './restore-warm.js';
-import type { RuntimeLogger } from '@centraid/app-engine';
-import { type BackupConfig, type BackupProviderConfig } from './backup-config.js';
-import { discardWalFiles, drainWalFiles, pruneWalGenerations, walPairKey } from './wal-uploader.js';
-import {
-  deriveBackupSourceInstanceId,
-  loadBackupState,
-  opaqueLabel,
-  saveBackupState,
-  type BackupTargetState,
-} from './backup-state.js';
-import { RecoveryKitStateStore, type RecoveryKitState } from './recovery-kit-state.js';
-import { assembleSourceEntries, type AssembleOptions } from './backup-sources.js';
+
+import { GatewayDatabase } from '../serve/gateway-db.js';
 import type { HealthRegistry } from '../serve/health-registry.js';
-import type { VaultRegistry } from '../serve/vault-registry.js';
 import type { VaultPlane } from '../serve/vault-plane.js';
-import type { StorageConnectionStore } from './storage-connections.js';
+import type { VaultRegistry } from '../serve/vault-registry.js';
 import { GATEWAY_VERSION } from '../version.js';
 import { resolveBackupBackend } from './backup-backend.js';
+import {
+  failedCasOnlyReconciliation,
+  runCasOnlyReconciliation,
+} from './backup-cas-reconciliation.js';
+import { type BackupConfig, type BackupProviderConfig } from './backup-config.js';
 import { evaluateBackupHealth } from './backup-health.js';
-import { recoveryKitDocument } from './backup-recovery-kit.js';
 import {
   inspectProviderPolicy,
   providerPolicyFor,
@@ -79,12 +73,22 @@ import {
   runBackupReconciliation,
   type BackupReconciliationState,
 } from './backup-reconciliation.js';
+import { recoveryKitDocument } from './backup-recovery-kit.js';
+import { assembleSourceEntries, type AssembleOptions } from './backup-sources.js';
 import {
-  failedCasOnlyReconciliation,
-  runCasOnlyReconciliation,
-} from './backup-cas-reconciliation.js';
+  deriveBackupSourceInstanceId,
+  loadBackupState,
+  opaqueLabel,
+  saveBackupState,
+  type BackupTargetState,
+} from './backup-state.js';
+import { RecoveryKitStateStore, type RecoveryKitState } from './recovery-kit-state.js';
+import { warmPreviewTinies, type PreviewsWarmResult } from './restore-warm.js';
 import { snapshotReferencedBlobShas } from './snapshot-blob-roots.js';
-import { GatewayDatabase } from '../serve/gateway-db.js';
+import type { StorageConnectionStore } from './storage-connections.js';
+import { discardWalFiles, drainWalFiles, pruneWalGenerations, walPairKey } from './wal-uploader.js';
+
+export { type RecoveryKitState } from './recovery-kit-state.js';
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
@@ -119,6 +123,21 @@ function newestReconciliation(
   return Date.parse(first.checkedAt) >= Date.parse(second.checkedAt) ? first : second;
 }
 
+/**
+ * Backup runs share mutable target state and WAL generations, so later vault
+ * work must not start until the preceding vault has settled.
+ */
+function applyInOrder<T>(
+  values: Iterable<T>,
+  apply: (value: T, index: number) => void | PromiseLike<void>,
+): Promise<void> {
+  let index = 0;
+  return Array.from(values).reduce<Promise<void>>(
+    (sequence, value) => sequence.then(() => apply(value, index++)),
+    Promise.resolve(),
+  );
+}
+
 /** A materialized restore is a new replica history, never a continuation. */
 function invalidateRestoredReplica(destDir: string): void {
   const vault = new DatabaseSync(path.join(destDir, 'vault.db'));
@@ -132,7 +151,10 @@ function invalidateRestoredReplica(destDir: string): void {
 export function buildBackupProvider(config: BackupProviderConfig): BackupProvider {
   return config.kind === 'local'
     ? openLocalBackupProvider({ rootDir: config.dir })
-    : openRemoteBackupProvider({ baseUrl: config.endpoint, apiKey: config.apiKey });
+    : openRemoteBackupProvider({
+        baseUrl: config.endpoint,
+        apiKey: config.apiKey,
+      });
 }
 
 export interface BackupServiceOptions {
@@ -190,7 +212,9 @@ export interface BackupServiceOptions {
  * time-to-usable-grid a new device waited. `previewsWarm` is absent on a full
  * restore (no `lazy` option).
  */
-export type LazyRestoreResult = RestoreResult & { previewsWarm?: PreviewsWarmResult };
+export type LazyRestoreResult = RestoreResult & {
+  previewsWarm?: PreviewsWarmResult;
+};
 
 /**
  * The previews-first lazy restore option (issue #405 §5 / #439 R2): the remote
@@ -309,7 +333,10 @@ export class BackupService {
   /** The vault/kind currently executing inside `chain`, if any — read by
    *  `isRunning()` (the `_gateway/backup` route's `running` flag). */
   private activeRun:
-    | { vaultId: string; kind: 'backup' | 'verify' | 'restore-verify' | 'reconcile' }
+    | {
+        vaultId: string;
+        kind: 'backup' | 'verify' | 'restore-verify' | 'reconcile';
+      }
     | undefined;
 
   constructor(opts: BackupServiceOptions) {
@@ -346,7 +373,13 @@ export class BackupService {
   }
 
   private async backend(): Promise<
-    { provider: BackupProvider; providerRef: string; label: string; dynamic: boolean } | undefined
+    | {
+        provider: BackupProvider;
+        providerRef: string;
+        label: string;
+        dynamic: boolean;
+      }
+    | undefined
   > {
     return resolveBackupBackend({
       ...(this.config ? { config: this.config } : {}),
@@ -376,13 +409,19 @@ export class BackupService {
     if (cached && at - cached.at < HOME_DISCOVERY_TTL_MS) return cached.value;
     const caps = await backend.provider.capabilities();
     const value: HomeDiscovery = caps.backup
-      ? { retention: caps.backup.retention, restoreCostClass: caps.backup.restoreCostClass }
+      ? {
+          retention: caps.backup.retention,
+          restoreCostClass: caps.backup.restoreCostClass,
+        }
       : { retention: { kind: 'none' }, restoreCostClass: 'free-egress' };
     this.homeDiscoveryCache = { at, value };
     return value;
   }
 
-  private async probe(): Promise<{ status: 'ok' | 'degraded' | 'error'; detail?: string }> {
+  private async probe(): Promise<{
+    status: 'ok' | 'degraded' | 'error';
+    detail?: string;
+  }> {
     const state = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
     const backend = await this.backend();
     const backup = backend
@@ -525,12 +564,12 @@ export class BackupService {
 
   private async syncEnabledPolicies(): Promise<void> {
     const state = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
-    for (const plane of this.vaults.planesList()) {
+    await applyInOrder(this.vaults.planesList(), async (plane) => {
       const vaultId = plane.boot.vaultId;
-      if (!state.targets[vaultId]) continue;
+      if (!state.targets[vaultId]) return;
       this.attachSnapshotRoots(plane);
       await this.syncPolicy(vaultId);
-    }
+    });
   }
 
   /**
@@ -591,9 +630,9 @@ export class BackupService {
    */
   async runAll(): Promise<void> {
     this.assertRunning();
-    for (const plane of this.vaults.planesList()) {
+    await applyInOrder(this.vaults.planesList(), async (plane) => {
       await this.runBackup(plane.boot.vaultId);
-    }
+    });
   }
 
   /** Is a backup/verify run currently executing? Scoped to `vaultId` when
@@ -699,7 +738,9 @@ export class BackupService {
     if (shipStatus.foreignCheckpointCount > 0) {
       target.walForeignCheckpointCount = shipStatus.foreignCheckpointCount;
       if (shipStatus.lastForeignCheckpoint) {
-        target.walLastForeignCheckpoint = { ...shipStatus.lastForeignCheckpoint };
+        target.walLastForeignCheckpoint = {
+          ...shipStatus.lastForeignCheckpoint,
+        };
       }
     }
 
@@ -758,7 +799,10 @@ export class BackupService {
         plane,
         bundleDir,
         ...(walTipTickMs === undefined ? {} : { walTipTickMs }),
-        log: { info: (m) => this.logger.info(m), warn: (m) => this.logger.warn(m) },
+        log: {
+          info: (m) => this.logger.info(m),
+          warn: (m) => this.logger.warn(m),
+        },
       });
       const row = await this.snapshot({
         provider: backend.provider,
@@ -768,7 +812,10 @@ export class BackupService {
         entries,
         generation: target.generation,
         appMeta: this.appMetaFor(plane, state.sourceInstanceId),
-        log: { info: (m) => this.logger.info(m), warn: (m) => this.logger.warn(m) },
+        log: {
+          info: (m) => this.logger.info(m),
+          warn: (m) => this.logger.warn(m),
+        },
       });
       const completedAt = new Date(this.now()).toISOString();
       target.firstBackupAt ??= completedAt;
@@ -989,9 +1036,9 @@ export class BackupService {
   async verifyAll(): Promise<void> {
     this.assertRunning();
     const state = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
-    for (const plane of this.vaults.planesList()) {
+    await applyInOrder(this.vaults.planesList(), async (plane) => {
       if (state.targets[plane.boot.vaultId]) await this.runVerify(plane.boot.vaultId);
-    }
+    });
   }
 
   private async doRunVerify(vaultId: string): Promise<VerifySnapshotResult | undefined> {
@@ -1190,7 +1237,10 @@ export class BackupService {
           vaultUserVersion: String(VAULT_MIGRATIONS.length),
           ontologyVersion: ONTOLOGY_VERSION,
         },
-        log: { info: (m) => this.logger.info(m), warn: (m) => this.logger.warn(m) },
+        log: {
+          info: (m) => this.logger.info(m),
+          warn: (m) => this.logger.warn(m),
+        },
       });
       const report = verifyRestoredPair(destDir, this.keyStore.export(`${vaultId}.sealkey`));
       const problems: string[] = [];
@@ -1319,7 +1369,7 @@ export class BackupService {
     try {
       const rows = await provider.listSnapshots(targetId);
       const store = await provider.openDataPlane(targetId, 'backup', 'read');
-      for (const row of rows) {
+      await applyInOrder(rows, async (row) => {
         let generations = this.manifestGenerationCache.get(row.manifestHash);
         if (!generations) {
           const opened = openManifest(
@@ -1334,7 +1384,7 @@ export class BackupService {
           this.manifestGenerationCache.set(row.manifestHash, generations);
         }
         for (const gen of generations) anchored.add(gen);
-      }
+      });
     } catch (err) {
       this.logger.warn(
         `backup: could not read the registered manifests to confirm which generations they ` +
@@ -1380,19 +1430,19 @@ export class BackupService {
 
   private async doDrainPass(vaultIds?: ReadonlySet<string>): Promise<void> {
     const backend = await this.backend();
-    for (const plane of this.vaults.planesList()) {
+    await applyInOrder(this.vaults.planesList(), async (plane) => {
       if (this.stopped) return;
       const shipper = plane.walShipper;
-      if (!shipper) continue;
+      if (!shipper) return;
       const vaultId = plane.boot.vaultId;
-      if (vaultIds && !vaultIds.has(vaultId)) continue;
+      if (vaultIds && !vaultIds.has(vaultId)) return;
       if (!backend) {
         // Capture-then-discard: the shipper must keep ticking (its
         // rollovers bound the WALs now that autocheckpoint is off), so
         // without a provider its output is consumed by deletion — and the
         // stream is marked holed (see discardWalFiles).
         discardWalFiles(plane);
-        continue;
+        return;
       }
       try {
         // A stream holed by capture-then-discard must break to a fresh
@@ -1415,12 +1465,12 @@ export class BackupService {
             this.logger.warn(
               `backup: discarded WAL generation could not re-base cleanly; registration deferred`,
             );
-            continue;
+            return;
           }
         }
         let state = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
         let target = state.targets[vaultId];
-        if (target?.fenced) continue;
+        if (target?.fenced) return;
         const needsRegistration = !target || shipper.pendingBases().length > 0;
         if (needsRegistration) {
           // A new generation (or a first-ever backup) needs its manifest
@@ -1440,7 +1490,7 @@ export class BackupService {
             target = state.targets[vaultId];
           }
         }
-        if (!target || target.fenced) continue;
+        if (!target || target.fenced) return;
         this.assertTargetBackend(target, backend);
         const keyring = await this.ensureKeyring();
         const newPins: Record<string, number> = {};
@@ -1502,7 +1552,7 @@ export class BackupService {
             `${err instanceof Error ? err.message : String(err)}`,
         );
       }
-    }
+    });
   }
 
   // ── Scheduler ─────────────────────────────────────────────────────────
@@ -1624,12 +1674,12 @@ export class BackupService {
   async tick(): Promise<void> {
     if (this.stopped) return;
     const backupConfigured = (await this.backend()) !== undefined;
-    for (const plane of this.vaults.planesList()) {
+    await applyInOrder(this.vaults.planesList(), async (plane) => {
       const vaultId = plane.boot.vaultId;
       const policy = readBackupPolicy(plane.db.vault);
       let state = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
       let target = state.targets[vaultId];
-      if (target?.fenced) continue;
+      if (target?.fenced) return;
       // Keep the plane's blob sweep pinned to the retained-snapshot GC roots
       // (issue #436 §6) for every backup-configured vault — covers planes
       // mounted lazily after start, before their first scheduled backup.
@@ -1684,7 +1734,7 @@ export class BackupService {
           this.now() - Date.parse(latestReconciliation.checkedAt) >=
             policy.verifyEveryDays * DAY_MS);
       if (reconciliationDue) await this.runReconciliation(vaultId);
-    }
+    });
   }
 
   // ── CLI-facing reads ─────────────────────────────────────────────────
@@ -1869,7 +1919,10 @@ export class BackupService {
       // registry row still cannot carry (see backup-sources.ts). A blob the
       // remote lacks is NOT skipped: the snapshot is its only copy.
       ...(lazy ? { skipBlob: ({ sha }) => lazy.remote.store.has(sha) } : {}),
-      log: { info: (m) => this.logger.info(m), warn: (m) => this.logger.warn(m) },
+      log: {
+        info: (m) => this.logger.info(m),
+        warn: (m) => this.logger.warn(m),
+      },
       current: {
         gatewayVersion: GATEWAY_VERSION,
         // The running code's ceiling — a fresh restore has no live plane to
@@ -1891,7 +1944,10 @@ export class BackupService {
       startedAtMs: restoreCompleteMs,
       now: () => this.now(),
       ...(lazy.warmConcurrency === undefined ? {} : { concurrency: lazy.warmConcurrency }),
-      log: { info: (m) => this.logger.info(m), warn: (m) => this.logger.warn(m) },
+      log: {
+        info: (m) => this.logger.info(m),
+        warn: (m) => this.logger.warn(m),
+      },
     });
     return { ...result, previewsWarm };
   }
@@ -1983,5 +2039,3 @@ export class BackupService {
     return target;
   }
 }
-
-export type { RecoveryKitState };

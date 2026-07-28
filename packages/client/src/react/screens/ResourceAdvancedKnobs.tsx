@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
+
 import { cx } from '../ui/cx.js';
-import styles from './GatewayScreen.module.css';
-import buttonCss from '../ui/Button.module.css';
 import {
   knobPending,
   knobRowsFromProfile,
@@ -12,6 +11,9 @@ import {
   type ResourceProfileDTO,
   type TunableKnobKey,
 } from './resource-summary.js';
+
+import buttonCss from '../ui/Button.module.css';
+import styles from './GatewayScreen.module.css';
 
 // L3 "Tune" rung of the Resource card (issue #528 Phase F): advanced knobs the
 // owner can override. Collapsed by default (an aria-expanded button + region,

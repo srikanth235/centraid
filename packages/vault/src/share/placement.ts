@@ -29,9 +29,10 @@
 // handler path: a share spans two vault scopes, so it belongs beside that
 // path, not inside it.
 
-import { liveBlobShas } from '../blob/read.js';
-import type { LocalBlobStore } from '../blob/local.js';
 import type { DatabaseSync } from 'node:sqlite';
+
+import type { LocalBlobStore } from '../blob/local.js';
+import { liveBlobShas } from '../blob/read.js';
 import { VaultShareError } from '../errors.js';
 import { placeBlob, type BlobPlacement } from './blobs.js';
 import { projectShareClosure, readShareClosure, type ShareableItemType } from './closure.js';

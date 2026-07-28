@@ -11,10 +11,10 @@
 // @ts-nocheck
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+
 import { describe, expect, test } from 'vitest';
 
-const here = path.dirname(fileURLToPath(import.meta.url));
+const here = import.meta.dirname;
 const appsRoot = path.resolve(here, '../apps');
 
 // Underscore-prefixed dirs under `apps/` are shared modules imported by several
@@ -87,27 +87,31 @@ describe('blueprint handler invoke smoke', () => {
       const queries = manifest.queries ?? [];
       expect(actions.length + queries.length).toBeGreaterThan(0);
 
-      for (const action of actions) {
-        const file = handlerPath(appId, 'actions', action.name);
-        expect(file, `${appId} action ${action.name} missing handler file`).toBeTruthy();
-        const mod = await importHandler(file!);
-        expect(mod.default).toBeTypeOf('function');
-      }
+      await Promise.all(
+        actions.map(async (action) => {
+          const file = handlerPath(appId, 'actions', action.name);
+          expect(file, `${appId} action ${action.name} missing handler file`).toBeTruthy();
+          const mod = await importHandler(file!);
+          expect(mod.default).toBeTypeOf('function');
+        }),
+      );
 
-      for (const query of queries) {
-        const file = handlerPath(appId, 'queries', query.name);
-        expect(file, `${appId} query ${query.name} missing handler file`).toBeTruthy();
-        const mod = await importHandler(file!);
-        expect(mod.default).toBeTypeOf('function');
-        // Invoke with an empty vault. Handlers may return empty projections or
-        // throw on missing required input — both prove the export is the real
-        // callable. A non-function default never gets here.
-        try {
-          await mod.default({ input: {}, query: {}, ctx: emptyCtx() });
-        } catch {
-          // Expected for handlers that require specific input fields.
-        }
-      }
+      await Promise.all(
+        queries.map(async (query) => {
+          const file = handlerPath(appId, 'queries', query.name);
+          expect(file, `${appId} query ${query.name} missing handler file`).toBeTruthy();
+          const mod = await importHandler(file!);
+          expect(mod.default).toBeTypeOf('function');
+          // Invoke with an empty vault. Handlers may return empty projections or
+          // throw on missing required input — both prove the export is the real
+          // callable. A non-function default never gets here.
+          try {
+            await mod.default({ input: {}, query: {}, ctx: emptyCtx() });
+          } catch {
+            // Expected for handlers that require specific input fields.
+          }
+        }),
+      );
     },
   );
 });

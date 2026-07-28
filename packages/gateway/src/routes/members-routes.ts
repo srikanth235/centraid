@@ -17,7 +17,9 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
+
 import { AUTHED_DEVICE_HEADER } from '@centraid/app-engine';
+
 import type { RouteHandler } from '../serve/build-gateway.js';
 import type { DeviceEnrollment, EnrollmentStore } from '../serve/enrollment-store.js';
 import type { Member } from '../serve/member-store.js';
@@ -175,9 +177,7 @@ export function makeMembersRouteHandler(deps: MembersRouteDeps): RouteHandler {
     const removed = deps.enrollments.removeMember(member.memberId);
     await deps.onRevoked?.(removed);
     const deadEndpoints = new Set(removed.map((row) => row.endpointId));
-    for (const endpointId of deadEndpoints) {
-      await deps.onEndpointRevoked?.(endpointId);
-    }
+    await Promise.all([...deadEndpoints].map((endpointId) => deps.onEndpointRevoked?.(endpointId)));
     return sendJson(res, 200, {
       removed: true,
       memberId: member.memberId,

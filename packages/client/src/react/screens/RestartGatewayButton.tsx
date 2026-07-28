@@ -1,8 +1,10 @@
 import { useState, type JSX } from 'react';
-import Icon from '../ui/Icon.js';
+
 import { cx } from '../ui/cx.js';
-import buttonCss from '../ui/Button.module.css';
+import Icon from '../ui/Icon.js';
+
 import controlsCss from '../styles/controls.module.css';
+import buttonCss from '../ui/Button.module.css';
 import styles from './GatewayScreen.module.css';
 
 /**

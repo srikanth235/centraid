@@ -1,19 +1,21 @@
-import { useState, type JSX } from 'react';
 import { palette, tileFinish } from '@centraid/design-tokens';
 import type { ColorHex, IconName } from '@centraid/design-tokens';
-import { Icon, KindBadge } from '../ui/index.js';
+import { useState, type JSX } from 'react';
+
+import { INTEGRATION_HUES } from '../format.js';
 import type {
   DiscoverBridgeProps,
   DiscoverMenuAnchor,
   DiscoverTemplate,
 } from '../screen-contracts.js';
-import { INTEGRATION_HUES } from '../format.js';
-import styles from './DiscoverScreen.module.css';
 import { cx } from '../ui/cx.js';
-import emptyCss from '../styles/pageEmpty.module.css';
+import { Icon, KindBadge } from '../ui/index.js';
+
 import au from '../styles/automation.module.css';
 import libCss from '../styles/library.module.css';
 import mainScrollCss from '../styles/mainScroll.module.css';
+import emptyCss from '../styles/pageEmpty.module.css';
+import styles from './DiscoverScreen.module.css';
 
 type Kind = 'all' | 'app' | 'automation';
 type Layout = 'tiles' | 'rows';
@@ -83,7 +85,9 @@ function IntegrationDots({ names }: { names: readonly string[] }): JSX.Element {
           key={name}
           className={au.auOvDot}
           title={name}
-          style={{ background: `var(--c-${INTEGRATION_HUES[name] ?? 'slate'})` }}
+          style={{
+            background: `var(--c-${INTEGRATION_HUES[name] ?? 'slate'})`,
+          }}
         />
       ))}
       {names.length > 4 ? <span className={au.auOvDotMore}>{`+${names.length - 4}`}</span> : null}
@@ -198,7 +202,12 @@ export default function DiscoverScreen({
 
   const segDefs = [
     { k: 'all' as const, label: 'All', count: all.length, icon: null },
-    { k: 'app' as const, label: 'Apps', count: appTemplates.length, icon: 'Home' as IconName },
+    {
+      k: 'app' as const,
+      label: 'Apps',
+      count: appTemplates.length,
+      icon: 'Home' as IconName,
+    },
     {
       k: 'automation' as const,
       label: 'Automations',

@@ -113,7 +113,10 @@ export async function persistAssistantSelection(
     await saveAssistantSelection(runnerKind, kind, value);
     return { ok: true };
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
   }
 }
 
@@ -318,7 +321,12 @@ export function useAssistant(): AssistantController {
     setBubbles((current) =>
       current.map((bubble) =>
         bubble.key === key
-          ? { ...bubble, pending: false, error: true, text: 'Not sent to the provider.' }
+          ? {
+              ...bubble,
+              pending: false,
+              error: true,
+              text: 'Not sent to the provider.',
+            }
           : bubble,
       ),
     );

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { errorText, moduleAvailability, unwrapPopupEnvelope } from './popup-core.js';
 import type { ModuleStatus } from './types.js';
 

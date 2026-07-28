@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import {
   approvalBadgeForState,
   approvalBadgeText,
@@ -39,7 +40,10 @@ describe('isLockerFillMessage / shouldCaptureContextMenu', () => {
 
   it('only captures the quick-task menu on a tab with a URL', () => {
     expect(
-      shouldCaptureContextMenu({ menuItemId: 'centraid-quick-task', tabUrl: 'https://x' }),
+      shouldCaptureContextMenu({
+        menuItemId: 'centraid-quick-task',
+        tabUrl: 'https://x',
+      }),
     ).toBe(true);
     expect(shouldCaptureContextMenu({ menuItemId: 'other', tabUrl: 'https://x' })).toBe(false);
     expect(shouldCaptureContextMenu({ menuItemId: 'centraid-quick-task' })).toBe(false);

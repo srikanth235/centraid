@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+
 import { resolveToken } from './auth.ts';
 
 describe('auth', () => {
@@ -18,7 +19,9 @@ describe('auth', () => {
   test('resolveToken falls back to CENTRAID_GATEWAY_TOKEN (the daemon loopback secret)', () => {
     // Issue #505 phase 7: there is no on-disk token.bin to auto-read; an operator
     // reuses the loopback secret the daemon was started with.
-    const token = resolveToken({ env: { CENTRAID_GATEWAY_TOKEN: 'gw-secret' } });
+    const token = resolveToken({
+      env: { CENTRAID_GATEWAY_TOKEN: 'gw-secret' },
+    });
     expect(token).toBe('gw-secret');
   });
 

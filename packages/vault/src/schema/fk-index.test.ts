@@ -9,7 +9,9 @@
 // rowid table's TEXT PRIMARY KEY / UNIQUE constraint, or a WITHOUT ROWID
 // table's own PRIMARY KEY.
 import { DatabaseSync } from 'node:sqlite';
+
 import { describe, expect, test } from 'vitest';
+
 import { openVaultDb } from '../db.js';
 
 interface UncoveredFk {
@@ -45,7 +47,9 @@ function findUncoveredForeignKeys(db: DatabaseSync): UncoveredFk[] {
       .sort((a, b) => a.pk - b.pk)
       .map((c) => c.name);
 
-    const indexList = db.prepare(`PRAGMA index_list(${table})`).all() as { name: string }[];
+    const indexList = db.prepare(`PRAGMA index_list(${table})`).all() as {
+      name: string;
+    }[];
     const indexColumnSets: IndexColumns[] = indexList.map((idx) => {
       const info = db.prepare(`PRAGMA index_info(${idx.name})`).all() as {
         name: string | null;

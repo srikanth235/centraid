@@ -1,11 +1,18 @@
-import { tempDirSync } from '@centraid/test-kit/temp-dir';
-import http from 'node:http';
-import { AddressInfo } from 'node:net';
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { Readable } from 'node:stream';
+import http from 'node:http';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { AddressInfo } from 'node:net';
+import path from 'node:path';
+import { Readable } from 'node:stream';
+
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
+import {
+  DEVICE_IDENTITY_HEADER,
+  DEVICE_PROOF_HEADER,
+  TUNNEL_FORWARDED_HEADER,
+} from '@centraid/tunnel';
 import { afterEach, describe, expect, it, test } from 'vitest';
+
 import {
   writeFileMap,
   readFileMap,
@@ -17,11 +24,6 @@ import {
   isDirectHostRequest,
   isLoopbackRequest,
 } from './route-helpers.js';
-import {
-  DEVICE_IDENTITY_HEADER,
-  DEVICE_PROOF_HEADER,
-  TUNNEL_FORWARDED_HEADER,
-} from '@centraid/tunnel';
 
 function tmp(): string {
   return tempDirSync('centraid-route-helpers-');
@@ -32,7 +34,10 @@ function mockReq(body: string | Buffer): IncomingMessage {
   return Readable.from([buf]) as unknown as IncomingMessage;
 }
 
-function mockRes(): { res: ServerResponse; out: { status: number; body: string } } {
+function mockRes(): {
+  res: ServerResponse;
+  out: { status: number; body: string };
+} {
   const out = { status: 0, body: '' };
   const res = {
     statusCode: 0,
@@ -48,10 +53,12 @@ function mockRes(): { res: ServerResponse; out: { status: number; body: string }
 const servers: http.Server[] = [];
 describe('route-helpers', () => {
   afterEach(async () => {
-    while (servers.length > 0) {
-      const server = servers.pop()!;
-      await new Promise<void>((resolve) => server.close(() => resolve()));
-    }
+    await Promise.all(
+      servers
+        .splice(0)
+        .toReversed()
+        .map((server) => new Promise<void>((resolve) => server.close(() => resolve()))),
+    );
   });
 
   async function endpoint(body: unknown): Promise<string> {
@@ -64,8 +71,15 @@ describe('route-helpers', () => {
   }
 
   test('gateway-native JSON compresses large responses asynchronously (#456 C8)', async () => {
-    const body = { rows: Array.from({ length: 500 }, (_, id) => ({ id, title: `row-${id}` })) };
-    const response = await fetch(await endpoint(body), { headers: { 'accept-encoding': 'br' } });
+    const body = {
+      rows: Array.from({ length: 500 }, (_, id) => ({
+        id,
+        title: `row-${id}`,
+      })),
+    };
+    const response = await fetch(await endpoint(body), {
+      headers: { 'accept-encoding': 'br' },
+    });
     expect(response.headers.get('content-encoding')).toBe('br');
     expect(response.headers.get('vary')).toContain('Accept-Encoding');
     await expect(response.json()).resolves.toStrictEqual(body);
@@ -80,7 +94,12 @@ describe('route-helpers', () => {
   });
 
   test('encoding negotiation honors explicit q=0 exclusions', async () => {
-    const body = { rows: Array.from({ length: 500 }, (_, id) => ({ id, title: `row-${id}` })) };
+    const body = {
+      rows: Array.from({ length: 500 }, (_, id) => ({
+        id,
+        title: `row-${id}`,
+      })),
+    };
     const response = await fetch(await endpoint(body), {
       headers: { 'accept-encoding': 'br;q=0, gzip;q=0.7' },
     });
@@ -97,7 +116,7 @@ describe('route-helpers', () => {
         { path: 'blob.bin', content: 'not-editable' },
         { path: '.secret', content: 'dotfile' },
       ]);
-      expect(readFileSync(join(dir, 'nested/app.js'), 'utf8')).toBe('export const x = 1;');
+      expect(readFileSync(path.join(dir, 'nested/app.js'), 'utf8')).toBe('export const x = 1;');
       const map = await readFileMap(dir);
       // Sorted, text-only, no dotfiles or non-editable extensions.
       expect(map.map((f) => f.path)).toStrictEqual(['index.html', 'nested/app.js']);
@@ -106,12 +125,12 @@ describe('route-helpers', () => {
     it('refuses to write outside the app dir', async () => {
       const dir = tmp();
       await expect(writeFileMap(dir, [{ path: '../escape.ts', content: 'x' }])).rejects.toThrow(
-        /outside the app/,
+        /outside the app/u,
       );
     });
 
     it('reads a missing dir as an empty map', async () => {
-      await expect(readFileMap(join(tmp(), 'does-not-exist'))).resolves.toStrictEqual([]);
+      await expect(readFileMap(path.join(tmp(), 'does-not-exist'))).resolves.toStrictEqual([]);
     });
   });
 
@@ -127,7 +146,10 @@ describe('route-helpers', () => {
       const { res, out } = mockRes();
       sendError(res, new Error('kaboom'));
       expect(out.status).toBe(500);
-      expect(JSON.parse(out.body)).toStrictEqual({ error: 'internal_error', message: 'kaboom' });
+      expect(JSON.parse(out.body)).toStrictEqual({
+        error: 'internal_error',
+        message: 'kaboom',
+      });
     });
 
     it('sendError stringifies a non-Error throw', () => {
@@ -143,11 +165,13 @@ describe('route-helpers', () => {
     });
 
     it('throws when the body exceeds the cap', async () => {
-      await expect(readBody(mockReq('way too long'), 4)).rejects.toThrow(/too large/);
+      await expect(readBody(mockReq('way too long'), 4)).rejects.toThrow(/too large/u);
     });
 
     it('parses a JSON object body', async () => {
-      await expect(readJson(mockReq('{"a":1}'))).resolves.toStrictEqual({ a: 1 });
+      await expect(readJson(mockReq('{"a":1}'))).resolves.toStrictEqual({
+        a: 1,
+      });
     });
 
     it('returns {} for an empty body', async () => {
@@ -155,7 +179,7 @@ describe('route-helpers', () => {
     });
 
     it('rejects a non-object JSON body', async () => {
-      await expect(readJson(mockReq('[1,2,3]'))).rejects.toThrow(/must be a JSON object/);
+      await expect(readJson(mockReq('[1,2,3]'))).rejects.toThrow(/must be a JSON object/u);
     });
   });
 
@@ -163,8 +187,8 @@ describe('route-helpers', () => {
     it('is true for a file and false for a missing path', async () => {
       const dir = tmp();
       await writeFileMap(dir, [{ path: 'a.txt', content: 'x' }]);
-      await expect(fileExists(join(dir, 'a.txt'))).resolves.toBe(true);
-      await expect(fileExists(join(dir, 'nope.txt'))).resolves.toBe(false);
+      await expect(fileExists(path.join(dir, 'a.txt'))).resolves.toBe(true);
+      await expect(fileExists(path.join(dir, 'nope.txt'))).resolves.toBe(false);
     });
   });
 
@@ -217,7 +241,9 @@ describe('route-helpers', () => {
     it('is strictly stronger than the bare-loopback gate it replaced', () => {
       // The pre-#566 gate that `buildGateway` still fell back to for the
       // embedded desktop (item B) said yes to exactly this request.
-      const forwarded = fakeRequest('127.0.0.1', { [TUNNEL_FORWARDED_HEADER]: '1' });
+      const forwarded = fakeRequest('127.0.0.1', {
+        [TUNNEL_FORWARDED_HEADER]: '1',
+      });
       expect(isLoopbackRequest(forwarded)).toBe(true);
       expect(isDirectHostRequest(forwarded)).toBe(false);
     });

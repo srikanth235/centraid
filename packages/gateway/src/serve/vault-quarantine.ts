@@ -30,6 +30,7 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+
 import type { RuntimeLogger } from '@centraid/app-engine';
 import type { VaultDb } from '@centraid/vault';
 

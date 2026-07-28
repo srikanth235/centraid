@@ -1,7 +1,8 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, type Mock, vi } from 'vitest';
-import type { AutomationEditorBridgeProps, AutomationEditorData } from '../screen-contracts.js';
+
+import type { AutomationEditorBridgeProps } from '../screen-contracts.js';
 import AutomationEditorScreen from './AutomationEditorScreen.js';
 import { addTrigger, makeData, makeProps } from './automationEditorTestKit.js';
 
@@ -124,7 +125,7 @@ describe('AutomationEditorTriggers', () => {
       container = null;
 
       const props = makeProps({
-        loadData: vi.fn().mockResolvedValue(
+        loadData: vi.fn<AutomationEditorBridgeProps['loadData']>().mockResolvedValue(
           makeData({
             automationId: 'a/x',
             mode: 'edit',
@@ -180,7 +181,7 @@ describe('AutomationEditorTriggers', () => {
       // Condition is no longer addable from the form; authoring still works for
       // automations that already carry a condition trigger.
       const props = makeProps({
-        loadData: vi.fn().mockResolvedValue(
+        loadData: vi.fn<AutomationEditorBridgeProps['loadData']>().mockResolvedValue(
           makeData({
             automationId: 'a/x',
             mode: 'edit',
@@ -252,7 +253,9 @@ describe('AutomationEditorTriggers', () => {
 
     const KINDS = ['core.transaction', 'core.event', 'billing.invoice'];
 
-    async function mountWithDataTrigger(loadEntityTypes: Mock<() => Promise<string[]>>): Promise<{
+    async function mountWithDataTrigger(
+      loadEntityTypes: Mock<NonNullable<AutomationEditorBridgeProps['loadEntityTypes']>>,
+    ): Promise<{
       el: HTMLDivElement;
       input: HTMLInputElement;
     }> {
@@ -271,7 +274,9 @@ describe('AutomationEditorTriggers', () => {
       [...el.querySelectorAll('.mentionOption span')].map((s) => s.textContent ?? '');
 
     it('fetches entity kinds lazily the first time a data trigger appears', async () => {
-      const loadEntityTypes = vi.fn().mockResolvedValue(KINDS);
+      const loadEntityTypes = vi
+        .fn<NonNullable<AutomationEditorBridgeProps['loadEntityTypes']>>()
+        .mockResolvedValue(KINDS);
       const { el } = await mountNamed({ loadEntityTypes });
       expect(loadEntityTypes).not.toHaveBeenCalled();
       await addTrigger(el, 'Data change');
@@ -283,7 +288,9 @@ describe('AutomationEditorTriggers', () => {
     });
 
     it('filters kinds client-side as the user types, capped to the query', async () => {
-      const loadEntityTypes = vi.fn().mockResolvedValue(KINDS);
+      const loadEntityTypes = vi
+        .fn<NonNullable<AutomationEditorBridgeProps['loadEntityTypes']>>()
+        .mockResolvedValue(KINDS);
       const { el, input } = await mountWithDataTrigger(loadEntityTypes);
       setValue(input, 'core');
       expect(optionLabels(el)).toStrictEqual(['core.transaction', 'core.event']);
@@ -292,7 +299,9 @@ describe('AutomationEditorTriggers', () => {
     });
 
     it('keyboard-navigates and accepts a kind into the input (Enter)', async () => {
-      const loadEntityTypes = vi.fn().mockResolvedValue(KINDS);
+      const loadEntityTypes = vi
+        .fn<NonNullable<AutomationEditorBridgeProps['loadEntityTypes']>>()
+        .mockResolvedValue(KINDS);
       const { el, input } = await mountWithDataTrigger(loadEntityTypes);
       setValue(input, 'core');
       keydown(input, 'ArrowDown');
@@ -302,7 +311,9 @@ describe('AutomationEditorTriggers', () => {
     });
 
     it('Escape dismisses the picker without changing the input', async () => {
-      const loadEntityTypes = vi.fn().mockResolvedValue(KINDS);
+      const loadEntityTypes = vi
+        .fn<NonNullable<AutomationEditorBridgeProps['loadEntityTypes']>>()
+        .mockResolvedValue(KINDS);
       const { el, input } = await mountWithDataTrigger(loadEntityTypes);
       setValue(input, 'core');
       expect(el.querySelector('.mentionPopover')).not.toBeNull();
@@ -312,7 +323,9 @@ describe('AutomationEditorTriggers', () => {
     });
 
     it('completes only the trailing comma segment for the data input', async () => {
-      const loadEntityTypes = vi.fn().mockResolvedValue(KINDS);
+      const loadEntityTypes = vi
+        .fn<NonNullable<AutomationEditorBridgeProps['loadEntityTypes']>>()
+        .mockResolvedValue(KINDS);
       const { input } = await mountWithDataTrigger(loadEntityTypes);
       setValue(input, 'core.transaction, bill');
       keydown(input, 'Enter');
@@ -320,10 +333,12 @@ describe('AutomationEditorTriggers', () => {
     });
 
     it('accepts a kind by click for a loaded condition entity input', async () => {
-      const loadEntityTypes = vi.fn().mockResolvedValue(KINDS);
+      const loadEntityTypes = vi
+        .fn<NonNullable<AutomationEditorBridgeProps['loadEntityTypes']>>()
+        .mockResolvedValue(KINDS);
       const el = await mount(
         makeProps({
-          loadData: vi.fn().mockResolvedValue(
+          loadData: vi.fn<AutomationEditorBridgeProps['loadData']>().mockResolvedValue(
             makeData({
               automationId: 'a/x',
               mode: 'edit',

@@ -4,6 +4,7 @@
  */
 
 import { afterEach, describe, expect, test, vi } from 'vitest';
+
 import { main } from './cli.ts';
 
 describe('cli.branches', () => {
@@ -67,27 +68,27 @@ describe('cli.branches', () => {
   test('missing command and unknown command exit 2 with usage / error', async () => {
     const empty = await runCli([]);
     expect(empty.code).toBe(2);
-    expect(empty.stderr).toMatch(/Usage:/);
+    expect(empty.stderr).toMatch(/Usage:/u);
 
     const unknown = await runCli(['stream', '--url', 'http://x']);
     expect(unknown.code).toBe(2);
-    expect(unknown.stderr).toMatch(/unknown command 'stream'/);
+    expect(unknown.stderr).toMatch(/unknown command 'stream'/u);
   });
 
   test('--url is required', async () => {
     const r = await runCli(['status']);
     expect(r.code).toBe(2);
-    expect(r.stderr).toMatch(/--url is required/);
+    expect(r.stderr).toMatch(/--url is required/u);
   });
 
   test('--help and --version short-circuit', async () => {
     const help = await runCli(['--help']);
     expect(help.code).toBe(2);
-    expect(help.stderr).toMatch(/Usage:/);
+    expect(help.stderr).toMatch(/Usage:/u);
 
     const ver = await runCli(['--version']);
     expect(ver.code).toBe(0);
-    expect(ver.stdout.trim()).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(ver.stdout.trim()).toMatch(/^\d+\.\d+\.\d+$/u);
   });
 
   function jsonResponse(status: number, body: unknown) {
@@ -101,7 +102,7 @@ describe('cli.branches', () => {
   }
 
   test('health fails on non-2xx; list fails on 401 and other non-2xx', async () => {
-    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchImpl = vi.fn<typeof fetch>(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.includes('/health')) return jsonResponse(503, { error: 'down' });
       if (url.includes('/_apps')) return jsonResponse(401, { error: 'unauthorized' });
@@ -115,11 +116,11 @@ describe('cli.branches', () => {
 
     const health = await runCli(['health', '--url', 'http://gw', '--token', 't']);
     expect(health.code).toBe(1);
-    expect(health.stderr).toMatch(/health HTTP 503/);
+    expect(health.stderr).toMatch(/health HTTP 503/u);
 
     const list401 = await runCli(['list', '--url', 'http://gw', '--token', 't']);
     expect(list401.code).toBe(1);
-    expect(list401.stderr).toMatch(/unauthorized/);
+    expect(list401.stderr).toMatch(/unauthorized/u);
 
     fetchImpl.mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input);
@@ -128,7 +129,7 @@ describe('cli.branches', () => {
     });
     const list500 = await runCli(['list', '--url', 'http://gw', '--token', 't']);
     expect(list500.code).toBe(1);
-    expect(list500.stderr).toMatch(/list HTTP 500/);
+    expect(list500.stderr).toMatch(/list HTTP 500/u);
   });
 
   test('status fails when handshake refuses protocol', async () => {
@@ -144,6 +145,6 @@ describe('cli.branches', () => {
     );
     const r = await runCli(['status', '--url', 'http://gw', '--token', 't']);
     expect(r.code).toBe(1);
-    expect(r.stderr).toMatch(/protocol/);
+    expect(r.stderr).toMatch(/protocol/u);
   });
 });

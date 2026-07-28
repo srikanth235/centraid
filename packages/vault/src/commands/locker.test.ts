@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, test } from 'vitest';
+
 import { bootstrapVault, createGrant, enrollApp, type BootstrapResult } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { createGateway, Gateway } from '../gateway/gateway.js';
-import { isSealedValue, sealAad, unsealValue } from '../schema/sealed.js';
 import type { Credential, InvokeOutcome } from '../gateway/types.js';
+import { isSealedValue, sealAad, unsealValue } from '../schema/sealed.js';
 import { LOCKER_ITEM_TYPE, registerLockerCommands } from './locker.js';
 import { FLAGS_SCHEME_URI, STARRED_NOTATION, taggedNotationCount } from './people-test-kit.js';
 
@@ -18,11 +19,19 @@ describe('locker', () => {
     boot = bootstrapVault(db, { ownerName: 'Alex' });
     gw = createGateway(db);
     registerLockerCommands(gw);
-    owner = { kind: 'device', deviceId: boot.deviceId, deviceKey: boot.deviceKey };
+    owner = {
+      kind: 'device',
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+    };
   });
 
   function invoke(command: string, input: Record<string, unknown>) {
-    return gw.invoke(owner, { command, input, purpose: 'dpv:ServiceProvision' });
+    return gw.invoke(owner, {
+      command,
+      input,
+      purpose: 'dpv:ServiceProvision',
+    });
   }
   function out<T = Record<string, unknown>>(o: ReturnType<typeof invoke>): T {
     expect(o.status).toBe('executed');
@@ -88,7 +97,12 @@ describe('locker', () => {
   test('login origin matching policy is explicit and editable', () => {
     const id = addLogin({ url_match_policy: 'exact-host' });
     expect(row(id)?.url_match_policy).toBe('exact-host');
-    out(invoke('locker.edit_item', { item_id: id, url_match_policy: 'registrable-domain' }));
+    out(
+      invoke('locker.edit_item', {
+        item_id: id,
+        url_match_policy: 'registrable-domain',
+      }),
+    );
     expect(row(id)?.url_match_policy).toBe('registrable-domain');
   });
 
@@ -163,7 +177,11 @@ describe('locker', () => {
       grantedByPartyId: boot.ownerPartyId,
       scopes: [{ schema: 'locker', verbs: 'read+act' }],
     });
-    const appCred: Credential = { kind: 'app', appId: app.appId, signingKey: app.signingKey };
+    const appCred: Credential = {
+      kind: 'app',
+      appId: app.appId,
+      signingKey: app.signingKey,
+    };
     const outcome: InvokeOutcome = gw.invoke(appCred, {
       command: 'locker.purge_item',
       input: { item_id: id },
@@ -219,16 +237,30 @@ describe('locker', () => {
       'failed',
     );
     expect(
-      invoke('locker.add_item', { type: 'login', title: 'X', connection_id: 'ghost' }).status,
+      invoke('locker.add_item', {
+        type: 'login',
+        title: 'X',
+        connection_id: 'ghost',
+      }).status,
     ).toBe('failed');
   });
 
   test('tags are shared SKOS concepts — two items reuse one concept', () => {
     const a = out<{ item_id: string }>(
-      invoke('locker.add_item', { type: 'note', title: 'A', content: 'x', tags: ['work'] }),
+      invoke('locker.add_item', {
+        type: 'note',
+        title: 'A',
+        content: 'x',
+        tags: ['work'],
+      }),
     ).item_id;
     const b = out<{ item_id: string }>(
-      invoke('locker.add_item', { type: 'note', title: 'B', content: 'y', tags: ['work', 'dev'] }),
+      invoke('locker.add_item', {
+        type: 'note',
+        title: 'B',
+        content: 'y',
+        tags: ['work', 'dev'],
+      }),
     ).item_id;
     expect(tagsOf(a)).toStrictEqual(['work']);
     expect(tagsOf(b)).toStrictEqual(['dev', 'work']);
@@ -244,7 +276,12 @@ describe('locker', () => {
 
   test('set_memo writes the canonical annotation; the item title is searchable (#310 C6)', () => {
     const id = addLogin();
-    out(invoke('locker.set_memo', { item_id: id, note: 'rotated after the breach' }));
+    out(
+      invoke('locker.set_memo', {
+        item_id: id,
+        note: 'rotated after the breach',
+      }),
+    );
     const memo = db.vault
       .prepare(
         `SELECT body_text FROM knowledge_annotation WHERE target_type = 'locker.item' AND target_id = ?`,

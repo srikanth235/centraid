@@ -6,12 +6,13 @@
  * still sitting in `trigger_ingress`.
  */
 
-import { describe, expect, test } from 'vitest';
 import type {
   AutomationTriggerStore,
   PruneIngressResult,
   TriggerIngressRecord,
 } from '@centraid/app-engine';
+import { describe, expect, test } from 'vitest';
+
 import { ingressRetentionGap, readIngressCursor } from './trigger-ingress-cursor.js';
 
 const NOW = 5_000;

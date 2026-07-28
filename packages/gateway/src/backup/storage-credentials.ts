@@ -19,8 +19,9 @@ import {
   type S3Grant,
 } from '@centraid/backup';
 import type { BlobStoreSettings, S3Credentials } from '@centraid/vault';
-import { StorageConnectionError, type StorageConnectionStore } from './storage-connections.js';
+
 import { opaqueLabel } from './backup-state.js';
+import { StorageConnectionError, type StorageConnectionStore } from './storage-connections.js';
 
 /** Refresh a cached grant this long before it actually expires. */
 const GRANT_REFRESH_MARGIN_MS = 5 * 60 * 1000;
@@ -179,7 +180,10 @@ export async function ensureProviderCasTarget(
     throw new Error(`connection "${connectionId}" is not a provider connection`);
   }
   const apiKey = await store.resolveProviderApiKey(connectionId);
-  const provider = openRemoteBackupProvider({ baseUrl: connection.baseUrl, apiKey });
+  const provider = openRemoteBackupProvider({
+    baseUrl: connection.baseUrl,
+    apiKey,
+  });
   let targetId = connection.targetId;
   if (!targetId) {
     const target = await provider.createTarget({ label: opaqueLabel() });

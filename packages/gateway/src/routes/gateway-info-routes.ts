@@ -13,8 +13,10 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
+
 import { AUTHED_PLANE_HEADER } from '@centraid/app-engine';
 import { ROUTES, buildGatewayInfoPayload, type GatewayCapabilities } from '@centraid/protocol';
+
 import type { RouteHandler } from '../serve/build-gateway.js';
 import { sendJson } from './route-helpers.js';
 
@@ -66,7 +68,10 @@ export function makeGatewayInfoRouteHandler(options: GatewayInfoRouteOptions): R
     const url = new URL(req.url ?? '/', 'http://gateway.local');
     if (url.pathname !== INFO_PATH) return false;
     if ((req.method ?? 'GET') !== 'GET') {
-      return sendJson(res, 405, { error: 'method_not_allowed', message: 'GET only' });
+      return sendJson(res, 405, {
+        error: 'method_not_allowed',
+        message: 'GET only',
+      });
     }
     const endpointId = options.endpointId?.();
     const endpointTicket = isAuthenticated(req) ? options.endpointTicket?.() : undefined;

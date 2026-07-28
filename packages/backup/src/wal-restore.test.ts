@@ -1,4 +1,4 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import fss, { promises as fs } from 'node:fs';
 // governance: allow-repo-hygiene file-size-limit (#408) the replay e2e suite drives one real mini-shipper fixture through every damage/PITR/coordination case; sharding would duplicate the shipper per file
 /*
  * End-to-end WAL replay tests (FORMAT.md § WAL segments — /1, issue #408).
@@ -18,11 +18,12 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  * (G6), coordinated across both databases (G8) — never a corrupt or mixed
  * database.
  */
-
-import fss, { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { describe, expect, test } from 'vitest';
+
 import { FsObjectStore, type ObjectStore } from './object-store.js';
 import {
   lastCommitBoundary,
@@ -110,9 +111,11 @@ class MiniShipper {
   }
 
   rows(): string[] {
-    return (this.conn.prepare('SELECT val FROM rows ORDER BY id').all() as { val: string }[]).map(
-      (r) => r.val,
-    );
+    return (
+      this.conn.prepare('SELECT val FROM rows ORDER BY id').all() as {
+        val: string;
+      }[]
+    ).map((r) => r.val);
   }
 
   /**
@@ -200,18 +203,22 @@ class MiniShipper {
   }
 
   private checkpointTruncate(): void {
-    const row = this.conn.prepare('PRAGMA wal_checkpoint(TRUNCATE)').get() as { busy: number };
+    const row = this.conn.prepare('PRAGMA wal_checkpoint(TRUNCATE)').get() as {
+      busy: number;
+    };
     if (row.busy !== 0) throw new Error('wal_checkpoint(TRUNCATE) reported busy');
   }
 }
 
 async function shipToStore(store: ObjectStore, ship: MiniShipper): Promise<void> {
-  for (const { addr, bytes } of ship.captured) {
-    await store.put(walSegmentKey(addr), sealWalSegment(DATA_KEY, VAULT_ID, addr, bytes));
-  }
-  for (const c of ship.closers) {
-    await store.put(walGroupCloserKey(c), sealWalCloser(DATA_KEY, VAULT_ID, c));
-  }
+  await Promise.all([
+    ...ship.captured.map(({ addr, bytes }) =>
+      store.put(walSegmentKey(addr), sealWalSegment(DATA_KEY, VAULT_ID, addr, bytes)),
+    ),
+    ...ship.closers.map((closer) =>
+      store.put(walGroupCloserKey(closer), sealWalCloser(DATA_KEY, VAULT_ID, closer)),
+    ),
+  ]);
 }
 
 /**
@@ -243,17 +250,21 @@ function markPair(
 }
 
 async function shipMarkers(store: ObjectStore, markers: WalPairMarker[]): Promise<void> {
-  for (const m of markers) {
-    await store.put(walPairMarkerKey(m), sealWalPairMarker(DATA_KEY, VAULT_ID, m));
-  }
+  await Promise.all(
+    markers.map((marker) =>
+      store.put(walPairMarkerKey(marker), sealWalPairMarker(DATA_KEY, VAULT_ID, marker)),
+    ),
+  );
 }
 
 function readRows(dbPath: string): string[] {
   const conn = new DatabaseSync(dbPath);
   try {
-    return (conn.prepare('SELECT val FROM rows ORDER BY id').all() as { val: string }[]).map(
-      (r) => r.val,
-    );
+    return (
+      conn.prepare('SELECT val FROM rows ORDER BY id').all() as {
+        val: string;
+      }[]
+    ).map((r) => r.val);
   } finally {
     conn.close();
   }
@@ -337,9 +348,13 @@ async function restoreVault(sc: VaultScenario, pointInTimeMs?: number) {
     vaultId: VAULT_ID,
     destDir,
     generationByDb: { vault: sc.gen },
-    ...(pointInTimeMs !== undefined ? { pointInTimeMs } : {}),
+    ...(pointInTimeMs === undefined ? {} : { pointInTimeMs }),
   });
-  return { outcome, destDir, rows: readRows(path.join(destDir, WAL_DB_FILES.vault)) };
+  return {
+    outcome,
+    destDir,
+    rows: readRows(path.join(destDir, WAL_DB_FILES.vault)),
+  };
 }
 
 describe('replayWalSegments — tip and point-in-time restore', () => {
@@ -362,9 +377,9 @@ describe('replayWalSegments — tip and point-in-time restore', () => {
     expect(outcome.perDb.journal.integrityCheck).toBe('skipped');
     expect(outcome.perDb.journal.generation).toBeNull();
     // The spool directory is cleaned up.
-    await expect(fs.access(path.join(destDir, '.wal-restore-spool'))).rejects.toThrow(/ENOENT/);
+    await expect(fs.access(path.join(destDir, '.wal-restore-spool'))).rejects.toThrow(/ENOENT/u);
     // No stray -wal/-shm left behind.
-    await expect(fs.access(path.join(destDir, 'vault.db-wal'))).rejects.toThrow(/ENOENT/);
+    await expect(fs.access(path.join(destDir, 'vault.db-wal'))).rejects.toThrow(/ENOENT/u);
   });
 
   test('point-in-time restores reproduce the exact rows recorded at each tick', async () => {
@@ -466,7 +481,7 @@ describe('replayWalSegments — a logically inconsistent restore is a FAILED res
         destDir,
         generationByDb: { vault: gen },
       }),
-    ).rejects.toThrow(/vault\.db failed foreign_key_check .*1 violation/);
+    ).rejects.toThrow(/vault\.db failed foreign_key_check .*1 violation/u);
   });
 
   test('the same base WITHOUT the violating write restores cleanly (the check is not vacuous)', async () => {
@@ -505,7 +520,7 @@ describe('replayWalSegments — damage degrades to an earlier consistent state (
     const sc = await buildVaultScenario();
     await forgeChecksumInvalidSegment(sc.store, sc.segKeys[1]!);
 
-    await expect(restoreVault(sc)).rejects.toThrow(/checksum/i);
+    await expect(restoreVault(sc)).rejects.toThrow(/checksum/iu);
   });
 
   test('a corrupted MIDDLE segment lands the restore at the last pre-damage tick', async () => {
@@ -835,7 +850,10 @@ describe('replayWalSegments — a dangling receipt must be unconstructible (G8)'
       walTipTickMs?: number;
       pointInTimeMs?: number;
     } = {},
-  ): Promise<{ destDir: string; outcome: Awaited<ReturnType<typeof replayWalSegments>> }> {
+  ): Promise<{
+    destDir: string;
+    outcome: Awaited<ReturnType<typeof replayWalSegments>>;
+  }> {
     const destDir = await tempDir('backup-wal-dest-');
     await fs.writeFile(path.join(destDir, WAL_DB_FILES.vault), bases.vault);
     await fs.writeFile(path.join(destDir, WAL_DB_FILES.journal), bases.journal);
@@ -845,9 +863,12 @@ describe('replayWalSegments — a dangling receipt must be unconstructible (G8)'
       vaultId: VAULT_ID,
       destDir,
       generationByDb: generations,
-      baseTickMsByDb: opts.baseTicks ?? { vault: BASE_TICK, journal: BASE_TICK },
-      ...(opts.walTipTickMs !== undefined ? { walTipTickMs: opts.walTipTickMs } : {}),
-      ...(opts.pointInTimeMs !== undefined ? { pointInTimeMs: opts.pointInTimeMs } : {}),
+      baseTickMsByDb: opts.baseTicks ?? {
+        vault: BASE_TICK,
+        journal: BASE_TICK,
+      },
+      ...(opts.walTipTickMs === undefined ? {} : { walTipTickMs: opts.walTipTickMs }),
+      ...(opts.pointInTimeMs === undefined ? {} : { pointInTimeMs: opts.pointInTimeMs }),
     });
     return { destDir, outcome };
   }
@@ -891,7 +912,7 @@ describe('replayWalSegments — a dangling receipt must be unconstructible (G8)'
     await p.store.delete(walSegmentKey(p.vault.captured[0]!.addr));
 
     await expect(restorePair(p, bases, { vault: V0, journal: J1 }, { baseTicks })).rejects.toThrow(
-      /bases are from DIFFERENT ticks/,
+      /bases are from DIFFERENT ticks/u,
     );
   });
 
@@ -900,7 +921,7 @@ describe('replayWalSegments — a dangling receipt must be unconstructible (G8)'
     await flipByteInStore(p.store, walSegmentKey(p.vault.captured[0]!.addr));
 
     await expect(restorePair(p, bases, { vault: V0, journal: J1 }, { baseTicks })).rejects.toThrow(
-      /bases are from DIFFERENT ticks/,
+      /bases are from DIFFERENT ticks/u,
     );
   });
 
@@ -917,7 +938,7 @@ describe('replayWalSegments — a dangling receipt must be unconstructible (G8)'
         destDir,
         generationByDb: { vault: V0, journal: J1 },
       }),
-    ).rejects.toThrow(/does not record a base tick for both databases/);
+    ).rejects.toThrow(/does not record a base tick for both databases/u);
   });
 
   /**
@@ -938,11 +959,14 @@ describe('replayWalSegments — a dangling receipt must be unconstructible (G8)'
     await ship(p);
 
     // Drop the vault's two newest segment objects — the listing simply ends.
-    for (const addr of p.vault.captured.slice(-2).map((c) => c.addr)) {
-      await p.store.delete(walSegmentKey(addr));
-    }
+    await Promise.all(
+      p.vault.captured.slice(-2).map((capture) => p.store.delete(walSegmentKey(capture.addr))),
+    );
 
-    const { destDir, outcome } = await restorePair(p, bases, { vault: V0, journal: J0 });
+    const { destDir, outcome } = await restorePair(p, bases, {
+      vault: V0,
+      journal: J0,
+    });
     expect(danglingReceipts(destDir)).toStrictEqual([]);
     // The pair landed on ONE instant: the newest tick the vault can still PROVE
     // it reached (marker t3), not the newest tick the journal reached.
@@ -975,7 +999,10 @@ describe('replayWalSegments — a dangling receipt must be unconstructible (G8)'
     const liveJournalRows = p.journal.rows();
     await ship(p);
 
-    const { destDir, outcome } = await restorePair(p, bases, { vault: V0, journal: J0 });
+    const { destDir, outcome } = await restorePair(p, bases, {
+      vault: V0,
+      journal: J0,
+    });
     expect(outcome.coordinatedCutMs).toBe(lastTick);
     expect(outcome.perDb.journal.lastTickMs).toBe(lastTick);
     expect(outcome.perDb.journal.truncated).toBe(false);
@@ -992,7 +1019,10 @@ describe('replayWalSegments — a dangling receipt must be unconstructible (G8)'
     const liveJournalRows = p.journal.rows();
     await ship(p);
 
-    const { destDir, outcome } = await restorePair(p, bases, { vault: V0, journal: J0 });
+    const { destDir, outcome } = await restorePair(p, bases, {
+      vault: V0,
+      journal: J0,
+    });
     expect(outcome.coordinatedCutMs).toBe(lastTick);
     expect(outcome.perDb.journal.lastTickMs).toBe(lastTick);
     expect(outcome.perDb.vault.segmentsApplied).toBe(0);
@@ -1018,7 +1048,7 @@ describe('replayWalSegments — a dangling receipt must be unconstructible (G8)'
     const registeredTip = ticks[2]!;
 
     // Delete ONLY the markers. Every segment and closer survives.
-    for (const m of p.markers) await p.store.delete(walPairMarkerKey(m));
+    await Promise.all(p.markers.map((marker) => p.store.delete(walPairMarkerKey(marker))));
 
     const { destDir, outcome } = await restorePair(
       p,
@@ -1097,7 +1127,10 @@ describe('replayWalSegments — a dangling receipt must be unconstructible (G8)'
     await ship(p);
     await p.store.delete(walGroupCloserKey(p.vault.closers[0]!));
 
-    const { destDir, outcome } = await restorePair(p, bases, { vault: V0, journal: J0 });
+    const { destDir, outcome } = await restorePair(p, bases, {
+      vault: V0,
+      journal: J0,
+    });
     expect(outcome.coordinatedCutMs).toBe(t1);
     expect(outcome.newestMarkerTickMs).toBe(t2);
     expect(danglingReceipts(destDir)).toStrictEqual([]);

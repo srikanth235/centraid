@@ -1,6 +1,7 @@
 // Small shared presentational bits used across Sidebar/List/Detail/overlays.
 // Pure functions of props — no app state.
 import type { FC } from 'react';
+
 import { CAT_ICON_PATHS, ICON_PATHS } from '../icons.ts';
 
 // A trusted static SVG path fragment wrapped in a real <svg> sized/stroked
@@ -66,4 +67,7 @@ export function CatIcon({
 // 'kit-meter', so `jsx('kit-meter', {ratio, tone})` emits the exact same host
 // element the JSX original did (React sets ratio/tone as attributes on a custom
 // element). The cast is the one place that host tag becomes typed.
-export const KitMeter = 'kit-meter' as unknown as FC<{ ratio: number; tone: string }>;
+export const KitMeter = 'kit-meter' as unknown as FC<{
+  ratio: number;
+  tone: string;
+}>;

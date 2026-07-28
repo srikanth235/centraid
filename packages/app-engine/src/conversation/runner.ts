@@ -73,7 +73,11 @@ export type TurnStreamEvent =
       /** Workspace files reported by ACP; the ledger stores path + hash refs. */
       locations?: Array<{ path: string; line?: number }>;
       /** Inline output without a workspace home; persisted to CAS by the host. */
-      artifacts?: Array<{ dataBase64: string; mime: string; filename?: string }>;
+      artifacts?: Array<{
+        dataBase64: string;
+        mime: string;
+        filename?: string;
+      }>;
       /** Lossless runner event envelope when the adapter exposes one. */
       rawJson?: string;
     }

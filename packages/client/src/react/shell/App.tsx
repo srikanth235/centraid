@@ -4,14 +4,9 @@
 // follow-up; #599 shrank this file rather than growing it (the space switcher's
 // callbacks and the New-space modal left for Household).
 import { type JSX, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { ShellRoute } from '../../app-shell-context.js';
-import PaletteScreen from '../screens/PaletteScreen.js';
-import { type ShellActions, ShellActionsProvider } from './actions.js';
-import { openConfirm } from './confirm.js';
-import { openMenu } from './contextMenu.js';
-import { openPrompt } from './prompt.js';
-import { showUndoToast } from './undoToast.js';
+
 import { relativeTime } from '../../app-format.js';
+import type { ShellRoute } from '../../app-shell-context.js';
 import {
   ASSISTANT_APP_ID,
   deleteConversation,
@@ -21,59 +16,65 @@ import {
   setConversationArchived,
   setConversationPinned,
 } from '../../gateway-client.js';
-import { buildPaletteGroups } from './routes/paletteData.js';
-import { createPaletteConversationSearch } from './routes/paletteConversationSearch.js';
-import { downloadConversation, type ExportFormat } from './routes/conversationExport.js';
-import { conversationScope, conversationScopes } from './routes/conversationScopes.js';
-import IdentityHead from './IdentityHead.js';
-import Sidebar, {
-  type ShellMenuAnchor,
-  type SidebarConversation,
-  type SidebarPage,
-} from './Sidebar.js';
-import ShellApp, { type ShellNav } from './ShellApp.js';
-import { showToast } from './toast.js';
-import { PageEmpty } from './status.js';
-import { useMemberScopes } from './useMemberScopes.js';
-import { useAppearance } from './useAppearance.js';
-import { useBuilderEnabled } from './useBuilderEnabled.js';
-import { useAssistantConversations } from './useAssistantConversations.js';
-import { useBlockingCount } from './useBlockingCount.js';
-import { useGatewayRuntime } from './useGatewayRuntime.js';
-import { useShellApps } from './useShellApps.js';
-import { useStarred } from './useStarred.js';
+import PaletteScreen from '../screens/PaletteScreen.js';
 import WhatsNewModal from '../screens/WhatsNewModal.js';
-import { relaunchToUpdate, updatePillTitle, useUpdateStatus } from './useUpdateStatus.js';
+import { type ShellActions, ShellActionsProvider } from './actions.js';
+import { openConfirm } from './confirm.js';
+import { openMenu } from './contextMenu.js';
 import { countGateways, getCachedGatewayRows, openGatewayRegistry } from './gatewayRegistry.js';
 import {
   closeGatewaySwitcher,
   openGatewaySwitcher,
   updateGatewaySwitcherRows,
 } from './gatewaySwitcher.js';
+import IdentityHead from './IdentityHead.js';
+import { openPrompt } from './prompt.js';
 import ApprovalsRoute from './routes/ApprovalsRoute.js';
 import AppViewRoute from './routes/AppViewRoute.js';
-import InlineAppRoute from './routes/InlineAppRoute.js';
-import { inlineAppLoader } from './routes/inlineApps.js';
-import AtlasRoute from './routes/AtlasRoute.js';
 import AssistantRoute from './routes/AssistantRoute.js';
+import AtlasRoute from './routes/AtlasRoute.js';
 import AutomationEditorRoute from './routes/AutomationEditorRoute.js';
 import AutomationsRoute from './routes/AutomationsRoute.js';
 import AutomationViewRoute from './routes/AutomationViewRoute.js';
-import StorageRoute from './routes/StorageRoute.js';
 import BuilderRoute from './routes/BuilderRoute.js';
 import ConnectFlowModal from './routes/ConnectFlowModal.js';
 import ConnectorsRoute from './routes/ConnectorsRoute.js';
+import { downloadConversation, type ExportFormat } from './routes/conversationExport.js';
+import { conversationScope, conversationScopes } from './routes/conversationScopes.js';
 import DiscoverRoute from './routes/DiscoverRoute.js';
 import GatewayRoute from './routes/GatewayRoute.js';
 import HomeRoute from './routes/HomeRoute.js';
 import HouseholdRoute from './routes/HouseholdRoute.js';
+import InlineAppRoute from './routes/InlineAppRoute.js';
+import { inlineAppLoader } from './routes/inlineApps.js';
 import InsightsRoute from './routes/InsightsRoute.js';
+import { createPaletteConversationSearch } from './routes/paletteConversationSearch.js';
+import { buildPaletteGroups } from './routes/paletteData.js';
 import RenameGatewayModal from './routes/RenameGatewayModal.js';
 import RunViewRoute from './routes/RunViewRoute.js';
 import SettingsRoute from './routes/SettingsRoute.js';
 import StarredRoute from './routes/StarredRoute.js';
+import StorageRoute from './routes/StorageRoute.js';
 import TemplatesRoute from './routes/TemplatesRoute.js';
 import TestConnectionModal from './routes/TestConnectionModal.js';
+import ShellApp, { type ShellNav } from './ShellApp.js';
+import Sidebar, {
+  type ShellMenuAnchor,
+  type SidebarConversation,
+  type SidebarPage,
+} from './Sidebar.js';
+import { PageEmpty } from './status.js';
+import { showToast } from './toast.js';
+import { showUndoToast } from './undoToast.js';
+import { useAppearance } from './useAppearance.js';
+import { useAssistantConversations } from './useAssistantConversations.js';
+import { useBlockingCount } from './useBlockingCount.js';
+import { useBuilderEnabled } from './useBuilderEnabled.js';
+import { useGatewayRuntime } from './useGatewayRuntime.js';
+import { useMemberScopes } from './useMemberScopes.js';
+import { useShellApps } from './useShellApps.js';
+import { useStarred } from './useStarred.js';
+import { relaunchToUpdate, updatePillTitle, useUpdateStatus } from './useUpdateStatus.js';
 
 // Build the ShellActions surface for the current render. Navigation + toast +
 // confirm are live; the remaining overlay actions (⌘K palette, the generic app
@@ -199,8 +200,8 @@ export default function App(): JSX.Element {
         const [changelog, settings] = await Promise.all([get(), getSettings()]);
         if (!alive) return;
         setWhatsNewAutoChecked(true);
-        const current = changelog.currentVersion?.replace(/^v/i, '') ?? '';
-        const seen = (settings.changelogSeenVersion ?? '').replace(/^v/i, '');
+        const current = changelog.currentVersion?.replace(/^v/iu, '') ?? '';
+        const seen = (settings.changelogSeenVersion ?? '').replace(/^v/iu, '');
         if (current && current !== seen && changelog.releases.length > 0) {
           setWhatsNewOpen(true);
         }
@@ -220,7 +221,9 @@ export default function App(): JSX.Element {
         const changelog = await window.CentraidApi.getChangelog?.();
         const ver = changelog?.currentVersion;
         if (ver) {
-          await window.CentraidApi.saveSettings?.({ changelogSeenVersion: ver });
+          await window.CentraidApi.saveSettings?.({
+            changelogSeenVersion: ver,
+          });
         }
       } catch {
         /* ignore */
@@ -240,10 +243,12 @@ export default function App(): JSX.Element {
   // Created once per mount; the palette hands it its `refresh()` on mount via
   // `setOnResults` (see `onReady` below), so nothing here has to hold that
   // callback in a ref and reach for it during render.
-  const [paletteConversationSearch] = useState(() =>
-    createPaletteConversationSearch({
-      search: (query, limit) => searchConversations(ASSISTANT_APP_ID, query, limit),
-    }),
+  const paletteConversationSearch = useMemo(
+    () =>
+      createPaletteConversationSearch({
+        search: (query, limit) => searchConversations(ASSISTANT_APP_ID, query, limit),
+      }),
+    [],
   );
   const [gatewaySwitcherOpen, setGatewaySwitcherOpen] = useState(false);
   // How many gateways this client knows. The gateway switcher is the ONE
@@ -262,9 +267,10 @@ export default function App(): JSX.Element {
     gatewayId: string;
     label: string;
   } | null>(null);
-  const [renameTarget, setRenameTarget] = useState<{ gatewayId: string; label: string } | null>(
-    null,
-  );
+  const [renameTarget, setRenameTarget] = useState<{
+    gatewayId: string;
+    label: string;
+  } | null>(null);
 
   // Document-level shortcuts + external re-scope, ported from the vanilla app.ts
   // boot block. Bound once against the live nav (navRef, fed by ShellApp). A
@@ -323,7 +329,7 @@ export default function App(): JSX.Element {
       // drop it explicitly so it can't outlive the shell root (tests, HMR).
       closeGatewaySwitcher();
     };
-  }, []);
+  }, [refresh]);
 
   // Sidebar "Chats" row delete — mirrors the vanilla AssistantRoute's old
   // deleteThread confirm pattern, now living here since the sidebar (not
@@ -542,7 +548,10 @@ export default function App(): JSX.Element {
           }
           onOpenHousehold={() => nav.navigate({ kind: 'household' })}
           {...(gatewayCount > 1
-            ? { onSwitchGateway: openGatewayPicker, switcherOpen: gatewaySwitcherOpen }
+            ? {
+                onSwitchGateway: openGatewayPicker,
+                switcherOpen: gatewaySwitcherOpen,
+              }
             : {})}
         />
       );

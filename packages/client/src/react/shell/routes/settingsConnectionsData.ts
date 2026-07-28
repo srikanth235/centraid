@@ -1,3 +1,4 @@
+import { completeAssistReturnLink as completeAssistReturnLinkFromClient } from '../../../assist-oauth-handoff.js';
 import {
   beginConnectionAuthorization,
   cloneTemplate as gwCloneTemplate,
@@ -26,7 +27,6 @@ import {
   toolDescriptorsFromHealthyConnections,
   type ProviderCapabilitiesDTO,
 } from './connectorPlatform.js';
-import { completeAssistReturnLink as completeAssistReturnLinkFromClient } from '../../../assist-oauth-handoff.js';
 
 // Connectors data layer (issue #304 renderer half; screen now lives on the
 // primary Connectors sidebar route): maps the gateway's broker-owned OAuth /
@@ -275,7 +275,10 @@ export async function updateConnectionStatus(
 export async function beginConnectionAuthorize(connectionId: string): Promise<string> {
   const capabilities = await window.CentraidApi.getHostCapabilities?.();
   const surface = capabilities?.platform === 'web' ? 'web' : 'desktop';
-  const { authUrl } = await beginConnectionAuthorization({ connectionId, surface });
+  const { authUrl } = await beginConnectionAuthorization({
+    connectionId,
+    surface,
+  });
   return authUrl;
 }
 

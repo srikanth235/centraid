@@ -4,9 +4,10 @@
 // conversation_digest so Insights/Executions read identical numbers before
 // archive and after prune (the digest union lives in insights-store.ts).
 
-import { gunzipSync, gzipSync } from 'node:zlib';
-import type { DatabaseSync } from 'node:sqlite';
 import { randomUUID } from 'node:crypto';
+import type { DatabaseSync } from 'node:sqlite';
+import { gunzipSync, gzipSync } from 'node:zlib';
+
 import type { EligibleRange } from './selector.js';
 import {
   CONVERSATION_SEGMENT_VERSION,
@@ -136,7 +137,12 @@ function computeDelta(journal: DatabaseSync, range: EligibleRange): DigestDelta 
     // with no step/agent model contributes to KPIs but not to byModel.
     const model = dominantModelOf(journal, t.id as string);
     if (model !== null) {
-      const roll = delta.models.get(model) ?? { model, runs: 0, tokens: 0, cost: 0 };
+      const roll = delta.models.get(model) ?? {
+        model,
+        runs: 0,
+        tokens: 0,
+        cost: 0,
+      };
       roll.runs += 1;
       roll.tokens += input + output + cacheRead + cacheWrite;
       roll.cost += num(t.total_cost_usd);
@@ -145,7 +151,12 @@ function computeDelta(journal: DatabaseSync, range: EligibleRange): DigestDelta 
     // No "default" bucket: only a runner-confirmed thought_level is durable.
     const effort = dominantEffortOf(journal, t.id as string);
     if (effort !== null) {
-      const roll = delta.efforts.get(effort) ?? { effort, runs: 0, tokens: 0, cost: 0 };
+      const roll = delta.efforts.get(effort) ?? {
+        effort,
+        runs: 0,
+        tokens: 0,
+        cost: 0,
+      };
       roll.runs += 1;
       roll.tokens += input + output + cacheRead + cacheWrite;
       roll.cost += num(t.total_cost_usd);
@@ -390,7 +401,11 @@ export function archiveRange(
     );
 
   upsertDigest(journal, conv, computeDelta(journal, range), nowMs);
-  return { segmentSha256: sha256, turnCount: range.turns.length, itemCount: items.length };
+  return {
+    segmentSha256: sha256,
+    turnCount: range.turns.length,
+    itemCount: items.length,
+  };
 }
 
 /**

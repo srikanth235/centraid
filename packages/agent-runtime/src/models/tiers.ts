@@ -20,6 +20,7 @@
  */
 
 import type { RunnerModel } from '@centraid/app-engine';
+
 import type { RunnerKind } from '../types.js';
 
 /** Capability tier tokens understood by the runner adapters. */

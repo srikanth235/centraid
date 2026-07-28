@@ -7,8 +7,9 @@
  * result varies by host).
  */
 
-import { describe, expect, test } from 'vitest';
 import { RUNNER_KINDS } from '@centraid/app-engine';
+import { describe, expect, test } from 'vitest';
+
 import { readAgentsStatus } from './agents-routes.ts';
 
 describe('agents-routes', () => {
@@ -21,7 +22,7 @@ describe('agents-routes', () => {
       expect(agent.label).toBeTypeOf('string');
       expect(agent.label.length).toBeGreaterThan(0);
       expect(agent.available).toBeTypeOf('boolean');
-      expect(agent.minVersion).toMatch(/^\d+\.\d+\.\d+$/);
+      expect(agent.minVersion).toMatch(/^\d+\.\d+\.\d+$/u);
     }
   });
 
@@ -43,9 +44,9 @@ describe('agents-routes', () => {
     const acp = s.agents.find((a) => a.kind === 'acp');
     expect(acp?.available).toBe(false);
     expect(acp?.hint).toBeTruthy();
-    for (const agent of s.agents) {
-      if (agent.available) expect(agent.hint).toBeUndefined();
-    }
+    expect(
+      s.agents.filter((agent) => agent.available).every((agent) => agent.hint === undefined),
+    ).toBe(true);
   });
 
   test('probes the configured binary for a kind when one is supplied', async () => {
@@ -74,7 +75,10 @@ describe('agents-routes', () => {
     const s = await readAgentsStatus({
       resolveModels: async (kind, refresh) => {
         calls.push([kind, refresh]);
-        return { list: [{ id: `${kind}-x`, name: 'X', default: true }], status: 'ready' };
+        return {
+          list: [{ id: `${kind}-x`, name: 'X', default: true }],
+          status: 'ready',
+        };
       },
     });
     // Asked once per registered kind, and each answer landed on its own entry.

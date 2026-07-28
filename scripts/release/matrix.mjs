@@ -37,7 +37,9 @@ if (shipIds) {
   }
 }
 
-const matrix = buildSurfaceMatrix({ shipIds: shipIds ?? defaultShipSurfaceIds() });
+const matrix = buildSurfaceMatrix({
+  shipIds: shipIds ?? defaultShipSurfaceIds(),
+});
 
 if (json) {
   console.log(JSON.stringify(matrix, null, 2));

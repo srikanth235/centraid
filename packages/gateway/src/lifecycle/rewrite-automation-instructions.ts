@@ -8,8 +8,9 @@
  * reads: owner steering bubble → “Revised instructions” → compile turn.
  */
 
-import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import path from 'node:path';
+
 import {
   resolveItemCost,
   type RunnerPrefs,
@@ -17,6 +18,7 @@ import {
   type TurnStreamEvent,
 } from '@centraid/app-engine';
 import type { Row as AutomationRow } from '@centraid/automation';
+
 import { journalConversationStore } from '../journal-stores.js';
 
 const REWRITE_SYSTEM = [
@@ -139,7 +141,7 @@ export async function rewriteAutomationInstructions(
   const onEvent = (event: TurnStreamEvent): void => {
     if (event.type === 'assistant.delta') text += event.delta;
     if (event.type === 'final') {
-      text = text || event.text;
+      text ||= event.text;
       rawJson = event.rawJson;
       stopReason = event.stopReason;
     }

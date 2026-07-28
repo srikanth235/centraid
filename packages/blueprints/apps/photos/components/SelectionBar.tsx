@@ -1,12 +1,14 @@
+import { useRef } from 'react';
+
 // The selection toolbar: count, "Add to album ▾" menu, Delete, exit. The
 // "Add to album ▾" menu's open/closed flag (`menuOpen`) is app.tsx state (it
 // drives an away-click listener added/removed in lockstep with it) — this
 // view only reads it as a prop. `countRef` is the batch-progress node that
 // selection-actions.ts mutates via direct `textContent` writes.
 import { armConfirm } from '../kit.ts';
-import { useRef } from 'react';
 import { runBatchAddToAlbum, runBatchDelete } from '../selection-actions.ts';
 import type { Album } from '../types.ts';
+
 import styles from './SelectionBar.module.css';
 
 export function SelectionBarView({
@@ -92,7 +94,12 @@ export function SelectionBarView({
         disabled={count === 0}
         onClick={(e) => {
           if (busy || selectedIds.size === 0) return;
-          if (!armConfirm(e.currentTarget, { armedLabel: `Delete ${selectedIds.size}?` })) return;
+          if (
+            !armConfirm(e.currentTarget, {
+              armedLabel: `Delete ${selectedIds.size}?`,
+            })
+          )
+            return;
           runBatchDelete([...selectedIds], countRef.current, {
             refresh,
             setBarBusy,

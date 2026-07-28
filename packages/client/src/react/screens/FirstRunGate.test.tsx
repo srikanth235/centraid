@@ -1,6 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
 import FirstRunGate, { type FirstRunGateProps } from './FirstRunGate.js';
 
 // FirstRunGate pulls in OnboardingScreen (→ ConnectFlow → gateway-client),
@@ -10,7 +11,10 @@ vi.hoisted(() => {
   (window as unknown as { CentraidApi: Record<string, unknown> }).CentraidApi = {
     onGatewayChanged: () => () => undefined,
     onVaultChanged: () => () => undefined,
-    getGatewayAuth: async () => ({ baseUrl: 'https://gateway.test', token: 't' }),
+    getGatewayAuth: async () => ({
+      baseUrl: 'https://gateway.test',
+      token: 't',
+    }),
   };
 });
 
@@ -40,11 +44,12 @@ describe('screens/FirstRunGate', () => {
   });
 
   async function flush(times = 3): Promise<void> {
-    for (let i = 0; i < times; i++) {
-      await act(async () => {
-        await Promise.resolve();
-      });
-    }
+    const flushNext = async (index: number): Promise<void> => {
+      if (index >= times) return;
+      await act(async () => {});
+      return flushNext(index + 1);
+    };
+    return flushNext(0);
   }
 
   async function mount(props: FirstRunGateProps): Promise<HTMLDivElement> {

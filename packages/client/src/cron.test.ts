@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import {
   cronFieldMatch,
   cronNextRuns,
@@ -156,8 +157,8 @@ describe(cronNextRuns, () => {
     expect(a.map((d) => d.getTime())).toStrictEqual(b.map((d) => d.getTime()));
     expect(a).toHaveLength(2);
     // 09:00 America/New_York on those days.
-    expect(zoneParts(a[0]!, 'America/New_York')).toMatch(/09:00$/);
-    expect(zoneParts(a[1]!, 'America/New_York')).toMatch(/09:00$/);
+    expect(zoneParts(a[0]!, 'America/New_York')).toMatch(/09:00$/u);
+    expect(zoneParts(a[1]!, 'America/New_York')).toMatch(/09:00$/u);
     // And the absolute instants are stable (not viewer-local).
     expect(a[0]!.toISOString()).toBe(b[0]!.toISOString());
   });
@@ -167,7 +168,7 @@ describe(cronNextRuns, () => {
     const from = new Date('2026-06-01T00:00:00.000Z');
     const runs = cronNextRuns('0 9 * * *', 1, from, 'America/Los_Angeles');
     expect(runs).toHaveLength(1);
-    expect(zoneParts(runs[0]!, 'America/Los_Angeles')).toMatch(/09:00$/);
+    expect(zoneParts(runs[0]!, 'America/Los_Angeles')).toMatch(/09:00$/u);
   });
 });
 
@@ -199,7 +200,7 @@ describe(describeCron, () => {
   });
 
   it('labels an explicit zone on daily glosses', () => {
-    expect(describeCron('0 9 * * *', 'America/New_York')).toMatch(/Every day at 09:00 \(.+\)/);
+    expect(describeCron('0 9 * * *', 'America/New_York')).toMatch(/Every day at 09:00 \(.+\)/u);
   });
 });
 
@@ -227,9 +228,9 @@ describe(cronRunLabel, () => {
       viewerTimeZone: 'Asia/Kolkata',
       now: new Date('2026-01-15T05:00:00.000Z'),
     });
-    expect(label).toMatch(/Today,/);
+    expect(label).toMatch(/Today,/u);
     // Zone short name appears when viewer ≠ schedule.
-    expect(label).toMatch(/\b(EST|EDT|GMT[-+]\d+|America\/New_York|New York)\b/);
+    expect(label).toMatch(/\b(?:EST|EDT|GMT[-+]\d+|America\/New_York|New York)\b/u);
   });
 
   it('omits the zone label when viewer and schedule zones match', () => {
@@ -239,8 +240,8 @@ describe(cronRunLabel, () => {
       viewerTimeZone: 'America/New_York',
       now: new Date('2026-01-15T05:00:00.000Z'),
     });
-    expect(label).toMatch(/^Today,/);
-    expect(label).not.toMatch(/\sEST$/);
+    expect(label).toMatch(/^Today,/u);
+    expect(label).not.toMatch(/\sEST$/u);
   });
 });
 

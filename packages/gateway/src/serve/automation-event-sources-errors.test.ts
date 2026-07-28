@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+
 import {
   pollProviderEventSource,
   type PollJson,
@@ -28,7 +29,11 @@ describe('pollProviderEventSource errors', () => {
   it('surfaces provider baseline, cursor, and pagination failures explicitly', async () => {
     await expect(
       pollProviderEventSource({
-        trigger: { kind: 'event', connectorKind: 'pull.gmail', event: 'new-message' },
+        trigger: {
+          kind: 'event',
+          connectorKind: 'pull.gmail',
+          event: 'new-message',
+        },
         connection: gmail,
         now: new Date('2026-07-25T00:00:00Z'),
         limit: 50,
@@ -37,7 +42,11 @@ describe('pollProviderEventSource errors', () => {
     ).rejects.toThrow('Gmail profile baseline failed (503)');
     await expect(
       pollProviderEventSource({
-        trigger: { kind: 'event', connectorKind: 'pull.gmail', event: 'new-message' },
+        trigger: {
+          kind: 'event',
+          connectorKind: 'pull.gmail',
+          event: 'new-message',
+        },
         connection: gmail,
         cursor: { provider: 'gmail', historyId: '1' },
         now: new Date('2026-07-25T00:00:00Z'),
@@ -50,7 +59,11 @@ describe('pollProviderEventSource errors', () => {
     ).rejects.toThrow('Gmail expired-cursor rebaseline failed (200)');
     await expect(
       pollProviderEventSource({
-        trigger: { kind: 'event', connectorKind: 'pull.gmail', event: 'new-message' },
+        trigger: {
+          kind: 'event',
+          connectorKind: 'pull.gmail',
+          event: 'new-message',
+        },
         connection: gmail,
         cursor: { provider: 'gmail', historyId: '1' },
         now: new Date('2026-07-25T00:00:00Z'),

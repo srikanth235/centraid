@@ -1,4 +1,5 @@
 import { type JSX, useEffect, useState } from 'react';
+
 import { cronNextRuns, describeCron } from '../../../../cron.js';
 import {
   listAutomationTurns,
@@ -6,11 +7,8 @@ import {
   readAutomation,
   writeAppFile,
 } from '../../../../gateway-client.js';
+import { cx } from '../../../ui/cx.js';
 import { iconSvg } from '../../iconSvg.js';
-import TriggerEditor, {
-  formatWhereClauses,
-  type EditableTrigger,
-} from './BuilderAutomationTriggers.js';
 import {
   Glyph,
   fmtNextRun,
@@ -20,8 +18,12 @@ import {
   relTime,
   runOriginLabel,
 } from './BuilderAutomationPaneShared.js';
+import TriggerEditor, {
+  formatWhereClauses,
+  type EditableTrigger,
+} from './BuilderAutomationTriggers.js';
+
 import styles from './BuilderAutomationPane.module.css';
-import { cx } from '../../../ui/cx.js';
 
 // Config view — see BuilderAutomationPane.tsx's file header for the overall
 // automation-mode right-pane layout this is one tab of. Split into its own
@@ -44,6 +46,34 @@ const svgX12 = iconSvg('X', 12);
 const svgPlus12 = iconSvg('Plus', 12);
 
 type ConfigSectionKey = 'what' | 'when' | 'activity' | 'behavior' | 'vault' | 'apps';
+
+function renderConfigSection(
+  flashSections: ReadonlySet<ConfigSectionKey>,
+  key: ConfigSectionKey,
+  label: string,
+  body: JSX.Element,
+  full = false,
+): JSX.Element {
+  const flash = flashSections.has(key);
+  return (
+    <div
+      key={key}
+      className={cx(styles.section, flash && styles.sectionFlash, full && styles.sectionFull)}
+      data-section={key}
+    >
+      <div className={styles.sectionLabel}>
+        <span>{label}</span>
+        {flash ? (
+          <span className={styles.diffRibbon}>
+            <Glyph svg={svgCheck11} />
+            Updated
+          </span>
+        ) : null}
+      </div>
+      {body}
+    </div>
+  );
+}
 
 /** Earliest upcoming cron fire across every cron trigger, or null with none. */
 function nextCronFire(triggers: CentraidAutomationManifest['triggers']): Date | null {
@@ -184,7 +214,10 @@ export default function ConfigView({
     if (saving) return;
     setSaving(true);
     setSaveError(null);
-    const nextManifest = { ...m, triggers: nextTriggers } as CentraidAutomationManifest;
+    const nextManifest = {
+      ...m,
+      triggers: nextTriggers,
+    } as CentraidAutomationManifest;
     try {
       await writeAppFile({
         id: automationRow.ownerApp,
@@ -193,7 +226,10 @@ export default function ConfigView({
       });
       await publish({ id: automationRow.ownerApp });
       const fresh = await readAutomation({ automationId: automationRow.ref });
-      setManifestOverride({ row: automationRow, manifest: fresh?.manifest ?? nextManifest });
+      setManifestOverride({
+        row: automationRow,
+        manifest: fresh?.manifest ?? nextManifest,
+      });
       setEditing(null);
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : String(err));
@@ -215,37 +251,6 @@ export default function ConfigView({
     if (!t || saving) return;
     if (!confirm(`Remove this ${t.kind} trigger?`)) return;
     void persistTriggers(m.triggers.filter((_, i) => i !== index));
-  };
-
-  // A titled section that flashes a one-shot diff ribbon when the latest chat
-  // turn changed it. The shell owns/clears `flashSections`; we only read it.
-  // `full` spans both grid columns at the wide-window breakpoint (see this
-  // file's header comment) — a no-op below it, where every section stacks.
-  const Section = (
-    key: ConfigSectionKey,
-    label: string,
-    body: JSX.Element,
-    full = false,
-  ): JSX.Element => {
-    const flash = flashSections.has(key);
-    return (
-      <div
-        key={key}
-        className={cx(styles.section, flash && styles.sectionFlash, full && styles.sectionFull)}
-        data-section={key}
-      >
-        <div className={styles.sectionLabel}>
-          <span>{label}</span>
-          {flash ? (
-            <span className={styles.diffRibbon}>
-              <Glyph svg={svgCheck11} />
-              Updated
-            </span>
-          ) : null}
-        </div>
-        {body}
-      </div>
-    );
   };
 
   // Per-trigger Edit/Remove affordances (GAP 1). Editing a trigger swaps its
@@ -398,7 +403,7 @@ export default function ConfigView({
 
   const triggersBody = (
     <div className={styles.triggers}>
-      {m.triggers.length === 0 && !(editing?.mode === 'add') ? (
+      {m.triggers.length === 0 && editing?.mode !== 'add' ? (
         <p className={styles.muted}>Manual runs only — no schedule.</p>
       ) : (
         triggerCards
@@ -462,21 +467,25 @@ export default function ConfigView({
           {enabled ? 'Enabled' : 'Draft'}
         </span>
       </div>
-      {Section(
+      {renderConfigSection(
+        flashSections,
         'what',
         'What it does',
         <p className={styles.prompt}>{m.prompt || 'Not described yet.'}</p>,
         true,
       )}
-      {Section('when', 'When it runs', triggersBody)}
-      {Section(
+      {renderConfigSection(flashSections, 'when', 'When it runs', triggersBody)}
+      {renderConfigSection(
+        flashSections,
         'activity',
         'Activity',
         <ActivityCard automationRef={automationRow.ref} triggers={m.triggers} />,
       )}
-      {Section('behavior', 'Behavior', behaviorBody, !vault)}
-      {vault ? Section('vault', 'Vault access', vaultBody as JSX.Element) : null}
-      {Section('apps', 'Connected apps', appsBody, true)}
+      {renderConfigSection(flashSections, 'behavior', 'Behavior', behaviorBody, !vault)}
+      {vault
+        ? renderConfigSection(flashSections, 'vault', 'Vault access', vaultBody as JSX.Element)
+        : null}
+      {renderConfigSection(flashSections, 'apps', 'Connected apps', appsBody, true)}
       <div className={styles.hint}>
         Triggers can be added, edited, and removed above. Everything else here is filled in by the
         chat — describe any other change in the conversation.

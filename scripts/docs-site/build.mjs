@@ -9,9 +9,12 @@
  */
 import { spawn } from 'node:child_process';
 import { readFile, readdir, stat, writeFile } from 'node:fs/promises';
-import { join, posix } from 'node:path';
+import path from 'node:path';
+
 import { JSDOM } from 'jsdom';
 import * as pagefind from 'pagefind';
+
+const { join, posix } = path;
 
 const repoRoot = join(import.meta.dirname, '..', '..');
 const outDir = join(repoRoot, 'dist', 'docs-site');
@@ -41,40 +44,44 @@ function basePrefix() {
 }
 
 async function walk(dir, prefix = '') {
-  const out = [];
-  for (const entry of await readdir(dir)) {
-    const abs = join(dir, entry);
-    const rel = prefix ? posix.join(prefix, entry) : entry;
-    const info = await stat(abs);
-    if (info.isDirectory()) out.push(...(await walk(abs, rel)));
-    else out.push(rel);
-  }
-  return out;
+  const entries = await readdir(dir);
+  return (
+    await Promise.all(
+      entries.map(async (entry) => {
+        const abs = join(dir, entry);
+        const rel = prefix ? posix.join(prefix, entry) : entry;
+        const info = await stat(abs);
+        return info.isDirectory() ? walk(abs, rel) : [rel];
+      }),
+    )
+  ).flat();
 }
 
 async function normalizePagefindAnchors() {
   const pages = (await walk(outDir)).filter((f) => f.endsWith('.html'));
   let moved = 0;
-  for (const page of pages) {
-    const abs = join(outDir, page);
-    const dom = new JSDOM(await readFile(abs, 'utf8'));
-    const doc = dom.window.document;
-    let changed = false;
+  await Promise.all(
+    pages.map(async (page) => {
+      const abs = join(outDir, page);
+      const dom = new JSDOM(await readFile(abs, 'utf8'));
+      const doc = dom.window.document;
+      let changed = false;
 
-    for (const section of doc.querySelectorAll('main section[id]')) {
-      const id = section.getAttribute('id');
-      const heading = section.querySelector('h1, h2, h3, h4, h5, h6');
-      if (!id || !heading || heading.id) continue;
-      heading.id = id;
-      section.removeAttribute('id');
-      changed = true;
-      moved += 1;
-    }
+      for (const section of doc.querySelectorAll('main section[id]')) {
+        const id = section.getAttribute('id');
+        const heading = section.querySelector('h1, h2, h3, h4, h5, h6');
+        if (!id || !heading || heading.id) continue;
+        heading.id = id;
+        section.removeAttribute('id');
+        changed = true;
+        moved += 1;
+      }
 
-    if (changed) {
-      await writeFile(abs, `<!doctype html>\n${doc.documentElement.outerHTML}`, 'utf8');
-    }
-  }
+      if (changed) {
+        await writeFile(abs, `<!doctype html>\n${doc.documentElement.outerHTML}`, 'utf8');
+      }
+    }),
+  );
   console.log(`docs-site search: moved ${moved} section anchors onto headings`);
 }
 

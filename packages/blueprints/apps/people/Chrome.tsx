@@ -9,6 +9,7 @@
 // once by the route host). The profile drawer + add-person modal render as slots
 // after the shell, inside the token-scoped app root.
 import type { KeyboardEvent, ReactNode } from 'react';
+
 import styles from './Chrome.module.css';
 
 export interface ChromeProps {

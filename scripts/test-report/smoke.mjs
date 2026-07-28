@@ -1,7 +1,7 @@
+import { execFileSync } from 'node:child_process';
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
 
 const temp = await mkdtemp(path.join(os.tmpdir(), 'centraid-report-'));
 const output = path.join(temp, 'index.html');
@@ -151,7 +151,13 @@ try {
     throw new Error('coverageScopesBelowFloor missed under-floor scope');
   }
   const summaryMdBody = renderSummaryMarkdown(
-    { failed: 1, unhandledErrors: 0, cellsFailed: 0, cellsMissing: 0, coverageBelowFloor: [] },
+    {
+      failed: 1,
+      unhandledErrors: 0,
+      cellsFailed: 0,
+      cellsMissing: 0,
+      coverageBelowFloor: [],
+    },
     { reportUrl: 'https://example.test/' },
   );
   if (

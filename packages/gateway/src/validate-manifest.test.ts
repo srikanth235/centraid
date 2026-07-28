@@ -1,4 +1,4 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import { promises as fs } from 'node:fs';
 // Publish-time `automation.json` validation gap: `validateManifestAt` parsed
 // `app.json` and linted `handler.js` for replay safety, but never ran
 // `@centraid/automation`'s `parseManifest` over `automations/<id>/automation.json`
@@ -9,10 +9,11 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
 // through publish and only failed later at fire/schedule time. This file
 // covers the new walk directly; `lifecycle/automation-lifecycle-over-http.test.ts`
 // covers the end-to-end publish-time 400.
-
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { promises as fs } from 'node:fs';
 import path from 'node:path';
+
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+
 import { validateManifestAt } from './validate-manifest.ts';
 
 let dir: string;
@@ -78,16 +79,16 @@ describe('validate-manifest', () => {
     );
     const err = await validateManifestAt(dir);
     expect(err).toBeTruthy();
-    expect(err!).toMatch(/automations\/main\/automation\.json/);
-    expect(err!).toMatch(/entities/);
+    expect(err!).toMatch(/automations\/main\/automation\.json/u);
+    expect(err!).toMatch(/entities/u);
   });
 
   test('rejects a cron trigger with a malformed expression', async () => {
     await writeAutomationApp(baseManifest({ triggers: [{ kind: 'cron', expr: 'not a cron' }] }));
     const err = await validateManifestAt(dir);
     expect(err).toBeTruthy();
-    expect(err!).toMatch(/automations\/main\/automation\.json/);
-    expect(err!).toMatch(/cron/);
+    expect(err!).toMatch(/automations\/main\/automation\.json/u);
+    expect(err!).toMatch(/cron/u);
   });
 
   test('rejects a second webhook trigger', async () => {
@@ -101,16 +102,18 @@ describe('validate-manifest', () => {
     );
     const err = await validateManifestAt(dir);
     expect(err).toBeTruthy();
-    expect(err!).toMatch(/at most one webhook/);
+    expect(err!).toMatch(/at most one webhook/u);
   });
 
   test('rejects a condition trigger missing its required vault block', async () => {
     await writeAutomationApp(
-      baseManifest({ triggers: [{ kind: 'condition', entity: 'core.invoice' }] }),
+      baseManifest({
+        triggers: [{ kind: 'condition', entity: 'core.invoice' }],
+      }),
     );
     const err = await validateManifestAt(dir);
     expect(err).toBeTruthy();
-    expect(err!).toMatch(/vault/);
+    expect(err!).toMatch(/vault/u);
   });
 
   test('rejects malformed JSON in automation.json', async () => {
@@ -135,8 +138,8 @@ describe('validate-manifest', () => {
     );
     const err = await validateManifestAt(dir);
     expect(err).toBeTruthy();
-    expect(err!).toMatch(/automations\/main\/automation\.json/);
-    expect(err!).toMatch(/not valid JSON/);
+    expect(err!).toMatch(/automations\/main\/automation\.json/u);
+    expect(err!).toMatch(/not valid JSON/u);
   });
 
   test('automation.json validation runs before handler linting, surfacing the manifest error first', async () => {
@@ -149,8 +152,8 @@ describe('validate-manifest', () => {
     );
     const err = await validateManifestAt(dir);
     expect(err).toBeTruthy();
-    expect(err!).toMatch(/automation\.json/);
-    expect(err!).not.toMatch(/no-date-now/);
+    expect(err!).toMatch(/automation\.json/u);
+    expect(err!).not.toMatch(/no-date-now/u);
   });
 
   test('does not validate automation.json of a non-automation app', async () => {

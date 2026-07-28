@@ -1,10 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
+
 import { cx } from '../ui/cx.js';
-import a11y from '../styles/a11y.module.css';
-import styles from './GatewayScreen.module.css';
-import buttonCss from '../ui/Button.module.css';
-import ResourceCompareDialog from './ResourceCompareDialog.js';
-import ResourceDetailsDialog from './ResourceDetailsDialog.js';
 import PowerPostureNote from './PowerPostureNote.js';
 import { presetHint } from './resource-presets.js';
 import {
@@ -19,6 +15,12 @@ import {
   type ResourceProfileDTO,
   type TunableKnobKey,
 } from './resource-summary.js';
+import ResourceCompareDialog from './ResourceCompareDialog.js';
+import ResourceDetailsDialog from './ResourceDetailsDialog.js';
+
+import a11y from '../styles/a11y.module.css';
+import buttonCss from '../ui/Button.module.css';
+import styles from './GatewayScreen.module.css';
 
 // Owner Resource mode control (#521). Writes `gateway.resourceMode` through the
 // device prefs store; the gateway reads it at serve boot and reports the active
@@ -32,9 +34,21 @@ export type { ResourceMode } from './resource-summary.js';
 export const RESOURCE_MODE_PREF_KEY = 'gateway.resourceMode';
 
 const MODES: readonly { id: ResourceMode; label: string; blurb: string }[] = [
-  { id: 'auto', label: 'Auto', blurb: 'Detect from cores, memory, and storage speed' },
-  { id: 'conserve', label: 'Conserve', blurb: 'Fewer workers and lighter background work' },
-  { id: 'balanced', label: 'Balanced', blurb: 'Standard throughput for a dedicated host' },
+  {
+    id: 'auto',
+    label: 'Auto',
+    blurb: 'Detect from cores, memory, and storage speed',
+  },
+  {
+    id: 'conserve',
+    label: 'Conserve',
+    blurb: 'Fewer workers and lighter background work',
+  },
+  {
+    id: 'balanced',
+    label: 'Balanced',
+    blurb: 'Standard throughput for a dedicated host',
+  },
   {
     id: 'performance',
     label: 'Performance',

@@ -1,4 +1,4 @@
-import { aesGcmKeyProtector, KeyStore, type KeyProtector } from '@centraid/vault';
+import { spawnSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import {
   chmodSync,
@@ -10,9 +10,11 @@ import {
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
+
+import { aesGcmKeyProtector, KeyStore, type KeyProtector } from '@centraid/vault';
+
 import {
   DEFAULT_LAUNCHD_LABEL,
   DEFAULT_SYSTEMD_UNIT_NAME,

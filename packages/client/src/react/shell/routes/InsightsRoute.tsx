@@ -1,4 +1,5 @@
 import { useState, type JSX } from 'react';
+
 import { getGatewayHealth, getInsightsSummary, listAutomations } from '../../../gateway-client.js';
 import InsightsScreen from '../../screens/InsightsScreen.js';
 import { useShellActions } from '../actions.js';
@@ -27,7 +28,10 @@ export default function InsightsRoute(): JSX.Element {
       ...summary,
       bySource: summary.bySource.map((row) =>
         row.kind === 'automation'
-          ? { ...row, label: nameByRef.get(row.key) ?? row.automationName ?? row.key }
+          ? {
+              ...row,
+              label: nameByRef.get(row.key) ?? row.automationName ?? row.key,
+            }
           : row,
       ),
       recent: summary.recent.map((row) =>

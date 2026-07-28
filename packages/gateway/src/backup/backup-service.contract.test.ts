@@ -1,15 +1,14 @@
-import { conflictAfterFirstCall } from './backup-conflict-provider.js';
-import { tempDir } from '@centraid/test-kit/temp-dir';
-
-import { afterEach, describe, expect, test, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+
 import {
   openLocalBackupProvider,
   wrapRecoveryKit,
   WAL_DB_FILES,
   type BackupProvider,
 } from '@centraid/backup';
+import { forEachSequentially } from '@centraid/test-kit/sequential';
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import {
   updateBackupPolicy,
   updateBlobStoreSettings,
@@ -18,21 +17,31 @@ import {
   sealKeyFileFor,
   type BackupPolicyPatch,
 } from '@centraid/vault';
-import { openVaultRegistry, type VaultRegistry } from '../serve/vault-registry.js';
+import { afterEach, describe, expect, test, vi } from 'vitest';
+
 import { HealthRegistry } from '../serve/health-registry.js';
-import { BackupService, recoveryWindowMs, walDrainDelayMs } from './backup-service.js';
-import type { BackupConfig } from './backup-config.js';
+import { openVaultRegistry, type VaultRegistry } from '../serve/vault-registry.js';
 import { runCasOnlyReconciliation } from './backup-cas-reconciliation.js';
+import type { BackupConfig } from './backup-config.js';
+import { conflictAfterFirstCall } from './backup-conflict-provider.js';
+import { BackupService, recoveryWindowMs, walDrainDelayMs } from './backup-service.js';
 
-const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
-
+const silentLogger = {
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+};
 const cleanups: Array<() => Promise<void> | void> = [];
 describe('backup-service', () => {
   afterEach(async () => {
-    while (cleanups.length > 0) await cleanups.pop()?.();
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
   });
   function openRegistry(rootDir: string): VaultRegistry {
-    const registry = openVaultRegistry({ rootDir, logger: silentLogger, ownerName: 'Priya' });
+    const registry = openVaultRegistry({
+      rootDir,
+      logger: silentLogger,
+      ownerName: 'Priya',
+    });
     registry.create('Test vault');
     cleanups.push(() => registry.stop());
     return registry;
@@ -51,11 +60,13 @@ describe('backup-service', () => {
 
   async function verifyExportedKit(h: Harness) {
     const kit = wrapRecoveryKit(await h.service.recoveryKitDocument(), 'test-password');
-    return h.service.verifyRecoveryKit({ kit, password: 'test-password', lossConsent: true });
+    return h.service.verifyRecoveryKit({
+      kit,
+      password: 'test-password',
+      lossConsent: true,
+    });
   }
 
-  /** Make the second snapshot registration simulate a provider takeover. */
-  /** One vault, a fixture file standing in for the staged DB, and a mutable clock. */
   async function harness(
     policy: BackupPolicyPatch = {},
     wrapProvider?: (real: BackupProvider) => BackupProvider,
@@ -86,8 +97,6 @@ describe('backup-service', () => {
       logger: silentLogger,
       now: () => clock.now,
       provider: wrapProvider ? wrapProvider(realProvider) : realProvider,
-      // The seam FORMAT.md's engine needs a `SourceEntry[]` for — a single
-      // "db" entry over the fixture file the test mutates directly.
       assembleEntries: ({ plane }) => {
         const bases = plane.walShipper!.currentBases();
         return Promise.resolve([
@@ -99,12 +108,25 @@ describe('backup-service', () => {
             walGeneration: base.generation,
             baseTickMs: base.createdAtMs,
           })),
-          { path: 'fixture.bin', kind: 'blob' as const, absolutePath: fixtureFile },
+          {
+            path: 'fixture.bin',
+            kind: 'blob' as const,
+            absolutePath: fixtureFile,
+          },
         ]);
       },
     });
 
-    return { service, registry, health, vaultId, fixtureFile, clock, providerDir, backupDir };
+    return {
+      service,
+      registry,
+      health,
+      vaultId,
+      fixtureFile,
+      clock,
+      providerDir,
+      backupDir,
+    };
   }
 
   test('recoveryWindowMs maps a retention ladder to its daily rung, non-ladder to none (issue #439 R4)', () => {
@@ -118,7 +140,6 @@ describe('backup-service', () => {
         neverPruneNewest: true,
       }),
     ).toBe(30 * DAY_MS);
-    // A local provider (no ladder) advertises no recovery window ⇒ grace disengaged.
     expect(recoveryWindowMs({ kind: 'none' })).toBeUndefined();
     expect(recoveryWindowMs(undefined)).toBeUndefined();
   });
@@ -185,7 +206,10 @@ describe('backup-service', () => {
 
     const synced = await h.service.syncPolicy(h.vaultId);
     const status = (await h.service.status())[h.vaultId];
-    expect(synced).toMatchObject({ status: 'synced', desired: { rpoSeconds: 15 * 60 } });
+    expect(synced).toMatchObject({
+      status: 'synced',
+      desired: { rpoSeconds: 15 * 60 },
+    });
     expect(status?.providerPolicy?.echo?.rpoSeconds).toBe(15 * 60);
   });
 
@@ -221,7 +245,11 @@ describe('backup-service', () => {
         ...opts,
         collect: async () => ({
           configured: true,
-          collection: { source: 'bucket', providerAttested: false, objects: [] },
+          collection: {
+            source: 'bucket',
+            providerAttested: false,
+            objects: [],
+          },
         }),
       }),
     );
@@ -249,7 +277,7 @@ describe('backup-service', () => {
       snapshot.components.find((component) => component.component === 'backups'),
     ).toMatchObject({
       status: 'degraded',
-      detail: expect.stringMatching(/offsite bytes.*recovery kit cannot restore/i),
+      detail: expect.stringMatching(/offsite bytes.*recovery kit cannot restore/iu),
     });
 
     await service.tick();
@@ -311,7 +339,7 @@ describe('backup-service', () => {
         status: 'error',
       });
       expect(snapshot.components.find((row) => row.component === 'backups')?.detail).toMatch(
-        /1 missing\/corrupt/,
+        /1 missing\/corrupt/u,
       );
     }
   });
@@ -379,12 +407,11 @@ describe('backup-service', () => {
     const fenced = (await h.service.status())[h.vaultId];
     expect(fenced?.fenced).toBe(true);
     expect(fenced?.generation).toBe(1); // never bumped automatically (PROTOCOL.md fencing rule)
-    expect(fenced?.lastError).toMatch(/another machine has taken over/);
+    expect(fenced?.lastError).toMatch(/another machine has taken over/u);
 
     const snap = await h.health.snapshot();
     expect(snap.components.find((c) => c.component === 'backups')?.status).toBe('error');
 
-    // A subsequent scheduler-driven attempt refuses outright — no retry loop.
     const before = fenced?.lastBackupAt;
     await h.service.runBackup(h.vaultId);
     expect((await h.service.status())[h.vaultId]?.lastBackupAt).toBe(before);
@@ -398,14 +425,11 @@ describe('backup-service', () => {
     let snap = await h.health.snapshot();
     expect(snap.components.find((c) => c.component === 'backups')?.status).toBe('ok');
 
-    // Past 2x verifyEveryDays (1 day) but under 2x intervalHours (1 hour) is
-    // impossible to isolate with these units, so move the clock far enough
-    // that BOTH would trip and assert the worse of the two (error) wins.
     h.clock.now += 3 * 24 * 60 * 60 * 1000;
     snap = await h.health.snapshot();
     const backups = snap.components.find((c) => c.component === 'backups');
     expect(backups?.status).toBe('error');
-    expect(backups?.detail).toMatch(/stale/);
+    expect(backups?.detail).toMatch(/stale/u);
   });
 
   test('verify-only staleness (backup fresh, verify old) degrades without erroring', async () => {
@@ -413,9 +437,6 @@ describe('backup-service', () => {
     await h.service.runBackup(h.vaultId);
     await h.service.runVerify(h.vaultId);
 
-    // Advance past 2x verifyEveryDays (14 days) but stay under 2x
-    // intervalHours (48 hours would trip first) — so bump the clock, then
-    // immediately refresh lastBackupAt so only verification looks stale.
     h.clock.now += 20 * 24 * 60 * 60 * 1000;
     await h.service.runBackup(h.vaultId); // no fixture change — refreshes lastBackupAt only
     await h.service.runRestoreVerify(h.vaultId); // isolate ordinary verify staleness
@@ -423,7 +444,7 @@ describe('backup-service', () => {
     const snap = await h.health.snapshot();
     const backups = snap.components.find((c) => c.component === 'backups');
     expect(backups?.status).toBe('degraded');
-    expect(backups?.detail).toMatch(/verification is stale/);
+    expect(backups?.detail).toMatch(/verification is stale/u);
   });
 
   test('recoveryKitStatus starts unconfirmed', async () => {

@@ -1,31 +1,32 @@
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import os from 'node:os';
 // governance: allow-repo-hygiene file-size-limit pending split into changes-feed / app-routes modules
 import path from 'node:path';
-import os from 'node:os';
-import type { IncomingMessage, ServerResponse } from 'node:http';
-import { Registry, RegistryError } from './registry/registry.js';
-import { parseWithDraft } from './http/router.js';
-import { Dispatcher, statusForToolError, type ToolResult } from './handlers/dispatcher.js';
-import { serveStatic } from './http/static-server.js';
-import { readBody, sendError, sendJson } from './http/http-utils.js';
-import { sendJsonNegotiated } from './http/compression.js';
-import { appDataDir } from './registry/app-paths.js';
-import { cleanupDeregisteredApp } from './registry/deregister-cleanup.js';
-import { handleLogsRoute, handleSettingsWrite } from './http/cloud-routes.js';
+
 import { ChangeBus } from './changes/change-bus.js';
-import { handleAppChanges } from './http/changes-sse.js';
-import { serveQueryBundle } from './http/query-bundle.js';
-import type { PrefsStore } from './stores/prefs-store.js';
 import type { ConversationHistoryStore } from './conversation/history.js';
-import { readAppSettings } from './settings/app-settings.js';
-import { buildSettingsInject } from './settings/settings-merge.js';
-import { handleTurnRoute, parseTurnSubRoute, type AskModelPrefs } from './http/turn-routes.js';
-import type { TurnLimiter } from './http/turn-limiter.js';
 import type { ConversationRunner } from './conversation/runner.js';
 import type { ConversationWorkspaceKind } from './conversation/schema.js';
 import type { RunnerKind } from './conversation/turn.js';
+import { Dispatcher, statusForToolError, type ToolResult } from './handlers/dispatcher.js';
 import type { VaultBridge } from './handlers/vault-bridge.js';
-import type { AppRef, RegistryEntry } from './types.js';
+import { handleAppChanges } from './http/changes-sse.js';
+import { handleLogsRoute, handleSettingsWrite } from './http/cloud-routes.js';
+import { sendJsonNegotiated } from './http/compression.js';
+import { readBody, sendError, sendJson } from './http/http-utils.js';
 import { COMPANION_GRANTS_HEADER, companionHandlerAllowed } from './http/internal-headers.js';
+import { serveQueryBundle } from './http/query-bundle.js';
+import { parseWithDraft } from './http/router.js';
+import { serveStatic } from './http/static-server.js';
+import type { TurnLimiter } from './http/turn-limiter.js';
+import { handleTurnRoute, parseTurnSubRoute, type AskModelPrefs } from './http/turn-routes.js';
+import { appDataDir } from './registry/app-paths.js';
+import { cleanupDeregisteredApp } from './registry/deregister-cleanup.js';
+import { Registry, RegistryError } from './registry/registry.js';
+import { readAppSettings } from './settings/app-settings.js';
+import { buildSettingsInject } from './settings/settings-merge.js';
+import type { PrefsStore } from './stores/prefs-store.js';
+import type { AppRef, RegistryEntry } from './types.js';
 
 const WEB_APP_HEADER = 'x-centraid-web-app';
 const WEB_SHELL_ORIGIN_HEADER = 'x-centraid-web-shell-origin';
@@ -737,7 +738,10 @@ export class Runtime {
               ...sharedServe,
             });
           } else {
-            await serveStatic(req, res, codeDir, rel, { ...draftServe, ...sharedServe });
+            await serveStatic(req, res, codeDir, rel, {
+              ...draftServe,
+              ...sharedServe,
+            });
           }
           return;
         }
@@ -769,7 +773,11 @@ export class Runtime {
 
         case 'app-runner-status': {
           if (!this.runnerStatus) {
-            sendJson(res, 200, { kind: 'none', ok: false, reason: 'no runner configured' });
+            sendJson(res, 200, {
+              kind: 'none',
+              ok: false,
+              reason: 'no runner configured',
+            });
             return;
           }
           const status = await this.runnerStatus({ refresh: route.refresh });

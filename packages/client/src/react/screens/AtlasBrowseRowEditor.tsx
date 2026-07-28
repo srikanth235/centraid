@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type JSX } from 'react';
+
 import {
   browseInsertRow,
   browseRefSearch,
@@ -8,7 +9,6 @@ import {
   type BrowseRefHit,
 } from '../../gateway-client.js';
 import Icon from '../ui/Icon.js';
-import styles from './AtlasBrowseTab.module.css';
 import {
   cellText,
   insertableColumns,
@@ -16,6 +16,8 @@ import {
   pkColumns,
   type EditorState,
 } from './atlasBrowseData.js';
+
+import styles from './AtlasBrowseTab.module.css';
 
 // The row editor drawer (issue #441 B3), split out of AtlasBrowseTab. An insert
 // or edit form whose writes ride the gateway's journalled command path — never
@@ -93,7 +95,12 @@ export function RowEditor({
         const was = original ? cellText(original[c.name]) : '';
         if (raw !== was) set[c.name] = coerce(c, raw);
       }
-      void browseUpdateRow({ table, id: editor.id, set, ...machineryFlag }).then(finish);
+      void browseUpdateRow({
+        table,
+        id: editor.id,
+        set,
+        ...machineryFlag,
+      }).then(finish);
     }
   };
 

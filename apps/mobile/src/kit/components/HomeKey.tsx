@@ -1,7 +1,7 @@
+import { Feather } from '@expo/vector-icons';
 import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme';
 import GlassBar from './GlassBar';
@@ -130,7 +130,13 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     width: FLOAT_SIZE,
   },
-  floatWrap: { alignItems: 'center', bottom: 0, left: 0, position: 'absolute', right: 0 },
+  floatWrap: {
+    alignItems: 'center',
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+  },
   headerKey: {
     alignItems: 'center',
     height: HEADER_SIZE,

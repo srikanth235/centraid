@@ -13,6 +13,7 @@
  */
 
 import assert from 'node:assert/strict';
+
 import { providerDerivedConformanceCases } from './conformance-derived.js';
 import { providerObservabilityConformanceCases } from './conformance-observability.js';
 import type { BackupProvider } from './provider.js';
@@ -146,7 +147,9 @@ export function providerConformanceCases(
       name: 'target lifecycle',
       run: () =>
         withProvider(makeProvider, async (provider) => {
-          const { targetId } = await provider.createTarget({ label: 'conformance-target' });
+          const { targetId } = await provider.createTarget({
+            label: 'conformance-target',
+          });
           assert.ok(targetId.length > 0);
           const info = await provider.getTarget(targetId);
           assert.equal(info.id, targetId);
@@ -206,7 +209,7 @@ export function providerConformanceCases(
             // own namespace or a restore has no coordinated cut to aim at.
             `wal/tick/${gen}-${jgen}/1752480060000`,
           ];
-          for (const key of keys) await rw.put(key, TEXT.encode(key));
+          await Promise.all(keys.map((key) => rw.put(key, TEXT.encode(key))));
           const listed: string[] = [];
           for await (const obj of rw.list(`wal/vault/${gen}/`)) listed.push(obj.key);
           assert.deepEqual(
@@ -219,7 +222,7 @@ export function providerConformanceCases(
           assert.deepEqual(markers, [keys[5]], 'pair-marker prefix list must return the marker');
           const got = await rw.get(keys[1]!);
           assert.equal(new TextDecoder().decode(got), keys[1]);
-          for (const key of keys) await rw.delete(key);
+          await Promise.all(keys.map((key) => rw.delete(key)));
           assert.equal(await rw.head(keys[0]!), null);
         }),
     },
@@ -318,7 +321,8 @@ export function providerConformanceCases(
         withProvider(makeProvider, async (provider) => {
           const { targetId } = await provider.createTarget({ label: 'seq' });
           const seqs: number[] = [];
-          for (let i = 0; i < 3; i++) {
+          const registerNext = async (i: number): Promise<void> => {
+            if (i >= 3) return;
             const row = await provider.registerSnapshot(targetId, {
               idempotencyKey: `seq-${i}`,
               manifestKey: manifestKeyFor(targetId, `seq-${i}.json`),
@@ -330,7 +334,9 @@ export function providerConformanceCases(
               appMeta: {},
             });
             seqs.push(row.seq);
-          }
+            return registerNext(i + 1);
+          };
+          await registerNext(0);
           for (let i = 1; i < seqs.length; i++) {
             assert.ok(
               (seqs[i] as number) > (seqs[i - 1] as number),
@@ -342,7 +348,9 @@ export function providerConformanceCases(
           const sortedDesc = [...listedSeqs].sort((a, b) => b - a);
           assert.deepEqual(listedSeqs, sortedDesc, 'listSnapshots must return newest-first');
 
-          const withPruned = await provider.listSnapshots(targetId, { includePruned: true });
+          const withPruned = await provider.listSnapshots(targetId, {
+            includePruned: true,
+          });
           assert.ok(withPruned.length >= rows.length, 'includePruned must never return fewer rows');
         }),
     },
@@ -427,7 +435,9 @@ export function providerConformanceCases(
       run: () =>
         withProvider(makeProvider, async (provider) => {
           if (!provider.requestGrant) return; // capability not offered — skip cleanly
-          const { targetId } = await provider.createTarget({ label: 'grant-layer' });
+          const { targetId } = await provider.createTarget({
+            label: 'grant-layer',
+          });
           const backupGrant = await provider.requestGrant(targetId, 'backup', 'read-write');
           const casGrant = await provider.requestGrant(targetId, 'cas', 'read-write');
           assert.equal(backupGrant.store, 'backup', 'grant must echo the requested store class');
@@ -453,7 +463,9 @@ export function providerConformanceCases(
         withProvider(makeProvider, async (provider) => {
           const caps = await provider.capabilities();
           if (!caps.capabilities.includes('cas')) return; // capability not offered — skip cleanly
-          const { targetId } = await provider.createTarget({ label: 'cas-roundtrip' });
+          const { targetId } = await provider.createTarget({
+            label: 'cas-roundtrip',
+          });
           const rw = await provider.openDataPlane(targetId, 'cas', 'read-write');
           const key = `blobs/${'ab'.repeat(32)}`; // sha256-hex-shaped key (FORMAT.md-agnostic; cas's own key layout)
           const payload = TEXT.encode('opaque sealed ciphertext');
@@ -474,7 +486,9 @@ export function providerConformanceCases(
         withProvider(makeProvider, async (provider) => {
           const caps = await provider.capabilities();
           if (!caps.capabilities.includes('cas')) return; // skip cleanly
-          const { targetId } = await provider.createTarget({ label: 'cas-disjoint' });
+          const { targetId } = await provider.createTarget({
+            label: 'cas-disjoint',
+          });
           const backupStore = await provider.openDataPlane(targetId, 'backup', 'read-write');
           const casStore = await provider.openDataPlane(targetId, 'cas', 'read-write');
           await backupStore.put('probe', TEXT.encode('backup-side'));
@@ -493,7 +507,9 @@ export function providerConformanceCases(
         withProvider(makeProvider, async (provider) => {
           const caps = await provider.capabilities();
           if (!caps.capabilities.includes('usage') || !provider.usageReport) return; // skip cleanly
-          const { targetId } = await provider.createTarget({ label: 'usage-report' });
+          const { targetId } = await provider.createTarget({
+            label: 'usage-report',
+          });
 
           const before = await provider.usageReport(targetId);
           for (const store of Object.keys(before) as (keyof typeof before)[]) {

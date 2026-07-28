@@ -15,13 +15,15 @@
  * asserts it cannot mint a founding ticket while the host itself still can.
  */
 
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { afterEach, describe, expect, test, vi } from 'vitest';
 import crypto from 'node:crypto';
-import http from 'node:http';
 import { promises as fs } from 'node:fs';
-import path from 'node:path';
+import http from 'node:http';
 import type { AddressInfo } from 'node:net';
+import path from 'node:path';
+
+import { ROUTES } from '@centraid/protocol';
+import { forEachSequentially } from '@centraid/test-kit/sequential';
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import {
   createTunnelClient,
   DEVICE_IDENTITY_HEADER,
@@ -32,23 +34,24 @@ import {
   TUNNEL_FORWARDED_HEADER,
   tunnelRequest,
 } from '@centraid/tunnel';
-import { ROUTES } from '@centraid/protocol';
 import { KeyStore } from '@centraid/vault';
+import { afterEach, describe, expect, test, vi } from 'vitest';
+
 import { RecoveryKitStateStore } from '../backup/recovery-kit-state.js';
 import { daemonLayoutFor } from '../cli/paths.js';
 import { EnrollmentStore } from '../serve/enrollment-store.js';
 import { GatewayDatabase } from '../serve/gateway-db.js';
 import { PairingTicketStore } from '../serve/pairing-store.js';
 import { openVaultRegistry } from '../serve/vault-registry.js';
-import { isDirectHostRequest } from './route-helpers.js';
 import { makeFoundingRouteHandler } from './founding-routes.js';
+import { isDirectHostRequest } from './route-helpers.js';
 
 vi.setConfig({ testTimeout: 60_000 });
 
 const cleanups: Array<() => Promise<void> | void> = [];
 describe('founding-forwarder', () => {
   afterEach(async () => {
-    for (const cleanup of cleanups.splice(0).toReversed()) await cleanup();
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
   });
 
   const HOST_BEARER = crypto.randomBytes(16).toString('hex');
@@ -62,7 +65,11 @@ describe('founding-forwarder', () => {
     const registry = openVaultRegistry({
       rootDir: layout.vaultDir,
       cacheRootDir: layout.cacheDir,
-      logger: { info: () => undefined, warn: () => undefined, error: () => undefined },
+      logger: {
+        info: () => undefined,
+        warn: () => undefined,
+        error: () => undefined,
+      },
     });
     cleanups.push(() => registry.stop());
 
@@ -177,6 +184,9 @@ describe('founding-forwarder', () => {
       headers: { authorization: `Bearer ${HOST_BEARER}` },
     });
     expect(direct.status).toBe(200);
-    await expect(direct.json()).resolves.toMatchObject({ ok: true, ticket: expect.any(String) });
+    await expect(direct.json()).resolves.toMatchObject({
+      ok: true,
+      ticket: expect.any(String),
+    });
   });
 });

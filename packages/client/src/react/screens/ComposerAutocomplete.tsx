@@ -7,8 +7,10 @@ import {
   type KeyboardEvent,
   type RefObject,
 } from 'react';
-import styles from './AssistantScreen.module.css';
+
 import { clearSlash, insertRef, mentionTokenAt, slashCommandAt } from './composerMentions.js';
+
+import styles from './AssistantScreen.module.css';
 
 /** An entity the @-mention picker can offer (a trimmed vault search hit). */
 export interface ComposerEntity {
@@ -38,7 +40,13 @@ export interface ComposerAutocompleteOptions {
 }
 
 type Suggest =
-  | { kind: 'mention'; start: number; caret: number; items: ComposerEntity[]; loading: boolean }
+  | {
+      kind: 'mention';
+      start: number;
+      caret: number;
+      items: ComposerEntity[];
+      loading: boolean;
+    }
   | { kind: 'slash'; caret: number; items: SlashCommand[] }
   | null;
 
@@ -76,12 +84,24 @@ export function useComposerAutocomplete(opts: ComposerAutocompleteOptions): {
           .searchEntities(query)
           .then((items) => {
             if (seq !== searchSeq.current) return;
-            setSuggest({ kind: 'mention', start, caret, items, loading: false });
+            setSuggest({
+              kind: 'mention',
+              start,
+              caret,
+              items,
+              loading: false,
+            });
             setActive(0);
           })
           .catch(() => {
             if (seq !== searchSeq.current) return;
-            setSuggest({ kind: 'mention', start, caret, items: [], loading: false });
+            setSuggest({
+              kind: 'mention',
+              start,
+              caret,
+              items: [],
+              loading: false,
+            });
           });
       }, 150);
     },

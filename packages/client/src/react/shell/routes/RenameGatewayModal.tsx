@@ -1,8 +1,10 @@
 import { type JSX, useEffect, useRef, useState } from 'react';
-import { iconSvg } from '../iconSvg.js';
-import spaceModalStyles from './SpaceModal.module.css';
-import controlsCss from '../../styles/controls.module.css';
+
 import { cx } from '../../ui/cx.js';
+import { iconSvg } from '../iconSvg.js';
+
+import controlsCss from '../../styles/controls.module.css';
+import spaceModalStyles from './SpaceModal.module.css';
 
 export interface RenameGatewayModalProps {
   initialLabel: string;

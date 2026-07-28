@@ -12,6 +12,7 @@
 // The chip labels are the only scope strings a user ever sees; they never name
 // the underlying storage.
 import type { InlineScope } from '../inline-types.ts';
+
 import styles from './ScopeChips.module.css';
 
 /** The "everything, merged" chip. Not a scope id — selection is null for it. */

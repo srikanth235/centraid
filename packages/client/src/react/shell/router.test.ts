@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import type { ShellRoute } from '../../app-shell-context.js';
 import {
   canGoBack,

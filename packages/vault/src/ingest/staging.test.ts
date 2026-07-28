@@ -3,7 +3,9 @@
 // file-drop customs for MBOX, statement CSV and Takeout zips.
 
 import { deflateRawSync } from 'node:zlib';
+
 import { beforeEach, describe, expect, test } from 'vitest';
+
 import { bootstrapVault, type BootstrapResult } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { createGateway, Gateway } from '../gateway/gateway.js';
@@ -19,7 +21,11 @@ describe('staging', () => {
     db = openVaultDb();
     boot = bootstrapVault(db, { ownerName: 'Priya' });
     gw = createGateway(db);
-    owner = { kind: 'device', deviceId: boot.deviceId, deviceKey: boot.deviceKey };
+    owner = {
+      kind: 'device',
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+    };
   });
 
   const ICS = (summary: string) =>
@@ -35,7 +41,10 @@ describe('staging', () => {
     ].join('\r\n');
 
   test('stage → review → publish: first contact is a draft, publish lands rows + map', () => {
-    const staged = gw.stageImportFile(owner, { filename: 'calendar.ics', data: ICS('Dentist') });
+    const staged = gw.stageImportFile(owner, {
+      filename: 'calendar.ics',
+      data: ICS('Dentist'),
+    });
     expect(staged.kind).toBe('file.ics');
     expect(staged.staged).toMatchObject({ create: 1, update: 0, skip: 0 });
     // Nothing landed yet — staging is reviewable state.
@@ -47,7 +56,10 @@ describe('staging', () => {
       purpose: 'dpv:ServiceProvision',
     }).rows;
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ disposition: 'create', entity_type: 'core.event' });
+    expect(rows[0]).toMatchObject({
+      disposition: 'create',
+      entity_type: 'core.event',
+    });
 
     const published = gw.publishImport(owner, staged.batchId);
     expect(published).toMatchObject({ created: 1, updated: 0, skipped: 0 });
@@ -57,15 +69,24 @@ describe('staging', () => {
     expect(event.summary).toBe('Dentist');
     const map = db.vault
       .prepare('SELECT target_type, gone_upstream FROM sync_external_entity WHERE external_id = ?')
-      .get('evt-1@example.com') as { target_type: string; gone_upstream: number };
+      .get('evt-1@example.com') as {
+      target_type: string;
+      gone_upstream: number;
+    };
     expect(map).toMatchObject({ target_type: 'core.event', gone_upstream: 0 });
   });
 
   test('re-import: unchanged skips, changed stages an update (vault-wins review)', () => {
-    const first = gw.stageImportFile(owner, { filename: 'calendar.ics', data: ICS('Dentist') });
+    const first = gw.stageImportFile(owner, {
+      filename: 'calendar.ics',
+      data: ICS('Dentist'),
+    });
     gw.publishImport(owner, first.batchId);
 
-    const unchanged = gw.stageImportFile(owner, { filename: 'calendar.ics', data: ICS('Dentist') });
+    const unchanged = gw.stageImportFile(owner, {
+      filename: 'calendar.ics',
+      data: ICS('Dentist'),
+    });
     expect(unchanged.staged).toMatchObject({ create: 0, update: 0, skip: 1 });
 
     const changed = gw.stageImportFile(owner, {
@@ -86,11 +107,14 @@ describe('staging', () => {
   });
 
   test('discard: a draft batch publishes nothing and cannot be re-published', () => {
-    const staged = gw.stageImportFile(owner, { filename: 'calendar.ics', data: ICS('Dentist') });
+    const staged = gw.stageImportFile(owner, {
+      filename: 'calendar.ics',
+      data: ICS('Dentist'),
+    });
     gw.discardImport(owner, staged.batchId);
     const events = db.vault.prepare('SELECT count(*) AS n FROM core_event').get() as { n: number };
     expect(events.n).toBe(0);
-    expect(() => gw.publishImport(owner, staged.batchId)).toThrow(/discarded, not draft/);
+    expect(() => gw.publishImport(owner, staged.batchId)).toThrow(/discarded, not draft/u);
   });
 
   const MBOX = [
@@ -112,7 +136,10 @@ describe('staging', () => {
   ].join('\n');
 
   test('MBOX: messages thread by normalized subject, senders resolve to one party', () => {
-    const staged = gw.stageImportFile(owner, { filename: 'inbox.mbox', data: MBOX });
+    const staged = gw.stageImportFile(owner, {
+      filename: 'inbox.mbox',
+      data: MBOX,
+    });
     expect(staged.staged.create).toBe(2);
     gw.publishImport(owner, staged.batchId);
 
@@ -129,7 +156,10 @@ describe('staging', () => {
       .get() as { n: number };
     expect(meera.n).toBe(1); // one sender party across both messages
     // Re-import: everything skips via the map.
-    const again = gw.stageImportFile(owner, { filename: 'inbox.mbox', data: MBOX });
+    const again = gw.stageImportFile(owner, {
+      filename: 'inbox.mbox',
+      data: MBOX,
+    });
     expect(again.staged).toMatchObject({ create: 0, skip: 2 });
   });
 
@@ -158,13 +188,29 @@ describe('staging', () => {
       .prepare(
         'SELECT amount_minor, direction, posted_at FROM core_transaction WHERE account_id = ? ORDER BY posted_at',
       )
-      .all(account.account_id) as { amount_minor: number; direction: string; posted_at: string }[];
+      .all(account.account_id) as {
+      amount_minor: number;
+      direction: string;
+      posted_at: string;
+    }[];
     // node:sqlite hands back null-prototype rows; spreading compares the column
     // data (which is the contract) without asserting the driver's prototype.
     expect(txns.map((row) => ({ ...row }))).toStrictEqual([
-      { amount_minor: 184250, direction: 'debit', posted_at: '2026-07-01T00:00:00Z' },
-      { amount_minor: 15000000, direction: 'credit', posted_at: '2026-07-02T00:00:00Z' },
-      { amount_minor: 3000, direction: 'debit', posted_at: '2026-07-03T00:00:00Z' },
+      {
+        amount_minor: 184250,
+        direction: 'debit',
+        posted_at: '2026-07-01T00:00:00Z',
+      },
+      {
+        amount_minor: 15000000,
+        direction: 'credit',
+        posted_at: '2026-07-02T00:00:00Z',
+      },
+      {
+        amount_minor: 3000,
+        direction: 'debit',
+        posted_at: '2026-07-03T00:00:00Z',
+      },
     ]);
     // Idempotent on the Reference column.
     const again = gw.stageImportFile(owner, {
@@ -222,7 +268,10 @@ describe('staging', () => {
       { name: 'Takeout/Contacts/All Contacts.vcf', text: VCF },
       { name: 'Takeout/archive_browser.html', text: '<html></html>' },
     ]);
-    const staged = gw.stageImportFile(owner, { filename: 'takeout.zip', data: zip });
+    const staged = gw.stageImportFile(owner, {
+      filename: 'takeout.zip',
+      data: zip,
+    });
     expect(staged.kind).toBe('file.takeout');
     expect(staged.staged.create).toBe(2);
     expect(staged.unrouted).toStrictEqual(['Takeout/archive_browser.html']);
@@ -249,6 +298,6 @@ describe('staging', () => {
           data: ICS('x'),
         },
       ),
-    ).toThrow(/unknown caller/);
+    ).toThrow(/unknown caller/u);
   });
 });

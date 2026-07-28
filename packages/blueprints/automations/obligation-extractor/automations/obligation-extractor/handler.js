@@ -26,9 +26,15 @@ const OBLIGATIONS_SCHEMA = {
         required: ['what', 'kind', 'date'],
         additionalProperties: false,
         properties: {
-          what: { type: 'string', description: 'e.g. "Home insurance policy renewal".' },
+          what: {
+            type: 'string',
+            description: 'e.g. "Home insurance policy renewal".',
+          },
           kind: { type: 'string', enum: ['expiry', 'renewal', 'due'] },
-          date: { type: 'string', description: 'The VISIBLE date, ISO (YYYY-MM-DD).' },
+          date: {
+            type: 'string',
+            description: 'The VISIBLE date, ISO (YYYY-MM-DD).',
+          },
         },
       },
     },

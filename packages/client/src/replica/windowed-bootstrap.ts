@@ -1,3 +1,4 @@
+import type { GatewayAuth } from '../gateway-auth.js';
 import { ReplicaProtocolError } from './errors.js';
 import {
   DEFAULT_REPLICA_BOOTSTRAP_WINDOW,
@@ -12,7 +13,6 @@ import type {
   ReplicaChangeBatch,
   ReplicaCursor,
 } from './types.js';
-import type { GatewayAuth } from '../gateway-auth.js';
 
 /**
  * The coordinator surface this driver needs. Narrowed to a structural type so
@@ -87,37 +87,40 @@ export async function runWindowedBootstrap(
   await options.target.bootstrapBegin(header);
   await options.target.bootstrapPage(first.rows);
 
-  let page: ReplicaBootstrapPage = first;
-  let pages = 1;
-  while (!page.complete) {
+  const applyNextPage = async (page: ReplicaBootstrapPage, pages: number): Promise<void> => {
+    if (page.complete) return;
     if (signal.aborted) throw new ReplicaProtocolError('Replica bootstrap was aborted');
     const next = page.next;
     if (!next) throw new ReplicaProtocolError('Incomplete replica bootstrap page had no token');
-    if (++pages > maxPages) {
+    const nextPageCount = pages + 1;
+    if (nextPageCount > maxPages) {
       throw new ReplicaProtocolError('Replica bootstrap exceeded its page budget');
     }
-    page = await fetchReplicaBootstrapPage(options.gatewayAuth, {
+    const nextPage = await fetchReplicaBootstrapPage(options.gatewayAuth, {
       after: next,
       window: options.window ?? DEFAULT_REPLICA_BOOTSTRAP_WINDOW,
       ...(options.fetcher ? { fetcher: options.fetcher } : {}),
       ...(options.signal ? { signal: options.signal } : {}),
     });
-    if (page.schemaEpoch !== header.schemaEpoch || page.vaultId !== header.vaultId) {
+    if (nextPage.schemaEpoch !== header.schemaEpoch || nextPage.vaultId !== header.vaultId) {
       throw new ReplicaProtocolError('Replica bootstrap page changed identity mid-walk');
     }
-    await options.target.bootstrapPage(page.rows);
-  }
+    await options.target.bootstrapPage(nextPage.rows);
+    return applyNextPage(nextPage, nextPageCount);
+  };
+  await applyNextPage(first, 1);
 
   const outcomes = (await options.reconcileOutcomes?.(firstCursor)) ?? [];
-  let cursor = await options.target.bootstrapCommit(firstCursor, header, outcomes);
+  const cursor = await options.target.bootstrapCommit(firstCursor, header, outcomes);
 
   // Mandatory convergence. Replay until the log stops advancing; only then is
   // the replica a faithful view of some real vault state.
-  while (!signal.aborted) {
-    const batch = await options.pullChanges(cursor, signal);
+  const converge = async (at: ReplicaCursor): Promise<ReplicaCursor> => {
+    if (signal.aborted) return at;
+    const batch = await options.pullChanges(at, signal);
     const applied = await options.target.applyChanges(batch);
-    if (applied.epoch === cursor.epoch && applied.seq <= cursor.seq) break;
-    cursor = applied;
-  }
-  return cursor;
+    if (applied.epoch === at.epoch && applied.seq <= at.seq) return at;
+    return converge(applied);
+  };
+  return converge(cursor);
 }

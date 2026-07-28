@@ -31,7 +31,10 @@
  */
 
 import crypto from 'node:crypto';
+import type { IncomingMessage } from 'node:http';
 import os from 'node:os';
+
+import type { RuntimeLogger } from '@centraid/app-engine';
 import {
   DEVICE_IDENTITY_HEADER,
   DEVICE_PROOF_HEADER as TUNNEL_DEVICE_PROOF_HEADER,
@@ -42,23 +45,22 @@ import {
   type GatewayPairRequest,
   type GatewayPairResponse,
 } from '@centraid/tunnel';
-import type { IncomingMessage } from 'node:http';
+import { KeyStore } from '@centraid/vault';
+
+import type { DataPlaneControlOptions } from '../routes/data-plane-control.js';
+import { isDirectHostRequest, isLoopbackRequest } from '../routes/route-helpers.js';
+import { EnrollmentStore } from '../serve/enrollment-store.js';
+import type { GatewayDatabase } from '../serve/gateway-db.js';
+import { PairingTicketStore } from '../serve/pairing-store.js';
 import type { DeviceAccess } from '../serve/vault-context.js';
 import type { VaultRegistry } from '../serve/vault-registry.js';
-import type { RuntimeLogger } from '@centraid/app-engine';
-import { EnrollmentStore } from '../serve/enrollment-store.js';
-import { PairingTicketStore } from '../serve/pairing-store.js';
 import {
   GATEWAY_MIN_PROTOCOL_VERSION,
   GATEWAY_PROTOCOL_VERSION,
   GATEWAY_SCHEMA_EPOCH,
   GATEWAY_VERSION,
 } from '../version.js';
-import type { DataPlaneControlOptions } from '../routes/data-plane-control.js';
-import { isDirectHostRequest, isLoopbackRequest } from '../routes/route-helpers.js';
 import type { DaemonLayout } from './paths.js';
-import type { GatewayDatabase } from '../serve/gateway-db.js';
-import { KeyStore } from '@centraid/vault';
 
 /**
  * The transport owns these names (`@centraid/tunnel`'s protocol module) —
@@ -87,12 +89,12 @@ export interface DaemonDevicePlane {
    * endpoint, the Rust byte relay, and the desktop phone tunnel — delivers a
    * remote peer to 127.0.0.1, so loopback alone proves nothing (#568 A/B).
    */
-  canMintFoundingTicket(req: IncomingMessage): boolean;
+  canMintFoundingTicket: (req: IncomingMessage) => boolean;
   /** Bind the endpoint once the HTTP listener is up. */
-  startEndpoint(upstream: {
+  startEndpoint: (upstream: {
     baseUrl: string;
     token: string;
-  }): Promise<GatewayEndpointHandle | undefined>;
+  }) => Promise<GatewayEndpointHandle | undefined>;
   /** Metadata-only callbacks exposed to the native iroh relay over loopback. */
   dataPlaneControl: DataPlaneControlOptions;
   /** Enrollment and one-time iroh pairing capability stores. */
@@ -199,8 +201,8 @@ export function makeDaemonDevicePlane(input: {
       endpointId,
       label: request.deviceName || `device ${endpointId.slice(0, 10)}…`,
       platform: request.platform,
-      ...(request.rememberDevice !== undefined ? { rememberDevice: request.rememberDevice } : {}),
-      ...(grantProfile !== undefined ? { grantProfile } : {}),
+      ...(request.rememberDevice === undefined ? {} : { rememberDevice: request.rememberDevice }),
+      ...(grantProfile === undefined ? {} : { grantProfile }),
     });
     const primary = enrolled?.[0];
     if (!enrolled || !primary) return { ok: false, error: 'invalid_ticket' };
@@ -235,7 +237,7 @@ export function makeDaemonDevicePlane(input: {
       memberId: primary.memberId,
       memberLabel: primary.memberLabel,
       gatewayId: liveEndpointId,
-      gatewayName: os.hostname().replace(/\.local$/, ''),
+      gatewayName: os.hostname().replace(/\.local$/u, ''),
       vaultId: primary.vaultId,
       vaultName: plane.name,
       vaultIds: enrolled.map((row) => row.vaultId),

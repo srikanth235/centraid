@@ -1,4 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
+
+import {
+  listAutomationTurns,
+  readAutomationTurnExpanded,
+  streamAutomationTurn,
+} from '../../../gateway-client.js';
 import {
   compileAttemptOf,
   compileStepOf,
@@ -7,19 +13,15 @@ import {
   loadTurnSteps,
   watchTurnSteps,
 } from './automationCompileData.js';
-import {
-  listAutomationTurns,
-  readAutomationTurnExpanded,
-  streamAutomationTurn,
-} from '../../../gateway-client.js';
 
 // `automationCompileData.ts` imports the gateway-client barrel; stub it so
 // pulling the module in doesn't run gateway-client-core's load-time
 // `window.CentraidApi` side effect (same guard automationsData.test.ts uses).
 vi.mock(import('../../../gateway-client.js'), () => ({
-  listAutomationTurns: vi.fn(),
-  readAutomationTurnExpanded: vi.fn(),
-  streamAutomationTurn: vi.fn(),
+  listAutomationTurns: vi.fn<typeof import('../../../gateway-client.js').listAutomationTurns>(),
+  readAutomationTurnExpanded:
+    vi.fn<typeof import('../../../gateway-client.js').readAutomationTurnExpanded>(),
+  streamAutomationTurn: vi.fn<typeof import('../../../gateway-client.js').streamAutomationTurn>(),
 }));
 
 const item = (over: Partial<CentraidAutomationItem> = {}): CentraidAutomationItem =>
@@ -43,9 +45,17 @@ describe(compileStepOf, () => {
 
   it('surfaces the error as the detail on a failed step', () => {
     const step = compileStepOf(
-      item({ ok: false, error: 'unexpected token', outputJson: '{"path":"handler.js"}' }),
+      item({
+        ok: false,
+        error: 'unexpected token',
+        outputJson: '{"path":"handler.js"}',
+      }),
     );
-    expect(step).toMatchObject({ status: 'fail', label: 'write_file', detail: 'unexpected token' });
+    expect(step).toMatchObject({
+      status: 'fail',
+      label: 'write_file',
+      detail: 'unexpected token',
+    });
   });
 
   it('marks an unfinished step running rather than failed', () => {
@@ -101,7 +111,10 @@ describe(compileAttemptOf, () => {
       error: 'handler.js: unexpected token',
       pinned: false,
     } as unknown as CentraidAutomationTurnRecord);
-    expect(attempt).toMatchObject({ status: 'fail', error: 'handler.js: unexpected token' });
+    expect(attempt).toMatchObject({
+      status: 'fail',
+      error: 'handler.js: unexpected token',
+    });
   });
 });
 
@@ -153,7 +166,10 @@ describe(watchTurnSteps, () => {
     // seeds the list so the owner never sees an empty rail for a compile that
     // has been running for minutes.
     vi.mocked(readAutomationTurnExpanded)
-      .mockResolvedValueOnce({ turn: turn(), items: [item({ itemId: 'a', ordinal: 0 })] } as never)
+      .mockResolvedValueOnce({
+        turn: turn(),
+        items: [item({ itemId: 'a', ordinal: 0 })],
+      } as never)
       .mockResolvedValueOnce({
         turn: turn({ endedAt: 5000, ok: true }),
         items: [item({ itemId: 'a', ordinal: 0 }), item({ itemId: 'b', ordinal: 1 })],
@@ -162,8 +178,20 @@ describe(watchTurnSteps, () => {
       _id: string,
       apply: (e: unknown) => void,
     ) => {
-      apply({ type: 'item.start', itemId: 'b', ordinal: 1, kind: 'tool', name: 'typecheck' });
-      apply({ type: 'item.end', itemId: 'b', ordinal: 1, ok: true, durationMs: 120 });
+      apply({
+        type: 'item.start',
+        itemId: 'b',
+        ordinal: 1,
+        kind: 'tool',
+        name: 'typecheck',
+      });
+      apply({
+        type: 'item.end',
+        itemId: 'b',
+        ordinal: 1,
+        ok: true,
+        durationMs: 120,
+      });
       apply({ type: 'turn.end', ok: true });
     }) as never);
 
@@ -181,7 +209,10 @@ describe(watchTurnSteps, () => {
 
   it('reports unsettled on abort rather than claiming the compile finished', async () => {
     const controller = new AbortController();
-    vi.mocked(readAutomationTurnExpanded).mockResolvedValue({ turn: null, items: [] } as never);
+    vi.mocked(readAutomationTurnExpanded).mockResolvedValue({
+      turn: null,
+      items: [],
+    } as never);
     vi.mocked(streamAutomationTurn).mockImplementation((async () => {
       controller.abort();
     }) as never);
@@ -194,7 +225,10 @@ describe(watchTurnSteps, () => {
   it('survives a cold read that fails, so a stream can still drive the rail', async () => {
     vi.mocked(readAutomationTurnExpanded)
       .mockRejectedValueOnce(new Error('500'))
-      .mockResolvedValueOnce({ turn: turn({ endedAt: 5000, ok: false }), items: [] } as never);
+      .mockResolvedValueOnce({
+        turn: turn({ endedAt: 5000, ok: false }),
+        items: [],
+      } as never);
     vi.mocked(streamAutomationTurn).mockImplementation((async () => undefined) as never);
     const outcome = await watchTurnSteps('c-1', () => undefined, new AbortController().signal);
     expect(outcome).toStrictEqual({ settled: true, ok: false });

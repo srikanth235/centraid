@@ -25,7 +25,10 @@ export interface InvokeOutcome {
 
 export function outcomeOf(x: unknown): InvokeOutcome | null;
 export function shortVal(v: unknown): string;
-export function describeParked(entry: ParkedEntry): { title: string; detail: string };
+export function describeParked(entry: ParkedEntry): {
+  title: string;
+  detail: string;
+};
 export function fetchParkedEntry(
   invocationId: string,
   deps: { fetchJson: FetchJson },

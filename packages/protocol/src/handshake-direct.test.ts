@@ -3,12 +3,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-  GATEWAY_MIN_PROTOCOL_VERSION,
-  GATEWAY_PROTOCOL_VERSION,
-  GATEWAY_SCHEMA_EPOCH,
-  GATEWAY_VERSION,
-} from './version.js';
+
 import {
   buildGatewayInfoPayload,
   handshakeGateway,
@@ -17,13 +12,23 @@ import {
   readProtocolFromInfo,
 } from './handshake.js';
 import { ROUTES } from './routes.js';
+import {
+  GATEWAY_MIN_PROTOCOL_VERSION,
+  GATEWAY_PROTOCOL_VERSION,
+  GATEWAY_SCHEMA_EPOCH,
+  GATEWAY_VERSION,
+} from './version.js';
 
 /**
  * `handshakeGateway` only reads `.ok`, `.status`, and `.json()` off the response,
  * so the stubs below model that slice of `fetch` rather than the whole Response
  * (hence the `as never` at each call site).
  */
-type StubResponse = { ok: boolean; status: number; json: () => Promise<unknown> };
+type StubResponse = {
+  ok: boolean;
+  status: number;
+  json: () => Promise<unknown>;
+};
 type StubFetch = (
   url: string,
   init?: { headers?: Record<string, string> },
@@ -52,17 +57,23 @@ describe(readProtocolFromInfo, () => {
 
 describe('judgeGatewayInfo branches', () => {
   it('malformed: non-object, missing version, missing protocol', () => {
-    expect(judgeGatewayInfo(null)).toMatchObject({ ok: false, reason: 'malformed' });
-    expect(judgeGatewayInfo([])).toMatchObject({ ok: false, reason: 'malformed' });
+    expect(judgeGatewayInfo(null)).toMatchObject({
+      ok: false,
+      reason: 'malformed',
+    });
+    expect(judgeGatewayInfo([])).toMatchObject({
+      ok: false,
+      reason: 'malformed',
+    });
     expect(judgeGatewayInfo({ protocolVersion: 2 })).toMatchObject({
       ok: false,
       reason: 'malformed',
-      detail: expect.stringMatching(/version/),
+      detail: expect.stringMatching(/version/u),
     });
     expect(judgeGatewayInfo({ version: '1.0.0' })).toMatchObject({
       ok: false,
       reason: 'malformed',
-      detail: expect.stringMatching(/protocolVersion/),
+      detail: expect.stringMatching(/protocolVersion/u),
     });
   });
 
@@ -165,7 +176,12 @@ describe('handshakeGateway network branches', () => {
       return {
         ok: true,
         status: 200,
-        json: async () => buildGatewayInfoPayload({ instanceId: 'i', startedAt: 1, uptimeMs: 2 }),
+        json: async () =>
+          buildGatewayInfoPayload({
+            instanceId: 'i',
+            startedAt: 1,
+            uptimeMs: 2,
+          }),
       };
     });
     const result = await handshakeGateway('http://gw', 'tok', good as never);

@@ -1,11 +1,12 @@
 import { handshakeGateway, ROUTES } from '@centraid/protocol';
 import { endpointIdForSecret } from '@centraid/tunnel';
-import { daemonLayoutFor } from './paths.js';
-import { resolveDaemonConfig } from './resolve-config.js';
+
 import { jsonFail, runJson, type Fail } from './json-cli.js';
-import { renderTerminalQr } from './pair-qr.js';
 import { daemonKeyStore } from './key-store.js';
 import { landlordBearerForEndpointSecret } from './landlord-auth.js';
+import { renderTerminalQr } from './pair-qr.js';
+import { daemonLayoutFor } from './paths.js';
+import { resolveDaemonConfig } from './resolve-config.js';
 
 interface InitTicketArgs {
   dataDir?: string;

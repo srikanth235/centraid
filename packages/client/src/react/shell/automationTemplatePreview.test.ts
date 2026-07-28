@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import type { TemplateEntry } from '../../app-shell-context.js';
 import { openAutomationTemplatePreview } from './automationTemplatePreview.js';
 
@@ -36,7 +37,7 @@ describe('automationTemplatePreview', () => {
     });
 
     it('fires onUse with the template and closes on "Use template"', () => {
-      const onUse = vi.fn();
+      const onUse = vi.fn<Parameters<typeof openAutomationTemplatePreview>[1]>();
       openAutomationTemplatePreview(tmpl, onUse);
       const useBtn = [...document.querySelectorAll('.auBtnPrimary')].find((b) =>
         b.textContent?.includes('Use template'),
@@ -47,7 +48,7 @@ describe('automationTemplatePreview', () => {
     });
 
     it('closes on Escape and backdrop click without firing onUse', () => {
-      const onUse = vi.fn();
+      const onUse = vi.fn<Parameters<typeof openAutomationTemplatePreview>[1]>();
       openAutomationTemplatePreview(tmpl, onUse);
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
       expect(document.querySelector('.auDrawer')).toBeNull();

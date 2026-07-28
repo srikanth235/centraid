@@ -28,17 +28,18 @@
 
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { daemonLayoutFor } from './paths.js';
-import { daemonKeyStore } from './key-store.js';
-import { formatBytes } from './backup-admin.js';
-import { GatewayDatabase, GatewayLockError } from '../serve/gateway-db.js';
+
+import { deriveBackupSourceInstanceId } from '../backup/backup-state.js';
 import {
   discoverRecovery,
   recover,
   type RecoverPhase,
   type RecoveryDiscovery,
 } from '../backup/recover.js';
-import { deriveBackupSourceInstanceId } from '../backup/backup-state.js';
+import { GatewayDatabase, GatewayLockError } from '../serve/gateway-db.js';
+import { formatBytes } from './backup-admin.js';
+import { daemonKeyStore } from './key-store.js';
+import { daemonLayoutFor } from './paths.js';
 
 interface RecoverArgs {
   kit?: string;
@@ -137,7 +138,9 @@ export async function commandRecover(
   const layout = daemonLayoutFor(parsed.dataDir);
   let gatewayDatabase: GatewayDatabase;
   try {
-    gatewayDatabase = GatewayDatabase.open(parsed.dataDir, { lock: 'exclusive' });
+    gatewayDatabase = GatewayDatabase.open(parsed.dataDir, {
+      lock: 'exclusive',
+    });
   } catch (error) {
     if (error instanceof GatewayLockError) {
       fail(

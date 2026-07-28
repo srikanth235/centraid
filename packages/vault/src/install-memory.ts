@@ -175,7 +175,12 @@ export function hasGrantHistory(db: VaultDb, grantee: GranteeKey): boolean {
  */
 export function openScopeRequest(
   db: VaultDb,
-  input: { plane: 'app' | 'agent'; appId: string; purpose: string; scopes: ScopeTriple[] },
+  input: {
+    plane: 'app' | 'agent';
+    appId: string;
+    purpose: string;
+    scopes: ScopeTriple[];
+  },
 ): string {
   const open = db.vault
     .prepare(

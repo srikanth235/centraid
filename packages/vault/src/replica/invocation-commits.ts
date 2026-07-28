@@ -1,8 +1,7 @@
 // governance: allow-repo-hygiene file-size-limit pre-existing cohesive invocation journal; decomposition is outside issue #417
 import type { DatabaseSync } from 'node:sqlite';
+
 import type { VaultDb } from '../db.js';
-import { nowIso } from '../ids.js';
-import type { Identity } from '../gateway/types.js';
 import {
   writeCheck,
   writeEvidence,
@@ -10,6 +9,8 @@ import {
   writeProvenance,
   writeReceipt,
 } from '../gateway/evidence.js';
+import type { Identity } from '../gateway/types.js';
+import { nowIso } from '../ids.js';
 
 type InvocationDatabases = Pick<VaultDb, 'vault' | 'journal'>;
 
@@ -515,7 +516,10 @@ export function repairReplicaInvocationCommits(
 
     const last = rows[rows.length - 1];
     if (!last) break;
-    cursor = { committedAt: last.committed_at, invocationId: last.invocation_id };
+    cursor = {
+      committedAt: last.committed_at,
+      invocationId: last.invocation_id,
+    };
     if (rows.length < batchSize) break;
   }
 

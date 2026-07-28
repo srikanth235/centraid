@@ -1,16 +1,18 @@
 import crypto from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+
 import {
   readReplicaIntentOutcome,
   recordReplicaIntentOutcome,
   type ReplicaIntentOutcome,
 } from '@centraid/vault';
+
 import { canWrite } from '../serve/enrollment-store.js';
-import type { VaultPlane } from '../serve/vault-plane.js';
 import { runWithReplicaIntent } from '../serve/replica-intent-context.js';
-import { readJson, sendJson } from './route-helpers.js';
-import { REPLICA_PROTOCOL_VERSION, type ReplicaShapeAccess } from './replica-shape.js';
+import type { VaultPlane } from '../serve/vault-plane.js';
 import { replicaOutcomeWire } from './replica-projection.js';
+import { REPLICA_PROTOCOL_VERSION, type ReplicaShapeAccess } from './replica-shape.js';
+import { readJson, sendJson } from './route-helpers.js';
 
 export interface ReplicaIntentDispatchInput {
   intentId: string;
@@ -21,7 +23,12 @@ export interface ReplicaIntentDispatchInput {
 
 export type ReplicaIntentDispatchOutcome =
   | { status: 'executed'; output?: unknown }
-  | { status: 'parked'; invocationId?: string; reason?: string; output?: unknown }
+  | {
+      status: 'parked';
+      invocationId?: string;
+      reason?: string;
+      output?: unknown;
+    }
   | { status: 'denied' | 'failed'; reason: string; output?: unknown }
   | { status: 'retryable'; reason?: string };
 
@@ -60,7 +67,12 @@ function expectedPayloadHash(appId: string, action: string, input: unknown): str
 
 function sameIdentity(
   outcome: ReplicaIntentOutcome,
-  input: { deviceId: string; appId: string; action: string; payloadHash: string },
+  input: {
+    deviceId: string;
+    appId: string;
+    action: string;
+    payloadHash: string;
+  },
 ): boolean {
   return (
     outcome.deviceId === input.deviceId &&
@@ -138,7 +150,13 @@ export async function handleReplicaIntent(
   const appId = typeof body.appId === 'string' ? body.appId : '';
   const action = typeof body.action === 'string' ? body.action : '';
   const payloadHash = typeof body.payloadHash === 'string' ? body.payloadHash : '';
-  if (!intentId || !appId || !action || !('input' in body) || !/^[a-f0-9]{64}$/.test(payloadHash)) {
+  if (
+    !intentId ||
+    !appId ||
+    !action ||
+    !('input' in body) ||
+    !/^[a-f0-9]{64}$/u.test(payloadHash)
+  ) {
     return sendJson(res, 400, {
       error: 'invalid_replica_intent',
       message: 'intentId, appId, action, input and a SHA-256 payloadHash are required',
@@ -160,7 +178,12 @@ export async function handleReplicaIntent(
     return sendJson(res, 400, { error: 'replica_intent_hash_mismatch' });
   }
 
-  const identity = { deviceId: context.access.deviceId, appId, action, payloadHash };
+  const identity = {
+    deviceId: context.access.deviceId,
+    appId,
+    action,
+    payloadHash,
+  };
   const existing = readReplicaIntentOutcome(context.plane.db.vault, intentId, identity.deviceId);
   if (existing) {
     if (!sameIdentity(existing, identity)) {
@@ -176,9 +199,9 @@ export async function handleReplicaIntent(
   // `canWrite` is the one predicate for "may this role mutate" — admin is
   // write's superset, so a hand-rolled `!== 'write'` here silently denied
   // every admin device, including the founding one.
-  const deniedReason = !canWrite(context.access.role)
-    ? 'read-only devices cannot submit actions'
-    : undefined;
+  const deniedReason = canWrite(context.access.role)
+    ? undefined
+    : 'read-only devices cannot submit actions';
   if (deniedReason) {
     try {
       const denied = recordReplicaIntentOutcome(context.plane.db.vault, {
@@ -218,7 +241,7 @@ export async function handleReplicaIntent(
         deviceId: identity.deviceId,
         // L4 attribution (#599): the acting member travels with the intent so
         // a replayed offline write names the person, not only the hardware.
-        ...(context.access.memberId !== undefined ? { memberId: context.access.memberId } : {}),
+        ...(context.access.memberId === undefined ? {} : { memberId: context.access.memberId }),
       },
       () => context.dispatch({ intentId, appId, action, input: body.input }),
     );

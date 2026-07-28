@@ -47,18 +47,20 @@ export function isOAuthFinishDeepLink(rawUrl: string): boolean {
  * persisting the code-bearing URL.
  */
 export function createDeepLinkBuffer(limit = 4): {
-  push: (url: string) => void;
+  enqueue: (...urls: string[]) => void;
   subscribe: (listener: (url: string) => void) => () => void;
 } {
   const pending: string[] = [];
   let activeListener: ((url: string) => void) | undefined;
   return {
-    push(url) {
-      if (activeListener) {
-        activeListener(url);
-        return;
+    enqueue(...urls) {
+      for (const url of urls) {
+        if (activeListener) {
+          activeListener(url);
+          continue;
+        }
+        if (pending.length < limit) pending.push(url);
       }
-      if (pending.length < limit) pending.push(url);
     },
     subscribe(listener) {
       activeListener = listener;

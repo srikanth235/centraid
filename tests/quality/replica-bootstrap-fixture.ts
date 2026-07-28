@@ -1,13 +1,13 @@
-import {
-  runWindowedBootstrap,
-  type WindowedBootstrapTarget,
-} from '../../packages/client/src/replica/windowed-bootstrap.js';
 import type { ReplicaFetcher } from '../../packages/client/src/replica/shell-transport.js';
 import type {
   ReplicaChangeBatch,
   ReplicaCursor,
   ReplicaSnapshotRow,
 } from '../../packages/client/src/replica/types.js';
+import {
+  runWindowedBootstrap,
+  type WindowedBootstrapTarget,
+} from '../../packages/client/src/replica/windowed-bootstrap.js';
 
 const gatewayAuth = {
   baseUrl: 'http://127.0.0.1:18789',

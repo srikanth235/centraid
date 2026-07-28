@@ -78,7 +78,11 @@ export function applyProbeOutcome(
   } else if (outcome.status === 'ready') {
     next = { spaceCount: outcome.spaceCount, status: 'ready' };
   } else {
-    next = { spaceCount: prev?.spaceCount, status: 'error', error: outcome.error };
+    next = {
+      spaceCount: prev?.spaceCount,
+      status: 'error',
+      error: outcome.error,
+    };
   }
   return { ...cache, [gatewayId]: next };
 }
@@ -172,7 +176,10 @@ async function probeOneGateway(gatewayId: string): Promise<void> {
         : { status: 'error', error: result.error },
     );
   } catch {
-    cache = applyProbeOutcome(cache, gatewayId, { status: 'error', error: 'unreachable' });
+    cache = applyProbeOutcome(cache, gatewayId, {
+      status: 'error',
+      error: 'unreachable',
+    });
   }
 }
 

@@ -1,3 +1,6 @@
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+
 /**
  * Desktop cold-path budget (#496 PD3).
  * Crude first-import proxy for desktop main modules (not full Electron launch).
@@ -6,8 +9,6 @@
  */
 import { recordQualityResult } from '@centraid/test-kit/quality-result';
 import { describe, expect, test } from 'vitest';
-import path from 'node:path';
-import { pathToFileURL } from 'node:url';
 
 const OWNER = 'tests/perf/desktop-cold.perf.test.ts';
 const BUDGET_MS = 3_000;
@@ -29,7 +30,12 @@ describe('desktop-cold.perf', () => {
       name: 'Desktop cold module import',
       status: passed ? 'passed' : 'failed',
       measurements: [
-        { name: 'import wall clock', value: durationMs, unit: 'ms', budget: BUDGET_MS },
+        {
+          name: 'import wall clock',
+          value: durationMs,
+          unit: 'ms',
+          budget: BUDGET_MS,
+        },
       ],
     });
     expect(durationMs).toBeLessThan(BUDGET_MS);

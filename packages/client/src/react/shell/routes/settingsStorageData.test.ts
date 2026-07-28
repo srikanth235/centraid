@@ -33,28 +33,35 @@ const {
     }
   }
   return {
-    listStorageConnections: vi.fn(),
-    gwCreateStorageConnection: vi.fn(),
-    gwDeleteStorageConnection: vi.fn(),
-    gwTestStorageConnection: vi.fn(),
-    confirmGatewayRecoveryKit: vi.fn(),
-    getVaultBlobStore: vi.fn(),
-    attachVaultStorageConnection: vi.fn(),
-    detachVaultStorageConnection: vi.fn(),
+    listStorageConnections:
+      vi.fn<typeof import('../../../gateway-client.js').listStorageConnections>(),
+    gwCreateStorageConnection:
+      vi.fn<typeof import('../../../gateway-client.js').createStorageConnection>(),
+    gwDeleteStorageConnection:
+      vi.fn<typeof import('../../../gateway-client.js').deleteStorageConnection>(),
+    gwTestStorageConnection:
+      vi.fn<typeof import('../../../gateway-client.js').testStorageConnection>(),
+    confirmGatewayRecoveryKit:
+      vi.fn<typeof import('../../../gateway-client.js').confirmGatewayRecoveryKit>(),
+    getVaultBlobStore: vi.fn<typeof import('../../../gateway-client.js').getVaultBlobStore>(),
+    attachVaultStorageConnection:
+      vi.fn<typeof import('../../../gateway-client.js').attachVaultStorageConnection>(),
+    detachVaultStorageConnection:
+      vi.fn<typeof import('../../../gateway-client.js').detachVaultStorageConnection>(),
     RecoveryKitNotConfirmedError,
     ProviderNotHomeProfileError,
   };
 });
 
 vi.mock(import('../../../gateway-client.js'), () => ({
-  listStorageConnections: () => listStorageConnections(),
-  createStorageConnection: (...a: unknown[]) => gwCreateStorageConnection(...a),
-  deleteStorageConnection: (...a: unknown[]) => gwDeleteStorageConnection(...a),
-  testStorageConnection: (...a: unknown[]) => gwTestStorageConnection(...a),
-  confirmGatewayRecoveryKit: () => confirmGatewayRecoveryKit(),
-  getVaultBlobStore: () => getVaultBlobStore(),
-  attachVaultStorageConnection: (...a: unknown[]) => attachVaultStorageConnection(...a),
-  detachVaultStorageConnection: () => detachVaultStorageConnection(),
+  listStorageConnections,
+  createStorageConnection: gwCreateStorageConnection,
+  deleteStorageConnection: gwDeleteStorageConnection,
+  testStorageConnection: gwTestStorageConnection,
+  confirmGatewayRecoveryKit,
+  getVaultBlobStore,
+  attachVaultStorageConnection,
+  detachVaultStorageConnection,
   ProviderNotHomeProfileError,
   RecoveryKitNotConfirmedError,
 }));
@@ -82,8 +89,21 @@ describe('settingsStorageData', () => {
   describe('settingsStorageData', () => {
     it('loadStorageConnectionsData maps rows', async () => {
       listStorageConnections.mockResolvedValue([
-        { id: 'c1', name: 'Home', baseUrl: 'https://p' },
-        { id: 'c2', name: 'Other' },
+        {
+          id: 'c1',
+          name: 'Home',
+          baseUrl: 'https://p',
+          kind: 'provider',
+          createdAt: '2026-07-28T00:00:00.000Z',
+          updatedAt: '2026-07-28T00:00:00.000Z',
+        },
+        {
+          id: 'c2',
+          name: 'Other',
+          kind: 'provider',
+          createdAt: '2026-07-28T00:00:00.000Z',
+          updatedAt: '2026-07-28T00:00:00.000Z',
+        },
       ]);
       await expect(loadStorageConnectionsData()).resolves.toStrictEqual([
         { id: 'c1', name: 'Home', baseUrl: 'https://p' },
@@ -104,15 +124,29 @@ describe('settingsStorageData', () => {
       gwCreateStorageConnection.mockRejectedValueOnce(
         new ProviderNotHomeProfileError('nope', ['cas', 'policy']),
       );
-      const home = await createStorageConnection({ name: 'n', baseUrl: 'u', apiKey: 'k' });
+      const home = await createStorageConnection({
+        name: 'n',
+        baseUrl: 'u',
+        apiKey: 'k',
+      });
       expect(home.ok).toBe(false);
       if (home.ok) return;
-      expect(home.message).toMatch(/cas, policy/);
+      expect(home.message).toMatch(/cas, policy/u);
 
-      gwCreateStorageConnection.mockResolvedValueOnce({ id: 'c1', name: 'n', baseUrl: 'u' });
+      gwCreateStorageConnection.mockResolvedValueOnce({
+        id: 'c1',
+        name: 'n',
+        baseUrl: 'u',
+        kind: 'provider',
+        createdAt: '2026-07-28T00:00:00.000Z',
+        updatedAt: '2026-07-28T00:00:00.000Z',
+      });
       await expect(
         createStorageConnection({ name: 'n', baseUrl: 'u', apiKey: 'k' }),
-      ).resolves.toStrictEqual({ ok: true, value: { id: 'c1', name: 'n', baseUrl: 'u' } });
+      ).resolves.toStrictEqual({
+        ok: true,
+        value: { id: 'c1', name: 'n', baseUrl: 'u' },
+      });
     });
 
     it('makeDeleteStorageConnection respects confirm cancel and deletes on confirm', async () => {
@@ -127,7 +161,9 @@ describe('settingsStorageData', () => {
 
     it('loadVaultBlobStoreData / attach / detach map fs vs s3', async () => {
       getVaultBlobStore.mockResolvedValue({ kind: 'fs' });
-      await expect(loadVaultBlobStoreData()).resolves.toStrictEqual({ kind: 'fs' });
+      await expect(loadVaultBlobStoreData()).resolves.toStrictEqual({
+        kind: 'fs',
+      });
 
       getVaultBlobStore.mockResolvedValue({ kind: 's3', connectionId: 'c1' });
       await expect(loadVaultBlobStoreData()).resolves.toStrictEqual({
@@ -135,7 +171,10 @@ describe('settingsStorageData', () => {
         connectionId: 'c1',
       });
 
-      attachVaultStorageConnection.mockResolvedValue({ kind: 's3', connectionId: 'c9' });
+      attachVaultStorageConnection.mockResolvedValue({
+        kind: 's3',
+        connectionId: 'c9',
+      });
       await expect(attachVaultConnection('c9')).resolves.toStrictEqual({
         ok: true,
         value: { kind: 's3', connectionId: 'c9' },
@@ -148,7 +187,9 @@ describe('settingsStorageData', () => {
       });
 
       detachVaultStorageConnection.mockResolvedValue({ kind: 'fs' });
-      await expect(detachVaultConnection()).resolves.toStrictEqual({ kind: 'fs' });
+      await expect(detachVaultConnection()).resolves.toStrictEqual({
+        kind: 'fs',
+      });
     });
   });
 });

@@ -19,6 +19,7 @@
 import { createHash } from 'node:crypto';
 import { closeSync, openSync, readSync, rmSync } from 'node:fs';
 import path from 'node:path';
+
 import type { VaultDb } from '../db.js';
 import { writeReceipt } from './evidence.js';
 import { GatewayError } from './types.js';
@@ -41,7 +42,10 @@ function requireDir(db: VaultDb, action: string): string {
  * the remainder first; this function remains for shipper-less contexts
  * (tests, one-shot CLI vault surgery).
  */
-export function checkpointVault(db: VaultDb): { vault: string; journal: string } {
+export function checkpointVault(db: VaultDb): {
+  vault: string;
+  journal: string;
+} {
   requireDir(db, 'checkpoint');
   db.vault.exec('PRAGMA wal_checkpoint(TRUNCATE)');
   db.journal.exec('PRAGMA wal_checkpoint(TRUNCATE)');
@@ -109,5 +113,12 @@ export function backupVault(db: VaultDb, destDir: string): BackupResult {
     decision: 'allow',
     detail: { vaultSha256, journalSha256, destDir, blobsCopied: copied },
   });
-  return { vaultPath, journalPath, vaultSha256, journalSha256, blobsCopied: copied, receiptId };
+  return {
+    vaultPath,
+    journalPath,
+    vaultSha256,
+    journalSha256,
+    blobsCopied: copied,
+    receiptId,
+  };
 }

@@ -10,6 +10,7 @@
 import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+
 import { frameChunkPayloadAsync, unframeChunkPayload } from './compress.js';
 import {
   activeMasterKey,
@@ -35,9 +36,10 @@ import {
   SNAPSHOT_FORMAT_V2,
   validateSnapshotBasePair,
 } from './manifest.js';
+import type { ObjectStore } from './object-store.js';
+import { applyAvailableInOrder, applyInOrder, mapWithConcurrency } from './ordered-work.js';
 import { partStream } from './parts.js';
 import type { BackupProvider, SnapshotRow } from './provider.js';
-import type { ObjectStore } from './object-store.js';
 import {
   openWalCloser,
   openWalPairMarker,
@@ -78,7 +80,10 @@ export interface SourceEntry {
 
 export type { EngineLogger } from './engine-log.js';
 
-const noopLog: Required<EngineLogger> = { info: () => undefined, warn: () => undefined };
+const noopLog: Required<EngineLogger> = {
+  info: () => undefined,
+  warn: () => undefined,
+};
 
 // ---------------------------------------------------------------------------
 // Bounded concurrency helper — chunk uploads run up to 4 in flight while
@@ -106,7 +111,7 @@ class Semaphore {
   private release(): void {
     this.available++;
     const next = this.waiters.shift();
-    if (next) next();
+    if (next) return next();
   }
 }
 
@@ -148,7 +153,12 @@ async function loadPreviousManifest(
   const { opened } = await openSnapshotRow(newest, store, keyring, vaultId);
   const entriesByPath = new Map(opened.entries.map((e) => [e.path, e] as const));
   const chunkSizes = new Map(opened.public.chunkIndex.map((c) => [c.id, c.size] as const));
-  return { row: newest, keyEpoch: opened.public.keyEpoch, entriesByPath, chunkSizes };
+  return {
+    row: newest,
+    keyEpoch: opened.public.keyEpoch,
+    entriesByPath,
+    chunkSizes,
+  };
 }
 
 async function statEntry(absolutePath: string): Promise<{ size: number; mtimeMs: number }> {
@@ -156,16 +166,23 @@ async function statEntry(absolutePath: string): Promise<{ size: number; mtimeMs:
   return { size: st.size, mtimeMs: st.mtimeMs };
 }
 
+async function* readNextFileChunk(
+  handle: Awaited<ReturnType<typeof fs.open>>,
+  buffer: Buffer,
+  bufferSize: number,
+): AsyncGenerator<Uint8Array> {
+  const { bytesRead } = await handle.read(buffer, 0, bufferSize, null);
+  if (bytesRead === 0) return;
+  yield new Uint8Array(buffer.subarray(0, bytesRead));
+  yield* readNextFileChunk(handle, buffer, bufferSize);
+}
+
 async function* readFileStream(absolutePath: string): AsyncGenerator<Uint8Array> {
   const handle = await fs.open(absolutePath, 'r');
   try {
     const bufSize = 256 * 1024;
     const buf = Buffer.alloc(bufSize);
-    for (;;) {
-      const { bytesRead } = await handle.read(buf, 0, bufSize, null);
-      if (bytesRead === 0) break;
-      yield new Uint8Array(buf.subarray(0, bytesRead));
-    }
+    yield* readNextFileChunk(handle, buf, bufSize);
   } finally {
     await handle.close();
   }
@@ -205,7 +222,7 @@ export async function createSnapshot(opts: CreateSnapshotOptions): Promise<Snaps
   let totalBytes = 0;
   let everyEntryReused = true;
 
-  for (const entry of opts.entries) {
+  await applyInOrder(opts.entries, async (entry) => {
     if (!isSafeEntryPath(entry.path)) {
       throw new Error(`createSnapshot: unsafe entry path "${entry.path}"`);
     }
@@ -249,17 +266,17 @@ export async function createSnapshot(opts: CreateSnapshotOptions): Promise<Snaps
         ...(entry.baseTickMs === undefined ? {} : { baseTickMs: entry.baseTickMs }),
         ...(entry.walTipTickMs === undefined ? {} : { walTipTickMs: entry.walTipTickMs }),
       });
-      continue;
+      return;
     }
 
     everyEntryReused = false;
     const chunkIds: string[] = [];
     const uploads: Promise<void>[] = [];
-    for await (const plain of partStream(readFileStream(entry.absolutePath))) {
+    await applyAvailableInOrder(partStream(readFileStream(entry.absolutePath)), async (plain) => {
       const id = computeChunkId(dedupKey, plain);
       chunkIds.push(id);
       newChunkIndex.set(id, plain.length);
-      if (knownChunkIds.has(id)) continue; // already known to exist (previous manifest or this run)
+      if (knownChunkIds.has(id)) return; // already known to exist (previous manifest or this run)
       knownChunkIds.add(id);
       const release = await uploadSem.acquire();
       const objectKey = `chunks/${id}`;
@@ -281,7 +298,7 @@ export async function createSnapshot(opts: CreateSnapshotOptions): Promise<Snaps
           .then((head) => (head ? undefined : store.put(objectKey, encrypted)))
           .finally(release),
       );
-    }
+    });
     await Promise.all(uploads);
     sealedEntries.push({
       path: entry.path,
@@ -294,7 +311,7 @@ export async function createSnapshot(opts: CreateSnapshotOptions): Promise<Snaps
       ...(entry.baseTickMs === undefined ? {} : { baseTickMs: entry.baseTickMs }),
       ...(entry.walTipTickMs === undefined ? {} : { walTipTickMs: entry.walTipTickMs }),
     });
-  }
+  });
 
   const previousChunkIdSet = sameEpochPrevious
     ? new Set(sameEpochPrevious.chunkSizes.keys())
@@ -327,7 +344,10 @@ export async function createSnapshot(opts: CreateSnapshotOptions): Promise<Snaps
     return null;
   }
 
-  const chunkIndex = [...newChunkIndex.entries()].map(([id, size]) => ({ id, size }));
+  const chunkIndex = [...newChunkIndex.entries()].map(([id, size]) => ({
+    id,
+    size,
+  }));
   validateSnapshotBasePair(sealedEntries);
   const { bytes, manifestHash } = sealManifest({
     keyring: opts.keyring,
@@ -431,8 +451,8 @@ export interface RestoreResult {
 
 /** `x.y` (or bare `x`) numeric version compare: -1/0/1. Non-numeric parts compare as 0. */
 function compareVersion(a: string, b: string): number {
-  const pa = a.split('.').map((p) => Number.parseInt(p, 10) || 0);
-  const pb = b.split('.').map((p) => Number.parseInt(p, 10) || 0);
+  const pa = a.split('.').map((p) => Math.trunc(Number(p)) || 0);
+  const pb = b.split('.').map((p) => Math.trunc(Number(p)) || 0);
   const len = Math.max(pa.length, pb.length);
   for (let i = 0; i < len; i++) {
     const x = pa[i] ?? 0;
@@ -541,11 +561,15 @@ export async function restoreSnapshot(opts: RestoreSnapshotOptions): Promise<Res
     if (row) selected = await openSnapshotRow(row, store, opts.keyring, opts.vaultId, opts.current);
   } else {
     const rows = await opts.provider.listSnapshots(opts.targetId);
-    const candidates: OpenedSnapshot[] = [];
-    for (const row of rows) {
-      const candidate = await openSnapshotRow(row, store, opts.keyring, opts.vaultId, opts.current);
-      if (candidate.baseTimeMs <= opts.pointInTimeMs) candidates.push(candidate);
+    const pointInTimeMs = opts.pointInTimeMs;
+    if (pointInTimeMs === undefined) {
+      throw new Error('restoreSnapshot: point-in-time selection requires a point in time');
     }
+    const candidates = (
+      await mapWithConcurrency(rows, 4, (row) =>
+        openSnapshotRow(row, store, opts.keyring, opts.vaultId, opts.current),
+      )
+    ).filter((candidate) => candidate.baseTimeMs <= pointInTimeMs);
     selected = candidates.sort((a, b) => b.baseTimeMs - a.baseTimeMs)[0];
     if (!selected) {
       throw new Error(
@@ -579,7 +603,7 @@ export async function restoreSnapshot(opts: RestoreSnapshotOptions): Promise<Res
   const dedupKey = deriveDedupKey(master, opts.vaultId);
 
   const skippedBlobs: string[] = [];
-  for (const entry of opened.entries) {
+  await applyInOrder(opened.entries, async (entry) => {
     // 2 (continued). Reject path traversal entries — openManifest already
     // validated this, but re-check defensively at the point we touch disk.
     if (!isSafeEntryPath(entry.path)) {
@@ -593,7 +617,7 @@ export async function restoreSnapshot(opts: RestoreSnapshotOptions): Promise<Res
       const sha = entry.path.split('/').pop() ?? '';
       if (await opts.skipBlob({ path: entry.path, sha })) {
         skippedBlobs.push(sha);
-        continue;
+        return;
       }
     }
     const dest = path.join(opts.destDir, ...entry.path.split('/'));
@@ -604,7 +628,7 @@ export async function restoreSnapshot(opts: RestoreSnapshotOptions): Promise<Res
     const hash = createHash('sha256');
     const handle = await fs.open(dest, 'w');
     try {
-      for (const id of entry.chunks) {
+      await applyInOrder(entry.chunks, async (id) => {
         const ciphertext = await store.get(`chunks/${id}`);
         // Unseal, then unframe: the sealed plaintext is `[algo-id][body]`
         // (/2, #405 §1); the raw part is what the keyed id is recomputed over,
@@ -619,7 +643,7 @@ export async function restoreSnapshot(opts: RestoreSnapshotOptions): Promise<Res
         const buf = Buffer.from(plain.buffer, plain.byteOffset, plain.byteLength);
         hash.update(buf);
         await handle.write(buf);
-      }
+      });
       await handle.sync();
     } finally {
       await handle.close();
@@ -632,7 +656,7 @@ export async function restoreSnapshot(opts: RestoreSnapshotOptions): Promise<Res
         );
       }
     }
-  }
+  });
 
   // Replay shipped WAL segments on top of the restored base files —
   // SQLite itself performs and validates the replay (wal-restore.ts).
@@ -712,7 +736,14 @@ export async function verifySnapshot(opts: VerifySnapshotOptions): Promise<Verif
   checkedObjects++;
   if (!manifestHead) {
     missing.push(row.manifestKey);
-    return { checkedObjects, missing, corrupt, sampled: 0, walSegments: 0, walSampled: 0 };
+    return {
+      checkedObjects,
+      missing,
+      corrupt,
+      sampled: 0,
+      walSegments: 0,
+      walSampled: 0,
+    };
   }
   const manifestBytes = await store.get(row.manifestKey);
   const opened = openManifest(manifestBytes, opts.keyring, opts.vaultId, row.manifestHash);
@@ -727,27 +758,28 @@ export async function verifySnapshot(opts: VerifySnapshotOptions): Promise<Verif
   const dataKey = deriveDataKey(master, opts.vaultId);
   const dedupKey = deriveDedupKey(master, opts.vaultId);
 
-  for (const chunk of opened.public.chunkIndex) {
-    checkedObjects++;
-    const head = await store.head(`chunks/${chunk.id}`);
-    if (!head) missing.push(chunk.id);
-  }
+  const chunkHeads = await mapWithConcurrency(opened.public.chunkIndex, 4, async (chunk) => ({
+    id: chunk.id,
+    present: (await store.head(`chunks/${chunk.id}`)) !== null,
+  }));
+  checkedObjects += chunkHeads.length;
+  missing.push(...chunkHeads.filter(({ present }) => !present).map(({ id }) => id));
 
   const sampleCount = Math.min(opts.sampleCount ?? 8, opened.public.chunkIndex.length);
   const sample = sampleWithoutReplacement(opened.public.chunkIndex, sampleCount);
-  for (const chunk of sample) {
+  const corruptSamples = await mapWithConcurrency(sample, 4, async (chunk) => {
     try {
       const ciphertext = await store.get(`chunks/${chunk.id}`);
       // Unseal → unframe → recompute the keyed id over the raw plaintext
       // (/2, #405 §1): a sample that decompresses and re-addresses proves the
       // object is both readable and the content it claims to be.
       const plain = unframeChunkPayload(decrypt(dataKey, ciphertext));
-      const recomputed = computeChunkId(dedupKey, plain);
-      if (recomputed !== chunk.id) corrupt.push(chunk.id);
+      return computeChunkId(dedupKey, plain) === chunk.id ? undefined : chunk.id;
     } catch {
-      corrupt.push(chunk.id);
+      return chunk.id;
     }
-  }
+  });
+  corrupt.push(...corruptSamples.filter((id): id is string => id !== undefined));
 
   // The snapshot's WAL streams. Existence is NOT just "the LIST
   // returned keys" — a lost mid-stream segment or closer silently truncates
@@ -768,28 +800,28 @@ export async function verifySnapshot(opts: VerifySnapshotOptions): Promise<Verif
     const generationByDb: Partial<Record<WalDbName, string>> = {};
     const listingByDb: Partial<Record<WalDbName, WalStreamListing>> = {};
     const walTipTickMs = basePair.walTipTickMs ?? -1;
-    for (const db of WAL_DB_NAMES) {
+    await applyInOrder(WAL_DB_NAMES, async (db) => {
       const entry = opened.entries.find((e) => e.kind === 'db' && e.path === WAL_DB_FILES[db]);
-      if (entry?.walGeneration === undefined) continue;
+      if (entry?.walGeneration === undefined) return;
       const generation = entry.walGeneration;
       generationByDb[db] = generation;
       const segments: WalSegmentAddress[] = [];
       const closers: WalGroupCloser[] = [];
-      for await (const obj of store.list(walSegmentPrefix(db, generation))) {
+      await applyAvailableInOrder(store.list(walSegmentPrefix(db, generation)), async (obj) => {
         const addr = parseWalSegmentKey(obj.key);
         if (addr) {
           segments.push(addr);
-          continue;
+          return;
         }
         const closer = parseWalCloserKey(obj.key);
-        if (!closer) continue;
+        if (!closer) return;
         try {
           openWalCloser(dataKey, opts.vaultId, closer, await store.get(obj.key));
           closers.push(closer);
         } catch {
           corrupt.push(obj.key);
         }
-      }
+      });
       listingByDb[db] = { segments, closers };
       walSegments += segments.length;
       const plan = planWalReplay({ segments, closers }, { db, generation });
@@ -799,30 +831,37 @@ export async function verifySnapshot(opts: VerifySnapshotOptions): Promise<Verif
             `but ${segments.length - plan.segments.length} listed segment(s) lie beyond it`,
         );
       }
-      for (const addr of sampleWithoutReplacement(segments, Math.min(4, segments.length))) {
-        walSampled++;
+      const sampleAddresses = sampleWithoutReplacement(segments, Math.min(4, segments.length));
+      walSampled += sampleAddresses.length;
+      const corruptAddresses = await mapWithConcurrency(sampleAddresses, 4, async (addr) => {
         const key = walSegmentKey(addr);
         try {
           openWalSegment(dataKey, opts.vaultId, addr, await store.get(key));
+          return undefined;
         } catch {
-          corrupt.push(key);
+          return key;
         }
-      }
-    }
+      });
+      corrupt.push(...corruptAddresses.filter((key): key is string => key !== undefined));
+    });
 
     const { vault: gv, journal: gj } = generationByDb;
     if (gv !== undefined && gj !== undefined) {
       const markers: WalPairMarker[] = [];
-      for await (const obj of store.list(walPairMarkerPrefix(gv, gj))) {
+      await applyAvailableInOrder(store.list(walPairMarkerPrefix(gv, gj)), async (obj) => {
         const addr = parseWalPairMarkerKey(obj.key);
-        if (!addr) continue;
+        if (!addr) return;
         try {
           markers.push(openWalPairMarker(dataKey, opts.vaultId, addr, await store.get(obj.key)));
         } catch {
           corrupt.push(obj.key);
         }
-      }
-      const coordinated = planCoordinatedReplay({ listingByDb, generationByDb, markers });
+      });
+      const coordinated = planCoordinatedReplay({
+        listingByDb,
+        generationByDb,
+        markers,
+      });
       if (
         coordinated.newestMarkerTickMs >= 0 &&
         coordinated.coordinatedCutMs < coordinated.newestMarkerTickMs
@@ -851,7 +890,14 @@ export async function verifySnapshot(opts: VerifySnapshotOptions): Promise<Verif
     }
   }
 
-  return { checkedObjects, missing, corrupt, sampled: sample.length, walSegments, walSampled };
+  return {
+    checkedObjects,
+    missing,
+    corrupt,
+    sampled: sample.length,
+    walSegments,
+    walSampled,
+  };
 }
 
 function sampleWithoutReplacement<T>(items: readonly T[], count: number): T[] {

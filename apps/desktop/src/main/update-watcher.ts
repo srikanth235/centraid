@@ -13,10 +13,12 @@
  * admit and only then marks ready-to-install (quitAndInstall).
  */
 
-import { app, BrowserWindow } from 'electron';
-import { createRequire } from 'node:module';
 import { readFile, stat } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import path from 'node:path';
+
+import { app, BrowserWindow } from 'electron';
+
 import {
   fingerprintOf,
   UpdatePoller,
@@ -60,7 +62,13 @@ let autoUpdaterRef: {
 
 /** Renderer-facing snapshot, for windows that mount after the broadcast. */
 export function getUpdateStatus(): UpdateStatus {
-  return current ?? { available: false, version: app.getVersion(), readyToInstall: false };
+  return (
+    current ?? {
+      available: false,
+      version: app.getVersion(),
+      readyToInstall: false,
+    }
+  );
 }
 
 /**
@@ -161,7 +169,11 @@ export function startUpdateWatcher(): void {
         const stats = await statWatched(distDir);
         const releasedAtMs = Math.max(0, ...stats.map((s) => (s ? s.mtimeMs : 0)));
         const version = await readDiskVersion(appRoot);
-        await announceUpdateIfAdmitted({ version, releasedAtMs, readyToInstall: true });
+        await announceUpdateIfAdmitted({
+          version,
+          releasedAtMs,
+          readyToInstall: true,
+        });
       })();
     }, POLL_MS);
     timer.unref();
@@ -214,7 +226,11 @@ export function startPackagedUpdateChecker(): void {
           });
           if (!admitted) return;
           // Metadata available but not yet downloaded — do not claim ready.
-          await broadcastUpdate({ available: true, version, readyToInstall: false });
+          await broadcastUpdate({
+            available: true,
+            version,
+            readyToInstall: false,
+          });
           try {
             await autoUpdater.downloadUpdate();
           } catch {

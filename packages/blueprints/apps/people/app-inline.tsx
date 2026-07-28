@@ -5,13 +5,13 @@
 // kitAsk. The `./queries/*` imports live ONLY here so they never reach the
 // served/browser bundle (the gateway refuses to serve node-side handlers).
 
-import { Root, CHANGE_TABLES } from './app-root.tsx';
-import peopleQuery from './queries/people.ts';
-import searchQuery from './queries/search.ts';
-import personQuery from './queries/person.ts';
-import journalQuery from './queries/journal.ts';
-import dashboardQuery from './queries/dashboard.ts';
 import type { InlineAppModule } from '../inline-types.ts';
+import { Root, CHANGE_TABLES } from './app-root.tsx';
+import dashboardQuery from './queries/dashboard.ts';
+import journalQuery from './queries/journal.ts';
+import peopleQuery from './queries/people.ts';
+import personQuery from './queries/person.ts';
+import searchQuery from './queries/search.ts';
 
 const peopleInlineApp: InlineAppModule = {
   appId: 'people',

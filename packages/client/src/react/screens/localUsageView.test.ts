@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import type { LocalUsageReportDTO } from '../../gateway-client-local-storage.js';
 import {
   budgetSummary,
@@ -39,8 +40,17 @@ function report(over: Partial<LocalUsageReportDTO> = {}): LocalUsageReportDTO {
       },
     ],
     disk: { freeBytes: 40 * GB, totalBytes: 500 * GB },
-    limits: { totalLimitBytes: null, warnAtPercent: 80, journalLimitBytes: null },
-    limit: { status: 'ok', fractionUsed: null, usedBytes: 10 * GB, limitBytes: null },
+    limits: {
+      totalLimitBytes: null,
+      warnAtPercent: 80,
+      journalLimitBytes: null,
+    },
+    limit: {
+      status: 'ok',
+      fractionUsed: null,
+      usedBytes: 10 * GB,
+      limitBytes: null,
+    },
     ...over,
   };
 }
@@ -102,10 +112,18 @@ describe(footprintScale, () => {
   it('measures against the owner’s budget when they set one', () => {
     const scale = footprintScale(
       report({
-        limits: { totalLimitBytes: 20 * GB, warnAtPercent: 75, journalLimitBytes: null },
+        limits: {
+          totalLimitBytes: 20 * GB,
+          warnAtPercent: 75,
+          journalLimitBytes: null,
+        },
       }),
     );
-    expect(scale).toMatchObject({ kind: 'budget', againstBytes: 20 * GB, over: false });
+    expect(scale).toMatchObject({
+      kind: 'budget',
+      againstBytes: 20 * GB,
+      over: false,
+    });
     expect(scale.fillFraction).toBeCloseTo(0.5, 5);
     expect(scale.warnFraction).toBeCloseTo(0.75, 5);
   });
@@ -113,7 +131,11 @@ describe(footprintScale, () => {
   it('clamps an over-budget fill so the bar stays in its box, and flags it', () => {
     const scale = footprintScale(
       report({
-        limits: { totalLimitBytes: 5 * GB, warnAtPercent: 80, journalLimitBytes: null },
+        limits: {
+          totalLimitBytes: 5 * GB,
+          warnAtPercent: 80,
+          journalLimitBytes: null,
+        },
       }),
     );
     expect(scale.fillFraction).toBe(1);
@@ -157,16 +179,34 @@ describe('formatBytes / parseBytes', () => {
 describe(budgetSummary, () => {
   it('says nothing is blocked when over budget', () => {
     const over = report({
-      limits: { totalLimitBytes: 5 * GB, warnAtPercent: 80, journalLimitBytes: null },
-      limit: { status: 'error', fractionUsed: 2, usedBytes: 10 * GB, limitBytes: 5 * GB },
+      limits: {
+        totalLimitBytes: 5 * GB,
+        warnAtPercent: 80,
+        journalLimitBytes: null,
+      },
+      limit: {
+        status: 'error',
+        fractionUsed: 2,
+        usedBytes: 10 * GB,
+        limitBytes: 5 * GB,
+      },
     });
     expect(budgetSummary(over, over.limits)).toContain('Nothing is being blocked');
   });
 
   it('names the warn threshold when past it', () => {
     const warn = report({
-      limits: { totalLimitBytes: 12 * GB, warnAtPercent: 80, journalLimitBytes: null },
-      limit: { status: 'degraded', fractionUsed: 0.83, usedBytes: 10 * GB, limitBytes: 12 * GB },
+      limits: {
+        totalLimitBytes: 12 * GB,
+        warnAtPercent: 80,
+        journalLimitBytes: null,
+      },
+      limit: {
+        status: 'degraded',
+        fractionUsed: 0.83,
+        usedBytes: 10 * GB,
+        limitBytes: 12 * GB,
+      },
     });
     expect(budgetSummary(warn, warn.limits)).toContain('80%');
   });

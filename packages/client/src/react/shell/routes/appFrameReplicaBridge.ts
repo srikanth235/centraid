@@ -200,7 +200,12 @@ export function attachAppFrameReplicaBridge(
         } catch (error) {
           const shaped = serializeReplicaError(error);
           post(
-            { type: 'centraid:replica-result', id: message.id, ok: false, ...shaped },
+            {
+              type: 'centraid:replica-result',
+              id: message.id,
+              ok: false,
+              ...shaped,
+            },
             expectedGeneration,
           );
         }
@@ -395,7 +400,10 @@ function validId(value: unknown): value is RequestId {
   return typeof value === 'string' || (typeof value === 'number' && Number.isSafeInteger(value));
 }
 
-function serializeReplicaError(error: unknown): { error: string; code: string } {
+function serializeReplicaError(error: unknown): {
+  error: string;
+  code: string;
+} {
   if (error instanceof Error) {
     const code = (error as Error & { code?: unknown }).code;
     return {

@@ -1,10 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
+
 import type { BlockingSummary, OutboxGrant } from '../../../gateway-client-outbox.js';
-import {
-  decideConsentItem,
-  filterConsentForAutomation,
-  loadAutomationThreadData,
-} from './automationThreadData.js';
 import {
   confirmVaultParked,
   decideOutboxItem,
@@ -15,6 +11,11 @@ import {
   readAutomation,
   revokeOutboxGrant,
 } from '../../../gateway-client.js';
+import {
+  decideConsentItem,
+  filterConsentForAutomation,
+  loadAutomationThreadData,
+} from './automationThreadData.js';
 
 // `automationThreadData.ts` imports the gateway-client barrel; stub it so
 // pulling the module in doesn't run gateway-client-core's load-time
@@ -308,9 +309,16 @@ describe(decideConsentItem, () => {
       receiptId: 'r1',
       status: 'executed',
     });
-    const ok = await decideConsentItem({ decision: 'approve', id: 'ob1', kind: 'outbox' });
+    const ok = await decideConsentItem({
+      decision: 'approve',
+      id: 'ob1',
+      kind: 'outbox',
+    });
     expect(ok).toBe(true);
-    expect(decideOutboxItem).toHaveBeenCalledWith({ decision: 'approve', itemId: 'ob1' });
+    expect(decideOutboxItem).toHaveBeenCalledWith({
+      decision: 'approve',
+      itemId: 'ob1',
+    });
   });
 
   it('reports failure when an outbox decision parks instead of executing', async () => {
@@ -319,15 +327,26 @@ describe(decideConsentItem, () => {
       reason: 'needs a fresh grant',
       status: 'parked',
     });
-    const ok = await decideConsentItem({ decision: 'approve', id: 'ob1', kind: 'outbox' });
+    const ok = await decideConsentItem({
+      decision: 'approve',
+      id: 'ob1',
+      kind: 'outbox',
+    });
     expect(ok).toBe(false);
   });
 
   it('confirms a parked invocation', async () => {
     vi.mocked(confirmVaultParked).mockResolvedValue({ status: 'confirmed' });
-    const ok = await decideConsentItem({ decision: 'approve', id: 'p1', kind: 'parked' });
+    const ok = await decideConsentItem({
+      decision: 'approve',
+      id: 'p1',
+      kind: 'parked',
+    });
     expect(ok).toBe(true);
-    expect(confirmVaultParked).toHaveBeenCalledWith({ approve: true, invocationId: 'p1' });
+    expect(confirmVaultParked).toHaveBeenCalledWith({
+      approve: true,
+      invocationId: 'p1',
+    });
   });
 
   it('revokes a standing grant', async () => {
@@ -337,7 +356,11 @@ describe(decideConsentItem, () => {
       receiptId: 'r1',
       status: 'executed',
     });
-    const ok = await decideConsentItem({ decision: 'revoke', id: 'g1', kind: 'grant' });
+    const ok = await decideConsentItem({
+      decision: 'revoke',
+      id: 'g1',
+      kind: 'grant',
+    });
     expect(ok).toBe(true);
     expect(revokeOutboxGrant).toHaveBeenCalledWith('g1');
   });

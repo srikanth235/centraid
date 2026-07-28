@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { ACCENT_PALETTE } from '../../app-shell-context.js';
 import {
   applyPrefsToDocument,
@@ -29,12 +30,18 @@ describe('appearance prefs', () => {
 
   it('rejects invalid union values', () => {
     expect(
-      pickAppearance({ density: 'huge', cards: 'shiny', accentKey: 'chartreuse' }),
+      pickAppearance({
+        density: 'huge',
+        cards: 'shiny',
+        accentKey: 'chartreuse',
+      }),
     ).toStrictEqual({});
   });
 
   it('falls back to the legacy `accent` key when `accentKey` is absent', () => {
-    expect(pickAppearance({ accent: 'teal' })).toStrictEqual({ accent: 'teal' });
+    expect(pickAppearance({ accent: 'teal' })).toStrictEqual({
+      accent: 'teal',
+    });
   });
 
   it('emits both the accent key and its resolved swatches to the wire', () => {
@@ -46,7 +53,9 @@ describe('appearance prefs', () => {
   });
 
   it('maps cardVariant → cards on the wire', () => {
-    expect(toRemoteShape({ cardVariant: 'flat' })).toStrictEqual({ cards: 'flat' });
+    expect(toRemoteShape({ cardVariant: 'flat' })).toStrictEqual({
+      cards: 'flat',
+    });
   });
 
   it('round-trips a full pref set through wire → pick', () => {
@@ -62,7 +71,12 @@ describe('appearance prefs', () => {
   });
 
   it('writes prefs onto <html> as data-attrs + CSS vars', () => {
-    applyPrefsToDocument({ ...DEFAULT_PREFS, theme: 'light', density: 'compact', accent: 'ochre' });
+    applyPrefsToDocument({
+      ...DEFAULT_PREFS,
+      theme: 'light',
+      density: 'compact',
+      accent: 'ochre',
+    });
     const html = document.documentElement;
     expect(html.dataset.theme).toBe('light');
     expect(html.dataset.density).toBe('compact');

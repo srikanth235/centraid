@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+
 import { RUNNER_TIERS, resolveClaudeModel } from './tiers.js';
 
 describe('tiers', () => {

@@ -108,7 +108,9 @@ export class DeviceStore {
     const payload: DeviceFile = { version: 1, devices: this.devices };
     fs.mkdirSync(path.dirname(this.file), { recursive: true });
     const tmp = `${this.file}.${process.pid}.tmp`;
-    fs.writeFileSync(tmp, `${JSON.stringify(payload, null, 2)}\n`, { mode: 0o600 });
+    fs.writeFileSync(tmp, `${JSON.stringify(payload, null, 2)}\n`, {
+      mode: 0o600,
+    });
     fs.renameSync(tmp, this.file);
   }
 }

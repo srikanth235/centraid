@@ -2,10 +2,12 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const appLiveUrl = vi.fn();
-const tunnelFetch = vi.fn();
+import type { appLiveUrl as AppLiveUrl } from '../../../gateway-client.js';
+
+const appLiveUrl = vi.fn<typeof AppLiveUrl>();
+const tunnelFetch = vi.fn<typeof fetch>();
 vi.mock(import('../../../gateway-client.js'), () => ({
-  appLiveUrl: (a: unknown) => appLiveUrl(a),
+  appLiveUrl: (input: Parameters<typeof AppLiveUrl>[0]) => appLiveUrl(input),
 }));
 
 let AppFrame: typeof import('./AppFrame.js').default;
@@ -85,7 +87,7 @@ describe('AppFrame', () => {
       expect(frame.dataset.centraidApp).toBe('1');
       expect(appLiveUrl).toHaveBeenCalledWith({ id: 'todos' });
       expect(frame.getAttribute('src')).toMatch(
-        /^https:\/\/gw\.local\/app\/todos\?theme=dark&bgL=5#theme=dark&bgL=5&bridge=.+$/,
+        /^https:\/\/gw\.local\/app\/todos\?theme=dark&bgL=5#theme=dark&bgL=5&bridge=.+$/u,
       );
     });
 
@@ -99,7 +101,7 @@ describe('AppFrame', () => {
       const launch = `${window.location.origin}/__centraid_iroh__/d-device/centraid/_web/session?code=one`;
       appLiveUrl.mockResolvedValueOnce({ url: launch });
       let el = await render();
-      await vi.waitFor(() => expect(el.querySelector('iframe')?.src).toMatch(/^data:text\/html/));
+      await vi.waitFor(() => expect(el.querySelector('iframe')?.src).toMatch(/^data:text\/html/u));
       expect(el.querySelector('iframe')!.getAttribute('sandbox')).not.toContain(
         'allow-same-origin',
       );
@@ -112,7 +114,7 @@ describe('AppFrame', () => {
       appLiveUrl.mockRejectedValueOnce(new Error('offline'));
 
       el = await render();
-      await vi.waitFor(() => expect(el.querySelector('iframe')?.src).toMatch(/^data:text\/html/));
+      await vi.waitFor(() => expect(el.querySelector('iframe')?.src).toMatch(/^data:text\/html/u));
       expect(el.querySelector('.viewFrame')?.textContent).not.toContain('Could not reach');
       expect(appLiveUrl).toHaveBeenCalledTimes(2);
       expect(tunnelFetch).toHaveBeenCalledWith(

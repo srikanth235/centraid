@@ -3,11 +3,13 @@
 // path, no-model-option, AUTH_REQUIRED, and missing-binary are all exercised
 // against a real launch → initialize → session/new exchange, not a mock.
 
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { describe, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { describe, expect, test } from 'vitest';
+
 import { enumerateAcpModels, mapOfferedModels } from './enumerate-models.js';
 import type { AcpTurnConfig } from './types.js';
 
@@ -46,7 +48,9 @@ describe('enumerate-models', () => {
   test('a missing binary enumerates [] rather than throwing', async () => {
     const dir = await tempDir('acp-enum-missing-');
     const models = await enumerateAcpModels(
-      fakeConfig(['--mode=normal'], { binPath: path.join(dir, 'does-not-exist') }),
+      fakeConfig(['--mode=normal'], {
+        binPath: path.join(dir, 'does-not-exist'),
+      }),
     );
     expect(models).toStrictEqual([]);
   });
@@ -65,7 +69,7 @@ describe('enumerate-models', () => {
     expect(pid).toBeGreaterThan(0);
     // signal 0 probes liveness without delivering a signal: ESRCH means the
     // child has already been reaped, which is the invariant we require.
-    expect(() => process.kill(pid, 0)).toThrow(/ESRCH/);
+    expect(() => process.kill(pid, 0)).toThrow(/ESRCH/u);
   });
 
   // ---- mapping unit ---------------------------------------------------------

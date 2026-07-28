@@ -5,6 +5,7 @@
 // automation-event-sources.test.ts / -github.test.ts, never shipped.
 
 import { vi } from 'vitest';
+
 import type { PollJson, PollJsonResponse } from './automation-event-sources.js';
 
 export const gmail = {

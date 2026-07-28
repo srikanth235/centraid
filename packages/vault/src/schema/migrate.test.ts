@@ -1,7 +1,9 @@
-import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { describe, expect, test } from 'vitest';
+
 import { openVaultDb } from '../db.js';
 import {
   JOURNAL_MIGRATIONS,
@@ -12,9 +14,12 @@ import {
   VaultSchemaAheadError,
 } from './migrate.js';
 import { listVaultEntities, resolveEntity } from './tables.js';
+
 function userVersionOf(file: string): number {
   const raw = new DatabaseSync(file);
-  const row = raw.prepare('PRAGMA user_version').get() as { user_version: number };
+  const row = raw.prepare('PRAGMA user_version').get() as {
+    user_version: number;
+  };
   raw.close();
   return row.user_version;
 }
@@ -83,7 +88,9 @@ describe('schema/migrate', () => {
     ] as const;
 
     for (const table of editableDomainTables) {
-      const columns = db.vault.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+      const columns = db.vault.prepare(`PRAGMA table_info(${table})`).all() as {
+        name: string;
+      }[];
       expect(
         columns.some((column) => column.name === 'updated_at'),
         `${table}.updated_at`,
@@ -126,7 +133,9 @@ describe('schema/migrate', () => {
     // openVaultDb already migrated; a second migrate run must be a no-op —
     // exercised by reopening the same in-memory handle path being impossible,
     // so assert user_version advanced exactly once per rung.
-    const version = db.vault.prepare('PRAGMA user_version').get() as { user_version: number };
+    const version = db.vault.prepare('PRAGMA user_version').get() as {
+      user_version: number;
+    };
     expect(version.user_version).toBe(VAULT_MIGRATIONS.length);
     db.close();
   });
@@ -159,7 +168,7 @@ describe('schema/migrate', () => {
          VALUES ('p1', 'alien', 'X', 't', 't', '1.1')`,
         )
         .run(),
-    ).toThrow(/CHECK/);
+    ).toThrow(/CHECK/u);
     expect(() =>
       db.vault
         .prepare(
@@ -167,7 +176,7 @@ describe('schema/migrate', () => {
          VALUES ('c1', 'text/plain', 'file:///x', 'abc', -1, 't')`,
         )
         .run(),
-    ).toThrow(/CHECK/);
+    ).toThrow(/CHECK/u);
     db.close();
   });
 
@@ -207,7 +216,7 @@ describe('schema/migrate', () => {
           `INSERT INTO health_workout (workout_id, activity_id, sport_concept_id) VALUES ('w2', 'a1', 'k1')`,
         )
         .run(),
-    ).toThrow(/UNIQUE/);
+    ).toThrow(/UNIQUE/u);
     db.close();
   });
 
@@ -219,11 +228,15 @@ describe('schema/migrate', () => {
     const db = new DatabaseSync(':memory:');
     // behind: fresh file, version 0 < migrations.length
     expect(() => migrate(db, JOURNAL_MIGRATIONS)).not.toThrow();
-    const afterFresh = db.prepare('PRAGMA user_version').get() as { user_version: number };
+    const afterFresh = db.prepare('PRAGMA user_version').get() as {
+      user_version: number;
+    };
     expect(afterFresh.user_version).toBe(JOURNAL_MIGRATIONS.length);
     // equal: re-running against the now fully-migrated db is a no-op, not a throw
     expect(() => migrate(db, JOURNAL_MIGRATIONS)).not.toThrow();
-    const afterReplay = db.prepare('PRAGMA user_version').get() as { user_version: number };
+    const afterReplay = db.prepare('PRAGMA user_version').get() as {
+      user_version: number;
+    };
     expect(afterReplay.user_version).toBe(JOURNAL_MIGRATIONS.length);
     db.close();
   });
@@ -263,7 +276,7 @@ describe('schema/migrate', () => {
     const err = caught as VaultSchemaAheadError;
     expect(err.fileVersion).toBe(JOURNAL_MIGRATIONS.length + 3);
     expect(err.knownVersion).toBe(JOURNAL_MIGRATIONS.length);
-    expect(err.message).toMatch(/newer version of Centraid/);
+    expect(err.message).toMatch(/newer version of Centraid/u);
     db.close();
   });
 

@@ -1,16 +1,16 @@
+import { Feather } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Modal, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
 
 import { useReplicaQuery } from '../../kit/hooks/useReplicaQuery';
 import { useReplica } from '../../kit/replica/ReplicaProvider';
 import { family, useTheme } from '../../kit/theme';
 import type { PhotosScreenProps } from '../../navigation';
+import { Store } from '../../storage';
 import PhotoTimeline from './PhotoTimeline';
 import { sectionPhotoAssets } from './timeline-model';
 import { usePhotoTimeline } from './timeline-source';
-import { Store } from '../../storage';
 
 const KEEP_ORIGINALS_KEY = 'photos.keepOriginalAlbums';
 
@@ -64,11 +64,17 @@ export default function AlbumDetail({
     setKeepOriginals(next);
   };
   const remove = async (): Promise<void> => {
-    for (const asset of assets.filter((item) => selection.has(item.id)))
+    const selectedAssets = assets.filter((item) => selection.has(item.id));
+    const removeNext = async (index: number): Promise<void> => {
+      const asset = selectedAssets[index];
+      if (!asset) return;
       await session?.write('photos', {
         action: 'remove-from-album',
         input: { album_id: route.params.albumId, asset_id: asset.assetId! },
       });
+      return removeNext(index + 1);
+    };
+    await removeNext(0);
     setSelection(new Set());
   };
   const setCover = async (): Promise<void> => {
@@ -96,7 +102,10 @@ export default function AlbumDetail({
         style: 'destructive',
         onPress: () =>
           void session
-            ?.write('photos', { action: 'delete-album', input: { album_id: route.params.albumId } })
+            ?.write('photos', {
+              action: 'delete-album',
+              input: { album_id: route.params.albumId },
+            })
             .then(() => navigation.goBack()),
       },
     ]);
@@ -200,9 +209,21 @@ const styles = StyleSheet.create({
   copy: { flex: 1, marginLeft: 10 },
   coverAction: { fontFamily: family.sansBold, fontSize: 13 },
   empty: { alignItems: 'center', flex: 1, justifyContent: 'center' },
-  dialog: { borderRadius: 16, left: 28, padding: 20, position: 'absolute', right: 28, top: '34%' },
+  dialog: {
+    borderRadius: 16,
+    left: 28,
+    padding: 20,
+    position: 'absolute',
+    right: 28,
+    top: '34%',
+  },
   dialogTitle: { fontFamily: family.displayBold, fontSize: 19 },
-  header: { alignItems: 'center', flexDirection: 'row', minHeight: 56, paddingHorizontal: 14 },
+  header: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    minHeight: 56,
+    paddingHorizontal: 14,
+  },
   meta: { fontFamily: family.sansRegular, fontSize: 11, marginTop: 3 },
   input: {
     borderRadius: 10,

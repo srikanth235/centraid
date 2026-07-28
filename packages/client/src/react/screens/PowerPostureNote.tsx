@@ -1,6 +1,8 @@
 import { type JSX } from 'react';
-import styles from './GatewayScreen.module.css';
+
 import { powerPostureLine, type PowerContextState } from './resource-summary.js';
+
+import styles from './GatewayScreen.module.css';
 
 // Power-context posture note on the Resource card (issue #528 Phase D). Battery
 // and thermal chrome render ONLY when the gateway host actually has a battery;

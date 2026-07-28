@@ -13,6 +13,7 @@
 // a new table instead.
 
 import type { DatabaseSync } from 'node:sqlite';
+
 import type { VaultDb } from '../db.js';
 import { nowIso } from '../ids.js';
 import { refreshReplicaTriggers } from '../replica/change-log.js';
@@ -32,10 +33,10 @@ import {
   type ExtBand,
   type ExtTableSpec,
 } from '../schema/ext.js';
-import { resolveEntity } from '../schema/tables.js';
-import { isSealedValue, sealAad, sealValue, stampSealKeyFingerprint } from '../schema/sealed.js';
-import { clearColumnCache } from './filters.js';
 import type { SearchableEntity } from '../schema/fts.js';
+import { isSealedValue, sealAad, sealValue, stampSealKeyFingerprint } from '../schema/sealed.js';
+import { resolveEntity } from '../schema/tables.js';
+import { clearColumnCache } from './filters.js';
 import type { CommandDefinition, HandlerCtx } from './types.js';
 
 export interface ExtApplyOutcome {
@@ -101,10 +102,17 @@ function fkResolver(
     const ext = parseExtLogical(logical);
     if (ext) {
       const inBatch = batch.get(ext.table);
-      if (inBatch) return { physical: extPhysical(appId, ext.table, band), pk: extPk(inBatch) };
+      if (inBatch)
+        return {
+          physical: extPhysical(appId, ext.table, band),
+          pk: extPk(inBatch),
+        };
       const existing = resolveEntity(extLogical(appId, ext.table, band), db.vault);
       if (existing)
-        return { physical: existing.physical, pk: pkColumn(db.vault, existing.physical) };
+        return {
+          physical: existing.physical,
+          pk: pkColumn(db.vault, existing.physical),
+        };
       throw new ExtSpecError(`references unknown ext table "${logical}"`);
     }
     const ref = resolveEntity(logical);
@@ -237,7 +245,10 @@ function alterExtTable(
     (column) => !(oldSpec.sealed ?? []).includes(column),
   );
   const canonColumn = (c: ExtTableSpec['columns'][number]) =>
-    canonicalSpecJson({ name: 'x', columns: [{ ...c, primaryKey: c.primaryKey }] });
+    canonicalSpecJson({
+      name: 'x',
+      columns: [{ ...c, primaryKey: c.primaryKey }],
+    });
   for (const [name, col] of newCols) {
     const old = oldCols.get(name);
     if (old && canonColumn(old) !== canonColumn(col)) {
@@ -484,7 +495,10 @@ function requireBandRow(
   if (!row) throw new Error(`no ${band} ext table "${table}" for app ${appId}`);
   if (row.status !== 'active')
     throw new Error(`ext table "${table}" is retained (app uninstalled)`);
-  return { physical: row.physical, spec: JSON.parse(row.spec_json) as ExtTableSpec };
+  return {
+    physical: row.physical,
+    spec: JSON.parse(row.spec_json) as ExtTableSpec,
+  };
 }
 
 /** Names of the trio, for registration and deregistration alike. */
@@ -517,7 +531,11 @@ export function extCommandDefinitions(appId: string): CommandDefinition[] {
       additionalProperties: false,
     },
     handler: (ctx) => {
-      const input = ctx.input as { table: string; values: Record<string, unknown>; band?: ExtBand };
+      const input = ctx.input as {
+        table: string;
+        values: Record<string, unknown>;
+        band?: ExtBand;
+      };
       const band = input.band ?? 'live';
       const { physical, spec } = requireBandRow(ctx, appId, band, input.table);
       const pk = extPk(spec);

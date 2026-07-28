@@ -1,3 +1,6 @@
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
+
 /**
  * Agent chat journey (#496 P1): message → side effect → transcript.
  *
@@ -9,8 +12,7 @@
  */
 import { tempDir } from '@centraid/test-kit/temp-dir';
 import { describe, expect, test } from 'vitest';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
+
 import { deltas, runFake, types, vaultToolContext } from './test-fixtures.js';
 
 describe('journey', () => {

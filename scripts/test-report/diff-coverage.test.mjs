@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+
 import {
   evaluateDiffCoverage,
   groupUncoveredHunks,
@@ -109,7 +110,7 @@ describe('evaluateDiffCoverage', () => {
     };
     const result = evaluateDiffCoverage(score, 80, null);
     expect(result.ok).toBe(false);
-    expect(result.reason).toMatch(/50\.0% < 80%/);
+    expect(result.reason).toMatch(/50\.0% < 80%/u);
     expect(result.messages.some((m) => m.includes('packages/a/src/x.ts:1-2'))).toBe(true);
   });
 
@@ -123,7 +124,12 @@ describe('evaluateDiffCoverage', () => {
     expect(evaluateDiffCoverage(score, 80, null).ok).toBe(true);
     expect(
       evaluateDiffCoverage(
-        { total: 10, covered: 1, percent: 10, uncovered: [{ file: 'a.ts', line: 1 }] },
+        {
+          total: 10,
+          covered: 1,
+          percent: 10,
+          uncovered: [{ file: 'a.ts', line: 1 }],
+        },
         80,
         'temporary large refactor #999',
       ).ok,

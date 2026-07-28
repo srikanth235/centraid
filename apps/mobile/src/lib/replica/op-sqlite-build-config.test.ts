@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+
 import { describe, expect, it } from 'vitest';
 
 // The native replica needs FTS5 (see replica-fts5-error.ts). FTS5 is not a
@@ -20,7 +20,7 @@ import { describe, expect, it } from 'vitest';
 // So the block must exist in BOTH files. Declaring it only on the app silently
 // ships an iOS build with no FTS5 (the podspec logs nothing about fts5 — the
 // only tell is a missing SQLITE_ENABLE_FTS5=1 in the generated xcconfig).
-const here = path.dirname(fileURLToPath(import.meta.url));
+const here = import.meta.dirname;
 const mobileRoot = path.resolve(here, '../../..');
 const repoRoot = path.resolve(mobileRoot, '../..');
 

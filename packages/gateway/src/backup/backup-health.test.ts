@@ -66,7 +66,10 @@ describe('backup-health', () => {
   });
 
   test('no foreign checkpoint recorded → ok, no note', () => {
-    const res = evaluateBackupHealth({ state: stateWith(healthyTarget()), now: NOW });
+    const res = evaluateBackupHealth({
+      state: stateWith(healthyTarget()),
+      now: NOW,
+    });
     expect(res.status).toBe('ok');
     expect(res.detail).not.toContain('foreign checkpoint');
   });

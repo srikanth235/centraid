@@ -44,7 +44,10 @@ async function forward(body) {
     return {
       jsonrpc: '2.0',
       id: body.id ?? null,
-      error: { code: -32000, message: `upstream HTTP ${res.status}: ${text.slice(0, 200)}` },
+      error: {
+        code: -32000,
+        message: `upstream HTTP ${res.status}: ${text.slice(0, 200)}`,
+      },
     };
   }
 }

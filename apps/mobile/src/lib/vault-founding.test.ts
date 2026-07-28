@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
 import {
   initializeMobileVault,
   prepareMobileFounding,
@@ -8,19 +9,19 @@ import {
 } from './vault-founding';
 
 const tunnel = vi.hoisted(() => ({
-  generateSecretKey: vi.fn(),
-  isTunnelAvailable: vi.fn(),
-  startTunnel: vi.fn(),
-  stopTunnel: vi.fn(),
+  generateSecretKey: vi.fn<typeof import('../../modules/centraid-tunnel').generateSecretKey>(),
+  isTunnelAvailable: vi.fn<typeof import('../../modules/centraid-tunnel').isTunnelAvailable>(),
+  startTunnel: vi.fn<typeof import('../../modules/centraid-tunnel').startTunnel>(),
+  stopTunnel: vi.fn<typeof import('../../modules/centraid-tunnel').stopTunnel>(),
 }));
 const secure = vi.hoisted(() => ({
   value: '',
-  setSecure: vi.fn(),
+  setSecure: vi.fn<typeof import('./secure-storage').setSecure>(),
 }));
 const spaces = vi.hoisted(() => ({
-  addSpace: vi.fn(),
+  addSpace: vi.fn<typeof import('./spaces').addSpace>(),
 }));
-const fetchMock = vi.hoisted(() => vi.fn());
+const fetchMock = vi.hoisted(() => vi.fn<typeof fetch>());
 
 vi.mock(import('react-native'), () => ({
   // vault-founding.ts only reads `Platform.OS`; react-native's real
@@ -39,7 +40,9 @@ vi.mock(import('./spaces'), () => ({
   LINK_SECRET_KEY: 'phoneLink.secretKey' as const,
   addSpace: spaces.addSpace,
 }));
-vi.mock(import('./phone-link'), () => ({ hydratePhoneLink: vi.fn() }));
+vi.mock(import('./phone-link'), () => ({
+  hydratePhoneLink: vi.fn<typeof import('./phone-link').hydratePhoneLink>(),
+}));
 vi.stubGlobal('fetch', fetchMock);
 
 function ticket(over: Partial<{ gw: string; t: string; s: string; exp: number }> = {}): string {
@@ -67,9 +70,12 @@ describe('vault-founding', () => {
     secure.setSecure.mockImplementation(async (_key: string, value: string) => {
       secure.value = value;
     });
-    fetchMock.mockImplementation(async (url: string) => {
-      if (url.endsWith('/centraid/_gateway/info')) {
-        return Response.json({ status: 'uninitialized', endpointId: 'gateway-endpoint-id' });
+    fetchMock.mockImplementation(async (url) => {
+      if (String(url).endsWith('/centraid/_gateway/info')) {
+        return Response.json({
+          status: 'uninitialized',
+          endpointId: 'gateway-endpoint-id',
+        });
       }
       return Response.json({ ok: true });
     });

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { ROLLOUT_WINDOW_MS, shouldAdmitUpdate, stableBucketId } from './update-rollout-core.js';
 
 const T0 = 1_700_000_000_000;

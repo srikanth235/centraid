@@ -12,9 +12,9 @@
 // (media.ts CONTENT_REFERENCES), so an embedded photo survives the photo
 // being trashed in its own app.
 
+import { MAX_INLINE_DATA_URI_CHARS, mintContentFromDataUri } from '../blob/mint.js';
 import type { Gateway } from '../gateway/gateway.js';
 import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
-import { MAX_INLINE_DATA_URI_CHARS, mintContentFromDataUri } from '../blob/mint.js';
 import { assertInlineDataUriWithinBudget } from './inline-body-guard.js';
 
 /**
@@ -165,7 +165,9 @@ function attach(ctx: HandlerCtx): Record<string, unknown> {
   let mediaType: string;
   let byteSize: number;
   if (input.staged_sha !== undefined) {
-    const claimed = ctx.blobs.claimStaged(input.staged_sha, { title: input.title });
+    const claimed = ctx.blobs.claimStaged(input.staged_sha, {
+      title: input.title,
+    });
     contentId = claimed.contentId;
     mediaType = claimed.mediaType;
     byteSize = claimed.byteSize;
@@ -174,7 +176,9 @@ function attach(ctx: HandlerCtx): Record<string, unknown> {
     // text/* cannot redirect (FTS reads content_uri in-transaction), so it
     // gets the tighter inline budget here (issue #367 §E4).
     assertInlineDataUriWithinBudget(input.data_uri);
-    const minted = mintContentFromDataUri(ctx, input.data_uri, { title: input.title });
+    const minted = mintContentFromDataUri(ctx, input.data_uri, {
+      title: input.title,
+    });
     contentId = minted.contentId;
     mediaType = minted.mediaType;
     byteSize = minted.byteSize;
@@ -211,7 +215,11 @@ function attach(ctx: HandlerCtx): Record<string, unknown> {
     entityType: input.subject_type,
     entityId: input.subject_id,
   });
-  return { attachment_id: attachmentId, content_id: contentId, is_primary: isPrimary };
+  return {
+    attachment_id: attachmentId,
+    content_id: contentId,
+    is_primary: isPrimary,
+  };
 }
 
 const DETACH: CommandDefinition = {

@@ -4,6 +4,7 @@
 // absent ids, and the >500-id chunk boundary the IN list splits on.
 
 import { beforeEach, describe, expect, test } from 'vitest';
+
 import { openVaultDb, type VaultDb } from '../db.js';
 import { nowIso, uuidv7 } from '../ids.js';
 import { resolveDerivativeShas } from './read.js';

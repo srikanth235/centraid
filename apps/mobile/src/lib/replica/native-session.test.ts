@@ -1,7 +1,5 @@
 import { createHash } from 'node:crypto';
 
-import { describe, expect, test } from 'vitest';
-
 import type {
   GatewayAuth,
   ReplicaChangeBatch,
@@ -12,6 +10,7 @@ import type {
   ReplicaSnapshotRow,
   VaultChangeMessage,
 } from '@centraid/client/replica/native';
+import { describe, expect, test } from 'vitest';
 
 import type { AppStateLike, NativeChangeFeed } from './native-session';
 import { createNativeReplicaSession } from './native-session';
@@ -61,7 +60,13 @@ function page(
 
 /** An already-converged delta pull: the mandatory post-bootstrap replay finds nothing. */
 function noChanges(cursor: ReplicaCursor): ReplicaChangeBatch {
-  return { protocolVersion: 1, schemaEpoch: 'schema-1', from: cursor, to: cursor, changes: [] };
+  return {
+    protocolVersion: 1,
+    schemaEpoch: 'schema-1',
+    from: cursor,
+    to: cursor,
+    changes: [],
+  };
 }
 
 function snapshot(cursor: ReplicaCursor): ReplicaSnapshot {
@@ -103,7 +108,7 @@ function snapshot(cursor: ReplicaCursor): ReplicaSnapshot {
 interface FakeFeed extends NativeChangeFeed {
   readonly active: boolean;
   readonly shapeIds: readonly string[];
-  emit(message: VaultChangeMessage): void;
+  emit: (message: VaultChangeMessage) => void;
 }
 
 /** Records active toggles and lets the test drive coordinator feed messages. */
@@ -140,7 +145,7 @@ function createFeed(): FakeFeed {
 }
 
 interface FakeAppState extends AppStateLike {
-  send(state: string): void;
+  send: (state: string) => void;
 }
 
 function createAppState(): FakeAppState {
@@ -168,7 +173,7 @@ function createAppState(): FakeAppState {
 type Responder = () => Response;
 
 interface FakeGateway {
-  on(pathFragment: string, responder: Responder): FakeGateway;
+  on: (pathFragment: string, responder: Responder) => FakeGateway;
   readonly baseUrls: readonly string[];
   readonly fetcher: (baseUrl: string, pathname: string, init: RequestInit) => Promise<Response>;
 }
@@ -233,11 +238,13 @@ async function until(
   timeoutMs = 1_000,
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs;
-  for (;;) {
+  const poll = async (): Promise<void> => {
     if (await predicate()) return;
     if (Date.now() > deadline) throw new Error('condition not reached in time');
     await new Promise((resolve) => setTimeout(resolve, 5));
-  }
+    return poll();
+  };
+  return poll();
 }
 
 describe(createNativeReplicaSession, () => {
@@ -259,13 +266,21 @@ describe(createNativeReplicaSession, () => {
       idFactory: sequentialIds(),
     });
     try {
-      expect((await session.status()).cursor).toStrictEqual({ epoch: 'replica-1', seq: 1 });
+      expect((await session.status()).cursor).toStrictEqual({
+        epoch: 'replica-1',
+        seq: 1,
+      });
       expect(feed.active).toBe(true);
 
-      feed.emit({ type: 'centraid:vault-cursor', cursor: { epoch: 'replica-1', seq: 2 } });
+      feed.emit({
+        type: 'centraid:vault-cursor',
+        cursor: { epoch: 'replica-1', seq: 2 },
+      });
       await until(async () => (await session.status()).cursor?.seq === 2);
 
-      const read = await session.read('photos', { entity: 'core.content_item' });
+      const read = await session.read('photos', {
+        entity: 'core.content_item',
+      });
       expect(read.rows[0]?.values.title).toBe('Renamed');
     } finally {
       await session.close();
@@ -345,7 +360,10 @@ describe(createNativeReplicaSession, () => {
         action: 'photos.favorite',
         input: { assetId: 'asset-1', favorite: true },
       });
-      expect(result).toMatchObject({ intentId: 'intent-1', status: 'executed' });
+      expect(result).toMatchObject({
+        intentId: 'intent-1',
+        status: 'executed',
+      });
 
       const [intent] = await session.coordinator.intents.list();
       expect(intent?.payloadHash).toBe(
@@ -411,9 +429,14 @@ describe(createNativeReplicaSession, () => {
       bootstrapWindow: 1,
     });
     try {
-      const read = await session.read('photos', { entity: 'core.content_item' });
+      const read = await session.read('photos', {
+        entity: 'core.content_item',
+      });
       expect(read.rows.map((row) => row.values.content_id)).toStrictEqual(['photo-b']);
-      expect((await session.status()).cursor).toStrictEqual({ epoch: 'replica-1', seq: 3 });
+      expect((await session.status()).cursor).toStrictEqual({
+        epoch: 'replica-1',
+        seq: 3,
+      });
     } finally {
       await session.close();
     }
@@ -446,7 +469,10 @@ describe(createNativeReplicaSession, () => {
       });
       expect((await session.coordinator.pendingIntents()).map((i) => i.intentId)).toHaveLength(1);
 
-      feed.emit({ type: 'centraid:vault-cursor', cursor: { epoch: 'replica-1', seq: 2 } });
+      feed.emit({
+        type: 'centraid:vault-cursor',
+        cursor: { epoch: 'replica-1', seq: 2 },
+      });
       // The 409 pull wipes canonical state and re-bootstraps to the new epoch.
       await until(async () => (await session.status()).cursor?.epoch === 'replica-2');
 

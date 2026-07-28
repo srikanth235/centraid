@@ -155,12 +155,12 @@ async function providerInventory(
   targetId: string,
   store: StoreClass,
 ): Promise<ProviderInventoryObject[]> {
-  if (!provider.listInventory) throw new Error('provider does not implement inventory');
+  const listInventory = provider.listInventory;
+  if (!listInventory) throw new Error('provider does not implement inventory');
   const objects: ProviderInventoryObject[] = [];
   const seen = new Set<string>();
-  let cursor: string | undefined;
-  do {
-    const page = await provider.listInventory(targetId, {
+  const readPage = async (cursor?: string): Promise<void> => {
+    const page = await listInventory(targetId, {
       store,
       ...(cursor ? { cursor } : {}),
       limit: 1000,
@@ -169,11 +169,12 @@ async function providerInventory(
       throw new Error(`provider returned ${page.store} inventory for ${store}`);
     }
     objects.push(...page.objects);
-    if (!page.nextCursor) break;
+    if (!page.nextCursor) return;
     if (seen.has(page.nextCursor)) throw new Error('provider repeated an inventory cursor');
     seen.add(page.nextCursor);
-    cursor = page.nextCursor;
-  } while (cursor);
+    return readPage(page.nextCursor);
+  };
+  await readPage();
   return objects;
 }
 
@@ -309,25 +310,26 @@ export async function collectAudit(
 ): Promise<CollectedAudit> {
   try {
     const caps = await capabilities(provider);
-    if (!caps.capabilities.includes('audit') || !provider.listEvents) {
+    const listEvents = provider.listEvents;
+    if (!caps.capabilities.includes('audit') || !listEvents) {
       return { source: 'unavailable', eventCount: 0, recent: [] };
     }
     let eventCount = 0;
     let recent: ProviderAuditEvent[] = [];
     const seen = new Set<string>();
-    let cursor: string | undefined;
-    do {
-      const page = await provider.listEvents(targetId, {
+    const readPage = async (cursor?: string): Promise<void> => {
+      const page = await listEvents(targetId, {
         ...(cursor ? { cursor } : {}),
         limit: 1000,
       });
       eventCount += page.events.length;
       recent = [...recent, ...page.events].slice(-50);
-      if (!page.nextCursor) break;
+      if (!page.nextCursor) return;
       if (seen.has(page.nextCursor)) throw new Error('provider repeated an audit cursor');
       seen.add(page.nextCursor);
-      cursor = page.nextCursor;
-    } while (cursor);
+      return readPage(page.nextCursor);
+    };
+    await readPage();
     return { source: 'provider', eventCount, recent };
   } catch (err) {
     return {

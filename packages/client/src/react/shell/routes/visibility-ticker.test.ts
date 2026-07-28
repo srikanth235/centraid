@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import { startVisibilityTicker } from './visibility-ticker.js';
 
 // Wakeup-hygiene fix (issue #528 Phase D): the 1s ticker must stop firing while

@@ -22,6 +22,7 @@
  */
 
 import type { RuntimeLogger } from '@centraid/app-engine';
+
 import type { StructuredResourceProfile } from './hardware-profile.js';
 import type { PowerContextState } from './power-context.js';
 import type { ResourceUsageActuals } from './resource-accounting.js';
@@ -174,9 +175,16 @@ export interface HealthSnapshot {
 }
 
 /** A snapshot-time check for state no subsystem pushes. */
-export type HealthProbe = () => Promise<{ status: ComponentStatus; detail?: string }>;
+export type HealthProbe = () => Promise<{
+  status: ComponentStatus;
+  detail?: string;
+}>;
 
-const SEVERITY: Record<ComponentStatus, number> = { ok: 0, degraded: 1, error: 2 };
+const SEVERITY: Record<ComponentStatus, number> = {
+  ok: 0,
+  degraded: 1,
+  error: 2,
+};
 
 const worseOf = (a: ComponentStatus, b: ComponentStatus): ComponentStatus =>
   SEVERITY[a] >= SEVERITY[b] ? a : b;
@@ -382,17 +390,19 @@ export class HealthRegistry {
   }
 
   async snapshot(): Promise<HealthSnapshot> {
-    for (const [component, probe] of this.probes) {
-      const state = this.stateFor(component);
-      try {
-        const result = await probe();
-        state.status = result.status;
-        if (result.detail !== undefined) state.detail = result.detail;
-        if (result.status === 'ok') state.lastOkAt = this.now();
-      } catch (err) {
-        this.reportError(component, err instanceof Error ? err.message : String(err));
-      }
-    }
+    await Promise.all(
+      [...this.probes].map(async ([component, probe]) => {
+        const state = this.stateFor(component);
+        try {
+          const result = await probe();
+          state.status = result.status;
+          if (result.detail !== undefined) state.detail = result.detail;
+          if (result.status === 'ok') state.lastOkAt = this.now();
+        } catch (err) {
+          this.reportError(component, err instanceof Error ? err.message : String(err));
+        }
+      }),
+    );
 
     const components: ComponentHealth[] = [...this.components.entries()]
       .map(([component, s]) => ({
@@ -448,7 +458,12 @@ export class HealthRegistry {
   }
 
   private pushEvent(component: string, level: 'warn' | 'error', message: string): void {
-    this.events.push({ at: new Date(this.now()).toISOString(), component, level, message });
+    this.events.push({
+      at: new Date(this.now()).toISOString(),
+      component,
+      level,
+      message,
+    });
     if (this.events.length > this.maxEvents)
       this.events.splice(0, this.events.length - this.maxEvents);
   }

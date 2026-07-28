@@ -1,6 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import FoundingScreen, { type FoundingScreenProps } from './FoundingScreen.js';
 
 let root: Root | null = null;
@@ -110,16 +111,27 @@ describe('screens/FoundingScreen', () => {
 
       const fileInput = el.querySelector('input[type="file"]') as HTMLInputElement;
       const file = new File(
-        [JSON.stringify({ format: 'centraid-recovery-kit/2', wrapped: 'ciphertext' })],
+        [
+          JSON.stringify({
+            format: 'centraid-recovery-kit/2',
+            wrapped: 'ciphertext',
+          }),
+        ],
         'centraid-recovery-kit.json',
         { type: 'application/json' },
       );
       Object.defineProperty(file, 'text', {
         value: async () =>
-          JSON.stringify({ format: 'centraid-recovery-kit/2', wrapped: 'ciphertext' }),
+          JSON.stringify({
+            format: 'centraid-recovery-kit/2',
+            wrapped: 'ciphertext',
+          }),
       });
       await act(async () => {
-        Object.defineProperty(fileInput, 'files', { configurable: true, value: [file] });
+        Object.defineProperty(fileInput, 'files', {
+          configurable: true,
+          value: [file],
+        });
         fileInput.dispatchEvent(new Event('change', { bubbles: true }));
         await Promise.resolve();
         await Promise.resolve();
@@ -150,7 +162,10 @@ describe('screens/FoundingScreen', () => {
         value: async () => JSON.stringify({ wrapped: 'ciphertext' }),
       });
       await act(async () => {
-        Object.defineProperty(fileInput, 'files', { configurable: true, value: [file] });
+        Object.defineProperty(fileInput, 'files', {
+          configurable: true,
+          value: [file],
+        });
         fileInput.dispatchEvent(new Event('change', { bubbles: true }));
         setValue(inputFor('Recovery-kit password'), 'correct horse');
         setValue(inputFor('Storage-provider key'), 'provider-key');

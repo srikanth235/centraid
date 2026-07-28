@@ -4,15 +4,13 @@
 // zip is just a bag of the same file kinds — entries route recursively and
 // land in ONE batch on one `file.takeout` connection.
 
+import { stageBlobBytes } from '../blob/staging.js';
 import type { VaultDb } from '../db.js';
 import type { Identity } from '../gateway/types.js';
-import { stageBlobBytes } from '../blob/staging.js';
-import { parseIcs } from './ics.js';
-import { parseVcards } from './vcard.js';
-import { parseMbox, threadKey } from './mbox.js';
 import { parseCsvRows, parseTransactionsCsv } from './csv.js';
+import { parseIcs } from './ics.js';
+import { parseMbox, threadKey } from './mbox.js';
 import { isPasswordsCsvHeader, parsePasswordsCsv } from './passwords-csv.js';
-import { readZipEntries } from './zip.js';
 import { PUBLISHERS } from './publishers.js';
 import type {
   EventPayload,
@@ -27,6 +25,8 @@ import {
   type StageCandidate,
   type StageResult,
 } from './staging.js';
+import { parseVcards } from './vcard.js';
+import { readZipEntries } from './zip.js';
 
 export interface StageFileOptions {
   /** Original filename — routes the parser and labels the connection. */

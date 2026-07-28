@@ -1,4 +1,4 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import crypto from 'node:crypto';
 /*
  * Lifecycle-shared publish/delete helpers (issue #147, Concern 3).
  *
@@ -8,14 +8,15 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  * full sequence — in order — against fakes, so a future edit that drops the
  * `reconcile()` call (the easy bug) fails here.
  */
-
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
+
 import * as automation from '@centraid/automation';
-import type { WorktreeStore } from '../worktree-store/index.js';
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+
 import { writeFileMap } from '../routes/route-helpers.js';
+import type { WorktreeStore } from '../worktree-store/index.js';
 import {
   deleteAppAndReconcile,
   publishAndReconcile,

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import {
   priceForModel,
   costForUsage,
@@ -94,19 +95,28 @@ describe('costForUsage — Anthropic price anchors (live LiteLLM catalog)', () =
 
   it('sonnet 4.x: 3 in / 15 out', () => {
     expect(
-      costForUsage('claude-sonnet-4-5', { inputTokens: 1_000_000, outputTokens: 1_000_000 }),
+      costForUsage('claude-sonnet-4-5', {
+        inputTokens: 1_000_000,
+        outputTokens: 1_000_000,
+      }),
     ).toBeCloseTo(18, 9);
   });
 
   it('haiku 4.5: 1 in / 5 out', () => {
     expect(
-      costForUsage('claude-haiku-4-5', { inputTokens: 1_000_000, outputTokens: 1_000_000 }),
+      costForUsage('claude-haiku-4-5', {
+        inputTokens: 1_000_000,
+        outputTokens: 1_000_000,
+      }),
     ).toBeCloseTo(6, 9);
   });
 
   it('a codex id prices from the catalog (1.25 in / 10 out, no cache-write rate published)', () => {
     expect(
-      costForUsage('gpt-5-codex', { inputTokens: 1_000_000, outputTokens: 1_000_000 }),
+      costForUsage('gpt-5-codex', {
+        inputTokens: 1_000_000,
+        outputTokens: 1_000_000,
+      }),
     ).toBeCloseTo(11.25, 9);
     expect(costForUsage('gpt-5-codex', { cacheWriteTokens: 1_000_000 })).toBeCloseTo(0, 9);
   });
@@ -182,7 +192,11 @@ describe(filterLiteLLM, () => {
         mode: 'chat',
         foo: 'bar',
       },
-      'gpt-x': { litellm_provider: 'openai', mode: 'chat', input_cost_per_token: 1e-6 },
+      'gpt-x': {
+        litellm_provider: 'openai',
+        mode: 'chat',
+        input_cost_per_token: 1e-6,
+      },
       'gpt-image-x': {
         litellm_provider: 'openai',
         mode: 'image_generation',

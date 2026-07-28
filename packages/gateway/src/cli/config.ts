@@ -27,7 +27,9 @@
  */
 
 import { promises as fs } from 'node:fs';
+
 import { RUNNER_KINDS, isRunnerKind, type RunnerKind } from '@centraid/app-engine';
+
 import { validateBackupConfig, type BackupConfig } from '../backup/backup-config.js';
 
 export interface DaemonRunnerConfig {

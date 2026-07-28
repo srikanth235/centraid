@@ -444,7 +444,10 @@ export function applyComponentAlerts(
   }
 
   return {
-    state: { ...state, componentAlerts: nextRecords.slice(-COMPONENT_ALERT_CAP) },
+    state: {
+      ...state,
+      componentAlerts: nextRecords.slice(-COMPONENT_ALERT_CAP),
+    },
     actions,
   };
 }
@@ -473,7 +476,10 @@ export function applyVersionSkewAlert(
   if (!config.enabled || state.versionSkewAlertedAt !== undefined) return { state };
   return {
     state: { ...state, versionSkewAlertedAt: now },
-    action: { gatewayVersion: skew.gatewayVersion, gatewaySchemaEpoch: skew.gatewaySchemaEpoch },
+    action: {
+      gatewayVersion: skew.gatewayVersion,
+      gatewaySchemaEpoch: skew.gatewaySchemaEpoch,
+    },
   };
 }
 

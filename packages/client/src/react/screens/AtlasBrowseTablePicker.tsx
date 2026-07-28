@@ -1,9 +1,11 @@
 import { type JSX } from 'react';
+
 import type { BrowseTableEntry } from '../../gateway-client.js';
-import Icon from '../ui/Icon.js';
 import { cx } from '../ui/cx.js';
-import styles from './AtlasBrowseTab.module.css';
+import Icon from '../ui/Icon.js';
 import type { BrowsePackGroup } from './atlasBrowseData.js';
+
+import styles from './AtlasBrowseTab.module.css';
 
 // The table picker rail (issue #441 B3) — a left rail on desktop, a collapsible
 // sheet on narrow. Ontology packs list first, machinery bands below a divider.

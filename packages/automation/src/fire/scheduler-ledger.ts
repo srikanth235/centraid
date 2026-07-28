@@ -42,8 +42,8 @@
  * ref — those always contain `/`) keys one JSON blob per vault.
  */
 
-import { cronMatches } from './cron-match.js';
 import { cronTriggersOf, type Trigger } from '../manifest/manifest.js';
+import { cronMatches } from './cron-match.js';
 
 /** Reserved `automation_state.automation_id` — never a real ref (those contain `/`). */
 export const SCHEDULER_LEDGER_AUTOMATION_ID = '__scheduler';

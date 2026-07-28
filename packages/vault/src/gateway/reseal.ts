@@ -16,6 +16,7 @@
 
 import { randomBytes } from 'node:crypto';
 import { renameSync, rmSync } from 'node:fs';
+
 import type { VaultDb } from '../db.js';
 import { readBlobStoreSettings } from '../db.js';
 import { payloadAad } from '../ingest/staging.js';
@@ -168,7 +169,19 @@ export function resealVaultKey(db: VaultDb, now: string = new Date().toISOString
     objectId: 'seal-key',
     purpose: null,
     decision: 'allow',
-    detail: { oldFingerprint, newFingerprint, resealedCells, resealedStaged, at: now },
+    detail: {
+      oldFingerprint,
+      newFingerprint,
+      resealedCells,
+      resealedStaged,
+      at: now,
+    },
   });
-  return { resealedCells, resealedStaged, oldFingerprint, newFingerprint, receiptId };
+  return {
+    resealedCells,
+    resealedStaged,
+    oldFingerprint,
+    newFingerprint,
+    receiptId,
+  };
 }

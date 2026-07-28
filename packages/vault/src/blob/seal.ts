@@ -12,6 +12,7 @@
 // here — no dual-format reader; stale remotes re-seal on the next sweep.
 
 import { Transform } from 'node:stream';
+
 import {
   decodeHeader,
   decodeTrailer,
@@ -27,12 +28,16 @@ import {
   unsealFrame,
 } from './seal-frames.js';
 
-/**
- * Buffered framed seal: cut the plaintext into `frameSize` frames, seal each,
- * then append the sealed directory and the fixed trailer. Used by the
- * replication path for blobs small enough to hold whole (issue #405 §1); the
- * streaming twin below handles the large ones.
- */
+export {
+  decodeHeader,
+  decodeTrailer,
+  DEFAULT_FRAME_SIZE,
+  frameCountFor,
+  HEADER_BYTES,
+  openDirectory,
+  TRAILER_BYTES,
+  unsealFrame,
+} from './seal-frames.js';
 export function sealBlob(
   key: Buffer,
   sha: string,
@@ -146,13 +151,3 @@ export function unsealBlob(key: Buffer, sha: string, sealed: Buffer): Buffer {
 }
 
 // Re-exported for the ranged read-through (custody-read.ts) and tests.
-export {
-  decodeHeader,
-  decodeTrailer,
-  frameCountFor,
-  openDirectory,
-  DEFAULT_FRAME_SIZE,
-  HEADER_BYTES,
-  TRAILER_BYTES,
-  unsealFrame,
-};

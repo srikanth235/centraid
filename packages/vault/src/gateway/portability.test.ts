@@ -1,6 +1,7 @@
 import { assert, beforeEach, describe, expect, test, vi } from 'vitest';
-import { registerScheduleCommands } from '../commands/schedule.js';
+
 import { bootstrapVault, createGrant, enrollApp, type BootstrapResult } from '../bootstrap.js';
+import { registerScheduleCommands } from '../commands/schedule.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { sha256Hex, uuidv7 } from '../ids.js';
 import { createGateway, Gateway } from './gateway.js';
@@ -18,7 +19,11 @@ describe('portability', () => {
     boot = bootstrapVault(db, { ownerName: 'Priya' });
     gw = createGateway(db);
     registerScheduleCommands(gw);
-    owner = { kind: 'device', deviceId: boot.deviceId, deviceKey: boot.deviceKey };
+    owner = {
+      kind: 'device',
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+    };
   });
 
   /** Populate the vault across several schemas so the round-trip is honest. */
@@ -71,10 +76,16 @@ describe('portability', () => {
 
   test('respond_rsvp denies a party that was never invited', () => {
     seedLife();
-    const event = db.vault.prepare('SELECT event_id FROM core_event').get() as { event_id: string };
+    const event = db.vault.prepare('SELECT event_id FROM core_event').get() as {
+      event_id: string;
+    };
     const outcome = gw.invoke(owner, {
       command: 'schedule.respond_rsvp',
-      input: { event_id: event.event_id, party_id: uuidv7(), partstat: 'declined' },
+      input: {
+        event_id: event.event_id,
+        party_id: uuidv7(),
+        partstat: 'declined',
+      },
       purpose: 'dpv:ServiceProvision',
     });
     expect(outcome.status).toBe('failed');
@@ -85,10 +96,13 @@ describe('portability', () => {
   test('export → reimport → re-export round-trips losslessly (§11 gate)', () => {
     seedLife();
     const first = gw.exportVault(owner);
-    expect(first.artifact.verifyHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(first.artifact.verifyHash).toMatch(/^[0-9a-f]{64}$/u);
     const jobs = db.vault
       .prepare('SELECT verify_hash, completed_at FROM consent_export_job WHERE export_id = ?')
-      .get(first.exportId) as { verify_hash: string; completed_at: string | null };
+      .get(first.exportId) as {
+      verify_hash: string;
+      completed_at: string | null;
+    };
     expect(jobs.verify_hash).toBe(first.artifact.verifyHash);
     expect(jobs.completed_at).not.toBeNull();
 
@@ -99,11 +113,17 @@ describe('portability', () => {
     const party = restored.vault
       .prepare('SELECT party_id, display_name FROM core_party WHERE party_id = ?')
       .get(boot.ownerPartyId) as { party_id: string; display_name: string };
-    expect(party).toMatchObject({ party_id: boot.ownerPartyId, display_name: 'Priya' });
+    expect(party).toMatchObject({
+      party_id: boot.ownerPartyId,
+      display_name: 'Priya',
+    });
 
     // The restored vault serves the same owner credential through its own gateway.
     const gw2 = createGateway(restored);
-    const events = gw2.read(owner, { entity: 'core.event', purpose: 'dpv:ServiceProvision' });
+    const events = gw2.read(owner, {
+      entity: 'core.event',
+      purpose: 'dpv:ServiceProvision',
+    });
     expect(events.rows).toHaveLength(1);
 
     // Re-export: identical data hash — the export contains no self-reference,
@@ -121,14 +141,14 @@ describe('portability', () => {
     if (!events?.[0]) throw new Error('expected an event');
     events[0]['summary'] = 'Rewritten history';
     const fresh = openVaultDb();
-    expect(() => importVaultExport(fresh, tampered)).toThrow(/hash mismatch/);
+    expect(() => importVaultExport(fresh, tampered)).toThrow(/hash mismatch/u);
     fresh.close();
   });
 
   test('import refuses a non-fresh vault', () => {
     seedLife();
     const { artifact } = gw.exportVault(owner);
-    expect(() => importVaultExport(db, artifact)).toThrow(/not a fresh vault/);
+    expect(() => importVaultExport(db, artifact)).toThrow(/not a fresh vault/u);
   });
 
   test('a poisoned row on one table is skipped, not fatal to the whole export (§4.3 hardening)', () => {

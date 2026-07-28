@@ -1,8 +1,10 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import crypto from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
+
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+
 import { commandService } from './service-admin.ts';
 
 let dataDir: string;
@@ -19,7 +21,10 @@ function fail(message: string, code = 1): never {
 }
 
 function stubPlatform(platform: NodeJS.Platform): void {
-  Object.defineProperty(process, 'platform', { value: platform, configurable: true });
+  Object.defineProperty(process, 'platform', {
+    value: platform,
+    configurable: true,
+  });
 }
 
 describe('service-admin', () => {
@@ -57,7 +62,7 @@ describe('service-admin', () => {
     expect(out).toContain('launchctl bootstrap gui/');
     await expect(
       fs.access(path.join(fakeHome, 'Library', 'LaunchAgents', 'dev.centraid.gateway.plist')),
-    ).rejects.toThrow();
+    ).rejects.toThrow(/ENOENT/u);
   });
 
   test('service install --dry-run embeds the resolved --data-dir into the serve argv', async () => {
@@ -85,7 +90,7 @@ describe('service-admin', () => {
     expect(out).toContain('systemctl --user enable --now centraid-gateway.service');
     await expect(
       fs.access(path.join(fakeHome, '.config', 'systemd', 'user', 'centraid-gateway.service')),
-    ).rejects.toThrow();
+    ).rejects.toThrow(/ENOENT/u);
   });
 
   test('service uninstall --dry-run prints the platform-appropriate teardown commands', async () => {
@@ -119,7 +124,7 @@ describe('service-admin', () => {
     stubPlatform('win32');
     await expect(
       commandService(['install', '--data-dir', dataDir, '--dry-run'], fail),
-    ).rejects.toThrow(/not supported on "win32"/);
+    ).rejects.toThrow(/not supported on "win32"/u);
   });
 
   test('service install without flags uses the shared platform default data dir', async () => {
@@ -132,7 +137,7 @@ describe('service-admin', () => {
 
   test('service install rejects an unknown subcommand', async () => {
     await expect(commandService(['bogus'], fail)).rejects.toThrow(
-      /must be one of: install, uninstall, status/,
+      /must be one of: install, uninstall, status/u,
     );
   });
 

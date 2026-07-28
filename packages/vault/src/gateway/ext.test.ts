@@ -5,10 +5,11 @@
 // ones; drafts are scratch copies; uninstall retains, purge deletes.
 
 import { beforeEach, describe, expect, test } from 'vitest';
+
 import { bootstrapVault, createGrant, enrollApp, type BootstrapResult } from '../bootstrap.js';
-import { openVaultDb, type VaultDb } from '../db.js';
 import { registerLinkCommands } from '../commands/links.js';
 import { registerPartyCommands } from '../commands/parties.js';
+import { openVaultDb, type VaultDb } from '../db.js';
 import { canonicalSpecJson, validateExtSpecs, type ExtTableSpec } from '../schema/ext.js';
 import { listVaultEntities, resolveEntity } from '../schema/tables.js';
 import { buildAssistantContext } from './assistant-context.js';
@@ -60,7 +61,10 @@ function appCred(): { cred: Credential; grantId: string } {
     grantedByPartyId: boot.ownerPartyId,
     scopes: [{ schema: `ext.${APP}`, verbs: 'read+act' }],
   });
-  return { cred: { kind: 'app', appId: app.appId, signingKey: app.signingKey }, grantId };
+  return {
+    cred: { kind: 'app', appId: app.appId, signingKey: app.signingKey },
+    grantId,
+  };
 }
 
 describe('ext', () => {
@@ -70,7 +74,11 @@ describe('ext', () => {
     gw = createGateway(db);
     registerPartyCommands(gw);
     registerLinkCommands(gw);
-    owner = { kind: 'device', deviceId: boot.deviceId, deviceKey: boot.deviceKey };
+    owner = {
+      kind: 'device',
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+    };
   });
 
   describe('spec validation', () => {
@@ -78,14 +86,19 @@ describe('ext', () => {
       const ok = () => true;
       expect(() =>
         validateExtSpecs(APP, [{ name: 'x', columns: [{ name: 'a', type: 'text' }] }], ok),
-      ).toThrow(/exactly one primaryKey/);
+      ).toThrow(/exactly one primaryKey/u);
       expect(() =>
         validateExtSpecs(
           APP,
-          [{ name: 'Bad-Name', columns: [{ name: 'a', type: 'text', primaryKey: true }] }],
+          [
+            {
+              name: 'Bad-Name',
+              columns: [{ name: 'a', type: 'text', primaryKey: true }],
+            },
+          ],
           ok,
         ),
-      ).toThrow(/invalid table name/);
+      ).toThrow(/invalid table name/u);
       expect(() =>
         validateExtSpecs(
           APP,
@@ -100,7 +113,7 @@ describe('ext', () => {
           ],
           ok,
         ),
-      ).toThrow(/stay within app/);
+      ).toThrow(/stay within app/u);
     });
   });
 
@@ -120,7 +133,9 @@ describe('ext', () => {
       expect(context).toContain(`ext.${APP}.insert`);
 
       // vault_sql reads it like any table.
-      const sql = gw.sql(owner, { sql: `SELECT count(*) AS n FROM ext_gym_log_workout` });
+      const sql = gw.sql(owner, {
+        sql: `SELECT count(*) AS n FROM ext_gym_log_workout`,
+      });
       expect(sql.rows[0]?.n).toBe(0);
     });
 
@@ -129,7 +144,10 @@ describe('ext', () => {
       const { cred } = appCred();
       const ins = gw.invoke(cred, {
         command: `ext.${APP}.insert`,
-        input: { table: 'workout', values: { kind: 'lift', notes: 'heavy day', reps: 5 } },
+        input: {
+          table: 'workout',
+          values: { kind: 'lift', notes: 'heavy day', reps: 5 },
+        },
         purpose: PURPOSE,
       });
       expect(ins.status).toBe('executed');
@@ -142,7 +160,10 @@ describe('ext', () => {
       });
       expect(upd.status).toBe('executed');
 
-      const read = gw.read(cred, { entity: `ext.${APP}.workout`, purpose: PURPOSE });
+      const read = gw.read(cred, {
+        entity: `ext.${APP}.workout`,
+        purpose: PURPOSE,
+      });
       expect(read.rows).toHaveLength(1);
       expect(read.rows[0]?.reps).toBe(8);
 
@@ -152,7 +173,7 @@ describe('ext', () => {
         purpose: PURPOSE,
       });
       expect(bad.status).toBe('failed');
-      expect((bad as { reason: string }).reason).toMatch(/unknown column "nope"/);
+      expect((bad as { reason: string }).reason).toMatch(/unknown column "nope"/u);
 
       const del = gw.invoke(cred, {
         command: `ext.${APP}.delete`,
@@ -167,7 +188,10 @@ describe('ext', () => {
 
     test('an app without the scope is denied; another app cannot write the band', () => {
       gw.applyAppExt(owner, APP, specs());
-      const stranger = enrollApp(db, { name: 'other-app', origin: 'generated' });
+      const stranger = enrollApp(db, {
+        name: 'other-app',
+        origin: 'generated',
+      });
       const cred: Credential = {
         kind: 'app',
         appId: stranger.appId,
@@ -193,7 +217,10 @@ describe('ext', () => {
       }) as { output: { party_id: string } };
       const ins = gw.invoke(owner, {
         command: `ext.${APP}.insert`,
-        input: { table: 'workout', values: { party_id: party.output.party_id, kind: 'row' } },
+        input: {
+          table: 'workout',
+          values: { party_id: party.output.party_id, kind: 'row' },
+        },
         purpose: PURPOSE,
       }) as { output: { id: string } };
       const link = gw.invoke(owner, {
@@ -225,7 +252,10 @@ describe('ext', () => {
       gw.applyAppExt(owner, APP, specs());
       gw.invoke(owner, {
         command: `ext.${APP}.insert`,
-        input: { table: 'workout', values: { notes: 'tempo intervals on the bridge' } },
+        input: {
+          table: 'workout',
+          values: { notes: 'tempo intervals on the bridge' },
+        },
         purpose: PURPOSE,
       });
       const hits = gw.search(owner, {
@@ -252,13 +282,15 @@ describe('ext', () => {
       const outcome = gw.applyAppExt(owner, APP, next);
       expect(outcome.altered).toStrictEqual(['workout']);
       expect(outcome.dropped).toStrictEqual(['gear']);
-      const rows = gw.sql(owner, { sql: 'SELECT notes, duration_s FROM ext_gym_log_workout' });
+      const rows = gw.sql(owner, {
+        sql: 'SELECT notes, duration_s FROM ext_gym_log_workout',
+      });
       expect(rows.rows[0]?.notes).toBe('keep me'); // data survives the diff
 
       const bad = specs().filter((s) => s.name === 'workout');
       const kind = bad[0]?.columns.find((c) => c.name === 'kind');
       if (kind) kind.type = 'integer';
-      expect(() => gw.applyAppExt(owner, APP, bad)).toThrow(/changed shape/);
+      expect(() => gw.applyAppExt(owner, APP, bad)).toThrow(/changed shape/u);
     });
 
     test('canonicalSpecJson is order-stable for the fields that matter', () => {
@@ -286,7 +318,10 @@ describe('ext', () => {
       });
 
       gw.seedAppExtDraft(owner, APP, specs());
-      const draft = gw.read(owner, { entity: `extdraft.${APP}.workout`, purpose: PURPOSE });
+      const draft = gw.read(owner, {
+        entity: `extdraft.${APP}.workout`,
+        purpose: PURPOSE,
+      });
       expect(draft.rows).toHaveLength(1); // seeded from live
 
       // Re-seeding is idempotent: rows survive; a schema edit diff-applies.
@@ -302,7 +337,11 @@ describe('ext', () => {
 
       gw.invoke(owner, {
         command: `ext.${APP}.insert`,
-        input: { table: 'workout', values: { notes: 'draft only' }, band: 'draft' },
+        input: {
+          table: 'workout',
+          values: { notes: 'draft only' },
+          band: 'draft',
+        },
         purpose: PURPOSE,
       });
       expect(
@@ -347,7 +386,9 @@ describe('ext', () => {
       gw.retainAppExt(owner, APP);
       expect(gw.discover(owner).map((c) => c.name)).not.toContain(`ext.${APP}.insert`);
       // The rows are still the owner's — reachable via SQL.
-      const kept = gw.sql(owner, { sql: 'SELECT count(*) AS n FROM ext_gym_log_workout' });
+      const kept = gw.sql(owner, {
+        sql: 'SELECT count(*) AS n FROM ext_gym_log_workout',
+      });
       expect(kept.rows[0]?.n).toBe(1);
 
       // Re-apply (reinstall) revives band + commands over the same data.
@@ -367,8 +408,8 @@ describe('ext', () => {
 
     test('the band surface is owner-only', () => {
       const { cred } = appCred();
-      expect(() => gw.applyAppExt(cred, APP, specs())).toThrow(/owner/);
-      expect(() => gw.purgeAppExt(cred, APP)).toThrow(/owner/);
+      expect(() => gw.applyAppExt(cred, APP, specs())).toThrow(/owner/u);
+      expect(() => gw.purgeAppExt(cred, APP)).toThrow(/owner/u);
     });
   });
 
@@ -430,7 +471,7 @@ describe('ext', () => {
         db.vault
           .prepare(`INSERT INTO ext_gym_log_workout (workout_id, reps) VALUES (?, ?)`)
           .run('w1', 9007199254740993n),
-      ).toThrow(/CHECK/i);
+      ).toThrow(/CHECK/iu);
       // The bound itself, and everything under it, still writes fine.
       expect(() =>
         db.vault
@@ -448,7 +489,7 @@ describe('ext', () => {
         db.vault
           .prepare(`INSERT INTO ext_gym_log_workout (workout_id, duration_s) VALUES (?, ?)`)
           .run('w3', 9007199254740993n),
-      ).toThrow(/CHECK/i);
+      ).toThrow(/CHECK/iu);
     });
   });
 });

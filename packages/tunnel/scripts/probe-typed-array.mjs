@@ -8,7 +8,11 @@ const iroh = require('@number0/iroh/index.js');
 function attempt(label, bytes) {
   try {
     const secret = iroh.SecretKey.fromBytes(bytes);
-    return { label, accepted: true, returnedByteShape: secret.toBytes().constructor.name };
+    return {
+      label,
+      accepted: true,
+      returnedByteShape: secret.toBytes().constructor.name,
+    };
   } catch (error) {
     return {
       label,

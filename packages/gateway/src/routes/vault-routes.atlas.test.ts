@@ -1,22 +1,28 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import http from 'node:http';
+
+import { forEachSequentially } from '@centraid/test-kit/sequential';
 // The Vault Atlas owner routes (issue #441 Part B): stats / graph / pulse.
 // These assert the gateway wires the vault-package builders to owner-gated
 // GET routes and returns the census/graph/pulse payloads. The ghost-semantics
 // and FK≠core_link invariants are proven in packages/vault; here we prove the
 // route surface and that numbers are computed from the live schema.
-
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterEach, describe, expect, test } from 'vitest';
-import http from 'node:http';
-import { openVaultRegistry } from '../serve/vault-registry.js';
+
 import type { VaultPlane } from '../serve/vault-plane.js';
+import { openVaultRegistry } from '../serve/vault-registry.js';
 import { makeVaultRouteHandler } from './vault-routes.js';
 
-const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
+const silentLogger = {
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+};
 
 const cleanups: Array<() => Promise<void> | void> = [];
 describe('vault-routes.atlas', () => {
   afterEach(async () => {
-    while (cleanups.length > 0) await cleanups.pop()?.();
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
   });
   async function startHandlerServer(
     handler: (req: http.IncomingMessage, res: http.ServerResponse) => Promise<boolean>,
@@ -37,7 +43,11 @@ describe('vault-routes.atlas', () => {
 
   async function setup(): Promise<{ base: string; plane: VaultPlane }> {
     const dir = await tempDir();
-    const registry = openVaultRegistry({ rootDir: dir, logger: silentLogger, ownerName: 'Priya' });
+    const registry = openVaultRegistry({
+      rootDir: dir,
+      logger: silentLogger,
+      ownerName: 'Priya',
+    });
     registry.create('Personal');
     cleanups.push(() => registry.stop());
     const plane = registry.current();
@@ -174,7 +184,11 @@ describe('vault-routes.atlas', () => {
     const body = (await res.json()) as {
       windowDays: number;
       live: boolean;
-      series: Array<{ entityType: string; physical: string | null; total: number }>;
+      series: Array<{
+        entityType: string;
+        physical: string | null;
+        total: number;
+      }>;
     };
     expect(body.windowDays).toBe(30);
     expect(body.live).toBe(true);

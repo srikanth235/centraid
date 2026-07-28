@@ -9,8 +9,8 @@
 // at worst lose bytes (which the reconciliation sweep reports), never
 // corrupt identity.
 
-import { assertSha, type BlobRange, type BlobStat, type BlobStore } from './store.js';
 import { S3RequestPipeline } from './s3-pipeline.js';
+import { assertSha, type BlobRange, type BlobStat, type BlobStore } from './store.js';
 
 export interface S3Credentials {
   accessKeyId: string;
@@ -78,7 +78,7 @@ async function streamToBuffer(source: NodeJS.ReadableStream): Promise<Buffer> {
  * Re-chunk a Readable into fixed-size Buffers, bounding resident memory to
  * roughly one part size regardless of the source's total length (issue #367
  * §C8: "never materializing the whole blob in memory").
- * @yields Fixed-size upload parts, with one final short part when needed.
+ * @yields {Buffer} Fixed-size upload parts, with one final short part when needed.
  */
 async function* chunkReadable(
   source: NodeJS.ReadableStream,
@@ -125,7 +125,11 @@ export class S3BlobStore implements BlobStore {
   private async request(
     method: string,
     key: string,
-    opts: { body?: Buffer; headers?: Record<string, string>; query?: Record<string, string> } = {},
+    opts: {
+      body?: Buffer;
+      headers?: Record<string, string>;
+      query?: Record<string, string>;
+    } = {},
   ): Promise<Response> {
     return this.pipeline.request(method, key, opts);
   }
@@ -169,7 +173,11 @@ export class S3BlobStore implements BlobStore {
   private async send(
     method: string,
     key: string,
-    opts: { body?: Buffer; headers?: Record<string, string>; query?: Record<string, string> } = {},
+    opts: {
+      body?: Buffer;
+      headers?: Record<string, string>;
+      query?: Record<string, string>;
+    } = {},
   ): Promise<Response> {
     return this.pipeline.send(method, key, opts);
   }
@@ -292,9 +300,12 @@ export class S3BlobStore implements BlobStore {
   async list(): Promise<string[]> {
     const prefix = this.keyFor('0'.repeat(64)).slice(0, -64); // ".../blobs/sha256/"
     const shas: string[] = [];
-    let token: string | undefined;
-    do {
-      const query: Record<string, string> = { 'list-type': '2', prefix, 'max-keys': '1000' };
+    const listPage = async (token?: string): Promise<void> => {
+      const query: Record<string, string> = {
+        'list-type': '2',
+        prefix,
+        'max-keys': '1000',
+      };
       if (token) query['continuation-token'] = token;
       const res = await this.send('GET', '', { query });
       if (!res.ok) throw new Error(`s3 list: ${res.status} ${await res.text()}`);
@@ -307,8 +318,10 @@ export class S3BlobStore implements BlobStore {
       const tokenMatch = /<NextContinuationToken>(?<token>[^<]+)<\/NextContinuationToken>/u.exec(
         xml,
       );
-      token = truncated ? tokenMatch?.groups?.token : undefined;
-    } while (token);
+      const nextToken = truncated ? tokenMatch?.groups?.token : undefined;
+      if (nextToken) return listPage(nextToken);
+    };
+    await listPage();
     return shas.sort();
   }
 

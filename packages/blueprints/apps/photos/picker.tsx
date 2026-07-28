@@ -1,10 +1,11 @@
+import type { MouseEvent, ReactNode } from 'react';
+
 // The album picker ("Add photos" from inside an album). Owns its own small
 // state (which album, which ids are picked) — nothing outside the picker
 // region ever reads `pickerAlbum`/`pickerPicked`.
 import { PickerView } from './components/Picker.tsx';
-import { submitPicker as runSubmitPicker } from './picker-actions.ts';
 import { $ } from './dom.ts';
-import type { MouseEvent, ReactNode } from 'react';
+import { submitPicker as runSubmitPicker } from './picker-actions.ts';
 import type { Album, Asset } from './types.ts';
 
 type Root = { render: (node: ReactNode) => void };
@@ -35,7 +36,10 @@ export function createPicker({
 
   function submitPicker(e: MouseEvent<HTMLButtonElement>) {
     if (!pickerAlbum) return;
-    return runSubmitPicker(e, pickerAlbum, [...pickerPicked], { refresh, closePicker });
+    return runSubmitPicker(e, pickerAlbum, [...pickerPicked], {
+      refresh,
+      closePicker,
+    });
   }
 
   function renderPicker() {

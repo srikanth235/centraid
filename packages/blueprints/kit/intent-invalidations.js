@@ -16,8 +16,8 @@
  * Dependencies fold to per-shape/entity invalidations (no rowId); optimistic
  * mutations fold to per-row invalidations. A Map keyed on
  * `intentId\0shapeId\0entity\0rowId?` dedups repeats within a batch.
- * @param {readonly import('./intent-invalidations.js').IntentInvalidationInput[]} intents
- * @returns {import('./intent-invalidations.js').OverlayInvalidation[]}
+ * @param {readonly import('./intent-invalidations.js').IntentInvalidationInput[]} intents The durable intents to fold.
+ * @returns {import('./intent-invalidations.js').OverlayInvalidation[]} The deduplicated overlay invalidations.
  */
 export function replicaIntentInvalidations(intents) {
   const values = new Map();

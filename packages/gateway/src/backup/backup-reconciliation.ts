@@ -25,11 +25,10 @@ import {
   liveBlobShas,
   type VaultDb,
 } from '@centraid/vault';
-import type { StorageConnectionStore } from './storage-connections.js';
+
 import { baseStore, reconcileCasInventory } from './backup-cas-diff.js';
 import { collectCasInventory } from './backup-cas-inventory.js';
 import { reconcileDerivedInto } from './backup-derived-inventory.js';
-import { snapshotReferencedBlobShas } from './snapshot-blob-roots.js';
 import {
   collectAudit,
   collectInventory,
@@ -42,6 +41,8 @@ import type {
   StoreReconciliationState,
 } from './backup-reconciliation-state.js';
 import { driftSummary as drift, unavailableStore } from './backup-reconciliation-state.js';
+import { snapshotReferencedBlobShas } from './snapshot-blob-roots.js';
+import type { StorageConnectionStore } from './storage-connections.js';
 
 export { reconcileCasInventory } from './backup-cas-diff.js';
 export type { BackupReconciliationState } from './backup-reconciliation-state.js';
@@ -199,10 +200,9 @@ async function analyzeBackupInventory(opts: {
   const store = await opts.provider.openDataPlane(opts.targetId, 'backup', 'read');
   let nextManifest = 0;
   const readManifest = async (): Promise<void> => {
-    for (;;) {
-      const row = liveRows[nextManifest++];
-      if (!row) return;
-      if (!liveKeys.has(row.manifestKey)) continue;
+    const row = liveRows[nextManifest++];
+    if (!row) return;
+    if (liveKeys.has(row.manifestKey)) {
       try {
         const manifest = openManifest(
           await store.get(row.manifestKey),
@@ -229,6 +229,7 @@ async function analyzeBackupInventory(opts: {
         unreadable.push(`${row.manifestKey}: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
+    return readManifest();
   };
   await Promise.all(Array.from({ length: Math.min(8, liveRows.length) }, readManifest));
   for (const [pair, tickMs] of Object.entries(opts.walMarkerTips ?? {})) {
@@ -328,7 +329,9 @@ export async function runBackupReconciliation(opts: {
       verifyBucket,
     }).then(
       (collection) => ({ collection }),
-      (err: unknown) => ({ error: err instanceof Error ? err.message : String(err) }),
+      (err: unknown) => ({
+        error: err instanceof Error ? err.message : String(err),
+      }),
     ),
     collectCasInventory({
       db: opts.db,
@@ -376,7 +379,9 @@ export async function runBackupReconciliation(opts: {
     });
   }
 
-  const rows = await opts.provider.listSnapshots(opts.targetId, { includePruned: true });
+  const rows = await opts.provider.listSnapshots(opts.targetId, {
+    includePruned: true,
+  });
   let backup = unavailableStore(true, 'backup inventory unavailable');
   let walGaps = drift([]);
   let walCoverage: BackupReconciliationState['walCoverage'] = {

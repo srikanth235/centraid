@@ -2,16 +2,21 @@
  * Direct unit tests for the handler worker TS loader hooks (issue #545 B5).
  */
 
-import { tempDir } from '@centraid/test-kit/temp-dir';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { describe, expect, it } from 'vitest';
+
 import { load, resolve } from './ts-loader-hooks.js';
 
 describe('ts-loader-hooks resolve', () => {
   it('falls through to nextResolve when it succeeds', async () => {
-    const next = async () => ({ url: 'file:///ok.js', format: 'module' as const });
+    const next = async () => ({
+      url: 'file:///ok.js',
+      format: 'module' as const,
+    });
     await expect(
       resolve('./x', { parentURL: 'file:///a/b.ts', conditions: [], importAttributes: {} }, next),
     ).resolves.toStrictEqual({ url: 'file:///ok.js', format: 'module' });
@@ -22,7 +27,9 @@ describe('ts-loader-hooks resolve', () => {
     await writeFile(path.join(dir, 'util.ts'), 'export const n = 1;\n');
     const parentURL = pathToFileURL(path.join(dir, 'handler.ts')).href;
     const next = async () => {
-      throw Object.assign(new Error('not found'), { code: 'ERR_MODULE_NOT_FOUND' });
+      throw Object.assign(new Error('not found'), {
+        code: 'ERR_MODULE_NOT_FOUND',
+      });
     };
     const result = await resolve(
       './util.js',
@@ -69,7 +76,10 @@ describe('ts-loader-hooks resolve', () => {
 
 describe('ts-loader-hooks load', () => {
   it('defers non-TS urls to nextLoad', async () => {
-    const next = async () => ({ format: 'module' as const, source: 'export {}' });
+    const next = async () => ({
+      format: 'module' as const,
+      source: 'export {}',
+    });
     await expect(
       load('file:///a.js', { conditions: [], importAttributes: {} }, next),
     ).resolves.toStrictEqual({ format: 'module', source: 'export {}' });
@@ -86,8 +96,8 @@ describe('ts-loader-hooks load', () => {
     const result = await load(url, { conditions: [], importAttributes: {} }, next);
     expect(result.shortCircuit).toBe(true);
     expect(result.format).toBe('module');
-    expect(String(result.source)).toMatch(/\badd\b/);
-    expect(String(result.source)).toMatch(/export\s*\{/);
-    expect(String(result.source)).not.toMatch(/: number/);
+    expect(String(result.source)).toMatch(/\badd\b/u);
+    expect(String(result.source)).toMatch(/export\s*\{/u);
+    expect(String(result.source)).not.toMatch(/: number/u);
   });
 });

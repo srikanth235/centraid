@@ -62,6 +62,9 @@ export default async function autofillCandidates({ ctx }: { ctx: HandlerCtx }) {
     return { candidates };
   } catch (err) {
     const error = err as { code?: string; message?: string };
-    return { candidates: [], vaultDenied: { code: error.code, message: error.message } };
+    return {
+      candidates: [],
+      vaultDenied: { code: error.code, message: error.message },
+    };
   }
 }

@@ -20,7 +20,9 @@ vi.mock(import('expo-file-system'), () => ({
 }));
 vi.mock(import('expo-image-manipulator'), () => ({
   manipulateAsync: vi.fn<typeof import('expo-image-manipulator').manipulateAsync>(),
-  SaveFormat: { JPEG: 'jpeg' } as unknown as typeof import('expo-image-manipulator').SaveFormat,
+  SaveFormat: {
+    JPEG: 'jpeg',
+  } as unknown as typeof import('expo-image-manipulator').SaveFormat,
 }));
 vi.mock(import('expo-video-thumbnails'), () => ({
   getThumbnailAsync: vi.fn<typeof import('expo-video-thumbnails').getThumbnailAsync>(),
@@ -71,6 +73,6 @@ describe(dhash, () => {
     const data = grayscale((col) => (col * 37 + 11) & 0xff);
     const first = dhash(9, 8, data);
     expect(dhash(9, 8, data), 'same input, same hash').toBe(first);
-    expect(first).toMatch(/^[0-9a-f]{16}$/);
+    expect(first).toMatch(/^[0-9a-f]{16}$/u);
   });
 });

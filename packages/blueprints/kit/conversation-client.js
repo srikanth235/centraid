@@ -94,8 +94,8 @@ export function vaultAppsPath() {
 
 /**
  * Normalize a `GET`/`PUT _turn/model` response body into `ModelState`.
- * @param {unknown} body
- * @returns {import('./conversation-client.js').ModelState}
+ * @param {unknown} body The gateway response payload.
+ * @returns {import('./conversation-client.js').ModelState} Normalized picker state.
  */
 export function normalizeModelState(body) {
   const b = body && typeof body === 'object' ? body : {};
@@ -110,8 +110,8 @@ export function normalizeModelState(body) {
 /**
  * The label the picker button shows for a `ModelState`: the current override's
  * display name, or "Default" when there is no override.
- * @param {import('./conversation-client.js').ModelState} state
- * @returns {string}
+ * @param {import('./conversation-client.js').ModelState} state The current picker state.
+ * @returns {string} The label displayed by the picker control.
  */
 export function modelLabel(state) {
   if (!state || !state.loaded) return 'Model';
@@ -126,8 +126,8 @@ export function modelLabel(state) {
  * Read a fetch Response into `{ ok, status, body }`, tolerating an empty or
  * non-JSON body (the same shape the kit's `fetchJson` returns). Injectable so
  * both surfaces can share it over their own fetch.
- * @param {Response} res
- * @returns {Promise<{ ok: boolean, status: number, body: unknown }>}
+ * @param {Response} res The fetch response to decode.
+ * @returns {Promise<{ ok: boolean, status: number, body: unknown }>} The tolerant decoded response shape.
  */
 export async function readJsonResponse(res) {
   const text = await res.text().catch(() => '');

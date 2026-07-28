@@ -5,6 +5,7 @@
 // encoder is testable outside the browser.
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+
 import { describe, expect, test } from 'vitest';
 
 const moduleUrl = pathToFileURL(
@@ -40,8 +41,8 @@ describe('photos-thumbhash', () => {
 
   test('produces canonical unpadded base64 and refuses inputs over 100 px', () => {
     const hash = thumbHashFromRgba(64, 64, gradient(64, 64))!;
-    expect(hash).toMatch(/^[A-Za-z0-9+/]+$/); // unpadded, standard alphabet
-    expect(Buffer.from(hash, 'base64').toString('base64').replace(/=+$/, '')).toBe(hash);
+    expect(hash).toMatch(/^[A-Za-z0-9+/]+$/u); // unpadded, standard alphabet
+    expect(Buffer.from(hash, 'base64').toString('base64').replace(/=+$/u, '')).toBe(hash);
     // ThumbHash caps at 100×100 — callers downscale first; a raw over-size input
     // is refused (null), never a throw that could sink an upload.
     expect(thumbHashFromRgba(200, 10, gradient(1, 1))).toBeNull();

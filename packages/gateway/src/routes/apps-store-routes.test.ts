@@ -1,4 +1,4 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import crypto from 'node:crypto';
 /*
  * Publish/session/files HTTP surface for the git-store backend
  * (issue #137). Drives a booted `serve()` over HTTP
@@ -6,13 +6,14 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  * gateway-side manifest validation), serve the published app, then
  * roll back. Replaces the tarball-upload flow.
  */
-
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
-import { serve, type GatewayServeHandle } from '../serve/serve.ts';
+
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+
 import type { GatewayPaths } from '../paths.ts';
+import { serve, type GatewayServeHandle } from '../serve/serve.ts';
 // apps-store-routes is exercised through serve() HTTP paths below (#545 B7).
 
 let dataDir: string;
@@ -47,7 +48,10 @@ const MANIFEST = JSON.stringify({
 describe('apps-store-routes', () => {
   beforeEach(async () => {
     dataDir = await tempDir(`gw-routes-${crypto.randomUUID()}-`);
-    handle = await serve({ initVaultName: "Owner's vault", paths: pathsUnder(dataDir) });
+    handle = await serve({
+      initVaultName: "Owner's vault",
+      paths: pathsUnder(dataDir),
+    });
   });
 
   afterEach(async () => {
@@ -93,9 +97,11 @@ describe('apps-store-routes', () => {
     expect(pub1Body.versionTag).toBe('todo/v1');
 
     // The published app serves from the main worktree.
-    const html1 = await fetch(`${handle.url}/centraid/todo/`, { headers: auth() });
+    const html1 = await fetch(`${handle.url}/centraid/todo/`, {
+      headers: auth(),
+    });
     expect(html1.status).toBe(200);
-    await expect(html1.text()).resolves.toMatch(/v1/);
+    await expect(html1.text()).resolves.toMatch(/v1/u);
 
     // Second session bumps index.html and publishes v2.
     await openSession('s2');
@@ -110,11 +116,13 @@ describe('apps-store-routes', () => {
     expect(((await pub2.json()) as { versionTag: string }).versionTag).toBe('todo/v2');
     await expect(
       (await fetch(`${handle.url}/centraid/todo/`, { headers: auth() })).text(),
-    ).resolves.toMatch(/v2/);
+    ).resolves.toMatch(/v2/u);
 
     // git-versions lists both, newest first; v2 is active.
     const versions = (await (
-      await fetch(`${handle.url}/centraid/_apps/todo/git-versions`, { headers: auth() })
+      await fetch(`${handle.url}/centraid/_apps/todo/git-versions`, {
+        headers: auth(),
+      })
     ).json()) as { versions: Array<{ tag: string; active: boolean }> };
     expect(versions.versions.map((v) => v.tag)).toStrictEqual(['todo/v2', 'todo/v1']);
     expect(versions.versions.map((v) => v.active)).toStrictEqual([true, false]);
@@ -129,9 +137,11 @@ describe('apps-store-routes', () => {
     expect(rb.status).toBe(200);
     await expect(
       (await fetch(`${handle.url}/centraid/todo/`, { headers: auth() })).text(),
-    ).resolves.toMatch(/v1/);
+    ).resolves.toMatch(/v1/u);
     const after = (await (
-      await fetch(`${handle.url}/centraid/_apps/todo/git-versions`, { headers: auth() })
+      await fetch(`${handle.url}/centraid/_apps/todo/git-versions`, {
+        headers: auth(),
+      })
     ).json()) as { versions: Array<{ tag: string; active: boolean }> };
     expect(after.versions.map((v) => v.active)).toStrictEqual([false, true]);
   });
@@ -154,7 +164,12 @@ describe('apps-store-routes', () => {
 
     const list = (await (
       await fetch(`${handle.url}/centraid/_apps`, { headers: auth() })
-    ).json()) as Array<{ id: string; iconKey?: string; colorKey?: string; hasIndex: boolean }>;
+    ).json()) as Array<{
+      id: string;
+      iconKey?: string;
+      colorKey?: string;
+      hasIndex: boolean;
+    }>;
     const row = list.find((a) => a.id === 'todo')!;
     expect(row.iconKey).toBe('Todo');
     expect(row.colorKey).toBe('indigo');
@@ -175,7 +190,7 @@ describe('apps-store-routes', () => {
     expect(pub.status).toBe(400);
     const body = (await pub.json()) as { error: string; message: string };
     expect(body.error).toBe('invalid_manifest');
-    expect(body.message).toMatch(/queries\/ping\.js does not exist/);
+    expect(body.message).toMatch(/queries\/ping\.js does not exist/u);
   });
 
   test('files read returns the draft files written into a session', async () => {
@@ -204,10 +219,15 @@ describe('apps-store-routes', () => {
     );
     const delBody = (await del.json()) as { path: string; deleted: boolean };
     expect(del.status).toBe(200);
-    expect(delBody).toStrictEqual({ path: 'automations/wake/handler.js', deleted: true });
+    expect(delBody).toStrictEqual({
+      path: 'automations/wake/handler.js',
+      deleted: true,
+    });
 
     const after = (await (
-      await fetch(`${handle.url}/centraid/_apps/todo/files?sessionId=s1`, { headers: auth() })
+      await fetch(`${handle.url}/centraid/_apps/todo/files?sessionId=s1`, {
+        headers: auth(),
+      })
     ).json()) as { files: Array<{ path: string }> };
     expect(after.files.map((f) => f.path).sort()).toStrictEqual([
       'app.json',

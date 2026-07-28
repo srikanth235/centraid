@@ -1,9 +1,15 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
+
 import { installWebHost } from './web-host.js';
 
-const pairGatewayOverIroh = vi.hoisted(() => vi.fn());
-const purgeIrohDeviceState = vi.hoisted(() => vi.fn());
-vi.mock(import('./iroh-transport.js'), () => ({ pairGatewayOverIroh, purgeIrohDeviceState }));
+const { pairGatewayOverIroh, purgeIrohDeviceState } = vi.hoisted(() => ({
+  pairGatewayOverIroh: vi.fn<typeof import('./iroh-transport.js').pairGatewayOverIroh>(),
+  purgeIrohDeviceState: vi.fn<typeof import('./iroh-transport.js').purgeIrohDeviceState>(),
+}));
+vi.mock(import('./iroh-transport.js'), () => ({
+  pairGatewayOverIroh,
+  purgeIrohDeviceState,
+}));
 
 function ticket(): string {
   return btoa(
@@ -42,7 +48,11 @@ describe('web-host', () => {
 
     await expect(
       window.CentraidApi.redeemGatewayPairing({ ticket: ticket() }),
-    ).resolves.toMatchObject({ ok: true, vaultId: 'vault-1', vaultName: 'Personal' });
+    ).resolves.toMatchObject({
+      ok: true,
+      vaultId: 'vault-1',
+      vaultName: 'Personal',
+    });
     expect(pairGatewayOverIroh).toHaveBeenCalledWith({
       endpointTicket: 'endpoint',
       ticketId: 'ticket',
@@ -77,7 +87,10 @@ describe('web-host', () => {
     });
 
     await expect(
-      window.CentraidApi.redeemGatewayPairing({ ticket: ticket(), rememberDevice: true }),
+      window.CentraidApi.redeemGatewayPairing({
+        ticket: ticket(),
+        rememberDevice: true,
+      }),
     ).resolves.toMatchObject({ ok: true, vaultId: 'vault-1' });
     expect(pairGatewayOverIroh).toHaveBeenCalledWith(
       expect.objectContaining({ rememberDevice: true }),
@@ -118,13 +131,18 @@ describe('web-host', () => {
         avatarColor: '#123456',
       }),
     );
-    const tunnelFetch = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ vaults: [{ vaultId: 'v1', name: 'Personal' }] }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      }),
-    );
-    window.CentraidIroh = { fetch: tunnelFetch, url: async (path: string) => path };
+    const tunnelFetch = vi
+      .fn<(path: string, init?: RequestInit) => Promise<Response>>()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ vaults: [{ vaultId: 'v1', name: 'Personal' }] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+    window.CentraidIroh = {
+      fetch: tunnelFetch,
+      url: async (path: string) => path,
+    };
     await expect(window.CentraidApi.listGatewayVaults({ gatewayId: 'web' })).resolves.toStrictEqual(
       {
         ok: true,
@@ -135,7 +153,7 @@ describe('web-host', () => {
   });
 
   test('connection replacement and consent downgrade publish targeted replica purge hints', async () => {
-    const changed = vi.fn();
+    const changed = vi.fn<Parameters<typeof window.CentraidApi.onGatewayChanged>[0]>();
     const off = window.CentraidApi.onGatewayChanged(changed);
     await window.CentraidApi.addGateway({
       label: 'First',
@@ -169,7 +187,7 @@ describe('web-host', () => {
         rememberDevice: true,
       }),
     );
-    const changed = vi.fn();
+    const changed = vi.fn<Parameters<typeof window.CentraidApi.onGatewayChanged>[0]>();
     const off = window.CentraidApi.onGatewayChanged(changed);
 
     await window.CentraidApi.removeGateway({ id: 'web' });

@@ -1,6 +1,6 @@
 // governance: allow-repo-hygiene file-size-limit one pipeline suite over a single bootstrapped vault fixture — identity/consent/contract/execution/evidence stages are asserted against shared state
 import { assert, beforeEach, describe, expect, test, vi } from 'vitest';
-import { registerScheduleCommands } from '../commands/schedule.js';
+
 import {
   bootstrapVault,
   createGrant,
@@ -9,6 +9,7 @@ import {
   enrollDevice,
   type BootstrapResult,
 } from '../bootstrap.js';
+import { registerScheduleCommands } from '../commands/schedule.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { uuidv7 } from '../ids.js';
 import {
@@ -53,7 +54,11 @@ describe('gateway', () => {
     boot = bootstrapVault(db, { ownerName: 'Priya' });
     gw = createGateway(db);
     registerScheduleCommands(gw);
-    owner = { kind: 'device', deviceId: boot.deviceId, deviceKey: boot.deviceKey };
+    owner = {
+      kind: 'device',
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+    };
     calendarId = seedCalendar();
   });
 
@@ -64,7 +69,7 @@ describe('gateway', () => {
           { kind: 'device', deviceId: 'nope', deviceKey: 'nope' },
           { entity: 'core.party', purpose: 'dpv:ServiceProvision' },
         ),
-      ).toThrow(/unknown caller/);
+      ).toThrow(/unknown caller/u);
       const receipts = db.journal.prepare('SELECT count(*) AS n FROM consent_receipt').get() as {
         n: number;
       };
@@ -77,13 +82,16 @@ describe('gateway', () => {
           { kind: 'device', deviceId: boot.deviceId, deviceKey: 'wrong' },
           { entity: 'core.party', purpose: 'dpv:ServiceProvision' },
         ),
-      ).toThrow(/unknown caller/);
+      ).toThrow(/unknown caller/u);
     });
   });
 
   describe('S2 consent', () => {
     test('owner-direct read is allowed and receipted', () => {
-      const result = gw.read(owner, { entity: 'core.party', purpose: 'dpv:ServiceProvision' });
+      const result = gw.read(owner, {
+        entity: 'core.party',
+        purpose: 'dpv:ServiceProvision',
+      });
       expect(result.rows.length).toBeGreaterThan(0);
       const receipt = db.journal
         .prepare(
@@ -105,10 +113,17 @@ describe('gateway', () => {
 
     test('app without a grant is denied with a deny receipt', () => {
       const app = enrollApp(db, { name: 'vitals-widget' });
-      const cred: Credential = { kind: 'app', appId: app.appId, signingKey: app.signingKey };
+      const cred: Credential = {
+        kind: 'app',
+        appId: app.appId,
+        signingKey: app.signingKey,
+      };
       expect(() =>
-        gw.read(cred, { entity: 'core.observation', purpose: 'dpv:HealthMonitoring' }),
-      ).toThrow(/deny/);
+        gw.read(cred, {
+          entity: 'core.observation',
+          purpose: 'dpv:HealthMonitoring',
+        }),
+      ).toThrow(/deny/u);
       const deny = db.journal
         .prepare(`SELECT count(*) AS n FROM consent_receipt WHERE decision='deny'`)
         .get() as { n: number };
@@ -126,17 +141,27 @@ describe('gateway', () => {
           { schema: 'core', table: 'event', verbs: 'read' },
         ],
       });
-      const cred: Credential = { kind: 'app', appId: app.appId, signingKey: app.signingKey };
+      const cred: Credential = {
+        kind: 'app',
+        appId: app.appId,
+        signingKey: app.signingKey,
+      };
       // 2 = the bootstrap-minted default "Personal" calendar + seedCalendar()'s.
       expect(
-        gw.read(cred, { entity: 'schedule.calendar', purpose: 'dpv:ServiceProvision' }).rows,
+        gw.read(cred, {
+          entity: 'schedule.calendar',
+          purpose: 'dpv:ServiceProvision',
+        }).rows,
       ).toHaveLength(2);
       expect(() =>
-        gw.read(cred, { entity: 'core.transaction', purpose: 'dpv:ServiceProvision' }),
-      ).toThrow(/deny/);
+        gw.read(cred, {
+          entity: 'core.transaction',
+          purpose: 'dpv:ServiceProvision',
+        }),
+      ).toThrow(/deny/u);
       // Wrong purpose on a valid scope is also a deny (purpose limitation).
       expect(() => gw.read(cred, { entity: 'schedule.calendar', purpose: 'dpv:Billing' })).toThrow(
-        /deny/,
+        /deny/u,
       );
     });
 
@@ -161,13 +186,20 @@ describe('gateway', () => {
           },
         ],
       });
-      const cred: Credential = { kind: 'app', appId: app.appId, signingKey: app.signingKey };
+      const cred: Credential = {
+        kind: 'app',
+        appId: app.appId,
+        signingKey: app.signingKey,
+      };
       // Tentative event filtered out by the grant's row filter.
       expect(
         gw.read(cred, { entity: 'core.event', purpose: 'dpv:ServiceProvision' }).rows,
       ).toHaveLength(0);
       db.vault.prepare(`UPDATE core_event SET status='confirmed'`).run();
-      const rows = gw.read(cred, { entity: 'core.event', purpose: 'dpv:ServiceProvision' }).rows;
+      const rows = gw.read(cred, {
+        entity: 'core.event',
+        purpose: 'dpv:ServiceProvision',
+      }).rows;
       expect(rows).toHaveLength(1);
       expect(Object.keys(rows[0] ?? {}).sort()).toStrictEqual(['event_id', 'summary']);
     });
@@ -175,7 +207,10 @@ describe('gateway', () => {
 
   describe('S3/S4 command execution', () => {
     test('the provenance doorbell rings only after journal commit and cannot fail the write', () => {
-      const observed: Array<{ entityTypes: readonly string[]; provenanceRows: number }> = [];
+      const observed: Array<{
+        entityTypes: readonly string[];
+        provenanceRows: number;
+      }> = [];
       gw = createGateway(db, {
         onProvenanceCommitted: (entityTypes = []) => {
           const placeholders = entityTypes.map(() => '?').join(',');
@@ -281,7 +316,11 @@ describe('gateway', () => {
         grantedByPartyId: boot.ownerPartyId,
         scopes: [{ schema: 'schedule', verbs: 'read+act' }],
       });
-      const cred: Credential = { kind: 'app', appId: app.appId, signingKey: app.signingKey };
+      const cred: Credential = {
+        kind: 'app',
+        appId: app.appId,
+        signingKey: app.signingKey,
+      };
       recordReplicaIntentOutcome(db.vault, {
         intentId: 'owned-intent',
         deviceId: 'paired-device-a',
@@ -299,8 +338,10 @@ describe('gateway', () => {
           intentId: 'owned-intent',
           intentDeviceId: 'paired-device-b',
         }),
-      ).toThrow(/not owned by this device and app/);
-      expect({ ...db.vault.prepare('SELECT count(*) AS n FROM core_event').get() }).toStrictEqual({
+      ).toThrow(/not owned by this device and app/u);
+      expect({
+        ...db.vault.prepare('SELECT count(*) AS n FROM core_event').get(),
+      }).toStrictEqual({
         n: 0,
       });
 
@@ -432,7 +473,10 @@ describe('gateway', () => {
       const event = db.vault
         .prepare('SELECT sequence, dtstart FROM core_event WHERE event_id = ?')
         .get(eventId);
-      expect(event).toMatchObject({ sequence: 1, dtstart: '2026-07-03T10:00:00Z' });
+      expect(event).toMatchObject({
+        sequence: 1,
+        dtstart: '2026-07-03T10:00:00Z',
+      });
     });
 
     test('idempotent replay: same invocation id never double-writes', () => {
@@ -451,7 +495,10 @@ describe('gateway', () => {
         purpose: 'dpv:ServiceProvision',
         invocationId,
       });
-      expect(replay).toMatchObject({ status: 'replayed', output: first.output });
+      expect(replay).toMatchObject({
+        status: 'replayed',
+        output: first.output,
+      });
       const events = db.vault.prepare('SELECT count(*) AS n FROM core_event').get() as {
         n: number;
       };
@@ -479,8 +526,10 @@ describe('gateway', () => {
           purpose: 'dpv:ServiceProvision',
           invocationId,
         }),
-      ).toThrow(/already bound/);
-      expect({ ...db.vault.prepare('SELECT count(*) AS n FROM core_event').get() }).toStrictEqual({
+      ).toThrow(/already bound/u);
+      expect({
+        ...db.vault.prepare('SELECT count(*) AS n FROM core_event').get(),
+      }).toStrictEqual({
         n: 0,
       });
       expect({
@@ -491,7 +540,9 @@ describe('gateway', () => {
 
       gw = createGateway(db);
       registerScheduleCommands(gw);
-      expect({ ...db.vault.prepare('SELECT count(*) AS n FROM core_event').get() }).toStrictEqual({
+      expect({
+        ...db.vault.prepare('SELECT count(*) AS n FROM core_event').get(),
+      }).toStrictEqual({
         n: 0,
       });
     });
@@ -600,7 +651,7 @@ describe('gateway', () => {
           invocationId,
           intentId: 'offline-intent-crash-gap',
         }),
-      ).toThrow(/synthetic repair crash/);
+      ).toThrow(/synthetic repair crash/u);
       db.journal.exec('DROP TRIGGER fail_repair_evidence');
 
       const count = (table: string, where = 'invocation_id = ?'): number =>
@@ -637,7 +688,11 @@ describe('gateway', () => {
              FROM agent_command_invocation WHERE invocation_id = ?`,
           )
           .get(invocationId),
-      }).toStrictEqual({ status: 'checked', executed_at: null, receipt_id: null });
+      }).toStrictEqual({
+        status: 'checked',
+        executed_at: null,
+        receipt_id: null,
+      });
       expect({
         ...db.vault
           .prepare(
@@ -701,8 +756,10 @@ describe('gateway', () => {
           invocationId,
           intentId: invocationId,
         }),
-      ).toThrow(/post-canonical finalization failure/);
-      expect({ ...db.vault.prepare('SELECT count(*) AS n FROM core_event').get() }).toStrictEqual({
+      ).toThrow(/post-canonical finalization failure/u);
+      expect({
+        ...db.vault.prepare('SELECT count(*) AS n FROM core_event').get(),
+      }).toStrictEqual({
         n: 1,
       });
       expect({
@@ -725,8 +782,14 @@ describe('gateway', () => {
         intentId: invocationId,
       });
 
-      expect(retry).toMatchObject({ status: 'replayed', invocationId, output: null });
-      expect({ ...db.vault.prepare('SELECT count(*) AS n FROM core_event').get() }).toStrictEqual({
+      expect(retry).toMatchObject({
+        status: 'replayed',
+        invocationId,
+        output: null,
+      });
+      expect({
+        ...db.vault.prepare('SELECT count(*) AS n FROM core_event').get(),
+      }).toStrictEqual({
         n: 1,
       });
       expect({
@@ -750,7 +813,7 @@ describe('gateway', () => {
           purpose: 'dpv:ServiceProvision',
           invocationId,
         }),
-      ).toThrow(/ordinary finalization failure/);
+      ).toThrow(/ordinary finalization failure/u);
       const event = db.vault.prepare('SELECT event_id FROM core_event').get() as {
         event_id: string;
       };
@@ -785,7 +848,9 @@ describe('gateway', () => {
         invocationId,
         output: { event_id: event.event_id },
       });
-      expect({ ...db.vault.prepare('SELECT count(*) AS n FROM core_event').get() }).toStrictEqual({
+      expect({
+        ...db.vault.prepare('SELECT count(*) AS n FROM core_event').get(),
+      }).toStrictEqual({
         n: 1,
       });
       expect(
@@ -906,7 +971,10 @@ describe('gateway', () => {
       expect(JSON.parse(receipt.detail_json).confirmation.confirmedBy).toBe(boot.ownerPartyId);
       expect(
         readReplicaIntentOutcome(db.vault, 'offline-intent-1', 'remote-device-1'),
-      ).toMatchObject({ status: 'executed', invocationId: parked.invocationId });
+      ).toMatchObject({
+        status: 'executed',
+        invocationId: parked.invocationId,
+      });
     });
 
     test('confirmation retry recreates payload after the journal-only crash gap', () => {
@@ -1115,7 +1183,7 @@ describe('gateway', () => {
       END`);
 
       expect(() => gw.confirm(owner, parked.invocationId, false)).toThrow(
-        /denial settlement crash/,
+        /denial settlement crash/u,
       );
       expect(readDurableParkedPayload(db, parked.invocationId)).toBeDefined();
       expect(
@@ -1144,7 +1212,9 @@ describe('gateway', () => {
       expect(
         readReplicaIntentOutcome(db.vault, intentId, 'remote-device-denial-crash'),
       ).toMatchObject({ status: 'denied', invocationId: parked.invocationId });
-      expect({ ...db.vault.prepare('SELECT count(*) AS n FROM core_event').get() }).toStrictEqual({
+      expect({
+        ...db.vault.prepare('SELECT count(*) AS n FROM core_event').get(),
+      }).toStrictEqual({
         n: 0,
       });
       expect({
@@ -1185,8 +1255,10 @@ describe('gateway', () => {
 
       expect(gw.listParked()).toStrictEqual([]);
       expect(readDurableParkedPayload(db, parked.invocationId)).toBeUndefined();
-      expect(() => gw.confirm(owner, parked.invocationId, true)).toThrow(/no parked invocation/);
-      expect({ ...db.vault.prepare('SELECT count(*) AS n FROM core_event').get() }).toStrictEqual({
+      expect(() => gw.confirm(owner, parked.invocationId, true)).toThrow(/no parked invocation/u);
+      expect({
+        ...db.vault.prepare('SELECT count(*) AS n FROM core_event').get(),
+      }).toStrictEqual({
         n: 0,
       });
     });
@@ -1231,7 +1303,9 @@ describe('gateway', () => {
         status: 'denied',
         reason: 'consent grant no longer active',
       });
-      expect({ ...db.vault.prepare('SELECT count(*) AS n FROM core_event').get() }).toStrictEqual({
+      expect({
+        ...db.vault.prepare('SELECT count(*) AS n FROM core_event').get(),
+      }).toStrictEqual({
         n: 0,
       });
       expect(readDurableParkedPayload(db, parked.invocationId)).toBeUndefined();
@@ -1241,14 +1315,20 @@ describe('gateway', () => {
           'offline-intent-revoked-before-confirm',
           'remote-device-revoked',
         ),
-      ).toMatchObject({ status: 'denied', reason: 'consent grant no longer active' });
+      ).toMatchObject({
+        status: 'denied',
+        reason: 'consent grant no longer active',
+      });
     });
 
     test('revocation cascade: agent goes dark instantly, receipts remain', () => {
       const { cred, grantId } = grantedAgent();
       // 2 = the bootstrap-minted default "Personal" calendar + seedCalendar()'s.
       expect(
-        gw.read(cred, { entity: 'schedule.calendar', purpose: 'dpv:ServiceProvision' }).rows,
+        gw.read(cred, {
+          entity: 'schedule.calendar',
+          purpose: 'dpv:ServiceProvision',
+        }).rows,
       ).toHaveLength(2);
       const before = db.journal.prepare('SELECT count(*) AS n FROM consent_receipt').get() as {
         n: number;
@@ -1256,8 +1336,11 @@ describe('gateway', () => {
       const result = gw.revokeGrant(owner, grantId);
       expect(result.grantId).toBe(grantId);
       expect(() =>
-        gw.read(cred, { entity: 'schedule.calendar', purpose: 'dpv:ServiceProvision' }),
-      ).toThrow(/deny/);
+        gw.read(cred, {
+          entity: 'schedule.calendar',
+          purpose: 'dpv:ServiceProvision',
+        }),
+      ).toThrow(/deny/u);
       const after = db.journal.prepare('SELECT count(*) AS n FROM consent_receipt').get() as {
         n: number;
       };
@@ -1331,7 +1414,11 @@ describe('gateway', () => {
 
     test('readonly device may read but never act', () => {
       const ro = enrollDevice(db, boot.ownerPartyId, 'readonly-tablet', 'readonly');
-      const cred: Credential = { kind: 'device', deviceId: ro.deviceId, deviceKey: ro.deviceKey };
+      const cred: Credential = {
+        kind: 'device',
+        deviceId: ro.deviceId,
+        deviceKey: ro.deviceKey,
+      };
       expect(
         gw.read(cred, { entity: 'core.party', purpose: 'dpv:ServiceProvision' }).rows.length,
       ).toBeGreaterThan(0);
@@ -1429,7 +1516,7 @@ describe('gateway', () => {
           purpose: 'dpv:ServiceProvision',
           cursor: pull.cursor,
         }),
-      ).toThrow(/deny/);
+      ).toThrow(/deny/u);
     });
 
     test('an agent reading the invocation ledger sees only ITS rows (confirmation-resume, structurally scoped)', () => {

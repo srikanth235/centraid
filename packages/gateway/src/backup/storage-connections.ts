@@ -10,7 +10,9 @@
 
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
+
 import { KeyStore, sealAad, sealValue, unsealValue } from '@centraid/vault';
+
 import { GatewayDatabase } from '../serve/gateway-db.js';
 
 export type StorageConnectionKind = 'provider';
@@ -199,7 +201,9 @@ export class StorageConnectionStore {
 
   async resolveProviderApiKey(id: string): Promise<string> {
     const row = this.requireRow(id);
-    const creds = this.unsealCreds(id, row.sealedCredentials) as { apiKey: string };
+    const creds = this.unsealCreds(id, row.sealedCredentials) as {
+      apiKey: string;
+    };
     return creds.apiKey;
   }
 

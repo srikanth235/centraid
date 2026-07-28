@@ -9,7 +9,9 @@
  */
 
 import { fileURLToPath } from 'node:url';
+
 import type { ToolContext, TurnStreamEvent } from '@centraid/app-engine';
+
 import {
   startVaultMcpServer,
   type AcpHttpMcpServer,

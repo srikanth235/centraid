@@ -1,4 +1,5 @@
 import { type JSX } from 'react';
+
 import type { TemplateEntry } from '../../../app-shell-context.js';
 import type { DiscoverTemplate } from '../../screen-contracts.js';
 import AutomationTemplatesScreen from '../../screens/AutomationTemplatesScreen.js';
@@ -28,10 +29,14 @@ export default function TemplatesRoute(): JSX.Element {
       .then(async ({ ref, webhooks }) => {
         // Show each minted secret once, in-app, before handing off to the
         // thread — the console line stays as a dev-only fallback.
-        for (const w of webhooks) {
-          surfaceMintedWebhook(w);
-          await openWebhookReveal(w);
-        }
+        const revealNext = async (index: number): Promise<void> => {
+          const webhook = webhooks[index];
+          if (!webhook) return;
+          surfaceMintedWebhook(webhook);
+          await openWebhookReveal(webhook);
+          return revealNext(index + 1);
+        };
+        await revealNext(0);
         // The thread route keys on the row's `ref`; if the fresh clone can't
         // be resolved, land on the fleet instead of a not-found thread.
         if (ref) navigate({ kind: 'automation-view', automationId: ref });

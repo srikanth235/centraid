@@ -1,6 +1,8 @@
 import { useState, type JSX } from 'react';
-import styles from './GatewayScreen.module.css';
+
 import { hostFactRows, resolvedKnobRows, type ResourceProfileDTO } from './resource-summary.js';
+
+import styles from './GatewayScreen.module.css';
 
 // L2 of the Resource card (issue #528 Phase B): the host facts + resolved knobs
 // behind "How we sized this". Read-only. Two render modes:

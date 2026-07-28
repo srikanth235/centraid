@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
-import Icon from '../ui/Icon.js';
-import { cx } from '../ui/cx.js';
+
+import { isRevokedDevice } from '../../device-roster.js';
 import type {
   CentraidGatewayDevice,
   GatewayDeviceTicket,
@@ -8,14 +8,16 @@ import type {
   GatewayDeviceWorkDepth,
   GatewayMember,
 } from '../../gateway-client.js';
-import { isRevokedDevice } from '../../device-roster.js';
-import buttonCss from '../ui/Button.module.css';
-import controlsCss from '../styles/controls.module.css';
-import gwStyles from './GatewayScreen.module.css';
-import styles from './DevicesCard.module.css';
-import DevicePairPanel from './DevicePairPanel.js';
-import DeviceMemberGroup from './DeviceMemberGroup.js';
+import { cx } from '../ui/cx.js';
+import Icon from '../ui/Icon.js';
 import { groupDevicesByMember, spacesFromGroups } from './device-groups.js';
+import DeviceMemberGroup from './DeviceMemberGroup.js';
+import DevicePairPanel from './DevicePairPanel.js';
+
+import controlsCss from '../styles/controls.module.css';
+import buttonCss from '../ui/Button.module.css';
+import styles from './DevicesCard.module.css';
+import gwStyles from './GatewayScreen.module.css';
 
 // Gateway → Overview → People & devices: the owner surface over the daemon's
 // member roster + `EnrollmentStore` (issues #392, #599).
@@ -129,7 +131,7 @@ export default function DevicesCard({
     async (device: CentraidGatewayDevice, confirmLastAdmin?: string): Promise<void> => {
       await onRevokeDevice(
         device.deviceId,
-        confirmLastAdmin !== undefined ? { confirmLastAdmin } : undefined,
+        confirmLastAdmin === undefined ? undefined : { confirmLastAdmin },
       );
       if (device.current) await onCurrentDeviceRevoked?.();
       // Optimistically drop the row; a background refresh reconciles (and
@@ -147,7 +149,7 @@ export default function DevicesCard({
       if (!onRemoveMember) return;
       await onRemoveMember(
         memberId,
-        confirmLastAdmin !== undefined ? { confirmLastAdmin } : undefined,
+        confirmLastAdmin === undefined ? undefined : { confirmLastAdmin },
       );
       if (mountedRef.current) {
         setMembers((prev) => prev.filter((member) => member.memberId !== memberId));
@@ -219,41 +221,43 @@ export default function DevicesCard({
               refresh();
             }}
             members={members}
-            {...(selfMemberId !== undefined ? { currentMemberId: selfMemberId } : {})}
+            {...(selfMemberId === undefined ? {} : { currentMemberId: selfMemberId })}
             spaces={spaces}
           />
         ) : null}
         {loadError ? (
           <div className={styles.loadError}>Couldn’t list paired devices: {loadError}</div>
-        ) : !devices ? (
-          <div className={gwStyles.panelEmpty}>Checking paired devices…</div>
-        ) : groups.length === 0 ? (
-          <div className={gwStyles.panelEmpty}>
-            No devices are paired with this gateway yet. Pair a browser or phone with a one-time
-            ticket, and it will show up here — revocable in one click.
-          </div>
+        ) : devices ? (
+          groups.length === 0 ? (
+            <div className={gwStyles.panelEmpty}>
+              No devices are paired with this gateway yet. Pair a browser or phone with a one-time
+              ticket, and it will show up here — revocable in one click.
+            </div>
+          ) : (
+            <div className={styles.groups}>
+              {groups.map((group) => (
+                <DeviceMemberGroup
+                  key={group.memberId}
+                  label={group.label}
+                  roles={group.roles}
+                  devices={group.devices}
+                  revoked={group.revoked}
+                  isSelf={group.isSelf}
+                  now={now}
+                  onRevokeDevice={revoke}
+                  {...(onUpdateCompute ? { onUpdateCompute: updateCompute } : {})}
+                  {...(onRemoveMember
+                    ? {
+                        onRemoveMember: (confirmLastAdmin?: string) =>
+                          removeMember(group.memberId, confirmLastAdmin),
+                      }
+                    : {})}
+                />
+              ))}
+            </div>
+          )
         ) : (
-          <div className={styles.groups}>
-            {groups.map((group) => (
-              <DeviceMemberGroup
-                key={group.memberId}
-                label={group.label}
-                roles={group.roles}
-                devices={group.devices}
-                revoked={group.revoked}
-                isSelf={group.isSelf}
-                now={now}
-                onRevokeDevice={revoke}
-                {...(onUpdateCompute ? { onUpdateCompute: updateCompute } : {})}
-                {...(onRemoveMember
-                  ? {
-                      onRemoveMember: (confirmLastAdmin?: string) =>
-                        removeMember(group.memberId, confirmLastAdmin),
-                    }
-                  : {})}
-              />
-            ))}
-          </div>
+          <div className={gwStyles.panelEmpty}>Checking paired devices…</div>
         )}
       </div>
     </section>

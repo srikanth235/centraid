@@ -20,8 +20,8 @@
 // secret live in secure storage; durable identity is the gateway EndpointId in
 // each row. Vault addressing and enrollment are enforced by the gateway.
 
-import { hydrateSecure, setSecure } from './secure-storage';
 import { Store } from '../storage';
+import { hydrateSecure, setSecure } from './secure-storage';
 
 // --- The active-slot projection keys (owned here; read by phone-link/replica) ---
 //
@@ -335,7 +335,11 @@ export async function noteActiveIdentity(identity: {
   const duplicate = registry.find(
     (s) => s.id !== active.id && sameTuple(s, identity.gatewayId, identity.vaultId),
   );
-  const next: Space = { ...active, gatewayId: identity.gatewayId, vaultId: identity.vaultId };
+  const next: Space = {
+    ...active,
+    gatewayId: identity.gatewayId,
+    vaultId: identity.vaultId,
+  };
   registry = registry
     .filter((s) => s.id !== duplicate?.id)
     .map((s) => (s.id === active.id ? next : s));
