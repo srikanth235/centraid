@@ -95,7 +95,7 @@
     "desktop.performance": "Partial crude cold-path budget in tests/perf/desktop-cold.perf.test.ts (module import / first-paint proxy — not full Electron launch).",
     "G4.mutation": "StrykerJS nightly on property-defended core packages: vault, client/replica, automation, backup, blob-format, protocol, tunnel, app-engine, gateway, agent-runtime (#532/#545). Floors in tests/mutation-floors.json; scores in artifacts/mutation/ via e2e.yml mutation-testing job. Not per-PR.",
     "G5.interop": "packages/backup test:interop runs via .github/workflows/interop-weekly.yml (schedule + workflow_dispatch, CLAWGNITION_INTEROP=1). Not part of test:quality:nightly (perf+scale+report only).",
-    "client.react.floor": "packages/client/src/react/** floors at 45/35 in coverage-floors.json (#545 D5 seed); journeys + extracted pure modules remain the primary owners.",
+    "client.react.floor": "packages/client/src/react/** floors at 65/35 in coverage-floors.json (#587 sustained-level ratchet); journeys + extracted pure modules remain the primary owners.",
     "search": "Flow vault-search owns search over ext/FTS (packages/vault/src/gateway/search.test.ts).",
     "enrichment": "Flow vault-enrichment owns device enrichment → searchable transcript (packages/gateway/src/routes/device-work-routes.test.ts).",
     "cross-linking": "Flow vault-cross-link owns core.link_entities (packages/vault/src/gateway/ext.test.ts).",

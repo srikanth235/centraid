@@ -436,6 +436,10 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
+      - uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.2.0
+        with:
+          distribution: temurin
+          java-version: "17"
       - name: Check Expo's compatibility map
         continue-on-error: true
         run: bun run --cwd apps/mobile ci:versions
@@ -443,6 +447,8 @@ jobs:
         run: bun run --cwd apps/mobile ci:native-state
       - name: Bundle iOS and Android through Metro
         run: bun run --cwd apps/mobile ci:bundle
+      - name: Compile the Android Expo tunnel module
+        run: bun run --cwd apps/mobile ci:android-native
 
   docs:
     needs: changes

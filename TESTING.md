@@ -343,10 +343,12 @@ does **not** prove that Metro can transform/resolve the app or that either
 native project builds. Expo/React Native peer ranges can accept incompatible
 major Babel versions at install time. The required PR `mobile-smoke` job is the
 compensating control: it runs Expo's compatibility check as an advisory, then
-requires iOS and Android Metro exports to succeed. `expo install --check`
-currently catches Expo's bundled-native-module version drift, but it does not
-model the Babel-core/runtime constraints that broke #565; only the bundle step
-catches those transform-time and resolve-time failures.
+requires iOS and Android Metro exports plus compilation of the Android Expo
+tunnel module to succeed. `expo install --check` currently catches Expo's
+bundled-native-module version drift, but it does not model the
+Babel-core/runtime constraints that broke #565 or Kotlin members added by a
+new Expo Module base class. Metro catches the transform-time and resolve-time
+failures; the Kotlin compile catches native source/API collisions.
 
 Dependabot continues to propose production major-version updates. Patch and
 minor updates stay grouped for noise control; each major arrives in its own PR
@@ -364,10 +366,11 @@ Android decisions mirror iOS where the artifact exists: Android uses the same
 fingerprint ratchet and path-safe `require.resolve` project configuration.
 There is no separately committed Android dependency-resolution lock equivalent
 to `Podfile.lock`, so F26 is structurally N/A there; Gradle resolves against the
-root Bun install and Metro smoke. The nightly Android toolchain remains
-separately pinned by its JDK/Gradle setup; unlike iOS, React Native exposes no
-single checked-in minimum-host-version contract to compare before Gradle
-configuration, so E24's explicit minimum-version preflight is iOS-only.
+root Bun install, Metro smoke, and PR-time tunnel-module compile. The nightly
+Android toolchain remains separately pinned by its JDK/Gradle setup; unlike
+iOS, React Native exposes no single checked-in minimum-host-version contract to
+compare before Gradle configuration, so E24's explicit minimum-version
+preflight is iOS-only.
 
 ## Unified report
 

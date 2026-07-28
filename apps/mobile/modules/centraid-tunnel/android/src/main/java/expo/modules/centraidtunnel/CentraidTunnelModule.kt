@@ -38,7 +38,10 @@ class StartArgs : Record {
 }
 
 class CentraidTunnelModule : Module() {
-  private val runtime = TunnelRuntime { payload -> sendEvent("onStatusChange", payload) }
+  // Expo Module gained its own `runtime` member. Keep the tunnel lifecycle
+  // explicitly named so dependency upgrades cannot turn this into a hidden
+  // member/override collision at Kotlin compile time.
+  private val tunnelRuntime = TunnelRuntime { payload -> sendEvent("onStatusChange", payload) }
 
   override fun definition() = ModuleDefinition {
     Name("CentraidTunnel")
@@ -60,27 +63,27 @@ class CentraidTunnelModule : Module() {
     }
 
     AsyncFunction("pairWithDesktop") Coroutine { args: PairArgs ->
-      runtime.pair(args)
+      tunnelRuntime.pair(args)
     }
 
     AsyncFunction("pairWithGateway") Coroutine { args: GatewayPairArgs ->
-      runtime.pairGateway(args)
+      tunnelRuntime.pairGateway(args)
     }
 
     AsyncFunction("startTunnel") Coroutine { args: StartArgs ->
-      mapOf("port" to runtime.start(args.ticket, args.secretKeyB64))
+      mapOf("port" to tunnelRuntime.start(args.ticket, args.secretKeyB64))
     }
 
     AsyncFunction("stopTunnel") Coroutine { ->
-      runtime.stop()
+      tunnelRuntime.stop()
     }
 
     AsyncFunction("getTunnelStatus") Coroutine { ->
-      runtime.status()
+      tunnelRuntime.status()
     }
 
     OnDestroy {
-      runtime.shutdown()
+      tunnelRuntime.shutdown()
     }
   }
 }

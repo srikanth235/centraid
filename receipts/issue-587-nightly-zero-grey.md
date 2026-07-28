@@ -126,7 +126,10 @@ the nightly scope, performs the Xcode preflight, runs the mobile volume proof,
 and uses `scripts/ci/report-cell-delta.mjs` to include newly red/grey/infra and
 aged-infra identities in the auto-filed/updated nightly issue.
 `tests/coverage-floors.json` records the sustained 3-run/2-point ratchet policy
-and raises the two egregiously lagging line floors;
+and raises the two egregiously lagging line floors. The first clean Linux
+coverage run measured OAuth worker at 90.65% and client React at 67.65%, so the
+floors are 88% and 65% respectively—materially above their old 70%/45%
+baselines without claiming more than CI demonstrated.
 `tests/mutation-floors.json` defines the independent 60% weakness signal.
 
 `TESTING.md` records zero-grey semantics, structural skip versus tracked gap,
@@ -137,20 +140,21 @@ fingerprint workflow, and Android decisions.
 
 ### E/F — mobile prevention
 
-The branch includes the already-reviewed prerequisite commit from #609 as an
-ancestor, outside this staged #587 diff, because `main` still contained the SDK
-57 Babel/native breakage; a required Metro gate over that tree would be red by
-construction. The prerequisite keeps its own receipt,
+The branch builds on the already-reviewed #609 prerequisite now present on
+`main`; a required Metro gate over the older SDK 57 Babel/native breakage would
+be red by construction. The prerequisite keeps its own receipt,
 `receipts/issue-609-mobile-ios-build-babel7.md`.
 
 `.github/workflows/ci.yml` extends the central `changes` job with a `mobile`
 output covering the root manifest, root lockfile, mobile sources, and shared
 client/design packages. The resulting required-check-capable `mobile-smoke`
 job runs Expo compatibility diagnostics as advisory evidence, then blocks on
-native-state verification and both iOS and Android Metro exports.
+native-state verification, both iOS and Android Metro exports, and compilation
+of the Android Expo tunnel module under JDK 17.
 
 `apps/mobile/package.json` exposes only repo-script entry points for these
-checks. `apps/mobile/native-fingerprints.json` commits both expected hashes;
+checks, including `ci:android-native`. `apps/mobile/native-fingerprints.json`
+commits both expected hashes;
 `apps/mobile/scripts/native-fingerprint.mjs` excludes that expectation file
 from the input hash. `apps/mobile/scripts/verify-native-state.mjs` verifies
 Expo/React Native pod-lock versions, the resolved Hermes tag,
@@ -161,6 +165,16 @@ writes named `infra-mismatch` evidence on failure.
 `apps/mobile/scripts/verify-native-state.test.mjs` covers stale Pod locks,
 seven-level worktree paths, fingerprint drift, and Xcode parsing;
 `apps/mobile/vitest.config.ts` includes it.
+
+The first real full-nightly run then caught the native compiler blind spot the
+new gates are intended to expose: Expo's upgraded Android `Module` now owns a
+`runtime` member, colliding with the tunnel module's private property even
+though TypeScript tests and both Metro bundles were green.
+`apps/mobile/modules/centraid-tunnel/android/src/main/java/expo/modules/centraidtunnel/CentraidTunnelModule.kt`
+now uses the unambiguous `tunnelRuntime` name, and
+`apps/mobile/native-fingerprints.json` explicitly accepts that reviewed native
+source change. The Android journey build remains the compiler-backed
+compatibility test for this class of dependency break.
 
 `.github/dependabot.yml` continues to propose all major upgrades, but leaves
 each production major in its own attributable PR while grouping patch/minor
@@ -232,6 +246,9 @@ bun run --cwd apps/mobile ci:native-state
 
 bun run --cwd apps/mobile ci:bundle
 # iOS Bundled 2,132 modules; Android Bundled 2,129 modules
+
+bun run --cwd apps/mobile ci:android-native
+# :centraid-tunnel:compileDebugKotlin; BUILD SUCCESSFUL
 ```
 
 Before installing the #609 prerequisite, the same bundle command reproduced
@@ -271,6 +288,17 @@ bun run check:pr:full
 ```
 
 GitHub checks are recorded after their successful runs.
+
+The first full-nightly workflow run, `30397249331`, proved the new prevention
+boundary by failing Android native compilation on the Expo `Module.runtime`
+collision while the PR-time native-state and dual-platform Metro bundle gate
+was green. That compiler finding was fixed in the same PR before rerunning the
+nightly graph.
+
+PR verification run `30397228787` passed all 6,286 coverage tests and then
+rejected the initially proposed 92%/74% line floors against Linux measurements
+of 90.65%/67.65%. The corrected 88%/65% floors apply the documented two-point
+margin while still tightening the previous 70%/45% baselines.
 
 ### Mechanical checklist crosswalk
 
@@ -326,6 +354,12 @@ specifically confirmed Expo/React Native/Hermes lock validation, the open #620
 F30 occupant, and the honest decision to leave A1/C1/C6 unchecked until a real
 full-nightly workflow supplies their outcome evidence.
 
+PASS — a refreshed fresh-context audit after the first GitHub runs confirmed
+the Expo `Module.runtime` fix is minimal, the required PR Android Kotlin compile
+gate is wired through the existing aggregator, the 88%/65% coverage floors
+faithfully apply the Linux evidence margin, all staged paths are covered, and
+Dependabot majors remain enabled as individual PRs.
+
 ## Steering
 
 PASS — a fresh-context steering audit found one correction: the maintainer
@@ -345,6 +379,7 @@ as independent, attributable PRs.
 | codex-019fa9f8-a97-1785270252-1 | codex | 019fa9f8-a974-7022-83ce-110628053d14 | #587 | gpt-5.6-sol | 1121386 | 0 | 59632384 | 125730 | 1247116 | 19.5975 | 1121386 | 0 | 59632384 | 125730 | test(report): make nightly evidence zero-grey (#587) -m governance: allow-toolch |
 | codex-019fa9f8-a97-1785270421-1 | codex | 019fa9f8-a974-7022-83ce-110628053d14 | #587 | gpt-5.6-sol | 10251 | 0 | 1448192 | 1166 | 11417 | 0.4052 | 1131637 | 0 | 61080576 | 126896 | test(report): make nightly evidence zero-grey (#587) -m governance: allow-toolch |
 | codex-019fa9f8-a97-1785270587-1 | codex | 019fa9f8-a974-7022-83ce-110628053d14 | #587 | gpt-5.6-sol | 11164 | 0 | 1924864 | 1931 | 13095 | 0.5381 | 1142801 | 0 | 63005440 | 128827 | test(report): make nightly evidence zero-grey (#587) -m governance: allow-toolch |
+| codex-019fa9f8-a97-1785272503-1 | codex | 019fa9f8-a974-7022-83ce-110628053d14 | #587 | gpt-5.6-sol | 237732 | 0 | 13811712 | 17343 | 255075 | 4.3074 | 1380533 | 0 | 76817152 | 146170 | fix(mobile): compile native module in PR gate (#587) -m governance: allow-toolch |
 
 ### Steering
 

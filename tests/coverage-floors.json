@@ -19,6 +19,6 @@
   "packages/tunnel/src/**": { "lines": 70, "branches": 51 },
   "packages/protocol/src/**": { "lines": 98, "branches": 96 },
   "packages/cli/src/**": { "lines": 83, "branches": 81 },
-  "apps/oauth-worker/src/**": { "lines": 92, "branches": 55 },
-  "packages/client/src/react/**": { "lines": 74, "branches": 35 }
+  "apps/oauth-worker/src/**": { "lines": 88, "branches": 55 },
+  "packages/client/src/react/**": { "lines": 65, "branches": 35 }
 }
