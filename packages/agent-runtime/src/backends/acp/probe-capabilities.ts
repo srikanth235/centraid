@@ -49,6 +49,12 @@ export interface AcpAgentCapabilities {
   modelConfigurable: boolean;
   /** Full config option surface observed on session/new. */
   configOptions: AcpConfigOptionSnapshot[];
+  /**
+   * The bounded diagnostic prompt actually ran (it is opt-in — see
+   * `probeLivePrompt`). When false the three `*Observed` flags below mean
+   * "not observed", never "unsupported".
+   */
+  livePromptProbed: boolean;
   /** Optional ACP signals observed during the bounded diagnostic prompt. */
   usageUpdateObserved: boolean;
   configOptionUpdateObserved: boolean;
@@ -61,6 +67,12 @@ export interface AcpAgentCapabilities {
   promptEmbeddedContext: boolean;
   /** Epoch milliseconds when this evidence was collected. */
   probedAt: number;
+  /**
+   * Set by the capabilities cache when a snapshot has outlived its TTL: the
+   * data is still displayable, but its verdicts (notably `authRequired`) are
+   * no longer evidence of the CURRENT state.
+   */
+  stale?: boolean;
   /** Human reason when `reachable` is false. */
   reason?: string;
 }
@@ -76,6 +88,7 @@ const emptyCaps = (over: Partial<AcpAgentCapabilities> = {}): AcpAgentCapabiliti
   mcpAcp: false,
   modelConfigurable: false,
   configOptions: [],
+  livePromptProbed: false,
   usageUpdateObserved: false,
   configOptionUpdateObserved: false,
   locationsObserved: false,
@@ -139,7 +152,7 @@ function snapshotConfigOptions(
  */
 export async function probeAcpCapabilities(
   config: AcpTurnConfig,
-  opts?: { cwd?: string; timeoutMs?: number },
+  opts?: { cwd?: string; timeoutMs?: number; probeLivePrompt?: boolean },
 ): Promise<AcpAgentCapabilities> {
   const timeoutMs = opts?.timeoutMs ?? 12_000;
   const cwd = opts?.cwd ?? (await fs.mkdtemp(path.join(tmpdir(), 'centraid-acp-cap-')));
@@ -231,12 +244,16 @@ export async function probeAcpCapabilities(
       caps.configOptions = snapshotConfigOptions(configOptions);
 
       // `config_option_update`, context usage and tool locations are optional
-      // runtime signals rather than initialize capabilities. An explicit
-      // Settings refresh runs this one bounded diagnostic prompt so the dump
-      // records observed truth instead of assuming every adapter implements
-      // the two first-party extensions.
+      // runtime signals rather than initialize capabilities — the only way to
+      // observe them is to run a real turn, which costs the owner a live
+      // provider request. So this diagnostic prompt is OPT-IN
+      // (`probeLivePrompt`): the explicit Settings refresh and the
+      // `probe-all-adapters` evidence dump ask for it; readiness checks that
+      // only need reachability/auth never do. Without it the three
+      // `*Observed` flags stay false, which reads as "not observed", not
+      // "unsupported".
       const sessionId = typeof created.sessionId === 'string' ? created.sessionId : undefined;
-      if (sessionId) {
+      if (sessionId && opts?.probeLivePrompt === true) {
         const model = findConfigOption(configOptions, 'model');
         const current = offered.models.find((entry) => entry.value === offered.currentValue);
         if (model && typeof model.id === 'string' && current) {
@@ -269,6 +286,7 @@ export async function probeAcpCapabilities(
               caps.reason = classified.message;
             }
           });
+        caps.livePromptProbed = true;
       }
       caps.usageUpdateObserved = usageUpdateObserved;
       caps.configOptionUpdateObserved = configOptionUpdateObserved;

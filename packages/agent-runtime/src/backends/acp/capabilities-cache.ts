@@ -18,6 +18,19 @@ export type { AcpAgentCapabilities };
 const cache = new Map<string, AcpAgentCapabilities>();
 const inflight = new Map<string, Promise<AcpAgentCapabilities>>();
 
+/**
+ * How long a snapshot counts as evidence of the CURRENT host state. Sign-ins
+ * expire, CLIs get upgraded, plans change — so a day-old `authRequired: true`
+ * is history, not a verdict. Past the TTL a snapshot is still returned (so
+ * Settings can render something) but marked `stale`, and any caller that
+ * probes on demand re-probes instead of trusting it.
+ */
+export const CAPABILITIES_TTL_MS = 24 * 60 * 60 * 1000;
+
+function isExpired(caps: AcpAgentCapabilities, now: number): boolean {
+  return !Number.isFinite(caps.probedAt) || now - caps.probedAt > CAPABILITIES_TTL_MS;
+}
+
 function key(kind: RunnerKind, binPath?: string, extraArgs?: readonly string[]): string {
   return `${kind}\0${binPath ?? ''}\0${JSON.stringify(extraArgs ?? [])}`;
 }
@@ -59,21 +72,46 @@ async function writePersisted(
 }
 
 /**
- * Return cached capabilities. Probes only when `refresh` is true (Settings
- * "Refresh" / `?refresh=1`) — never on a cold status poll, because spawning
- * every installed agent on every Settings open is too expensive.
+ * Return cached capabilities.
+ *
+ * - `refresh` (Settings "Refresh" / `?refresh=1`) always re-probes, and that
+ *   explicit owner action is the one place the probe's live diagnostic prompt
+ *   runs by default — it burns a real provider turn.
+ * - Otherwise the memory then the persisted snapshot is served; a snapshot
+ *   past `CAPABILITIES_TTL_MS` comes back marked `stale`.
+ * - `probeIfMissing` lets a readiness check (preflight) probe when nothing
+ *   usable is cached, WITHOUT the live prompt unless asked for.
+ *
+ * Never probes on a plain cold status poll: spawning every installed agent on
+ * every Settings open is too expensive.
  */
 export async function resolveAcpCapabilities(
   kind: RunnerKind,
-  opts?: { binPath?: string; extraArgs?: string[]; refresh?: boolean; cacheDir?: string },
+  opts?: {
+    binPath?: string;
+    extraArgs?: string[];
+    refresh?: boolean;
+    cacheDir?: string;
+    /** Probe when no fresh snapshot is cached (default: false). */
+    probeIfMissing?: boolean;
+    /** Run the probe's live diagnostic prompt (default: `refresh`). */
+    probeLivePrompt?: boolean;
+  },
 ): Promise<AcpAgentCapabilities | undefined> {
   const k = key(kind, opts?.binPath, opts?.extraArgs);
+  const livePrompt = opts?.probeLivePrompt ?? opts?.refresh === true;
   if (!opts?.refresh) {
-    const cached = cache.get(k);
-    if (cached) return cached;
-    const persisted = await readPersisted(opts?.cacheDir, k);
-    if (persisted) cache.set(k, persisted);
-    return persisted;
+    const now = Date.now();
+    let known = cache.get(k);
+    if (!known) {
+      const persisted = await readPersisted(opts?.cacheDir, k);
+      if (persisted) {
+        cache.set(k, persisted);
+        known = persisted;
+      }
+    }
+    if (known && !isExpired(known, now)) return known;
+    if (!opts?.probeIfMissing) return known ? { ...known, stale: true } : undefined;
   }
 
   const existing = inflight.get(k);
@@ -85,7 +123,10 @@ export async function resolveAcpCapabilities(
         ...(opts?.binPath ? { binPath: opts.binPath } : {}),
         ...(opts?.extraArgs?.length ? { extraArgs: opts.extraArgs } : {}),
       });
-      const caps = await probeAcpCapabilities(config, { timeoutMs: 10_000 });
+      const caps = await probeAcpCapabilities(config, {
+        timeoutMs: 10_000,
+        ...(livePrompt ? { probeLivePrompt: true } : {}),
+      });
       cache.set(k, caps);
       await writePersisted(opts?.cacheDir, k, caps);
       return caps;

@@ -1,13 +1,21 @@
 // Cache + probe path for Settings capability status. Uses the real fake ACP
 // agent so the shipped resolve/probe entry points run end-to-end.
 
-import { expect, test, afterEach } from 'vitest';
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { expect, test, afterEach, vi } from 'vitest';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
 import { FAKE_AGENT } from './test-fixtures.js';
-import { clearCapabilitiesCache, resolveAcpCapabilities } from './capabilities-cache.ts';
+import {
+  CAPABILITIES_TTL_MS,
+  clearCapabilitiesCache,
+  resolveAcpCapabilities,
+} from './capabilities-cache.ts';
 import { probeAcpCapabilities } from './probe-capabilities.ts';
 
 afterEach(() => {
   clearCapabilitiesCache();
+  vi.useRealTimers();
 });
 
 test('probeAcpCapabilities reports reachable + advertised caps from fake agent', async () => {
@@ -25,7 +33,7 @@ test('probeAcpCapabilities reports reachable + advertised caps from fake agent',
         '--prompt-caps=image,audio,embeddedContext',
       ],
     },
-    { timeoutMs: 8_000 },
+    { timeoutMs: 8_000, probeLivePrompt: true },
   );
   expect(caps.reachable).toBe(true);
   expect(caps.resume).toBe(true);
@@ -40,7 +48,69 @@ test('probeAcpCapabilities reports reachable + advertised caps from fake agent',
   expect(caps.usageUpdateObserved).toBe(true);
   expect(caps.configOptionUpdateObserved).toBe(true);
   expect(caps.locationsObserved).toBe(true);
+  expect(caps.livePromptProbed).toBe(true);
   expect(caps.authRequired).toBe(false);
+});
+
+test('without probeLivePrompt the probe sends no session/prompt', async () => {
+  // The diagnostic prompt is a REAL provider turn. A readiness check must not
+  // buy one, so the observed-signal flags stay honest-false instead.
+  const dir = await tempDir('acp-probe-noprompt-');
+  const promptMarker = path.join(dir, 'prompt.json');
+  const caps = await probeAcpCapabilities(
+    {
+      kind: 'acp',
+      acpArgs: [],
+      binPath: FAKE_AGENT,
+      extraArgs: ['--mode=normal', `--prompt-marker=${promptMarker}`],
+    },
+    { timeoutMs: 8_000 },
+  );
+  expect(caps.reachable).toBe(true);
+  // Config options still come from session/new — no prompt needed for those.
+  expect(caps.modelConfigurable).toBe(true);
+  expect(caps.livePromptProbed).toBe(false);
+  expect(caps.usageUpdateObserved).toBe(false);
+  await expect(fs.access(promptMarker)).rejects.toThrow();
+});
+
+test('a snapshot past its TTL is served marked stale, and re-probed on demand', async () => {
+  const first = await resolveAcpCapabilities('acp', { binPath: FAKE_AGENT, refresh: true });
+  expect(first?.reachable).toBe(true);
+
+  // Age the cached snapshot past the TTL. Only `Date` is faked — the probe
+  // still spawns a real child on real timers.
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date(Date.now() + CAPABILITIES_TTL_MS + 1));
+  const stale = await resolveAcpCapabilities('acp', { binPath: FAKE_AGENT });
+  // Still displayable…
+  expect(stale?.reachable).toBe(true);
+  // …but no longer presented as the current verdict.
+  expect(stale?.stale).toBe(true);
+
+  // A caller that is allowed to probe gets fresh evidence instead.
+  const refreshed = await resolveAcpCapabilities('acp', {
+    binPath: FAKE_AGENT,
+    probeIfMissing: true,
+  });
+  expect(refreshed?.stale).toBeUndefined();
+  expect(refreshed?.probedAt).toBeGreaterThan(first!.probedAt);
+});
+
+test('probeIfMissing serves a fresh cache without spawning, and never buys a live prompt', async () => {
+  const dir = await tempDir('acp-probe-ifmissing-');
+  const promptMarker = path.join(dir, 'prompt.json');
+  const opts = {
+    binPath: FAKE_AGENT,
+    extraArgs: ['--mode=normal', `--prompt-marker=${promptMarker}`],
+  };
+  const cold = await resolveAcpCapabilities('acp', { ...opts, probeIfMissing: true });
+  expect(cold?.reachable).toBe(true);
+  expect(cold?.livePromptProbed).toBe(false);
+  await expect(fs.access(promptMarker)).rejects.toThrow();
+
+  const warm = await resolveAcpCapabilities('acp', { ...opts, probeIfMissing: true });
+  expect(warm).toBe(cold);
 });
 
 test.each([
@@ -65,9 +135,11 @@ test.each([
     expected: { model: true, effort: true, usage: false, configUpdate: false, locations: false },
   },
 ])('capability matrix: $name', async ({ args, expected }) => {
+  // The `*Observed` expectations are exactly what the live diagnostic prompt
+  // exists to establish, so this matrix opts into it.
   const caps = await probeAcpCapabilities(
     { kind: 'acp', acpArgs: [], binPath: FAKE_AGENT, extraArgs: args },
-    { timeoutMs: 8_000 },
+    { timeoutMs: 8_000, probeLivePrompt: true },
   );
   expect(caps.reachable).toBe(true);
   expect(caps.modelConfigurable).toBe(expected.model);
@@ -101,7 +173,9 @@ test('probeAcpCapabilities sets authRequired when the diagnostic prompt rejects 
       binPath: FAKE_AGENT,
       extraArgs: ['--mode=auth-prompt'],
     },
-    { timeoutMs: 8_000 },
+    // An agent that only reveals its expired sign-in when prompted is the
+    // reason the live prompt exists at all.
+    { timeoutMs: 8_000, probeLivePrompt: true },
   );
   expect(caps.reachable).toBe(true);
   expect(caps.authRequired).toBe(true);

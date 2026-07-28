@@ -248,7 +248,17 @@ export function createSessionUpdateMapper(
       update.rawOutput && typeof update.rawOutput === 'object' && !Array.isArray(update.rawOutput)
         ? {
             ...(update.rawOutput as Record<string, unknown>),
-            ...(renderableContent.length ? { content: renderableContent } : {}),
+            ...(renderableContent.length
+              ? {
+                  content: renderableContent,
+                  // The agent's own `rawOutput.content` is its payload, not
+                  // our renderable projection — overwriting the key would
+                  // silently drop tool output the agent chose to return.
+                  ...((update.rawOutput as Record<string, unknown>).content !== undefined
+                    ? { rawOutputContent: (update.rawOutput as Record<string, unknown>).content }
+                    : {}),
+                }
+              : {}),
           }
         : renderableContent.length
           ? { rawOutput: update.rawOutput ?? null, content: renderableContent }

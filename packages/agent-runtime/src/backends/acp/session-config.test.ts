@@ -9,6 +9,7 @@ import {
   pinThoughtLevel,
   readConfigOptionUpdate,
   readConfigOptions,
+  readCurrentConfigValue,
   readOfferedModels,
   SET_CONFIG_OPTION,
 } from './session-config.ts';
@@ -54,7 +55,7 @@ test('readConfigOptions filters non-objects and empty lists', () => {
   ).toEqual([{ id: 'model' }, { category: 'mode' }]);
 });
 
-test('readConfigOptionUpdate normalizes plural and legacy singular notifications', () => {
+test('readConfigOptionUpdate reads the schema’s full-set notification', () => {
   expect(readConfigOptionUpdate(null)).toBeUndefined();
   expect(readConfigOptionUpdate({ update: null })).toBeUndefined();
   expect(readConfigOptionUpdate({ update: { sessionUpdate: 'other' } })).toBeUndefined();
@@ -66,6 +67,10 @@ test('readConfigOptionUpdate normalizes plural and legacy singular notifications
       },
     }),
   ).toEqual([{ id: 'model' }]);
+  // The ACP schema's ConfigOptionUpdate has exactly one field, `configOptions`
+  // ("the full set"). A notification carrying only a singular option is not a
+  // shape the wire defines — reading it as an update is what made the caller
+  // MERGE, and merging keeps withdrawn options alive as stale pin targets.
   expect(
     readConfigOptionUpdate({
       update: {
@@ -73,18 +78,26 @@ test('readConfigOptionUpdate normalizes plural and legacy singular notifications
         configOption: { category: 'thought_level' },
       },
     }),
-  ).toEqual([{ category: 'thought_level' }]);
-  expect(
-    readConfigOptionUpdate({
-      update: {
-        sessionUpdate: 'config_option_update',
-        option: { category: 'model' },
-      },
-    }),
-  ).toEqual([{ category: 'model' }]);
+  ).toBeUndefined();
   expect(
     readConfigOptionUpdate({ update: { sessionUpdate: 'config_option_update' } }),
   ).toBeUndefined();
+  // An empty full set is a real update: the agent withdrew every option.
+  expect(
+    readConfigOptionUpdate({
+      update: { sessionUpdate: 'config_option_update', configOptions: [] },
+    }),
+  ).toEqual([]);
+});
+
+test('readCurrentConfigValue reads only string currentValues, by category', () => {
+  const options = [
+    { id: 'model', category: 'model', currentValue: 'm-1' },
+    { id: 'effort', category: 'thought_level', currentValue: 3 },
+  ];
+  expect(readCurrentConfigValue(options, 'model')).toBe('m-1');
+  expect(readCurrentConfigValue(options, 'thought_level')).toBeUndefined();
+  expect(readCurrentConfigValue([], 'model')).toBeUndefined();
 });
 
 test('readOfferedModels flattens groups and reports currentValue', () => {
@@ -259,42 +272,93 @@ test('pinModel exact value match wins over name', async () => {
   expect(pinned).toBe('exact-id');
 });
 
-test('pinThoughtLevel records only a value the runner confirms', async () => {
-  const options = [
-    {
-      id: 'reasoning_effort',
-      category: 'thought_level',
-      currentValue: 'medium',
-      options: [{ value: 'medium' }, { value: 'high' }],
-    },
-  ];
+// D4: "confirmed" means the agent echoed the value OR resolved the pin RPC.
+// The set_config_option RESULT's config echo is optional in the schema, so a
+// resolved request is itself the confirmation — only a CONTRADICTING echo
+// leaves the active value unknown.
+const effortOptions = [
+  {
+    id: 'reasoning_effort',
+    category: 'thought_level',
+    currentValue: 'medium',
+    options: [{ value: 'medium' }, { value: 'high' }],
+  },
+];
+
+test('pinThoughtLevel records an echo-confirmed value', async () => {
+  const notices: Array<{ code?: string }> = [];
   const confirmed = await pinThoughtLevel({
     request: async <T = unknown>(): Promise<T> =>
-      ({
-        configOptions: [
-          {
-            ...options[0],
-            currentValue: 'high',
-          },
-        ],
-      }) as T,
-    emit: () => undefined,
+      ({ configOptions: [{ ...effortOptions[0], currentValue: 'high' }] }) as T,
+    emit: (event) => notices.push(event as { code?: string }),
     sessionId: 's1',
-    configOptions: options,
+    configOptions: effortOptions,
     requested: 'high',
   });
   expect(confirmed).toBe('high');
+  expect(notices).toEqual([]);
+});
 
+test('pinThoughtLevel records a successful pin that echoes nothing', async () => {
   const notices: Array<{ code?: string }> = [];
-  const unconfirmed = await pinThoughtLevel({
+  const confirmed = await pinThoughtLevel({
     request: async <T = unknown>(): Promise<T> => ({}) as T,
     emit: (event) => notices.push(event as { code?: string }),
     sessionId: 's1',
-    configOptions: options,
+    configOptions: effortOptions,
+    requested: 'high',
+  });
+  expect(confirmed).toBe('high');
+  expect(notices).toEqual([]);
+});
+
+test('pinThoughtLevel treats a contradicting echo as unconfirmed', async () => {
+  const notices: Array<{ code?: string; level?: string }> = [];
+  const unconfirmed = await pinThoughtLevel({
+    request: async <T = unknown>(): Promise<T> =>
+      ({ configOptions: [{ ...effortOptions[0], currentValue: 'medium' }] }) as T,
+    emit: (event) => notices.push(event as { code?: string; level?: string }),
+    sessionId: 's1',
+    configOptions: effortOptions,
     requested: 'high',
   });
   expect(unconfirmed).toBeUndefined();
-  expect(notices.at(-1)?.code).toBe('thought_level_unconfirmed');
+  expect(notices.at(-1)).toMatchObject({ code: 'thought_level_unconfirmed', level: 'warn' });
+});
+
+test('pinModel records a successful pin that echoes nothing, and warns on a contradicting echo', async () => {
+  const modelOptions = [
+    {
+      id: 'model',
+      category: 'model',
+      currentValue: 'm-default',
+      options: [{ value: 'm-default' }, { value: 'm-other' }],
+    },
+  ];
+  const quiet: Array<{ code?: string }> = [];
+  expect(
+    await pinModel({
+      request: async <T = unknown>(): Promise<T> => ({}) as T,
+      emit: (event) => quiet.push(event as { code?: string }),
+      sessionId: 's1',
+      configOptions: modelOptions,
+      requested: 'm-other',
+    }),
+  ).toBe('m-other');
+  expect(quiet).toEqual([]);
+
+  const notices: Array<{ code?: string; level?: string }> = [];
+  expect(
+    await pinModel({
+      request: async <T = unknown>(): Promise<T> =>
+        ({ configOptions: [{ ...modelOptions[0], currentValue: 'm-default' }] }) as T,
+      emit: (event) => notices.push(event as { code?: string; level?: string }),
+      sessionId: 's1',
+      configOptions: modelOptions,
+      requested: 'm-other',
+    }),
+  ).toBeUndefined();
+  expect(notices.at(-1)).toMatchObject({ code: 'model_unconfirmed', level: 'warn' });
 });
 
 test('pinThoughtLevel surfaces unsupported, unavailable, and rejected effort pins', async () => {

@@ -44,6 +44,7 @@ import {
   pinThoughtLevel,
   readConfigOptions,
   readConfigOptionUpdate,
+  readCurrentConfigValue,
   SET_MODE,
   type InitializeResult,
   type SessionConfigOption,
@@ -190,15 +191,16 @@ export async function runAcpTurn(
       if (method !== 'session/update') return;
       const optionUpdate = readConfigOptionUpdate(params);
       if (optionUpdate) {
-        for (const next of optionUpdate) {
-          const index = configOptions.findIndex(
-            (current) =>
-              (typeof next.category === 'string' && current.category === next.category) ||
-              (typeof next.id === 'string' && current.id === next.id),
-          );
-          if (index >= 0) configOptions[index] = next;
-          else configOptions.push(next);
-        }
+        // `ConfigOptionUpdate.configOptions` is "the full set" per the ACP
+        // schema — REPLACE, never merge, so an option the agent dropped stops
+        // being a pin target and stops feeding accounting.
+        configOptions = optionUpdate;
+        // The agent just told us what is actually in effect, which is exactly
+        // the D4 "ACP-confirmed" evidence the usage stamp needs. A mid-turn
+        // model/effort switch has to book the rest of the turn under the new
+        // identity instead of the value pinned before the prompt started.
+        activeModel = readCurrentConfigValue(configOptions, 'model');
+        activeEffort = readCurrentConfigValue(configOptions, 'thought_level');
       }
       if (!promptStarted) return;
       stream.handleSessionUpdate(params);
@@ -330,15 +332,7 @@ export async function runAcpTurn(
         }
       }
       if (!sessionId) {
-        if (input.prevSessionId && (canResume || canLoad)) {
-          emit({
-            type: 'notice',
-            level: 'warn',
-            code: 'session_resume_self_heal',
-            message:
-              'The agent no longer recognized its saved session. Started a fresh session and restored the conversation from Centraid’s ledger.',
-          });
-        }
+        const selfHealed = Boolean(input.prevSessionId) && (canResume || canLoad);
         const created = await requestWithTimeout(
           conn.request<SessionSetupResult>('session/new', withMcp()),
           stageTimeoutMs,
@@ -350,6 +344,17 @@ export async function runAcpTurn(
         modes = created?.modes ?? undefined;
         sessionId = id;
         continuity = 'fresh';
+        // Only claim the self-heal once the fresh session really exists — a
+        // failing `session/new` must not leave the owner told we recovered.
+        if (selfHealed) {
+          emit({
+            type: 'notice',
+            level: 'warn',
+            code: 'session_resume_self_heal',
+            message:
+              'The agent no longer recognized its saved session. Started a fresh session and restored the conversation from Centraid’s ledger.',
+          });
+        }
       }
     } else {
       for (const notice of pendingNotices) emit(notice);
@@ -387,13 +392,6 @@ export async function runAcpTurn(
           modes = loaded?.modes ?? undefined;
         }
       } catch {
-        emit({
-          type: 'notice',
-          level: 'warn',
-          code: 'session_resume_self_heal',
-          message:
-            'The agent no longer recognized its saved session. Started a fresh session and restored the conversation from Centraid’s ledger.',
-        });
         const created = await requestWithTimeout(
           conn.request<SessionSetupResult>('session/new', {
             ...sessionParams(),
@@ -408,6 +406,14 @@ export async function runAcpTurn(
         modes = created?.modes ?? undefined;
         sessionId = freshId;
         continuity = 'fresh';
+        // Announced only after the replacement session exists (see above).
+        emit({
+          type: 'notice',
+          level: 'warn',
+          code: 'session_resume_self_heal',
+          message:
+            'The agent no longer recognized its saved session. Started a fresh session and restored the conversation from Centraid’s ledger.',
+        });
       }
     }
 
@@ -659,7 +665,21 @@ export async function runAcpTurn(
         // ignore
       }
       if (!child.killed) child.kill('SIGTERM');
-      await requestWithTimeout(conn.exited, stageTimeoutMs, 'process exit').catch(() => undefined);
+      const exited = await requestWithTimeout(
+        // A rejected `exited` still means the process is gone.
+        conn.exited.then(
+          () => true,
+          () => true,
+        ),
+        stageTimeoutMs,
+        'process exit',
+      ).catch(() => false);
+      if (!exited) {
+        // SIGTERM is a request. An agent that ignores it would otherwise leak
+        // one child per turn for the lifetime of the gateway.
+        child.kill('SIGKILL');
+        await conn.exited.catch(() => undefined);
+      }
     }
 
     input.abortSignal.removeEventListener('abort', abortHandler);

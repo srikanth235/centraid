@@ -145,7 +145,18 @@ export async function disposeSlot(
     // ignore
   }
   if (!child.killed) child.kill('SIGTERM');
-  await bounded(conn.exited.catch(() => undefined));
+  const exited = await bounded(
+    conn.exited.then(
+      () => true,
+      () => true,
+    ),
+  );
+  if (!exited) {
+    // SIGTERM is a request. An agent that ignores it would leak one warm
+    // child per evicted slot, so the dispose path escalates.
+    child.kill('SIGKILL');
+    await conn.exited.catch(() => undefined);
+  }
 }
 
 /** Test helper: drop every warm slot. */

@@ -102,6 +102,33 @@ test('a tool_call that arrives already completed emits both start and result', (
   ).toMatchObject({ toolCallId: 'done', status: 'completed' });
 });
 
+test('an agent’s own rawOutput.content survives the renderable-content merge', () => {
+  // The merge used to spread rawOutput and then overwrite `content` with our
+  // renderable projection, silently destroying the payload the agent chose to
+  // return under that key.
+  const { mapper, events } = harness();
+  mapper.handleSessionUpdate({
+    update: {
+      sessionUpdate: 'tool_call',
+      toolCallId: 'merge',
+      title: 'search',
+      status: 'completed',
+      rawOutput: { content: [{ path: 'a.txt', score: 0.9 }], hits: 1 },
+      content: [{ type: 'content', content: { type: 'text', text: 'found 1 match' } }],
+    },
+  });
+  const result = events.find(
+    (event): event is Extract<TurnStreamEvent, { type: 'tool.result' }> =>
+      event.type === 'tool.result',
+  );
+  const merged = result?.result as Record<string, unknown>;
+  expect(merged.hits).toBe(1);
+  // The renderable projection is what the UI reads…
+  expect(merged.content).toEqual([{ type: 'text', text: 'found 1 match' }]);
+  // …and the agent's own payload is still there, not overwritten.
+  expect(merged.rawOutputContent).toEqual([{ path: 'a.txt', score: 0.9 }]);
+});
+
 test('tool_call_update maps failed → ok:false with an error message, and dedupes', () => {
   const { mapper, events } = harness();
   mapper.handleSessionUpdate({

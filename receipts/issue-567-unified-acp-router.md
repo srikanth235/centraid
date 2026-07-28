@@ -75,6 +75,15 @@ branch in one follow-up round:
   durable instead of deleting the turn; compile failover notices use the
   machine-keyed `notice:warn:failover`; the `agent-failover` health component
   recovers on the next successful turn, which also closes auth breakers.
+- **Accounting/config truth.** `config_option_update` replaces the option set
+  wholesale (the invented singular shape is gone) and re-derives the
+  confirmed model/effort mid-turn; a successful pin RPC counts as confirmation
+  (contradicting echoes stay unconfirmed); effort-only usage events are no
+  longer booked; capability snapshots carry a 24 h staleness flag; capability
+  probes send a live prompt only on the explicit Settings-refresh path, and
+  session-ready preflight serves the warm cache instead of burning a provider
+  turn; failure classification prefers RPC codes and stages over stderr
+  keywords; teardown escalates SIGTERM → SIGKILL.
 - **Ledger/watermark correctness.** Failed turns no longer advance the
   hydration watermark; the empty-watermark sentinel is `-1` everywhere; the
   hydration tool line understands the real chat-path payload shape (`state`)

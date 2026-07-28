@@ -88,6 +88,33 @@ test('session-ready preflight rejects an installed but unauthenticated ACP runne
   expect(status.hint).toMatch(/set|configure|install|sign/i);
 });
 
+test('session-ready preflight serves a warm capability cache without spawning the agent', async () => {
+  // Readiness used to force `refresh: true`, so every poll spawned the agent
+  // AND bought a live provider turn from the diagnostic prompt.
+  const dir = await tempDir('centraid-preflight-ready-');
+  const pidMarker = path.join(dir, 'pid');
+  const promptMarker = path.join(dir, 'prompt.json');
+  const prefs = {
+    kind: 'acp' as const,
+    binPath: FAKE_AGENT,
+    extraArgs: ['--mode=normal', `--pid-marker=${pidMarker}`, `--prompt-marker=${promptMarker}`],
+  };
+
+  invalidatePreflightCache();
+  const first = await runPreflight(prefs, { requireSessionReady: true });
+  expect(first.ok).toBe(true);
+  // The cold check did spawn once — and did NOT prompt the provider.
+  await fs.access(pidMarker);
+  await expect(fs.access(promptMarker)).rejects.toThrow();
+
+  await fs.rm(pidMarker);
+  invalidatePreflightCache();
+  const second = await runPreflight(prefs, { requireSessionReady: true });
+  expect(second.ok).toBe(true);
+  // No second spawn: the marker was never rewritten.
+  await expect(fs.access(pidMarker)).rejects.toThrow();
+});
+
 test('attaches an empty model list when no catalog path is set (no seed)', async () => {
   invalidatePreflightCache();
   const status = await runPreflight({ kind: 'codex', binPath: 'true' });

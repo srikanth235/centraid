@@ -235,3 +235,21 @@ test('confined turns structurally deny ACP permission requests', async () => {
   expect(types(events).at(-1)).toBe('final');
   expect(deltas(events)).toBe('Hello world');
 });
+
+test('teardown escalates to SIGKILL for an agent that ignores SIGTERM', async () => {
+  // SIGTERM is a request, not a guarantee. An agent that ignores it (and
+  // stdin close) would leak one child process per turn for the lifetime of
+  // the gateway, so the teardown bound has to escalate.
+  const dir = await tempDir('acp-teardown-');
+  const pidMarker = path.join(dir, 'pid');
+  const { events } = await runFake({
+    extraArgs: ['--mode=normal', '--ignore-stdin-end', `--pid-marker=${pidMarker}`],
+    config: { stageTimeoutMs: 1_500 },
+  });
+  expect(types(events).at(-1)).toBe('final');
+
+  const pid = Number(await fs.readFile(pidMarker, 'utf8'));
+  expect(Number.isInteger(pid)).toBe(true);
+  // `kill(pid, 0)` is a liveness probe: ESRCH means the process is gone.
+  expect(() => process.kill(pid, 0)).toThrow(/ESRCH/);
+});

@@ -51,6 +51,12 @@
  *   --no-usage-update       omit the optional usage_update notification
  *   --no-locations          omit tool-call workspace locations
  *   --no-config-update      omit config_option_update notifications
+ *   --midturn-model=<value> mid-prompt, switch the active model and announce
+ *                           the new full config set (config_option_update)
+ *   --midturn-drop-effort   mid-prompt, announce a config set with NO
+ *                           thought_level option (the agent withdrew it)
+ *   --ignore-stdin-end      survive stdin end AND SIGTERM (teardown escalation
+ *                           probe — only SIGKILL stops this process)
  *   --pid-marker=<path>     write this process's pid at startup (liveness probe)
  *   --cost=<amount>         emit a usage_update carrying this cumulative cost
  *   --currency=<code>       ISO 4217 code for --cost (default USD)
@@ -85,6 +91,9 @@ const noEffortOption = has('no-effort-option');
 const noUsageUpdate = has('no-usage-update');
 const noLocations = has('no-locations');
 const noConfigUpdate = has('no-config-update');
+const midturnModel = flag('midturn-model');
+const midturnDropEffort = has('midturn-drop-effort');
+const ignoreStdinEnd = has('ignore-stdin-end');
 const cost = flag('cost');
 const currency = flag('currency') ?? 'USD';
 const mcpMarker = flag('mcp-marker');
@@ -379,6 +388,18 @@ async function runPrompt(reqId, sessionId) {
     content: { type: 'text', text: 'world' },
   });
 
+  // A mid-turn configuration change, announced the way the schema defines it:
+  // `configOptions` is the FULL set, so anything absent has been withdrawn.
+  if (midturnModel !== undefined || midturnDropEffort) {
+    if (midturnModel !== undefined) activeModel = midturnModel;
+    update(sessionId, {
+      sessionUpdate: 'config_option_update',
+      configOptions: midturnDropEffort
+        ? configOptions().filter((option) => option.category !== 'thought_level')
+        : configOptions(),
+    });
+  }
+
   // Per schema: context used/size, plus a CUMULATIVE cost. No tokens here.
   if (!noUsageUpdate) {
     update(sessionId, {
@@ -575,7 +596,13 @@ process.stdin.on('data', (chunk) => {
     nl = buffer.indexOf('\n');
   }
 });
-// Client closed stdin → teardown. Exit cleanly so the parent's exit wait resolves.
-process.stdin.on('end', () => process.exit(0));
-process.stdin.on('close', () => process.exit(0));
+// Client closed stdin → teardown. Exit cleanly so the parent's exit wait
+// resolves. `--ignore-stdin-end` models the agent that honours NEITHER stdin
+// close nor SIGTERM: only SIGKILL ends it.
+if (!ignoreStdinEnd) {
+  process.stdin.on('end', () => process.exit(0));
+  process.stdin.on('close', () => process.exit(0));
+} else {
+  setInterval(() => {}, 1000);
+}
 void promptSessionId;

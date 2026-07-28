@@ -89,18 +89,30 @@ export function readConfigOptions(result: SessionSetupResult | undefined): Sessi
 }
 
 /**
- * Read a `config_option_update` session notification. Adapters have shipped
- * both the plural whole-array shape and a singular option shape; normalize
- * them here so the turn orchestrator never grows adapter branches.
+ * Read a `config_option_update` session notification.
+ *
+ * Schema-verified against `@agentclientprotocol/sdk`'s generated
+ * `ConfigOptionUpdate`: the notification carries exactly one field,
+ * `configOptions`, documented as "The full set of configuration options and
+ * their current values". There is NO singular option shape in the schema, so
+ * the result REPLACES the tracked set — an option missing from an update is
+ * gone, not retained from an earlier snapshot.
  */
 export function readConfigOptionUpdate(params: unknown): SessionConfigOption[] | undefined {
   if (!isObject(params) || !isObject(params.update)) return undefined;
   const update = params.update;
   if (update.sessionUpdate !== 'config_option_update') return undefined;
-  const plural = update.configOptions;
-  if (Array.isArray(plural)) return plural.filter(isObject);
-  const singular = update.configOption ?? update.option;
-  return isObject(singular) ? [singular] : undefined;
+  const options = update.configOptions;
+  return Array.isArray(options) ? options.filter(isObject) : undefined;
+}
+
+/** The `currentValue` the session advertises for one semantic category. */
+export function readCurrentConfigValue(
+  options: SessionConfigOption[],
+  category: string,
+): string | undefined {
+  const option = findConfigOption(options, category);
+  return typeof option?.currentValue === 'string' ? option.currentValue : undefined;
 }
 
 /** Does the agent advertise `modeId` among its available session modes? */
@@ -255,12 +267,22 @@ export async function pinModel(args: {
       configId: option.id,
       value,
     });
-    const returned = readConfigOptions(result);
-    const confirmed = findConfigOption(
-      returned.length > 0 ? returned : args.configOptions,
-      'model',
-    );
-    return confirmed?.currentValue === value ? value : undefined;
+    // D4 confirmation: a RESOLVED `session/set_config_option` IS the agent
+    // confirming the pin — the spec's result echo is optional. Only an echo
+    // that CONTRADICTS the request leaves the active value unknown.
+    const echoed = readCurrentConfigValue(readConfigOptions(result), 'model');
+    if (echoed !== undefined && echoed !== value) {
+      args.emit({
+        type: 'notice',
+        level: 'warn',
+        code: 'model_unconfirmed',
+        message:
+          `This runner accepted the selected model (${args.requested}) but reported ` +
+          `a different active model, so Centraid will record the model as unknown.`,
+      });
+      return undefined;
+    }
+    return value;
   } catch {
     // The agent rejected the pin (stale option list, provider hiccup). The
     // turn is still runnable on its default — say so instead of failing it.
@@ -325,19 +347,19 @@ export async function pinThoughtLevel(args: {
       configId: option.id,
       value: selected,
     });
-    const returned = readConfigOptions(result);
-    const confirmed = findConfigOption(
-      returned.length > 0 ? returned : args.configOptions,
-      'thought_level',
-    );
-    if (confirmed?.currentValue === selected) return selected;
-    args.emit({
-      type: 'notice',
-      level: 'info',
-      code: 'thought_level_unconfirmed',
-      message: `The runner accepted the effort request but did not confirm the active value, so Centraid will record effort as unknown.`,
-    });
-    return undefined;
+    // Same D4 rule as `pinModel`: the resolved RPC confirms the request; only
+    // a contradicting echo makes the active value unknown.
+    const echoed = readCurrentConfigValue(readConfigOptions(result), 'thought_level');
+    if (echoed !== undefined && echoed !== selected) {
+      args.emit({
+        type: 'notice',
+        level: 'warn',
+        code: 'thought_level_unconfirmed',
+        message: `The runner accepted the effort request but reported a different active effort, so Centraid will record effort as unknown.`,
+      });
+      return undefined;
+    }
+    return selected;
   } catch {
     args.emit({
       type: 'notice',

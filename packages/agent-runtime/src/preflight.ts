@@ -103,10 +103,16 @@ export async function runPreflight(
   cached = { status, cacheKey: key };
 
   if (status.ok && opts.requireSessionReady) {
+    // Readiness only needs "does this agent reach initialize + session/new,
+    // and is it signed in". A fresh cached snapshot answers that, so this
+    // never spawns on a warm cache — and when it does have to spawn it skips
+    // the probe's live diagnostic prompt, which would bill the owner a real
+    // provider turn on every session-ready check.
     const caps = await resolveAcpCapabilities(prefs.kind, {
       ...(prefs.binPath ? { binPath: prefs.binPath } : {}),
       ...(prefs.extraArgs?.length ? { extraArgs: prefs.extraArgs } : {}),
-      refresh: true,
+      probeIfMissing: true,
+      probeLivePrompt: false,
     });
     if (!caps?.reachable || caps.authRequired) {
       return {

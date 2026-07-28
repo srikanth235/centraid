@@ -104,6 +104,31 @@ test('a refused model request never stamps the unconfirmed requested model', asy
   expect(usageOf(events)?.model).toBeUndefined();
 });
 
+// ---- mid-turn config_option_update ---------------------------------------
+
+test('a mid-turn model switch is what the usage event is stamped with', async () => {
+  // The agent switched models after the pin, and said so on the wire. Booking
+  // the tokens under the model pinned at the start of the turn would reprice
+  // the whole turn at the wrong rate.
+  const { events } = await runFake({
+    extraArgs: ['--mode=normal', '--midturn-model=fake-opus-9-1'],
+  });
+  expect(usageOf(events)?.model).toBe('fake-opus-9-1');
+});
+
+test('an option withdrawn by a config_option_update stops being tracked', async () => {
+  // Baseline: the agent's advertised effort reaches the usage stamp…
+  const before = await runFake({ extraArgs: ['--mode=normal'] });
+  expect(usageOf(before.events)?.effort).toBe('default');
+
+  // …and once the agent's full-set update no longer carries a thought_level
+  // option, the stale value must not survive as a pin target or a stamp.
+  const after = await runFake({ extraArgs: ['--mode=normal', '--midturn-drop-effort'] });
+  expect(usageOf(after.events)?.effort).toBeUndefined();
+  // Tokens are unaffected — only the withdrawn configuration is dropped.
+  expect(usageOf(after.events)?.inputTokens).toBe(100);
+});
+
 test('resumed cumulative token and USD totals are booked as deltas', async () => {
   const resumed = await runFake({
     extraArgs: ['--mode=resume-cap', '--cost=0.42'],

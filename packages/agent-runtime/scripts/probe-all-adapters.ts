@@ -14,32 +14,52 @@ const runnerKinds = Object.keys(RUNNER_BACKENDS) as RunnerKind[];
 const envKey = (kind: RunnerKind): string =>
   `CENTRAID_${kind.replaceAll('-', '_').toUpperCase()}_BIN`;
 
-const rows = await Promise.all(
-  runnerKinds.map(async (kind) => {
-    const configured = process.env[envKey(kind)];
-    const availability = await probeCliAvailability(kind, configured);
-    if (!availability.available) {
-      return {
-        kind,
-        label: getRunnerBackend(kind).label,
-        available: false,
-        reachable: false,
-        reason: configured
-          ? `${configured} did not pass the version preflight`
-          : 'runner binary is not installed or configured on this host',
-      };
-    }
-    const capabilities = await probeAcpCapabilities(
-      acpConfigFor(kind, configured ? { binPath: configured } : {}),
-      { timeoutMs: 20_000 },
-    );
+/**
+ * Each probed kind spawns a CLI and (when reachable) sends one live
+ * diagnostic prompt to that vendor's provider. Running all ~31 at once would
+ * fire a burst of real, billable requests at a handful of providers, so the
+ * dump is bounded — evidence collection must not look like an attack.
+ */
+const MAX_CONCURRENT_PROBES = 3;
+
+type Row = Record<string, unknown> & { kind: RunnerKind };
+
+async function probeOne(kind: RunnerKind): Promise<Row> {
+  const configured = process.env[envKey(kind)];
+  const availability = await probeCliAvailability(kind, configured);
+  if (!availability.available) {
     return {
       kind,
       label: getRunnerBackend(kind).label,
-      available: true,
-      ...(availability.version ? { version: availability.version } : {}),
-      ...capabilities,
+      available: false,
+      reachable: false,
+      reason: configured
+        ? `${configured} did not pass the version preflight`
+        : 'runner binary is not installed or configured on this host',
     };
+  }
+  const capabilities = await probeAcpCapabilities(
+    acpConfigFor(kind, configured ? { binPath: configured } : {}),
+    // This dump is the one place that WANTS the live prompt: the observed
+    // usage/config-update/locations signals are its whole point.
+    { timeoutMs: 20_000, probeLivePrompt: true },
+  );
+  return {
+    kind,
+    label: getRunnerBackend(kind).label,
+    available: true,
+    ...(availability.version ? { version: availability.version } : {}),
+    ...capabilities,
+  };
+}
+
+const rows: Row[] = [];
+let next = 0;
+await Promise.all(
+  Array.from({ length: Math.min(MAX_CONCURRENT_PROBES, runnerKinds.length) }, async () => {
+    for (let index = next++; index < runnerKinds.length; index = next++) {
+      rows[index] = await probeOne(runnerKinds[index]!);
+    }
   }),
 );
 

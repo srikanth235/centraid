@@ -94,3 +94,78 @@ test.each([
     failureClass,
   );
 });
+
+// ---- classification precedence ------------------------------------------
+//
+// The class drives a per-class circuit breaker (issue #567 D7), so a
+// misclassification trips the wrong breaker. Structured signals must beat
+// keyword scans, and the primary message must beat vendor stderr — these
+// stderr strings are the full, realistic multi-line dumps agents actually
+// print, not one hand-picked line.
+
+const CRASH_STDERR = [
+  "thread 'main' panicked at src/session.rs:214:",
+  'called `Result::unwrap()` on an `Err` value: Elapsed(())',
+  'note: request timeout was set to 30s (RUST_BACKTRACE=1 for a backtrace)',
+  '  0: agent_core::session::prompt',
+  '  1: agent_core::main',
+].join('\n');
+
+test('a crash whose stderr mentions a timeout is not classified as a timeout', () => {
+  const detail = classifyAgentFailureDetail(
+    new Error('acp agent exited with code 101'),
+    CRASH_STDERR,
+    config,
+  );
+  expect(detail.failureClass).toBe('exit');
+  // The evidence is still reported to the owner verbatim.
+  expect(detail.message).toContain('panicked');
+});
+
+test('stderr is still consulted when the message decides nothing', () => {
+  expect(
+    classifyAgentFailureDetail(new Error('agent stopped responding'), CRASH_STDERR, config)
+      .failureClass,
+  ).toBe('timeout');
+});
+
+test('a quota RPC code outranks a message with no quota wording', () => {
+  const detail = classifyAgentFailureDetail(
+    // -32029 is what the scripted agent (and agents in this space) answer for
+    // a rate limit; the text alone would fall through to `init`.
+    new AcpRpcError(-32029, 'The model is overloaded, please retry'),
+    'HTTP 429 from provider\nretry-after: 60',
+    config,
+  );
+  expect(detail.failureClass).toBe('quota');
+});
+
+test('a forwarded HTTP 429 RPC code is a quota failure', () => {
+  expect(
+    classifyAgentFailureDetail(new AcpRpcError(429, 'Too Many Requests'), '', config).failureClass,
+  ).toBe('quota');
+});
+
+test('our own stage timeouts classify by stage, not by keyword', () => {
+  // These strings are authored by the backend's `requestWithTimeout`, so the
+  // stage name in them is structured evidence.
+  expect(
+    classifyAgentFailureDetail(new Error('ACP session/new timed out after 20000ms'), '', config)
+      .failureClass,
+  ).toBe('init');
+  expect(
+    classifyAgentFailureDetail(new Error('ACP initialize timed out after 20000ms'), '', config)
+      .failureClass,
+  ).toBe('init');
+  expect(
+    classifyAgentFailureDetail(new Error('ACP session/close timed out after 20000ms'), '', config)
+      .failureClass,
+  ).toBe('timeout');
+  expect(
+    classifyAgentFailureDetail(
+      new Error('ACP prompt idle watchdog timed out after 120000ms (wedge)'),
+      '',
+      config,
+    ).failureClass,
+  ).toBe('wedge');
+});

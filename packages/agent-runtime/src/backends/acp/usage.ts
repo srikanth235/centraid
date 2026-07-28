@@ -139,7 +139,11 @@ export function buildUsageEvent(
   cost: UsageCost | undefined,
 ): TurnStreamEvent | undefined {
   const costUsd = cost && cost.currency.toUpperCase() === 'USD' ? cost.amount : undefined;
-  if (Object.keys(tokens).length === 0 && costUsd === undefined && effort === undefined) {
+  // Effort alone is not usage. Emitting for it books a zero-token, zero-cost
+  // ledger row whose only content is a configuration label — noise the
+  // repricing pipeline then has to carry forever. Effort rides ALONG with
+  // real usage (below) when there is any.
+  if (Object.keys(tokens).length === 0 && costUsd === undefined) {
     return undefined;
   }
   return {

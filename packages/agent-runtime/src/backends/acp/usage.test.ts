@@ -148,6 +148,17 @@ describe('buildUsageEvent', () => {
     expect(event && 'costUsd' in event).toBe(false);
   });
 
+  it('does not book a usage row for effort alone', () => {
+    // Effort is a configuration label, not spend. Emitting for it wrote a
+    // zero-token, zero-cost ledger row for every turn a runner reported no
+    // usage at all.
+    expect(buildUsageEvent('acp', 'm', 'high', {}, undefined)).toBeUndefined();
+    // It still rides along whenever there IS usage to book (see above).
+    expect(buildUsageEvent('acp', 'm', 'high', { inputTokens: 1 }, undefined)).toMatchObject({
+      effort: 'high',
+    });
+  });
+
   it('omits an unconfirmed model so repricing never trusts a guess', () => {
     const event = buildUsageEvent('acp', undefined, undefined, { inputTokens: 5 }, undefined);
     expect(event && 'model' in event).toBe(false);
