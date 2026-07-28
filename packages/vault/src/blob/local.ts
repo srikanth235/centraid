@@ -12,6 +12,7 @@ import {
   createReadStream,
   existsSync,
   fsyncSync,
+  linkSync,
   mkdirSync,
   openSync,
   readSync,
@@ -29,6 +30,19 @@ import { asVaultDiskFullError } from '../errors.js';
 import { assertSha, resolveRange, type BlobRange, type BlobStat, type BlobStore } from './store.js';
 
 /* eslint-disable max-classes-per-file -- (#296) FsBlobStore + MemoryBlobStore are the two tiers of one LocalBlobStore contract (file-backed + in-memory, identical semantics), paired by design */
+
+/**
+ * What `linkFromSync` did (issue #599 decision 11):
+ *   - `linked`      a new directory entry now points at the SAME inode — zero
+ *                   bytes copied, and the filesystem's link count is the
+ *                   cross-vault refcount.
+ *   - `exists`      the content address is already populated here. CAS files
+ *                   are immutable and write-once, so same key ⇒ same bytes.
+ *   - `unsupported` the filesystem refused the link (EXDEV across mounts,
+ *                   EPERM where hardlinks are restricted). The caller falls
+ *                   back to a byte copy: identical semantics, costs bytes.
+ */
+export type BlobLinkOutcome = 'linked' | 'exists' | 'unsupported';
 
 /** The synchronous surface the command pipeline and sweeps rely on. */
 export interface LocalBlobStore extends BlobStore {
@@ -59,6 +73,14 @@ export interface LocalBlobStore extends BlobStore {
   ): { stream: Readable; size: number; range: { start: number; end: number } } | null;
   /** Local path for an authorized X-Sendfile-style native handoff. */
   localPathSync?(sha256: string): string | null;
+  /**
+   * Adopt `sourcePath`'s bytes under `sha256` by HARDLINK (issue #599 decision
+   * 11) — the share-by-placement primitive. Present only on file-backed
+   * stores; an absent implementation (the memory tier) means the caller copies
+   * instead. The two-hex fan-out stays a directory detail owned by this
+   * module, so callers never compute a CAS path themselves.
+   */
+  linkFromSync?(sha256: string, sourcePath: string): BlobLinkOutcome;
 }
 
 export class FsBlobStore implements LocalBlobStore {
@@ -192,6 +214,50 @@ export class FsBlobStore implements LocalBlobStore {
       return true;
     } catch (err) {
       throw asVaultDiskFullError('blob CAS temp adoption', err);
+    }
+  }
+
+  /**
+   * Hardlink `sourcePath` (another vault's CAS entry for the same content
+   * address) into this store. All vaults sit under one gateway rootDir on one
+   * filesystem and CAS files are immutable write-once, so a second directory
+   * entry onto the same inode is safe and copies ZERO bytes — and the
+   * filesystem's link count becomes the cross-vault refcount, so each vault's
+   * own sweep can unlink its entry without ever freeing bytes another vault
+   * still holds.
+   *
+   * Attempt-and-catch rather than a boot probe: the classification is per
+   * call, and the fallback path must be exercised either way. The catch is
+   * narrow — only the errnos that mean "this filesystem will not link" become
+   * `unsupported`; ENOSPC becomes the usual `VaultDiskFullError` and every
+   * other errno (ENOENT on a vanished source, EIO, …) propagates untouched.
+   */
+  linkFromSync(sha: string, sourcePath: string): BlobLinkOutcome {
+    const file = this.fileFor(sha);
+    if (existsSync(file)) return 'exists';
+    mkdirSync(path.dirname(file), { recursive: true });
+    try {
+      linkSync(sourcePath, file);
+      return 'linked';
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      // A concurrent placer won the race to the same content address. CAS is
+      // write-once, so the winner's bytes are ours too.
+      if (code === 'EEXIST') return 'exists';
+      // EXDEV: source and destination are on different filesystems.
+      // EPERM/EACCES/EOPNOTSUPP/ENOSYS/EMLINK: the filesystem (or its mount
+      // options, or the inode's link limit) refuses this link.
+      if (
+        code === 'EXDEV' ||
+        code === 'EPERM' ||
+        code === 'EACCES' ||
+        code === 'EOPNOTSUPP' ||
+        code === 'ENOSYS' ||
+        code === 'EMLINK'
+      ) {
+        return 'unsupported';
+      }
+      throw asVaultDiskFullError('blob CAS hardlink', err);
     }
   }
 

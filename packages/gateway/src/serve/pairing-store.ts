@@ -8,7 +8,8 @@
 
 import crypto from 'node:crypto';
 import path from 'node:path';
-import type { GrantableTrust, DeviceEnrollment, EnrollmentStore } from './enrollment-store.js';
+import type { GrantableRole, DeviceEnrollment, EnrollmentStore } from './enrollment-store.js';
+import type { MemberGrant } from './member-store.js';
 import { GatewayDatabase } from './gateway-db.js';
 import {
   clearReservedFoundingVaults,
@@ -33,10 +34,68 @@ interface TicketRow {
   ticket_id: string;
   kind: 'found' | 'enroll';
   secret_hash: string;
-  vault_id: string | null;
-  trust: GrantableTrust | null;
+  member_id: string | null;
+  grants_json: string | null;
   created_at: string;
   expires_at: number;
+}
+
+const TICKET_COLUMNS =
+  'ticket_id, kind, secret_hash, member_id, grants_json, created_at, expires_at';
+
+/** An invitation: which member joins, and the exact authority they hold. */
+export interface TicketInvitation {
+  memberId: string;
+  grants: MemberGrant[];
+}
+
+function parseGrants(raw: string | null): MemberGrant[] {
+  if (raw === null) return [];
+  const parsed: unknown = JSON.parse(raw);
+  if (!Array.isArray(parsed)) throw new Error('ticket grants are not a list');
+  return parsed.map((entry) => {
+    const grant = entry as { vaultId?: unknown; role?: unknown };
+    if (
+      typeof grant.vaultId !== 'string' ||
+      (grant.role !== 'admin' && grant.role !== 'write' && grant.role !== 'read')
+    ) {
+      throw new Error('ticket grant must be {vaultId, role}');
+    }
+    return { vaultId: grant.vaultId, role: grant.role };
+  });
+}
+
+export interface FounderEnrollInput {
+  endpointId: string;
+  vaultIds: string[];
+  label: string;
+  platform?: string;
+  /** Display label for the owner member founding creates (#599 Decision 9). */
+  memberLabel?: string;
+}
+
+/**
+ * Founding auto-creates the owner member — no extra first-run prompt, ever.
+ * The founder becomes `admin` of every vault the ceremony materialized, so a
+ * fresh install has exactly one member and zero "Unassigned" bindings.
+ */
+function enrollFounder(
+  enrollments: EnrollmentStore,
+  input: FounderEnrollInput,
+): DeviceEnrollment[] {
+  return enrollments.enrollWithinTransaction({
+    endpointId: input.endpointId,
+    memberLabel: input.memberLabel ?? 'You',
+    grants: input.vaultIds.map((vaultId) => ({ vaultId, role: 'admin' as const })),
+    label: input.label,
+    ...(input.platform !== undefined ? { platform: input.platform } : {}),
+  });
+}
+
+function invitationOf(row: TicketRow): TicketInvitation | undefined {
+  if (row.member_id === null) return undefined;
+  const grants = parseGrants(row.grants_json);
+  return grants.length > 0 ? { memberId: row.member_id, grants } : undefined;
 }
 
 function hashSecret(secret: string): string {
@@ -59,12 +118,20 @@ export class PairingTicketStore {
     return new PairingTicketStore(databaseFor(source));
   }
 
+  /**
+   * Mint an INVITATION (#599 Decision 5). The member and the full grant list
+   * are decided here, server-side, and burned into the ticket; the joining
+   * device can name neither. Authorization for WHO may mint WHAT lives in
+   * `routes/devices-routes.ts` — this store only records the decision.
+   */
   mint(
-    vaultId: string,
+    invitation: TicketInvitation,
     ttlMs = DEFAULT_TICKET_TTL_MS,
-    trust: GrantableTrust = 'full',
   ): { ticketId: string; secret: string; expiresAt: number } {
-    return this.insert('enroll', ttlMs, vaultId, trust);
+    if (invitation.grants.length === 0) {
+      throw new Error('an invitation must carry at least one vault grant');
+    }
+    return this.insert('enroll', ttlMs, invitation.memberId, invitation.grants);
   }
 
   /**
@@ -95,12 +162,17 @@ export class PairingTicketStore {
     });
   }
 
-  redeem(ticketId: string, secret: string): { vaultId: string; trust: GrantableTrust } | undefined {
+  redeem(ticketId: string, secret: string): TicketInvitation | undefined {
     const row = this.consume(ticketId, secret, 'enroll');
-    if (!row?.vault_id || !row.trust) return undefined;
-    return { vaultId: row.vault_id, trust: row.trust };
+    return row ? invitationOf(row) : undefined;
   }
 
+  /**
+   * One scan, every grant, ONE transaction: the burn, the member's roles, and
+   * the device binding commit together or not at all. A failure anywhere —
+   * including the injected `beforeEnroll` seam — rolls the ticket back and
+   * leaves zero enrollment, never a half-paired device (#599 AC).
+   */
   redeemAndEnroll(
     ticketId: string,
     secret: string,
@@ -113,22 +185,23 @@ export class PairingTicketStore {
       grantProfile?: string[];
     },
     beforeEnroll?: () => void,
-  ): DeviceEnrollment | undefined {
+  ): DeviceEnrollment[] | undefined {
     if (enrollments.gatewayDatabase.file !== this.gatewayDatabase.file) {
       throw new Error('ticket and enrollment stores must share gateway.db');
     }
     return this.gatewayDatabase.transaction(() => {
       const row = this.consumeWithinTransaction(ticketId, secret, 'enroll');
-      if (!row?.vault_id || !row.trust) return undefined;
+      const invitation = row ? invitationOf(row) : undefined;
+      if (!invitation) return undefined;
       beforeEnroll?.();
       return enrollments.enrollWithinTransaction({
         endpointId: input.endpointId,
-        vaultId: row.vault_id,
+        memberId: invitation.memberId,
+        grants: invitation.grants,
         label: input.label,
         ...(input.platform !== undefined ? { platform: input.platform } : {}),
         ...(input.rememberDevice !== undefined ? { rememberDevice: input.rememberDevice } : {}),
         ...(input.grantProfile !== undefined ? { grantProfile: input.grantProfile } : {}),
-        trust: row.trust,
       });
     });
   }
@@ -146,6 +219,7 @@ export class PairingTicketStore {
       vaultId: string;
       label: string;
       platform?: string;
+      memberLabel?: string;
     },
     beforeEnroll?: () => void,
   ): DeviceEnrollment | undefined {
@@ -154,8 +228,11 @@ export class PairingTicketStore {
       secret,
       enrollments,
       {
-        ...input,
+        endpointId: input.endpointId,
         vaultIds: [input.vaultId],
+        label: input.label,
+        ...(input.platform !== undefined ? { platform: input.platform } : {}),
+        ...(input.memberLabel !== undefined ? { memberLabel: input.memberLabel } : {}),
       },
       beforeEnroll,
     )?.[0];
@@ -165,12 +242,7 @@ export class PairingTicketStore {
     ticketId: string,
     secret: string,
     enrollments: EnrollmentStore,
-    input: {
-      endpointId: string;
-      vaultIds: string[];
-      label: string;
-      platform?: string;
-    },
+    input: FounderEnrollInput,
     beforeEnroll?: () => void,
   ): DeviceEnrollment[] | undefined {
     if (enrollments.gatewayDatabase.file !== this.gatewayDatabase.file) {
@@ -180,15 +252,7 @@ export class PairingTicketStore {
       const row = this.consumeWithinTransaction(ticketId, secret, 'found');
       if (!row) return undefined;
       beforeEnroll?.();
-      return input.vaultIds.map((vaultId) =>
-        enrollments.enrollWithinTransaction({
-          endpointId: input.endpointId,
-          vaultId,
-          label: input.label,
-          ...(input.platform !== undefined ? { platform: input.platform } : {}),
-          trust: 'owner',
-        }),
-      );
+      return enrollFounder(enrollments, input);
     });
   }
 
@@ -206,7 +270,7 @@ export class PairingTicketStore {
     return this.gatewayDatabase.transaction(() => {
       const row = this.gatewayDatabase.db
         .prepare(
-          `SELECT ticket_id, kind, secret_hash, vault_id, trust, created_at, expires_at
+          `SELECT ${TICKET_COLUMNS}
              FROM tickets
             WHERE ticket_id = ? AND kind = 'found'`,
         )
@@ -246,12 +310,7 @@ export class PairingTicketStore {
   redeemReservedFoundingAndEnrollMany(
     reservationId: string,
     enrollments: EnrollmentStore,
-    input: {
-      endpointId: string;
-      vaultIds: string[];
-      label: string;
-      platform?: string;
-    },
+    input: FounderEnrollInput,
     beforeEnroll?: () => void,
     afterEnroll?: () => void,
   ): DeviceEnrollment[] | undefined {
@@ -272,15 +331,7 @@ export class PairingTicketStore {
         .run(reservation.ticket_id);
       if (deleted.changes !== 1) return undefined;
       beforeEnroll?.();
-      const enrolled = input.vaultIds.map((vaultId) =>
-        enrollments.enrollWithinTransaction({
-          endpointId: input.endpointId,
-          vaultId,
-          label: input.label,
-          ...(input.platform !== undefined ? { platform: input.platform } : {}),
-          trust: 'owner',
-        }),
-      );
+      const enrolled = enrollFounder(enrollments, input);
       afterEnroll?.();
       return enrolled;
     });
@@ -317,7 +368,7 @@ export class PairingTicketStore {
   validatesFounding(ticketId: string, secret: string): boolean {
     const row = this.gatewayDatabase.db
       .prepare(
-        `SELECT ticket_id, kind, secret_hash, vault_id, trust, created_at, expires_at
+        `SELECT ${TICKET_COLUMNS}
            FROM tickets
           WHERE ticket_id = ? AND kind = 'found' AND expires_at > ?`,
       )
@@ -330,48 +381,42 @@ export class PairingTicketStore {
 
   listActive(): Array<{
     ticketId: string;
-    vaultId: string;
-    trust: GrantableTrust;
+    memberId: string;
+    grants: MemberGrant[];
     expiresAt: number;
   }> {
     const now = Date.now();
     return (
       this.gatewayDatabase.db
         .prepare(
-          `SELECT ticket_id, kind, secret_hash, vault_id, trust, created_at, expires_at
+          `SELECT ${TICKET_COLUMNS}
              FROM tickets WHERE kind = 'enroll' AND expires_at > ? ORDER BY created_at`,
         )
         .all(now) as unknown as TicketRow[]
-    ).flatMap((row) =>
-      row.vault_id && row.trust
-        ? [
-            {
-              ticketId: row.ticket_id,
-              vaultId: row.vault_id,
-              trust: row.trust,
-              expiresAt: row.expires_at,
-            },
-          ]
-        : [],
-    );
+    ).flatMap((row) => {
+      const invitation = invitationOf(row);
+      return invitation
+        ? [{ ...invitation, ticketId: row.ticket_id, expiresAt: row.expires_at }]
+        : [];
+    });
   }
 
   private insert(
     kind: 'found' | 'enroll',
     ttlMs: number,
-    vaultId: string | null,
-    trust: GrantableTrust | null,
+    memberId: string | null,
+    grants: readonly MemberGrant[] | null,
   ): { ticketId: string; secret: string; expiresAt: number } {
     return this.gatewayDatabase.transaction(() =>
-      this.insertWithinTransaction(kind, ttlMs, vaultId, trust),
+      this.insertWithinTransaction(kind, ttlMs, memberId, grants),
     );
   }
 
   private insertWithinTransaction(
     kind: 'found' | 'enroll',
     ttlMs: number,
-    vaultId: string | null,
-    trust: GrantableTrust | null,
+    memberId: string | null,
+    grants: readonly MemberGrant[] | null,
   ): { ticketId: string; secret: string; expiresAt: number } {
     const ticketId = crypto.randomUUID();
     const secret = crypto.randomBytes(32).toString('base64url');
@@ -379,10 +424,18 @@ export class PairingTicketStore {
     this.gatewayDatabase.db
       .prepare(
         `INSERT INTO tickets (
-          ticket_id, kind, secret_hash, vault_id, trust, created_at, expires_at
+          ticket_id, kind, secret_hash, member_id, grants_json, created_at, expires_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(ticketId, kind, hashSecret(secret), vaultId, trust, new Date().toISOString(), expiresAt);
+      .run(
+        ticketId,
+        kind,
+        hashSecret(secret),
+        memberId,
+        grants === null ? null : JSON.stringify(grants),
+        new Date().toISOString(),
+        expiresAt,
+      );
     return { ticketId, secret, expiresAt };
   }
 
@@ -403,7 +456,7 @@ export class PairingTicketStore {
   ): TicketRow | undefined {
     const row = this.gatewayDatabase.db
       .prepare(
-        `SELECT ticket_id, kind, secret_hash, vault_id, trust, created_at, expires_at
+        `SELECT ${TICKET_COLUMNS}
            FROM tickets
           WHERE ticket_id = ? AND kind = ?`,
       )

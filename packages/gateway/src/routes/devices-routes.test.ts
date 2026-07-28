@@ -1,66 +1,8 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { AUTHED_DEVICE_HEADER } from '@centraid/app-engine';
-import { afterEach, expect, test, vi } from 'vitest';
-import http from 'node:http';
-import { promises as fs } from 'node:fs';
-import type { AddressInfo } from 'node:net';
-import { EnrollmentStore } from '../serve/enrollment-store.js';
-import { GatewayDatabase } from '../serve/gateway-db.js';
-import { PairingTicketStore, parsePairingTicket } from '../serve/pairing-store.js';
-import { hashControlToken, WebControlSessionStore } from '../serve/web-session-store.js';
-import { makeDevicesRouteHandler, type DevicesRouteDeps } from './devices-routes.js';
+import { afterEach, expect, test } from 'vitest';
+import { hashControlToken } from '../serve/web-session-store.js';
+import { cleanupHarnesses, deviceHeaders, harness } from './devices-routes.test-fixtures.js';
 
-const servers: http.Server[] = [];
-const databases: GatewayDatabase[] = [];
-const dirs: string[] = [];
-
-afterEach(async () => {
-  for (const server of servers.splice(0)) server.close();
-  for (const database of databases.splice(0)) database.close();
-  for (const dir of dirs.splice(0)) await fs.rm(dir, { recursive: true, force: true });
-});
-
-async function harness(
-  overrides: Partial<Pick<DevicesRouteDeps, 'endpointTicket' | 'isUninitialized'>> = {},
-): Promise<{
-  base: string;
-  enrollments: EnrollmentStore;
-  tickets: PairingTicketStore;
-  sessions: WebControlSessionStore;
-  onEndpointRevoked: ReturnType<typeof vi.fn>;
-}> {
-  const dir = await tempDir('devices-routes-');
-  dirs.push(dir);
-  const database = GatewayDatabase.open(dir);
-  databases.push(database);
-  const enrollments = EnrollmentStore.open(database);
-  const tickets = PairingTicketStore.open(database);
-  const sessions = WebControlSessionStore.open(database);
-  const onEndpointRevoked = vi.fn();
-  const handler = makeDevicesRouteHandler({
-    enrollments,
-    tickets,
-    vaultName: (vaultId) => (vaultId === 'vault-a' ? 'Personal' : undefined),
-    endpointTicket: () => 'endpoint-ticket',
-    onEndpointRevoked,
-    ...overrides,
-  });
-  const server = http.createServer((req, res) => void handler(req, res));
-  servers.push(server);
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-  const { port } = server.address() as AddressInfo;
-  return {
-    base: `http://127.0.0.1:${port}`,
-    enrollments,
-    tickets,
-    sessions,
-    onEndpointRevoked,
-  };
-}
-
-function deviceHeaders(endpointId: string): Record<string, string> {
-  return { [AUTHED_DEVICE_HEADER]: endpointId, 'content-type': 'application/json' };
-}
+afterEach(cleanupHarnesses);
 
 test('roster requires a proved identity and exposes only enrolled iroh rows', async () => {
   const f = await harness();
@@ -68,7 +10,7 @@ test('roster requires a proved identity and exposes only enrolled iroh rows', as
     endpointId: 'owner-key',
     vaultId: 'vault-a',
     label: 'Owner laptop',
-    trust: 'owner',
+    role: 'admin',
   });
   f.enrollments.enroll({
     endpointId: 'other-key',
@@ -88,54 +30,9 @@ test('roster requires a proved identity and exposes only enrolled iroh rows', as
         transport: 'iroh',
         vaultId: 'vault-a',
         current: true,
-        trust: 'owner',
+        role: 'admin',
       },
     ],
-  });
-});
-
-test('owner mints a full-trust iroh ticket; ordinary devices cannot delegate', async () => {
-  const f = await harness();
-  f.enrollments.enroll({
-    endpointId: 'owner-key',
-    vaultId: 'vault-a',
-    label: 'Owner',
-    trust: 'owner',
-  });
-  f.enrollments.enroll({
-    endpointId: 'full-key',
-    vaultId: 'vault-a',
-    label: 'Member',
-    trust: 'full',
-  });
-  const body = JSON.stringify({ vaultId: 'vault-a' });
-  const anonymous = await fetch(`${f.base}/centraid/_gateway/devices/ticket`, {
-    method: 'POST',
-    body,
-  });
-  expect(anonymous.status).toBe(403);
-
-  const denied = await fetch(`${f.base}/centraid/_gateway/devices/ticket`, {
-    method: 'POST',
-    headers: deviceHeaders('full-key'),
-    body,
-  });
-  expect(denied.status).toBe(403);
-
-  const minted = await fetch(`${f.base}/centraid/_gateway/devices/ticket`, {
-    method: 'POST',
-    headers: deviceHeaders('owner-key'),
-    body,
-  });
-  expect(minted.status).toBe(200);
-  const payload = (await minted.json()) as { ticket: string };
-  const parsed = parsePairingTicket(payload.ticket);
-  expect(parsed).toBeDefined();
-  if (!parsed) throw new Error('ticket did not parse');
-  expect(parsed.gw).toBe('endpoint-ticket');
-  expect(f.tickets.redeem(parsed.t, parsed.s)).toMatchObject({
-    vaultId: 'vault-a',
-    trust: 'full',
   });
 });
 
@@ -145,13 +42,13 @@ test('revocation cascades web sessions and closes the iroh transport', async () 
     endpointId: 'owner-key',
     vaultId: 'vault-a',
     label: 'Owner',
-    trust: 'owner',
+    role: 'admin',
   });
   const member = f.enrollments.enroll({
     endpointId: 'member-key',
     vaultId: 'vault-a',
     label: 'Member',
-    trust: 'full',
+    role: 'write',
   });
   const tokenHash = hashControlToken('control-token');
   f.sessions.establish({
@@ -175,13 +72,13 @@ test('revocation cascades web sessions and closes the iroh transport', async () 
   expect(f.onEndpointRevoked).toHaveBeenCalledWith('member-key');
 });
 
-test('revoking the last owner requires typing the vault name exactly', async () => {
+test('revoking the last admin requires typing the vault name exactly', async () => {
   const f = await harness();
   const owner = f.enrollments.enroll({
     endpointId: 'owner-key',
     vaultId: 'vault-a',
     label: 'Owner',
-    trust: 'owner',
+    role: 'admin',
   });
   const url = `${f.base}/centraid/_gateway/devices/${encodeURIComponent(owner.enrollmentId)}`;
 
@@ -190,22 +87,25 @@ test('revoking the last owner requires typing the vault name exactly', async () 
     headers: deviceHeaders(owner.endpointId),
   });
   expect(missing.status).toBe(409);
-  expect(await missing.json()).toMatchObject({ error: 'last_owner_confirmation_required' });
+  expect(await missing.json()).toMatchObject({ error: 'last_admin_confirmation_required' });
 
   const wrong = await fetch(url, {
     method: 'DELETE',
     headers: deviceHeaders(owner.endpointId),
-    body: JSON.stringify({ confirmLastOwner: 'personal' }),
+    body: JSON.stringify({ confirmLastAdmin: 'personal' }),
   });
   expect(wrong.status).toBe(409);
 
   const confirmed = await fetch(url, {
     method: 'DELETE',
     headers: deviceHeaders(owner.endpointId),
-    body: JSON.stringify({ confirmLastOwner: 'Personal' }),
+    body: JSON.stringify({ confirmLastAdmin: 'Personal' }),
   });
   expect(confirmed.status).toBe(200);
-  expect(f.enrollments.listByVault('vault-a')).toEqual([]);
+  // Revocation tombstones the BINDING; the owner member and their grant
+  // survive so `devices add` from the box can bring a replacement device in.
+  expect(f.enrollments.listByVault('vault-a').map((row) => row.role)).toEqual(['revoked']);
+  expect(f.enrollments.isEnrolled('owner-key')).toBe(false);
 });
 
 test('compute profile validates every capability and persists a valid update', async () => {
@@ -214,7 +114,7 @@ test('compute profile validates every capability and persists a valid update', a
     endpointId: 'device-key',
     vaultId: 'vault-a',
     label: 'Phone',
-    trust: 'full',
+    role: 'write',
   });
   const url = `${f.base}/centraid/_gateway/devices/${encodeURIComponent(device.enrollmentId)}/compute`;
 
@@ -267,13 +167,13 @@ test('DELETE of an already-revoked enrollment is idempotent, not an error', asyn
     endpointId: 'owner-key',
     vaultId: 'vault-a',
     label: 'Owner',
-    trust: 'owner',
+    role: 'admin',
   });
   const member = f.enrollments.enroll({
     endpointId: 'member-key',
     vaultId: 'vault-a',
     label: 'Member',
-    trust: 'full',
+    role: 'write',
   });
   const url = `${f.base}/centraid/_gateway/devices/${encodeURIComponent(member.enrollmentId)}`;
 
@@ -292,7 +192,7 @@ test('every devices route refuses a wrong method with 405', async () => {
     endpointId: 'owner-key',
     vaultId: 'vault-a',
     label: 'Owner',
-    trust: 'owner',
+    role: 'admin',
   });
   const cases: Array<[string, string]> = [
     ['/centraid/_gateway/devices', 'POST'],
@@ -316,13 +216,13 @@ test('an enrollment in a foreign vault 404s rather than leaking its existence', 
     endpointId: 'owner-key',
     vaultId: 'vault-a',
     label: 'Owner',
-    trust: 'owner',
+    role: 'admin',
   });
   const foreign = f.enrollments.enroll({
     endpointId: 'stranger-key',
     vaultId: 'vault-b',
     label: 'Stranger',
-    trust: 'owner',
+    role: 'admin',
   });
   for (const route of [
     `/centraid/_gateway/devices/${encodeURIComponent(foreign.enrollmentId)}`,
@@ -338,25 +238,25 @@ test('an enrollment in a foreign vault 404s rather than leaking its existence', 
   expect(f.enrollments.isEnrolled('stranger-key')).toBe(true);
 });
 
-test('a full-trust device cannot revoke a peer but may unpair itself', async () => {
+test('a full-role device cannot revoke a peer but may unpair itself', async () => {
   const f = await harness();
   f.enrollments.enroll({
     endpointId: 'owner-key',
     vaultId: 'vault-a',
     label: 'Owner',
-    trust: 'owner',
+    role: 'admin',
   });
   const member = f.enrollments.enroll({
     endpointId: 'member-key',
     vaultId: 'vault-a',
     label: 'Member',
-    trust: 'full',
+    role: 'write',
   });
   const peer = f.enrollments.enroll({
     endpointId: 'peer-key',
     vaultId: 'vault-a',
     label: 'Peer',
-    trust: 'full',
+    role: 'write',
   });
 
   // This is what stops a compromised `full` device from revoking its owner.
@@ -365,7 +265,7 @@ test('a full-trust device cannot revoke a peer but may unpair itself', async () 
     { method: 'DELETE', headers: deviceHeaders('member-key') },
   );
   expect(denied.status).toBe(403);
-  expect(await denied.json()).toMatchObject({ error: 'not_owner' });
+  expect(await denied.json()).toMatchObject({ error: 'not_admin' });
   expect(f.enrollments.isEnrolled('peer-key')).toBe(true);
 
   // Self-unpair by a non-owner stays allowed — leaving is always the device's
@@ -376,71 +276,4 @@ test('a full-trust device cannot revoke a peer but may unpair itself', async () 
   );
   expect(selfUnpair.status).toBe(200);
   expect(f.enrollments.isEnrolled('member-key')).toBe(false);
-});
-
-test('minting a ticket with no resolvable vault answers vault_required', async () => {
-  const f = await harness();
-  // Enrolled in a vault the handler's `vaultName` does not know, and no
-  // explicit target — nothing to scope the ticket to.
-  f.enrollments.enroll({
-    endpointId: 'owner-key',
-    vaultId: 'vault-b',
-    label: 'Owner',
-    trust: 'owner',
-  });
-  const anonymousVault = await fetch(`${f.base}/centraid/_gateway/devices/ticket`, {
-    method: 'POST',
-    headers: deviceHeaders('owner-key'),
-    body: JSON.stringify({}),
-  });
-  expect(anonymousVault.status).toBe(404);
-
-  const noVaults = await harness();
-  noVaults.enrollments.enroll({
-    endpointId: 'lonely-key',
-    vaultId: 'vault-a',
-    label: 'Owner',
-    trust: 'owner',
-  });
-  const unknownTarget = await fetch(`${noVaults.base}/centraid/_gateway/devices/ticket`, {
-    method: 'POST',
-    headers: deviceHeaders('lonely-key'),
-    body: JSON.stringify({ vaultId: 'no-such-vault' }),
-  });
-  expect(unknownTarget.status).toBe(400);
-  expect(await unknownTarget.json()).toMatchObject({ error: 'vault_required' });
-});
-
-test('a gateway with no iroh endpoint refuses to mint a dud ticket', async () => {
-  const f = await harness({ endpointTicket: () => undefined });
-  f.enrollments.enroll({
-    endpointId: 'owner-key',
-    vaultId: 'vault-a',
-    label: 'Owner',
-    trust: 'owner',
-  });
-  const response = await fetch(`${f.base}/centraid/_gateway/devices/ticket`, {
-    method: 'POST',
-    headers: deviceHeaders('owner-key'),
-    body: JSON.stringify({ vaultId: 'vault-a' }),
-  });
-  expect(response.status).toBe(409);
-  expect(await response.json()).toMatchObject({ error: 'no_iroh_endpoint' });
-});
-
-test('a pre-founding gateway refuses ordinary pairing with uninitialized', async () => {
-  const f = await harness({ isUninitialized: () => true });
-  f.enrollments.enroll({
-    endpointId: 'owner-key',
-    vaultId: 'vault-a',
-    label: 'Owner',
-    trust: 'owner',
-  });
-  const response = await fetch(`${f.base}/centraid/_gateway/devices/ticket`, {
-    method: 'POST',
-    headers: deviceHeaders('owner-key'),
-    body: JSON.stringify({ vaultId: 'vault-a' }),
-  });
-  expect(response.status).toBe(409);
-  expect(await response.json()).toMatchObject({ error: 'uninitialized' });
 });

@@ -41,6 +41,8 @@ There is **no `run` layer** and no `run_nodes` table (collapsed in #190). Automa
 | **journal** | `journal.db` — audit/receipt stream **and** conversation ledger bands. | vault package + app-engine `gateway-db.ts` |
 | **replica** | Consent-scoped, read-mostly device copy; intents for offline writes; gateway is sole canonical writer. | `packages/vault` replica schema; `packages/client/src/replica/` |
 | **pairing** | One-time ticket ceremony that enrolls a device key to a vault over the tunnel. | `packages/gateway` pairing/enrollment stores; `packages/tunnel` |
+| **member** | A human principal on the gateway — the L2 layer of the auth model (#599). Stable `member_id` + editable label in `gateway.db`; devices bind to a member and inherit its roles. Never a `core_party` row: people-as-*data* and people-as-*principals* are separate concepts, and a party row never confers authority. See [Members and roles](#members-and-roles-gateway-599). | `members` / `member_roles` in `gateway-db.ts` |
+| **role** | The authority a **member** holds in a vault — what they may **do**: `admin` / `write` / `read`, authored per `(member, vault)`; devices inherit. UI labels: Owner / Member / Viewer. See [Members and roles](#members-and-roles-gateway-599). | `DeviceRole` / `GrantableRole` / `canWrite()` in `enrollment-store.ts` |
 | **tunnel / relay** | Iroh QUIC device path; browsers are relay-only (no UDP). | `packages/tunnel`, `packages/tunnel/data-plane` |
 | **CAS / custody** | Content-addressed blob store; local-only vs remote-primary lifecycle. | `packages/vault` blob; backup package |
 | **skill** | Agent grounding unit (`SKILL.md`) loaded by the agent runtime. | `packages/gateway/src/skills` |
@@ -58,6 +60,33 @@ There is **no `run` layer** and no `run_nodes` table (collapsed in #190). Automa
 | **client package** | Shared React shell + browser-safe HTTP. `packages/client` |
 | **daemon** | Standalone `centraid-gateway` process under a `dataDir`. |
 
+## Members and roles (gateway, #599)
+
+The auth model has five layers (issue #599): **L0 custody** (the gateway box, landlord bearer, recovery kit), **L1 authentication** (devices proving iroh EndpointIds — the only cryptographically provable layer), **L2 principals** (members and agents), **L3 authorization** (`(member, vault) → role`), **L4 attribution** (the journal records the acting member — and the agent when one acted — whenever a principal is known; scheduler-fired automations carry none). Keep the axes in separate words:
+
+- **trust / identity** — is this device *who it claims*? Answered by its proved iroh EndpointId. Nothing to do with authority.
+- **member** — *who is acting*? The human behind the device. Devices are pure bindings `(endpoint_id, member_id)`.
+- **role** — what may this member *do in this vault*? Authored per `(member, vault)`, revocable; every device the member enrolls inherits it. There is **no per-device role** and no attenuation — a communal device (kitchen iPad) enrolls as its own low-trust member.
+
+| Role | Value | UI label | May do |
+| --- | --- | --- | --- |
+| admin | `admin` | Owner | Everything `write` may, **plus** invite people, grant roles, revoke devices, remove members. Creating a vault makes you its owner. |
+| write | `write` | Member | Read the vault and change it. **The default for every grant**, CLI and UI. |
+| read | `read` | Viewer | Read/query only; mutations refused at the gate. |
+
+`revoked` is **not a role** — it is a tombstone state a device binding is put into. It is never granted, never offered in a picker, and deliberately absent from `GrantableRole`.
+
+Invariants:
+
+- **No vault types.** Every vault is a vault with a membership list; "personal" and "shared" are descriptions of that list, never a `type` column or a conversion flow.
+- **Narrower vaults over finer roles.** Finer-grained permission wants (per-item visibility, a fourth role tier) are answered with another vault, not with row-level ACLs — the fence against Model B drift (#599).
+- **Minting splits by target.** Any member may **self-pair** a new device at their own roles from an already-enrolled device; only a vault's **owners** mint invitations for other people. A ticket is an invitation `(member, [(vault, role)…])` — server-authoritative, one scan, atomic across all grants; the joining device can never name its own member or roles.
+- **Two revocation verbs.** *Revoke a device* leaves the member and their other devices intact; *remove a member* is one atomic operation that kills all their bindings.
+- Founding auto-creates the owner's member with no prompt; every vault keeps ≥1 owner, and removing the last owner requires explicit confirmation (`--confirm-last-admin` / `confirmLastAdmin`).
+- **Sharing is placement, not filtering.** Data crosses vaults only by projection into an audience vault ("Share to <audience>"), recorded in `core_share_origin`. No one can ever query your vault; what others see is only what was placed where they are.
+
+One deliberate mapping: the vault's `consent_device.trust` (`full`/`readonly`) is a **capability mirror**, not the role. `admin` and `write` both collapse to `full` there, because minting and revoking are gateway-plane concerns the vault has no opinion about.
+
 ## Forbidden / discouraged synonyms (broader)
 
 | Avoid | Prefer |
@@ -67,6 +96,12 @@ There is **no `run` layer** and no `run_nodes` table (collapsed in #190). Automa
 | "template app" after install | **app** (blueprint is the shipped source) |
 | "plugin" for declared handlers | **handler** / **query** / **action** |
 | "identity.sqlite" / multi-user gateway identity | vault owner *is* the user (#280) |
+| `owner` as a **device** role | **`admin`** — the owner is the human; a device is never the owner |
+| `full` as a device role | **`write`** — "full" is a lie once `admin` sits above it |
+| "trust" / "trust tier" for what a device may do | **role** — trust is proved identity, role is granted authority |
+| "the active vault" as a user-facing mode / a space switcher | **spaces are never switched between** (#599, Decision 14). The sidebar switcher is retired: Household lists every space the member can reach, each creation flow (conversation, app, install) names its target with a visible picker, and the active-vault pointer survives only as an INTERNAL default for surfaces with no explicit target (per-space home pins, the ambient request header). The one switcher left is the **gateway** switcher, shown only when more than one gateway is registered. |
+| "user" / "account" for a household principal | **member** — there are no accounts, passwords, or sessions; a member is a principal on the enrollment plane (#599) |
+| "token" for the pairing artifact | **ticket** — one-time, burns on redemption (#555 removed bearer redemption) |
 | `com.centraid.*` identifiers | **`dev.centraid.*`** ([identifiers.md](identifiers.md)) |
 
 ## Inconsistencies (known dual vocabulary)

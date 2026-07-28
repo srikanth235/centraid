@@ -26,6 +26,10 @@ export function SelectionBarView({
   busy: boolean;
   refresh: () => Promise<void>;
   setBarBusy: (on: boolean) => void;
+  /**
+   * The scope a selected asset is shown from (issue #599). A selection can
+   * span scopes, so the delete/restore batches address each asset's own.
+   */
   onToggleMenu: () => void;
   onCloseMenu: () => void;
   onExit: () => void;

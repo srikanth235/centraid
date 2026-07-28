@@ -18,10 +18,11 @@ import type { AppearancePrefs } from '../../../app-shell-context.js';
 import { deleteApp, updateAppMeta } from '../../../gateway-client.js';
 import type { InlineAppModule } from '@centraid/blueprints/apps/inline-types';
 import {
-  getReplicaShellSession,
-  type ReplicaShellSession,
+  acquireReplicaShellSession,
+  type ReplicaScopeLease,
 } from '../../../replica/shell-session.js';
-import { installInlineCentraid } from '../../blueprints/centraid-inline.js';
+import { addInlineScope, installInlineCentraid } from '../../blueprints/centraid-inline.js';
+import { scopeSetKey, useAppScopes, type ResolvedAppScope } from './useAppScopes.js';
 import { installInlineAsk } from '../../blueprints/kit-ask-inline.js';
 import { installInlineBlobImages } from '../../blueprints/inline-blob-images.js';
 import { useShellActions } from '../actions.js';
@@ -88,7 +89,9 @@ function loadDescriptor(
 interface InlineAppMountProps {
   appId: string;
   cacheKey: string;
-  loader: () => Promise<{ default: InlineAppModule }>;
+  descriptorPromise: Promise<{ default: InlineAppModule }>;
+  /** Mounted scopes, primary first (issue #599). */
+  scopes: readonly ResolvedAppScope[];
   onDescriptor: (descriptor: InlineAppModule) => void;
   onRootReady: (el: HTMLElement | null, descriptor: InlineAppModule) => void;
 }
@@ -96,28 +99,77 @@ interface InlineAppMountProps {
 function InlineAppMount({
   appId,
   cacheKey,
-  loader,
+  descriptorPromise,
+  scopes,
   onDescriptor,
   onRootReady,
 }: InlineAppMountProps): JSX.Element {
-  const descriptorPromise = useMemo(() => loadDescriptor(cacheKey, loader), [cacheKey, loader]);
-  // The live singleton session is resolved once per mount; the parent keys
-  // this component on (appId, cacheKey), so a new app means a new mount.
-  const sessionPromise = useMemo<Promise<ReplicaShellSession>>(() => getReplicaShellSession(), []);
+  // ONLY the primary scope blocks first paint (issue #599). Every audience is
+  // hydrated after the app is on screen, so a household with several shared
+  // scopes still paints as fast as a single-scope one.
+  const primary = scopes[0]!;
+  const primaryIdentity = primary.identity;
+  const primaryLease = useMemo(
+    () => acquireReplicaShellSession(primaryIdentity),
+    [primaryIdentity],
+  );
   const descriptor = use(descriptorPromise).default;
-  const session = use(sessionPromise);
+  const lease = use(primaryLease);
 
   // Install window.centraid BEFORE the app's Root renders/effects run (its first
   // refresh() reads window.centraid). The lazy state initialiser is the
   // createRoot-style resource pattern: it runs once per mount — which the
-  // parent's key makes "once per (appId, cacheKey)" — and the effect below
-  // tears it down when that mount goes away.
-  const [installation] = useState(() => ({
-    teardown: installInlineCentraid({ appId, session, queries: descriptor.queries }),
-  }));
+  // parent's key makes "once per (appId, cacheKey, scope set)" — and the effect
+  // below tears it down when that mount goes away.
+  const [installation] = useState(() => {
+    // Capture what actually got published so the hydration effect below extends
+    // THAT client, not whatever a later mount replaced it with.
+    let client: unknown;
+    const teardown = installInlineCentraid({
+      appId,
+      queries: descriptor.queries,
+      scopes: [{ scope: primary.scope, session: lease.session }],
+      onInstalled: (published) => {
+        client = published;
+      },
+    });
+    return { client, teardown };
+  });
+  const installed = installation.client;
+
   useEffect(() => {
     onDescriptor(descriptor);
-    return () => installation.teardown();
+    return () => {
+      installation.teardown();
+      lease.release();
+    };
+  }, []);
+
+  // Secondary scopes stream in. Each is an independent replica session, so one
+  // slow or failing audience never holds up the others — or the app.
+  useEffect(() => {
+    if (!descriptor.multiScope) return undefined;
+    let alive = true;
+    const leases: ReplicaScopeLease[] = [];
+    for (const entry of scopes.slice(1)) {
+      void acquireReplicaShellSession(entry.identity)
+        .then((secondary) => {
+          if (!alive) {
+            secondary.release();
+            return;
+          }
+          leases.push(secondary);
+          addInlineScope(installed, { scope: entry.scope, session: secondary.session });
+        })
+        .catch(() => {
+          // An audience that cannot be opened is simply not offered. The app
+          // keeps every scope that did mount.
+        });
+    }
+    return () => {
+      alive = false;
+      for (const held of leases) held.release();
+    };
   }, []);
 
   const Root = descriptor.Root;
@@ -303,6 +355,16 @@ export default function InlineAppRoute({
   );
 
   const cacheKey = `${appId}:${attempt}`;
+  // Kick the descriptor chunk import off NOW, so it downloads in parallel with
+  // the scopes fetch below — InlineAppMount receives this same promise, and
+  // first paint pays max(chunk, scopes) instead of their sum.
+  const descriptorPromise = useMemo(() => loadDescriptor(cacheKey, loader), [cacheKey, loader]);
+  // The mount key gains a SCOPE-SET axis (issue #599, docs/client-keying.md):
+  // the same app over a different set of scopes is a different mount, because
+  // `window.centraid` and every replica lease it holds are per scope set.
+  const scopesState = useAppScopes(appId);
+  const scopes = scopesState.status === 'ready' ? scopesState.data : null;
+  const scopeKey = scopes ? scopeSetKey(scopes) : '';
 
   return (
     <ShellFrame
@@ -329,14 +391,19 @@ export default function InlineAppRoute({
             }}
           >
             <Suspense fallback={<div className={styles.fallback}>Loading {app.name}…</div>}>
-              <InlineAppMount
-                key={`${appId}\0${cacheKey}`}
-                appId={appId}
-                cacheKey={cacheKey}
-                loader={loader}
-                onDescriptor={() => {}}
-                onRootReady={onRootReady}
-              />
+              {scopes ? (
+                <InlineAppMount
+                  key={`${appId}\0${cacheKey}\0${scopeKey}`}
+                  appId={appId}
+                  cacheKey={cacheKey}
+                  descriptorPromise={descriptorPromise}
+                  scopes={scopes}
+                  onDescriptor={() => {}}
+                  onRootReady={onRootReady}
+                />
+              ) : (
+                <div className={styles.fallback}>Loading {app.name}…</div>
+              )}
             </Suspense>
           </ErrorBoundary>
         </div>

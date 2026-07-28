@@ -173,10 +173,10 @@ export function makeFoundingRouteHandler(deps: FoundingRouteDeps): RouteHandler 
     }
 
     if (url.pathname === ROUTES.vaultInitializeVerify) {
-      const owner = deps.enrollments
+      const admin = deps.enrollments
         .list()
-        .find((row) => row.endpointId === endpointId && row.trust === 'owner');
-      if (!owner) return sendJson(res, 403, { error: 'owner_required' });
+        .find((row) => row.endpointId === endpointId && row.role === 'admin');
+      if (!admin) return sendJson(res, 403, { error: 'admin_required' });
       if (body.lossConsent !== true) {
         return sendJson(res, 409, {
           error: 'loss_consent_required',
@@ -203,7 +203,7 @@ export function makeFoundingRouteHandler(deps: FoundingRouteDeps): RouteHandler 
           message: 'the selected recovery kit is not the one this gateway just created',
         });
       }
-      return sendJson(res, 200, { ok: true, vaultId: owner.vaultId, fingerprint });
+      return sendJson(res, 200, { ok: true, vaultId: admin.vaultId, fingerprint });
     }
 
     if (!deps.vaults.isFresh()) {

@@ -96,16 +96,16 @@
     {
       "name": "gatewayPairRequest",
       "note": "centraid/gw-pair/1 ticket redemption request (all fields).",
-      "json": "{\"ticketId\":\"tkt_1a2b\",\"secret\":\"s3cr3t-one-time\",\"deviceName\":\"Pixel 9\",\"platform\":\"android\",\"rememberDevice\":true,\"trust\":\"full\"}",
-      "jsonByteLength": 131,
-      "frameBase64": "AAAAg3sidGlja2V0SWQiOiJ0a3RfMWEyYiIsInNlY3JldCI6InMzY3IzdC1vbmUtdGltZSIsImRldmljZU5hbWUiOiJQaXhlbCA5IiwicGxhdGZvcm0iOiJhbmRyb2lkIiwicmVtZW1iZXJEZXZpY2UiOnRydWUsInRydXN0IjoiZnVsbCJ9"
+      "json": "{\"ticketId\":\"tkt_1a2b\",\"secret\":\"s3cr3t-one-time\",\"deviceName\":\"Pixel 9\",\"platform\":\"android\",\"rememberDevice\":true}",
+      "jsonByteLength": 116,
+      "frameBase64": "AAAAdHsidGlja2V0SWQiOiJ0a3RfMWEyYiIsInNlY3JldCI6InMzY3IzdC1vbmUtdGltZSIsImRldmljZU5hbWUiOiJQaXhlbCA5IiwicGxhdGZvcm0iOiJhbmRyb2lkIiwicmVtZW1iZXJEZXZpY2UiOnRydWV9"
     },
     {
       "name": "gatewayPairResponse",
-      "note": "centraid/gw-pair/1 redemption response (all fields).",
-      "json": "{\"ok\":true,\"gatewayId\":\"gw_9c8d\",\"gatewayName\":\"home\",\"vaultId\":\"vlt_42\",\"vaultName\":\"personal\",\"version\":\"0.1.0\",\"schemaEpoch\":7}",
-      "jsonByteLength": 130,
-      "frameBase64": "AAAAgnsib2siOnRydWUsImdhdGV3YXlJZCI6Imd3XzljOGQiLCJnYXRld2F5TmFtZSI6ImhvbWUiLCJ2YXVsdElkIjoidmx0XzQyIiwidmF1bHROYW1lIjoicGVyc29uYWwiLCJ2ZXJzaW9uIjoiMC4xLjAiLCJzY2hlbWFFcG9jaCI6N30="
+      "note": "centraid/gw-pair/1 redemption response (all fields); the invitation binds a member and may grant several vaults.",
+      "json": "{\"ok\":true,\"gatewayId\":\"gw_9c8d\",\"gatewayName\":\"home\",\"memberId\":\"mbr_priya\",\"memberLabel\":\"Priya\",\"vaultId\":\"vlt_42\",\"vaultName\":\"personal\",\"vaultIds\":[\"vlt_42\",\"vlt_family\"],\"version\":\"0.1.0\",\"schemaEpoch\":7}",
+      "jsonByteLength": 210,
+      "frameBase64": "AAAA0nsib2siOnRydWUsImdhdGV3YXlJZCI6Imd3XzljOGQiLCJnYXRld2F5TmFtZSI6ImhvbWUiLCJtZW1iZXJJZCI6Im1icl9wcml5YSIsIm1lbWJlckxhYmVsIjoiUHJpeWEiLCJ2YXVsdElkIjoidmx0XzQyIiwidmF1bHROYW1lIjoicGVyc29uYWwiLCJ2YXVsdElkcyI6WyJ2bHRfNDIiLCJ2bHRfZmFtaWx5Il0sInZlcnNpb24iOiIwLjEuMCIsInNjaGVtYUVwb2NoIjo3fQ=="
     }
   ]
 }

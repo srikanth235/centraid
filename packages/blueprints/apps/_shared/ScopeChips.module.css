@@ -1,0 +1,12 @@
+/* Layout only for the multi-scope selector (issue #599). The chips themselves
+   are kit.css's global `.kit-chip` — every colour, radius and selected state
+   comes from there, so this module carries the row box and nothing else. No
+   colour declarations belong in this file. */
+
+.scopeChips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+}

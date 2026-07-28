@@ -36,7 +36,6 @@ export const ROUTES = {
   gatewayHealth: `${GATEWAY_PLANE_PREFIX}/health`,
   gatewayDevices: `${GATEWAY_PLANE_PREFIX}/devices`,
   gatewayFoundingTicket: `${GATEWAY_PLANE_PREFIX}/founding/ticket`,
-  gatewayPair: `${GATEWAY_PLANE_PREFIX}/pair`,
   vaultStatus: `${VAULT_PLANE_PREFIX}/status`,
   vaultInitialize: `${VAULT_PLANE_PREFIX}/vaults:initialize`,
   vaultInitializeVerify: `${VAULT_PLANE_PREFIX}/vaults:initialize/verify`,

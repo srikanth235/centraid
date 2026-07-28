@@ -16,6 +16,10 @@ import type { InlineAppModule } from '../inline-types.ts';
 const photosInlineApp: InlineAppModule = {
   appId: 'photos',
   changeTables: PHOTOS_READ_TABLES_LIST,
+  // Mount over every scope this member can see (issue #599): the timeline is
+  // the merge of their own library and each audience they belong to. app-root
+  // paints one grid over N pages; albums, places and trash stay own-scope.
+  multiScope: true,
   // Query defaults are typed against the ambient `HandlerArgs`; the inline
   // contract types `ctx` as `unknown`, so bridge the two here (the shell builds
   // a compatible ctx at run time — inlineQueryCtx.ts).
@@ -30,7 +34,7 @@ const photosInlineApp: InlineAppModule = {
     scope: 'photos',
     placeholder: 'Ask your photos…',
     intro:
-      'Ask me to find photos, make an album, or share a set. Albums and shares show for your approval before they touch the vault.',
+      'Ask me to find photos, make an album, or share a set. Albums and shares show for your approval before anything is saved.',
     suggest: ['Make an album of Saturday’s photos', 'Find beach photos', 'Share these with Dana'],
   },
   Root,

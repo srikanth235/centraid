@@ -52,10 +52,18 @@ if [[ ${#staged[@]} -eq 0 ]]; then
     exit 0
 fi
 
+# Mirror CI exactly: `bun run format:check` is `oxfmt -c oxfmt.config.mjs`.
+# Without the config oxfmt falls back to defaults and flags files that the
+# repo's own config considers formatted, so the gate must pass it too.
+config_args=()
+if [[ -f "$REPO_ROOT/oxfmt.config.mjs" ]]; then
+    config_args=(-c "$REPO_ROOT/oxfmt.config.mjs")
+fi
+
 # oxfmt --check prints one offending path per line, then a summary. Match its
 # output back against the staged list so a path we never staged can't be
 # reported, and so the summary lines are ignored.
-output="$("$OXFMT" --check "${staged[@]}" 2>&1 || true)"
+output="$("$OXFMT" "${config_args[@]}" --check "${staged[@]}" 2>&1 || true)"
 while IFS= read -r line; do
     [[ -z "$line" ]] && continue
     # Strip oxfmt's trailing timing annotation, e.g. "path/to/file.ts (12ms)".

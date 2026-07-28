@@ -1,48 +1,66 @@
-import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
-import type { IconName } from '@centraid/design-tokens';
+import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import Icon from '../ui/Icon.js';
 import { cx } from '../ui/cx.js';
-import { formatDuration } from '../shell/routes/gatewayData.js';
 import type {
   CentraidGatewayDevice,
   GatewayDeviceTicket,
+  GatewayDeviceTicketInput,
   GatewayDeviceWorkDepth,
+  GatewayMember,
 } from '../../gateway-client.js';
+import { isRevokedDevice } from '../../device-roster.js';
 import buttonCss from '../ui/Button.module.css';
 import controlsCss from '../styles/controls.module.css';
 import gwStyles from './GatewayScreen.module.css';
 import styles from './DevicesCard.module.css';
 import DevicePairPanel from './DevicePairPanel.js';
+import DeviceMemberGroup from './DeviceMemberGroup.js';
+import { groupDevicesByMember, spacesFromGroups } from './device-groups.js';
 
-// Gateway → Overview → Paired devices: the owner surface over the daemon's
-// `EnrollmentStore` + `DeviceTokenStore` (issue #392 follow-up). Until now
-// the roster of paired browsers/phones was reachable only through the
-// `centraid-gateway devices` CLI on the host machine — no way to see, let
-// alone revoke, a device from the app. That matters most for the case you
-// can't reach the device at all (lost/stolen): revoke here and the durable
-// web-session store's `isDeviceValid` re-check kills its live control/app
-// cookies on their very next request.
+// Gateway → Overview → People & devices: the owner surface over the daemon's
+// member roster + `EnrollmentStore` (issues #392, #599).
 //
-// It reads as a sibling of the Backups/Storage cards — same `.panel` shell,
-// mono meta, hairline-bordered list — not a bolted-on settings form. A
-// device carries a type glyph (browser / phone / desktop), a transport chip
-// (Relay vs Direct), its vault, and humanized paired/last-seen ages. Revoke
-// is a two-step inline confirm, never a bare destructive click; the current
-// device is called out so signing yourself out is a deliberate choice.
+// It is people-first because authority is: a role is authored on a PERSON and
+// devices inherit it, so "Priya's phone is admin but her laptop is read-only"
+// isn't a state this card can even display. Each group is one person, their
+// access in ownership words, and the hardware acting as them.
+//
+// The two removal verbs are deliberately different affordances:
+//   Revoke device  (per row)    — "this phone was stolen". The person keeps
+//                                 their access and their other devices.
+//   Remove <person> (per group) — "she moved out". One atomic act that drops
+//                                 their roles and every device they own.
+//
+// Revoking no longer deletes the row; it tombstones it, so a past write still
+// resolves to the device that made it. Tombstones live in a collapsed
+// disclosure at the foot of their person's group — present for audit, absent
+// from every count and every action.
 
 export interface DevicesCardProps {
   /** Live clock (parent ticks it each second) — drives the humanized ages. */
   now: number;
   loadDevices: () => Promise<CentraidGatewayDevice[]>;
-  onRevokeDevice: (deviceId: string) => Promise<{ removed: boolean }>;
+  onRevokeDevice: (
+    deviceId: string,
+    options?: { confirmLastAdmin?: string },
+  ) => Promise<{ removed: boolean }>;
   /** Eager local cleanup after this renderer successfully revokes itself. */
   onCurrentDeviceRevoked?: () => Promise<void>;
   /**
-   * Mint a one-time pairing ticket for the active vault (`POST
-   * _gateway/devices/ticket`). Optional so a host that can't mint (or a test)
-   * simply hides the "Pair a device" affordance.
+   * The household roster. Optional so a gateway with no member surface (or a
+   * test) still renders — the groups then come from the devices alone.
    */
-  onCreateTicket?: (input?: { ttlMinutes?: number }) => Promise<GatewayDeviceTicket>;
+  loadMembers?: () => Promise<GatewayMember[]>;
+  /** Remove a PERSON. Absent = the card offers only per-device revocation. */
+  onRemoveMember?: (
+    memberId: string,
+    options?: { confirmLastAdmin?: string },
+  ) => Promise<{ removed: boolean }>;
+  /**
+   * Mint a one-time pairing ticket (`POST _gateway/devices/ticket`). Optional
+   * so a host that can't mint (or a test) simply hides "Pair a device".
+   */
+  onCreateTicket?: (input?: GatewayDeviceTicketInput) => Promise<GatewayDeviceTicket>;
   onUpdateCompute?: (
     device: CentraidGatewayDevice,
     contributeWhileCharging: boolean,
@@ -53,189 +71,22 @@ export interface DevicesCardProps {
 /** Poll cadence — same order of magnitude as the Backups card. */
 const POLL_MS = 15_000;
 
-function platformGlyph(device: CentraidGatewayDevice): IconName {
-  const platform = (device.platform ?? '').toLowerCase();
-  if (device.transport === 'iroh' && /ios|android|iphone|ipad|mobile|phone/.test(platform)) {
-    return 'Phone';
-  }
-  if (/ios|android|iphone|ipad|mobile|phone/.test(platform)) return 'Phone';
-  if (/web|browser|chrome|safari|firefox|edge/.test(platform)) return 'Globe';
-  if (/mac|win|linux|desktop|electron/.test(platform)) return 'Monitor';
-  // Every gateway device is admitted by its iroh identity.
-  return 'Globe';
-}
-
-function ageLabel(iso: string | undefined, now: number): string {
-  if (!iso) return '';
-  const at = Date.parse(iso);
-  if (Number.isNaN(at)) return '';
-  return `${formatDuration(Math.max(0, now - at))} ago`;
-}
-
-function DeviceRow({
-  device,
-  now,
-  onRevoke,
-  onUpdateCompute,
-}: {
-  device: CentraidGatewayDevice;
-  now: number;
-  onRevoke: (device: CentraidGatewayDevice) => Promise<void>;
-  onUpdateCompute?: (device: CentraidGatewayDevice, enabled: boolean) => Promise<void>;
-}): JSX.Element {
-  const [confirming, setConfirming] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [computeBusy, setComputeBusy] = useState(false);
-
-  const lastSeen = device.lastUsedAt ? ageLabel(device.lastUsedAt, now) : undefined;
-  const paired = ageLabel(device.addedAt, now);
-  const transportLabel = 'Relay';
-
-  const revoke = async (): Promise<void> => {
-    setBusy(true);
-    setError(null);
-    try {
-      await onRevoke(device);
-      // On success the parent drops the row; nothing more to do here.
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-      setBusy(false);
-      setConfirming(false);
-    }
-  };
-
-  const updateCompute = async (enabled: boolean): Promise<void> => {
-    if (!onUpdateCompute) return;
-    setComputeBusy(true);
-    setError(null);
-    try {
-      await onUpdateCompute(device, enabled);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setComputeBusy(false);
-    }
-  };
-
-  return (
-    <div className={styles.row} data-current={device.current || undefined}>
-      <span className={styles.glyph} aria-hidden="true">
-        <Icon name={platformGlyph(device)} size={16} />
-      </span>
-      <div className={styles.main}>
-        <div className={styles.nameLine}>
-          <span className={styles.name}>{device.label}</span>
-          {device.current ? <span className={styles.currentChip}>This device</span> : null}
-          <span
-            className={styles.transportChip}
-            data-transport={device.transport}
-            title="Paired over the relay-only Iroh tunnel"
-          >
-            {transportLabel}
-          </span>
-        </div>
-        <div className={styles.meta}>
-          {device.platform ? <span>{device.platform}</span> : null}
-          {(device.vaultName ?? device.vaultId) ? (
-            <span className={styles.metaVault}>
-              <Icon name="Key" size={11} />
-              {device.vaultName ?? device.vaultId}
-            </span>
-          ) : null}
-          {lastSeen ? <span>active {lastSeen}</span> : <span data-quiet="true">never used</span>}
-          {paired ? <span data-quiet="true">paired {paired}</span> : null}
-        </div>
-        {device.grantProfile !== undefined ? (
-          <div className={styles.grantProfile} aria-label="Companion module grants">
-            <span>Companion</span>
-            {device.grantProfile.length > 0 ? (
-              device.grantProfile.map((grant) => <span key={grant}>{grant}</span>)
-            ) : (
-              <span>no modules</span>
-            )}
-          </div>
-        ) : null}
-        {onUpdateCompute ? (
-          <label className={styles.computeToggle}>
-            <input
-              type="checkbox"
-              checked={device.compute?.contributeWhileCharging ?? false}
-              disabled={computeBusy}
-              onChange={(event) => void updateCompute(event.target.checked)}
-            />
-            <span>Help index your library while charging and unmetered</span>
-            {computeBusy ? <small>saving…</small> : null}
-          </label>
-        ) : null}
-        {device.compute?.contributeWhileCharging ? (
-          <div className={styles.computeCaps}>
-            {Object.entries(device.compute.capabilities)
-              .filter(([, enabled]) => enabled)
-              .map(([capability]) => (
-                <span key={capability}>{capability}</span>
-              ))}
-          </div>
-        ) : null}
-        {error ? <div className={styles.rowError}>{error}</div> : null}
-      </div>
-
-      <div className={styles.rowAction}>
-        {confirming ? (
-          <div className={styles.confirm}>
-            <span className={styles.confirmAsk}>
-              {device.current ? 'Sign out this device?' : 'Remove?'}
-            </span>
-            <button
-              type="button"
-              className={cx(buttonCss.btn, buttonCss.sm, styles.confirmYes)}
-              disabled={busy}
-              onClick={() => void revoke()}
-            >
-              {busy ? (
-                <span className={styles.spin}>
-                  <Icon name="Loader" size={13} />
-                </span>
-              ) : (
-                'Remove'
-              )}
-            </button>
-            <button
-              type="button"
-              className={cx(buttonCss.btn, buttonCss.sm, controlsCss.soft)}
-              disabled={busy}
-              onClick={() => setConfirming(false)}
-            >
-              Cancel
-            </button>
-          </div>
-        ) : (
-          <button
-            type="button"
-            className={cx(buttonCss.btn, buttonCss.sm, controlsCss.soft, styles.revokeBtn)}
-            onClick={() => setConfirming(true)}
-          >
-            <Icon name="Trash" size={13} />
-            <span>Revoke</span>
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
 export default function DevicesCard({
   now,
   loadDevices,
   onRevokeDevice,
   onCurrentDeviceRevoked,
+  loadMembers,
+  onRemoveMember,
   onCreateTicket,
   onUpdateCompute,
   loadWorkStatus,
 }: DevicesCardProps): JSX.Element {
   const [devices, setDevices] = useState<CentraidGatewayDevice[] | null>(null);
+  const [members, setMembers] = useState<GatewayMember[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [workDepth, setWorkDepth] = useState<GatewayDeviceWorkDepth[]>([]);
+  const [pairing, setPairing] = useState(false);
   const mountedRef = useRef(true);
 
   const refresh = useCallback((): void => {
@@ -249,13 +100,20 @@ export default function DevicesCard({
         if (!mountedRef.current) return;
         setLoadError(err instanceof Error ? err.message : String(err));
       });
+    void loadMembers?.()
+      .then((list) => {
+        if (mountedRef.current) setMembers(list);
+      })
+      // A roster the gateway won't serve is not fatal: the devices still name
+      // their people, so the card degrades to device-derived groups.
+      .catch(() => undefined);
     void loadWorkStatus?.()
       .then((depth) => {
         if (mountedRef.current) setWorkDepth(depth);
       })
       // Poll failures are transient; retain the last successful work badge.
       .catch(() => undefined);
-  }, [loadDevices, loadWorkStatus]);
+  }, [loadDevices, loadMembers, loadWorkStatus]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -268,16 +126,36 @@ export default function DevicesCard({
   }, [refresh]);
 
   const revoke = useCallback(
-    async (device: CentraidGatewayDevice): Promise<void> => {
-      await onRevokeDevice(device.deviceId);
+    async (device: CentraidGatewayDevice, confirmLastAdmin?: string): Promise<void> => {
+      await onRevokeDevice(
+        device.deviceId,
+        confirmLastAdmin !== undefined ? { confirmLastAdmin } : undefined,
+      );
       if (device.current) await onCurrentDeviceRevoked?.();
-      // Optimistically drop the row; a background refresh reconciles.
+      // Optimistically drop the row; a background refresh reconciles (and
+      // brings the tombstone back under the group's revoked disclosure).
       if (mountedRef.current) {
         setDevices((prev) => prev?.filter((d) => d.deviceId !== device.deviceId) ?? prev);
       }
       refresh();
     },
     [onCurrentDeviceRevoked, onRevokeDevice, refresh],
+  );
+
+  const removeMember = useCallback(
+    async (memberId: string, confirmLastAdmin?: string): Promise<void> => {
+      if (!onRemoveMember) return;
+      await onRemoveMember(
+        memberId,
+        confirmLastAdmin !== undefined ? { confirmLastAdmin } : undefined,
+      );
+      if (mountedRef.current) {
+        setMembers((prev) => prev.filter((member) => member.memberId !== memberId));
+        setDevices((prev) => prev?.filter((device) => device.memberId !== memberId) ?? prev);
+      }
+      refresh();
+    },
+    [onRemoveMember, refresh],
   );
 
   const updateCompute = useCallback(
@@ -293,19 +171,24 @@ export default function DevicesCard({
     [onUpdateCompute],
   );
 
-  const count = devices?.length ?? 0;
+  const groups = useMemo(() => groupDevicesByMember(devices ?? [], members), [devices, members]);
+  const spaces = useMemo(() => spacesFromGroups(groups), [groups]);
+  const selfMemberId = groups.find((group) => group.isSelf)?.memberId;
+
+  const people = groups.length;
+  const liveCount = devices?.filter((device) => !isRevokedDevice(device)).length ?? 0;
   const queued = workDepth.reduce((sum, depth) => sum + depth.available, 0);
   const leased = workDepth.reduce((sum, depth) => sum + depth.leased, 0);
-  const [pairing, setPairing] = useState(false);
 
   return (
     <section className={cx(gwStyles.panel, styles.card)}>
       <div className={gwStyles.panelHead}>
-        <h2>Paired devices</h2>
+        <h2>People &amp; devices</h2>
         <div className={styles.headRight}>
-          {devices && count > 0 ? (
+          {devices && people > 0 ? (
             <span className={gwStyles.panelMeta}>
-              {count} device{count === 1 ? '' : 's'}
+              {people} {people === 1 ? 'person' : 'people'} · {liveCount} device
+              {liveCount === 1 ? '' : 's'}
             </span>
           ) : null}
           {loadWorkStatus ? (
@@ -331,27 +214,43 @@ export default function DevicesCard({
           <DevicePairPanel
             now={now}
             onCreateTicket={onCreateTicket}
-            onClose={() => setPairing(false)}
+            onClose={() => {
+              setPairing(false);
+              refresh();
+            }}
+            members={members}
+            {...(selfMemberId !== undefined ? { currentMemberId: selfMemberId } : {})}
+            spaces={spaces}
           />
         ) : null}
         {loadError ? (
           <div className={styles.loadError}>Couldn’t list paired devices: {loadError}</div>
         ) : !devices ? (
           <div className={gwStyles.panelEmpty}>Checking paired devices…</div>
-        ) : devices.length === 0 ? (
+        ) : groups.length === 0 ? (
           <div className={gwStyles.panelEmpty}>
             No devices are paired with this gateway yet. Pair a browser or phone with a one-time
             ticket, and it will show up here — revocable in one click.
           </div>
         ) : (
-          <div className={styles.list}>
-            {devices.map((device) => (
-              <DeviceRow
-                key={device.deviceId}
-                device={device}
+          <div className={styles.groups}>
+            {groups.map((group) => (
+              <DeviceMemberGroup
+                key={group.memberId}
+                label={group.label}
+                roles={group.roles}
+                devices={group.devices}
+                revoked={group.revoked}
+                isSelf={group.isSelf}
                 now={now}
-                onRevoke={revoke}
-                onUpdateCompute={onUpdateCompute ? updateCompute : undefined}
+                onRevokeDevice={revoke}
+                {...(onUpdateCompute ? { onUpdateCompute: updateCompute } : {})}
+                {...(onRemoveMember
+                  ? {
+                      onRemoveMember: (confirmLastAdmin?: string) =>
+                        removeMember(group.memberId, confirmLastAdmin),
+                    }
+                  : {})}
               />
             ))}
           </div>

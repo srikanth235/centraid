@@ -52,7 +52,13 @@ export interface GatewayPairRequest {
   deviceName: string;
   platform: string;
   rememberDevice?: boolean;
-  trust?: 'full' | 'readonly';
+  /*
+   * There is deliberately NO role OR member field here. Both are baked into
+   * the server-minted invitation and read back from `tickets` at redemption;
+   * a joining device never gets to name its own principal or its own
+   * authority. A `trust?` field used to sit here — never read by the host,
+   * but it read as if the client could pick.
+   */
   /** Optional module capability profile for a constrained companion device. */
   grantProfile?: string[];
 }
@@ -66,9 +72,14 @@ export interface GatewayPairResponse {
   gatewayId?: string;
   /** Owner-facing gateway name. */
   gatewayName?: string;
-  /** The vault the redeemed ticket enrolled the device into. */
+  /** The member this device is now bound to, and their display label (#599). */
+  memberId?: string;
+  memberLabel?: string;
+  /** The first vault the redeemed invitation enrolled the device into. */
   vaultId?: string;
   vaultName?: string;
+  /** Every vault the invitation granted — one scan, many vaults, atomically. */
+  vaultIds?: string[];
   /** Product version (display). Protocol fields gate connect (#512). */
   version?: string;
   protocolVersion?: number;

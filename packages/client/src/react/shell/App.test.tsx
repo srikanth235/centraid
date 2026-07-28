@@ -4,6 +4,11 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 
 vi.mock('../../gateway-client.js', () => ({
   getUserPrefs: () => Promise.resolve({}),
+  // The sidebar identity row + every scope picker read the member's scope
+  // registry (#599). `undefined` is the "gateway has no scopes plane" answer,
+  // which falls through to listVaults.
+  listAppScopes: () => Promise.resolve(undefined),
+  listVaults: () => Promise.resolve([]),
   saveUserPrefs: () => Promise.resolve(undefined),
   listApps: () => Promise.resolve([{ id: 'todos', name: 'Todos', kind: 'app' }]),
   listAutomations: () => Promise.resolve([]),

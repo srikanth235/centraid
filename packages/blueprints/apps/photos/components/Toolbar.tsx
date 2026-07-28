@@ -2,7 +2,13 @@
 // affordance inside an album, "Add photos"/"New album" on the views that
 // want them, and the Select toggle. Pure view — app.tsx computes every
 // derived string/flag and passes it straight through.
+//
+// The scope chips (issue #599) appear here, under the title, ONLY when this
+// mount actually spans scopes: a member with one library must see the toolbar
+// exactly as it was, so `scopes` arriving with a single entry renders nothing.
+import { ScopeChips } from '../../_shared/ScopeChips.tsx';
 import { ChevronLeftIcon, PlusIcon } from '../icons.tsx';
+import type { InlineScope } from '../../inline-types.ts';
 import styles from './Toolbar.module.css';
 
 export function ToolbarView({
@@ -17,6 +23,10 @@ export function ToolbarView({
   showSelect,
   selectMode,
   onToggleSelect,
+  scopes,
+  ownScopeId,
+  selectedScopeId,
+  onSelectScope,
 }: {
   title: string;
   subtitle: string;
@@ -29,6 +39,12 @@ export function ToolbarView({
   showSelect: boolean;
   selectMode: boolean;
   onToggleSelect: () => void;
+  /** Every mounted scope, primary first. One entry means "no chips at all". */
+  scopes: readonly InlineScope[];
+  ownScopeId: string;
+  /** The selected chip, or null for "All". */
+  selectedScopeId: string | null;
+  onSelectScope: (scopeId: string | null) => void;
 }) {
   return (
     <div className={styles.toolbar}>
@@ -45,6 +61,17 @@ export function ToolbarView({
       <div className={styles.toolbarTitle}>
         <div className={styles.toolbarH1}>{title}</div>
         <div className={styles.toolbarSub}>{subtitle}</div>
+        {scopes.length > 1 ? (
+          <div className={styles.toolbarScopes}>
+            <ScopeChips
+              scopes={scopes}
+              ownScopeId={ownScopeId}
+              selectedScopeId={selectedScopeId}
+              onSelect={onSelectScope}
+              label="Shown from"
+            />
+          </div>
+        ) : null}
       </div>
       <div className={styles.toolbarActions}>
         {showAddPhotos ? (

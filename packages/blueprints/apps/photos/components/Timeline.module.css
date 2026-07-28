@@ -133,6 +133,34 @@
   opacity: 1;
   background: var(--accent-deep);
 }
+/* The "shown from <audience>" pill (issue #599), bottom-left so it never
+   collides with the select check (top-left), the heart or the remove control
+   (top-right), or the trash bar (full-width bottom — trash is own-scope, so
+   the two never coexist). Always visible, unlike the hover-revealed controls:
+   it is provenance, not an action, and a tile whose origin only appears on
+   hover would be a lie on touch. Colour comes from the accent + surface
+   tokens; the tile beneath it is an arbitrary photo, hence the scrim-like
+   translucent fill rather than a flat token background. */
+.tileScope {
+  position: absolute;
+  left: 7px;
+  bottom: 7px;
+  max-width: calc(100% - 14px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 2px 7px;
+  border-radius: var(--r-pill);
+  font: var(--t-small);
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--accent-deep-fg);
+  background: color-mix(in oklab, var(--accent-soft) 88%, transparent);
+  border: 1px solid color-mix(in oklab, var(--_accent) 30%, transparent);
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+  z-index: 2;
+}
 .tileHeart {
   position: absolute;
   top: 6px;

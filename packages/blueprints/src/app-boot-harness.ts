@@ -319,12 +319,36 @@ function consentBannerShown(): boolean {
   return banner !== null && banner.hidden === false;
 }
 
+/**
+ * Mirror one source tree into the boot scratch dir the way the client bundles
+ * it: TypeScript stripped, CSS modules compiled to the class-map JS the gateway
+ * serves, everything else copied verbatim.
+ */
+function mirrorSources(srcRoot: string, destRoot: string): void {
+  mkdirSync(destRoot, { recursive: true });
+  for (const rel of collectSources(srcRoot)) {
+    const out = path.join(destRoot, rel);
+    mkdirSync(path.dirname(out), { recursive: true });
+    if (rel.endsWith('.jsx') || rel.endsWith('.tsx') || rel.endsWith('.ts')) {
+      writeFileSync(out, transformInlineSource(readFileSync(path.join(srcRoot, rel), 'utf8'), rel));
+    } else if (rel.endsWith('.module.css')) {
+      writeFileSync(
+        `${out}.js`,
+        compileModuleCssLikeTheGateway(path.join(srcRoot, rel), srcRoot, destRoot),
+      );
+    } else {
+      cpSync(path.join(srcRoot, rel), out);
+    }
+  }
+}
+
 export function describeAppBoot(
   app: string,
   options: { expectLive?: boolean; expectReplica?: boolean } = {},
 ) {
   describe(`${app} boots`, () => {
     let dir: string;
+    let bootRoot: string;
     let reactRoot: ReactRoot | undefined;
     let originalFetch: typeof fetch;
     const errors: unknown[] = [];
@@ -340,29 +364,19 @@ export function describeAppBoot(
       originalFetch = globalThis.fetch;
       // Inside the package, not os.tmpdir(): vite resolves the dynamic import
       // below and refuses to load a module outside the project root.
-      dir = path.join(PKG, '.app-boot', app);
-      rmSync(dir, { recursive: true, force: true });
+      // Each app gets its own scratch ROOT, laid out like `apps/` itself:
+      // `<root>/<app>` beside `<root>/_shared`. An app importing a cross-app
+      // module by its real specifier (`../_shared/…`, issue #599) then resolves
+      // exactly as it does when served — and because the shared copy lives
+      // inside the app's own root, two app-boot files running in parallel never
+      // write the same path.
+      bootRoot = path.join(PKG, '.app-boot', app);
+      rmSync(bootRoot, { recursive: true, force: true });
+      dir = path.join(bootRoot, app);
       mkdirSync(dir, { recursive: true });
-      const appDir = path.join(PKG, 'apps', app);
-      // Mirror the client-bundled source graph into the scratch dir. TypeScript
-      // is stripped and CSS modules use the app-engine-equivalent compiler.
-      for (const rel of collectSources(appDir)) {
-        const out = path.join(dir, rel);
-        mkdirSync(path.dirname(out), { recursive: true });
-        if (rel.endsWith('.jsx') || rel.endsWith('.tsx') || rel.endsWith('.ts')) {
-          writeFileSync(
-            out,
-            transformInlineSource(readFileSync(path.join(appDir, rel), 'utf8'), rel),
-          );
-        } else if (rel.endsWith('.module.css')) {
-          writeFileSync(
-            `${out}.js`,
-            compileModuleCssLikeTheGateway(path.join(appDir, rel), appDir, dir),
-          );
-        } else {
-          cpSync(path.join(appDir, rel), out);
-        }
-      }
+      mirrorSources(path.join(PKG, 'apps', app), dir);
+      const sharedDir = path.join(PKG, 'apps', '_shared');
+      if (existsSync(sharedDir)) mirrorSources(sharedDir, path.join(bootRoot, '_shared'));
       for (const file of SHARED) {
         if (!existsSync(path.join(dir, file))) {
           symlinkSync(path.join(PKG, 'kit', file), path.join(dir, file));
@@ -407,7 +421,7 @@ export function describeAppBoot(
       for (const id of intervals) clearInterval(id);
       process.off('unhandledRejection', push);
       process.off('uncaughtException', push);
-      rmSync(dir, { recursive: true, force: true });
+      rmSync(bootRoot, { recursive: true, force: true });
     });
 
     it(

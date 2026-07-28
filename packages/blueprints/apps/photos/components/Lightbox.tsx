@@ -27,6 +27,7 @@ import {
 import { fmtBytes } from '../kit.ts';
 import { assetBytes, isAudioAsset, isRenderableUri, isVideoAsset } from '../format.ts';
 import { act, narrate } from '../outcomes.ts';
+import { canWriteScope, scopeAttr } from '../scopes.ts';
 import { useEffect, useState } from 'react';
 import type { Album, Asset, Place } from '../types.ts';
 import styles from './Lightbox.module.css';
@@ -89,9 +90,15 @@ function wireZoom(img: HTMLImageElement): void {
 // pre-redesign lightbox had, just re-hosted here instead of behind a
 // PanelBody-owned ref.
 export function Stage({ asset, onDims }: { asset: Asset; onDims: (w: number, h: number) => void }) {
+  // Every branch below points at this asset's bytes, and the lightbox steps
+  // through a MERGED list, so each one names the scope those bytes live in
+  // (issue #599) — see fillTileMedia's note on why an unstamped reference in a
+  // shared audience renders the wrong photo rather than failing.
+  const scope = scopeAttr(asset.scope_id);
   if (isRenderableUri(asset.content_uri) && isVideoAsset(asset)) {
     return (
       <video
+        data-scope={scope}
         src={asset.content_uri ?? undefined}
         muted
         playsInline
@@ -104,7 +111,7 @@ export function Stage({ asset, onDims }: { asset: Asset; onDims: (w: number, h: 
   }
   if (isRenderableUri(asset.content_uri) && isAudioAsset(asset)) {
     return (
-      <div className={styles.audio}>
+      <div className={styles.audio} data-scope={scope}>
         <span aria-hidden="true">♪</span>
         <audio
           src={asset.content_uri ?? undefined}
@@ -127,6 +134,7 @@ export function Stage({ asset, onDims }: { asset: Asset; onDims: (w: number, h: 
       displaySrc === asset.content_uri && (asset.width == null || asset.height == null);
     return (
       <img
+        data-scope={scope}
         src={displaySrc}
         alt={asset.title ?? asset.kind ?? 'Photo'}
         decoding="async"
@@ -219,6 +227,9 @@ export function LightboxShell({
     setProbed(null);
   }
   const displayAsset = withProbedDims(asset, probed);
+  // Same rule as the grid tile: a read-only audience's photo is viewable, and
+  // the actions that would write are disabled rather than refused (#599).
+  const canWrite = canWriteScope(asset.scope_id);
   return (
     <div className={styles.lightbox}>
       <div className={styles.topbar}>
@@ -234,6 +245,7 @@ export function LightboxShell({
             <button
               type="button"
               className={styles.iconBtn}
+              disabled={!canWrite}
               data-active={asset.favorite ? 'true' : 'false'}
               aria-pressed={asset.favorite ? 'true' : 'false'}
               aria-label={asset.favorite ? 'Remove from favorites' : 'Add to favorites'}
@@ -249,7 +261,7 @@ export function LightboxShell({
             >
               <PlayIcon />
             </button>
-            {isRenderableUri(asset.content_uri) && !isVideoAsset(asset) ? (
+            {isRenderableUri(asset.content_uri) && !isVideoAsset(asset) && canWrite ? (
               <button
                 type="button"
                 className={styles.iconBtn}
@@ -263,6 +275,7 @@ export function LightboxShell({
             String(asset.content_uri ?? '').startsWith('data:') ? (
               <a
                 className={styles.iconBtn}
+                data-scope={scopeAttr(asset.scope_id)}
                 aria-label="Download"
                 href={asset.content_uri ?? undefined}
                 download={(asset.title ?? '').trim() || `photo-${asset.asset_id}`}
@@ -281,15 +294,20 @@ export function LightboxShell({
             <button
               type="button"
               className={styles.iconBtn}
+              disabled={!canWrite}
               aria-label="Delete"
               onClick={async () => {
-                const outcome = await act('delete-asset', { asset_id: asset.asset_id });
+                const outcome = await act(
+                  'delete-asset',
+                  { asset_id: asset.asset_id },
+                  asset.scope_id,
+                );
                 if (narrate(outcome)) {
                   onClose();
                   toast('Moved to trash — it leaves every album it was in.', {
                     undoLabel: 'Undo',
                     onUndo: async () => {
-                      await act('restore', { asset_id: asset.asset_id });
+                      await act('restore', { asset_id: asset.asset_id }, asset.scope_id);
                       await refresh();
                     },
                   });
@@ -382,10 +400,14 @@ export function LightboxShell({
             const src = gridSrc(a);
             return (
               <button
-                key={a.asset_id}
+                // Scope-qualified for the same reason the grid's tiles are.
+                key={`${a.scope_id ?? ''}:${a.asset_id}`}
                 type="button"
                 className={src ? styles.frame : `${styles.frame} is-placeholder`}
                 data-active={a.asset_id === asset.asset_id ? 'true' : 'false'}
+                /* The strip mixes scopes: each frame names its own so the
+                   authorizer's nearest-ancestor lookup finds the right one. */
+                data-scope={scopeAttr(a.scope_id)}
                 onClick={(e) => {
                   e.stopPropagation();
                   const i = list.findIndex((x) => x.asset_id === a.asset_id);

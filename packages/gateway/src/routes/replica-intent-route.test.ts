@@ -85,7 +85,7 @@ test('a crash-left sending row deterministically re-dispatches, then terminal re
   const first = response();
   await handleReplicaIntent(request(body), first.res, {
     plane: vault,
-    access: { trust: 'full', rememberDevice: true, deviceId: identity.deviceId, appId: 'planner' },
+    access: { role: 'write', rememberDevice: true, deviceId: identity.deviceId, appId: 'planner' },
     dispatch,
   });
   expect(first.res.statusCode).toBe(200);
@@ -101,7 +101,7 @@ test('a crash-left sending row deterministically re-dispatches, then terminal re
   const retry = response();
   await handleReplicaIntent(request(body), retry.res, {
     plane: vault,
-    access: { trust: 'full', rememberDevice: true, deviceId: identity.deviceId, appId: 'planner' },
+    access: { role: 'write', rememberDevice: true, deviceId: identity.deviceId, appId: 'planner' },
     dispatch,
   });
   expect(retry.res.statusCode).toBe(200);
@@ -139,7 +139,7 @@ test('a foreign intent id looks in-flight and never dispatches or mutates its ow
     result.res,
     {
       plane: vault,
-      access: { trust: 'full', rememberDevice: true, deviceId: 'device-prober', appId: 'planner' },
+      access: { role: 'write', rememberDevice: true, deviceId: 'device-prober', appId: 'planner' },
       dispatch,
     },
   );
@@ -183,7 +183,7 @@ test('a dispatch exception stays in-flight, then retry terminalizes without dura
   const context = {
     plane: vault,
     access: {
-      trust: 'full' as const,
+      role: 'write' as const,
       rememberDevice: true,
       deviceId: 'device-ambiguous',
       appId: 'planner',
@@ -321,7 +321,7 @@ test('a blueprint-caught post-canonical bridge error stays retryable and replays
   const context = {
     plane: vault,
     access: {
-      trust: 'full' as const,
+      role: 'write' as const,
       rememberDevice: true,
       deviceId: 'device-bridge-finalization',
       appId: 'planner',
@@ -640,7 +640,7 @@ test('read-only policy denial is a durable outcome, not a revocation-shaped 403'
     {
       plane: vault,
       access: {
-        trust: 'readonly',
+        role: 'read',
         rememberDevice: true,
         deviceId: 'device-readonly',
         appId: 'planner',
@@ -652,6 +652,35 @@ test('read-only policy denial is a durable outcome, not a revocation-shaped 403'
   expect(reply.res.statusCode).toBe(200);
   expect(reply.body()).toMatchObject({ outcome: { status: 'denied' } });
   expect(dispatch).not.toHaveBeenCalled();
+});
+
+test('owner role may act — it is full plus admin, not a lesser tier', async () => {
+  const vault = await plane();
+  vault.approveGrant('planner', {
+    purpose: 'dpv:ServiceProvision',
+    scopes: [{ schema: 'schedule', table: 'task', verbs: 'read+act' }],
+  });
+  const input = { title: 'owner task' };
+  const payloadHash = crypto
+    .createHash('sha256')
+    .update('{"action":"add_task","appId":"planner","input":{"title":"owner task"}}')
+    .digest('hex');
+  const dispatch = vi.fn().mockResolvedValue({ status: 'executed' });
+  const reply = response();
+
+  await handleReplicaIntent(
+    request({ intentId: 'owner-1', appId: 'planner', action: 'add_task', input, payloadHash }),
+    reply.res,
+    {
+      plane: vault,
+      access: { role: 'admin', rememberDevice: false, deviceId: 'device-owner', appId: 'planner' },
+      dispatch,
+    },
+  );
+
+  expect(reply.res.statusCode).toBe(200);
+  expect(reply.body()).toMatchObject({ outcome: { status: 'executed' } });
+  expect(dispatch).toHaveBeenCalledTimes(1);
 });
 
 test('act-only consent reaches the canonical dispatcher without requiring a read shape', async () => {
@@ -674,7 +703,7 @@ test('act-only consent reaches the canonical dispatcher without requiring a read
     {
       plane: vault,
       access: {
-        trust: 'full',
+        role: 'write',
         rememberDevice: false,
         deviceId: 'device-act-only',
         appId: 'planner',

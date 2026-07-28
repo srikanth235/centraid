@@ -37,7 +37,7 @@ import {
   type VaultOutcome,
 } from '@centraid/blueprints/kit/kit.js';
 import { auth, authHeaders, doFetch } from '../../gateway-client-core.js';
-import { authorizeBlobUrl, BLOB_PREFIX } from './blob-auth.js';
+import { authorizeBlobUrl, blobAuthHeaders, BLOB_PREFIX } from './blob-auth.js';
 
 export * from '@centraid/blueprints/kit/kit.js';
 // `authorizeBlobUrl` moved to the leaf `blob-auth.js` module so importing it
@@ -169,9 +169,12 @@ interface StagedBlob {
 export async function stageFileBytes(
   file: File,
   extra = '',
-  { hash = true }: { hash?: boolean } = {},
+  { hash = true, scope }: { hash?: boolean; scope?: string } = {},
 ): Promise<StagedBlob> {
   const { baseUrl, token } = await auth();
+  // Bytes land in the scope the caller named, not the focused one (issue #599):
+  // an upload aimed at an audience must be staged into THAT vault's CAS.
+  const headers = blobAuthHeaders(token, scope);
   const q = new URLSearchParams();
   if (file.name) q.set('filename', file.name);
   if (file.type) q.set('media_type', file.type);
@@ -191,7 +194,7 @@ export async function stageFileBytes(
       if (file.name) preflight.set('filename', file.name);
       const have = await doFetch(baseUrl, `${BLOB_PREFIX}/_sha/${declaredSha}?${preflight}`, {
         method: 'HEAD',
-        headers: authHeaders(token),
+        headers,
       });
       if (have.ok) {
         return {
@@ -211,7 +214,7 @@ export async function stageFileBytes(
   const res = await doFetch(baseUrl, `${BLOB_PREFIX}?${q}${extra}`, {
     method: 'POST',
     headers: {
-      ...authHeaders(token),
+      ...headers,
       'content-type': file.type || 'application/octet-stream',
       ...(declaredSha ? { 'x-content-sha256': declaredSha } : {}),
     },

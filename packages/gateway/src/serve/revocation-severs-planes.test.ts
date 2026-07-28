@@ -82,13 +82,13 @@ test('revocation removes web sessions and closes the admitted iroh endpoint', as
     endpointId: 'owner-endpoint',
     vaultId,
     label: 'Owner',
-    trust: 'owner',
+    role: 'admin',
   });
   const member = enrollments.enroll({
     endpointId: memberClient.endpointId,
     vaultId,
     label: 'Member',
-    trust: 'full',
+    role: 'write',
   });
   const tokenHash = hashControlToken('member-control-cookie');
   sessions.establish({

@@ -194,7 +194,7 @@ export function SidebarView({
           </span>
           <div className={styles.brandText}>
             <div className={styles.brandName}>Photos</div>
-            <div className={styles.brandTag}>a projection of your vault</div>
+            <div className={styles.brandTag}>a projection of your library</div>
           </div>
           <button
             type="button"

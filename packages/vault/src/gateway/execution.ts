@@ -14,7 +14,7 @@ import { ONTOLOGY_VERSION } from '../schema/migrate.js';
 import { resolveEntity } from '../schema/tables.js';
 import type { ConsentAllow } from './consent.js';
 import { evaluateConditions, judgmentVeto, type CommandRow } from './contract.js';
-import { writeCheck, writeExplanation, writeReceipt } from './evidence.js';
+import { actingMemberDetail, writeCheck, writeExplanation, writeReceipt } from './evidence.js';
 import { validateJson } from './json-schema.js';
 import { SEED_DEMO_ACTIVITY } from '../schema/seed.js';
 import {
@@ -641,6 +641,8 @@ export function runContractAndExecute(
       provenance,
       receiptDetail: {
         ...(!request.intentId ? { output: durableOutput } : {}),
+        // L4 attribution (issue #599 decision 8) — WHO, not just what.
+        ...actingMemberDetail(identity, request),
         writes: writes.map((write) => ({ ...write })),
         // The salience marker (issue #306 decision 2): what the review feed
         // surfaces first, now that risk no longer gates execution.

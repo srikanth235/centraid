@@ -52,7 +52,7 @@ test('sealed names remain sticky metadata while values never enter a replica row
     .run(new Date().toISOString(), new Date().toISOString());
 
   const [shape] = buildReplicaShapes(vault.db.vault, {
-    trust: 'full',
+    role: 'write',
     rememberDevice: true,
     appId: 'passwords',
   });
@@ -84,7 +84,7 @@ test('consent-masked columns remain sticky unavailable for local handler fallbac
   });
 
   const shape = buildReplicaShapes(vault.db.vault, {
-    trust: 'full',
+    role: 'write',
     rememberDevice: true,
     appId: 'tasks',
   })[0]!;
@@ -135,7 +135,7 @@ test('unmasked shapes hide protocol credential names and values', async () => {
     .run();
 
   const shape = buildReplicaShapes(vault.db.vault, {
-    trust: 'full',
+    role: 'write',
     rememberDevice: true,
     appId: 'credential-auditor',
   })[0]!;
@@ -194,7 +194,7 @@ test('credential predicates and credential-only masks fail closed', async () => 
 
   for (const appId of ['credential-filter', 'credential-mask']) {
     const shape = buildReplicaShapes(vault.db.vault, {
-      trust: 'full',
+      role: 'write',
       rememberDevice: true,
       appId,
     })[0]!;
@@ -238,7 +238,7 @@ test("keeps one app's purpose grants in independent row and column shapes", asyn
   insert.run('billing-task', vault.boot.ownerPartyId, 'Invoice', 'completed', 7);
 
   const shapes = buildReplicaShapes(vault.db.vault, {
-    trust: 'full',
+    role: 'write',
     rememberDevice: true,
     appId: 'planner',
   });
@@ -307,7 +307,7 @@ test('uses the exact first grant/scope selected by canonical online consent', as
   expect(online.rows).toEqual([{ task_id: 'both-grants', title: 'Canonical first' }]);
 
   const shape = buildReplicaShapes(vault.db.vault, {
-    trust: 'full',
+    role: 'write',
     rememberDevice: true,
     appId: 'planner',
   })[0]!;
@@ -350,7 +350,7 @@ test.each([
     entity: 'schedule.task',
   });
   const shape = buildReplicaShapes(vault.db.vault, {
-    trust: 'full',
+    role: 'write',
     rememberDevice: true,
     appId: 'planner',
   })[0]!;
@@ -379,7 +379,7 @@ test('changes temporal shape identity exactly when a row enters and leaves its w
        VALUES ('timed-task', ?, 'Due soon', 'needs-action', 0, '2026-07-10T00:00:00.000Z')`,
     )
     .run(vault.boot.ownerPartyId);
-  const access = { trust: 'full' as const, rememberDevice: true, appId: 'planner' };
+  const access = { role: 'write' as const, rememberDevice: true, appId: 'planner' };
   const before = buildReplicaShapes(vault.db.vault, access, '2026-07-08T23:59:59.999Z')[0]!;
   const entered = buildReplicaShapes(vault.db.vault, access, '2026-07-09T00:00:00.000Z')[0]!;
   const leaving = buildReplicaShapes(vault.db.vault, access, '2026-07-10T00:00:00.000Z')[0]!;
@@ -421,7 +421,7 @@ test('expires within-days membership without requiring a database write', async 
        VALUES ('recent-task', ?, 'Just done', 'completed', 0, '2026-07-09T00:00:00.000Z')`,
     )
     .run(vault.boot.ownerPartyId);
-  const access = { trust: 'full' as const, rememberDevice: true, appId: 'planner' };
+  const access = { role: 'write' as const, rememberDevice: true, appId: 'planner' };
   const watermark = currentReplicaLogState(vault.db.vault).watermark;
   const atBoundary = buildReplicaShapes(vault.db.vault, access, '2026-07-10T00:00:00.000Z')[0]!;
   const expired = buildReplicaShapes(vault.db.vault, access, '2026-07-10T00:00:00.001Z')[0]!;
@@ -462,7 +462,7 @@ test('omits an unrelated filtered delete without rebootstrap or row-id disclosur
 
   const projected = projectReplicaPage(
     vault.db.vault,
-    { trust: 'full', rememberDevice: true, appId: 'planner' },
+    { role: 'write', rememberDevice: true, appId: 'planner' },
     since,
   );
   expect(projected.rebootstrapReason).toBeUndefined();
@@ -492,7 +492,7 @@ test('uses one stable opaque id through snapshot, update-out and delete', async 
        VALUES ('canonical-secret-id', ?, 'Visible', ?, 'needs-action', 0)`,
     )
     .run(vault.boot.ownerPartyId, 'x'.repeat(70_000));
-  const access = { trust: 'full' as const, rememberDevice: true, appId: 'planner' };
+  const access = { role: 'write' as const, rememberDevice: true, appId: 'planner' };
   const shape = buildReplicaShapes(vault.db.vault, access)[0]!;
   const row = readReplicaRow(vault.db.vault, 'schedule.task', 'canonical-secret-id')!;
   const snapshot = shapeReplicaRow(shape, 'schedule.task', row)!;
@@ -576,7 +576,7 @@ test('never serializes either component of a masked composite primary key', asyn
     .run(vault.boot.ownerPartyId);
 
   const shape = buildReplicaShapes(vault.db.vault, {
-    trust: 'full',
+    role: 'write',
     rememberDevice: true,
     appId: 'tally',
   })[0]!;
@@ -610,7 +610,7 @@ test('ordinary concepts tail incrementally instead of invalidating every shape',
     .run();
   const projected = projectReplicaPage(
     vault.db.vault,
-    { trust: 'full', rememberDevice: true, appId: 'planner' },
+    { role: 'write', rememberDevice: true, appId: 'planner' },
     since,
   );
   expect(projected.rebootstrapReason).toBeUndefined();
@@ -644,7 +644,7 @@ test('doorbells name only the shapes that received the projected row', async () 
 
   const projected = projectReplicaPage(
     vault.db.vault,
-    { trust: 'full', rememberDevice: true, appId: 'planner' },
+    { role: 'write', rememberDevice: true, appId: 'planner' },
     since,
   );
   const visibleShape = projected.shapes.find((shape) => shape.purpose === 'dpv:ServiceProvision')!;
@@ -689,7 +689,7 @@ test('the photos grant yields a self-contained shape a native client can render 
   });
 
   const shape = buildReplicaShapes(vault.db.vault, {
-    trust: 'full',
+    role: 'write',
     rememberDevice: true,
     appId: 'photos',
   })[0]!;
@@ -749,7 +749,7 @@ test('docs and agenda grants multiplex as additive self-contained native shapes'
   });
 
   const shapes = replicaShapesWire(
-    buildReplicaShapes(vault.db.vault, { trust: 'full', rememberDevice: true }),
+    buildReplicaShapes(vault.db.vault, { role: 'write', rememberDevice: true }),
   );
   const docs = shapes.find((shape) => shape.appId === 'docs')!;
   const agenda = shapes.find((shape) => shape.appId === 'agenda')!;

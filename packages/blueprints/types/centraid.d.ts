@@ -177,7 +177,35 @@ interface CentraidChangeDetail {
   intentId?: string;
   intentState?: string;
   ts?: number;
+  /**
+   * Which mounted scope burst (issue #599). A multi-scope app refetches ONLY
+   * this scope; absent means "the ambient one" (single-scope surfaces). The
+   * shell also fires `{source: 'scope-added', scope}` when an audience scope
+   * hydrates after first paint.
+   */
+  scope?: string;
 }
+
+/**
+ * One mounted scope of a multi-scope app (issue #599) — the member's own
+ * library or a shared audience. `label` is the only scope string an app may
+ * render; `canWrite` is the shell's already-resolved answer to "may this member
+ * add here?", so apps disable rather than guess. Structurally identical to
+ * `InlineScope` in `apps/inline-types.ts`, restated here because the ambient
+ * global cannot import.
+ */
+interface CentraidScope {
+  id: string;
+  label: string;
+  color?: string;
+  icon?: string;
+  canWrite: boolean;
+}
+
+/** One scope's answer in a `readAll` fan-out. Errors are data, never throws. */
+type CentraidScopeRead<T> =
+  | { scope: string; ok: true; data: T }
+  | { scope: string; ok: false; error: { code?: string; message: string } };
 
 /**
  * The injected vault client. `read`/`write` are generic on their result so a
@@ -187,16 +215,39 @@ interface CentraidChangeDetail {
 interface CentraidClient {
   /** The app id this client is scoped to (present on the mock; may be absent). */
   appId?: string;
+  /**
+   * Every scope this app is mounted over, primary (the member's own) FIRST
+   * (issue #599). Absent on single-scope hosts (the served bridge, the visual
+   * harness mock); the SAME array grows in place as audiences hydrate, so read
+   * it fresh rather than caching a snapshot.
+   */
+  scopes?: CentraidScope[];
   read<T = Record<string, unknown>>(opts: {
     query: string;
     input?: Record<string, unknown>;
     signal?: AbortSignal;
+    /** Which mounted scope to read; defaults to the primary. */
+    scope?: string;
   }): Promise<T>;
+  /**
+   * Fan one query across scopes (issue #599). Settled per scope — one audience
+   * failing never sinks the others — so it resolves with an answer per scope
+   * and never rejects. `scopes` restricts the fan-out (e.g. "Show more" hits
+   * only the horizon scopes). Absent on single-scope hosts.
+   */
+  readAll?<T = Record<string, unknown>>(opts: {
+    query: string;
+    input?: Record<string, unknown>;
+    signal?: AbortSignal;
+    scopes?: readonly string[];
+  }): Promise<CentraidScopeRead<T>[]>;
   write<T = VaultOutcome>(opts: {
     action: string;
     input?: Record<string, unknown>;
     intentId?: string;
     signal?: AbortSignal;
+    /** Which mounted scope the write lands in; defaults to the primary. */
+    scope?: string;
   }): Promise<T>;
   describe?(): Promise<unknown>;
   /** Subscribe to the change feed; returns the unsubscribe. */

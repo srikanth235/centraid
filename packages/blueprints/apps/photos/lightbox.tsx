@@ -4,6 +4,7 @@
 // file from growing unbounded as issue #352 adds regions (search/slideshow/
 // duplicates) alongside it; the pure view still lives in
 // components/Lightbox.tsx.
+import { assetKey } from './asset-key.ts';
 import { LightboxShell } from './components/Lightbox.tsx';
 import { $ } from './dom.ts';
 import type { ReactNode } from 'react';
@@ -21,34 +22,36 @@ export function createLightbox({
   slideshow,
 }: {
   lightboxRoot: Root;
-  findAsset: (assetId: string) => Asset | undefined;
+  findAsset: (key: string) => Asset | undefined;
   visibleAssets: () => Asset[];
   getAlbums: () => Album[];
   getPlaces: () => Place[];
   refresh: () => Promise<void>;
   slideshow: { openSlideshow: (list: Asset[], startAssetId: string | null) => void };
 }) {
-  let assetId: string | null = null; // non-null while the lightbox is open
+  // The COMPOSITE key of the open row (asset-key.ts), non-null while open. A
+  // bare `asset_id` would be ambiguous across scopes (issue #599).
+  let openKey: string | null = null;
   let renderSeq = 0;
 
   function closeLightbox() {
-    assetId = null;
+    openKey = null;
     const box = $('lightbox');
     box.hidden = true;
     lightboxRoot.render(null);
   }
 
-  function openLightbox(id: string) {
-    assetId = id;
+  function openLightbox(key: string) {
+    openKey = key;
     renderLightbox();
   }
 
   function step(delta: number) {
     const list = visibleAssets();
-    const idx = list.findIndex((a) => a.asset_id === assetId);
+    const idx = list.findIndex((a) => assetKey(a) === openKey);
     const next = idx < 0 ? undefined : list[idx + delta];
     if (!next) return;
-    assetId = next.asset_id;
+    openKey = assetKey(next);
     renderLightbox();
   }
 
@@ -64,18 +67,18 @@ export function createLightbox({
 
   function renderLightbox() {
     const box = $('lightbox');
-    if (assetId == null) {
+    if (openKey == null) {
       closeLightbox();
       return;
     }
-    const asset = findAsset(assetId);
+    const asset = findAsset(openKey);
     if (!asset) {
       closeLightbox();
       return;
     }
     renderSeq += 1;
     const list = visibleAssets();
-    const idx = list.findIndex((a) => a.asset_id === asset.asset_id);
+    const idx = list.findIndex((a) => assetKey(a) === assetKey(asset));
     lightboxRoot.render(
       <LightboxShell
         asset={asset}
@@ -113,9 +116,9 @@ export function createLightbox({
     closeLightbox,
     step,
     startSlideshow,
-    isOpen: () => assetId != null,
+    isOpen: () => openKey != null,
     renderIfOpen: () => {
-      if (assetId != null) renderLightbox();
+      if (openKey != null) renderLightbox();
     },
   };
 }

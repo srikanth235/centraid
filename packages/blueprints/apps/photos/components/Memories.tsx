@@ -1,6 +1,7 @@
 // The memories strip (main Photos view only, per the build prompt — never in
 // search/select). Pure view; `memories` is already the fully-derived list
 // (see buildMemories() in app.tsx) of `{ key, title, sub, coverUri, onOpen }`.
+import { scopeAttr } from '../scopes.ts';
 import type { MemoryCard } from '../types.ts';
 import styles from './Memories.module.css';
 import shared from './shared.module.css';
@@ -17,6 +18,10 @@ export function MemoriesStrip({ memories }: { memories: MemoryCard[] }) {
             type="button"
             className={styles.memoryCard}
             style={m.coverUri ? { backgroundImage: `url(${m.coverUri})` } : undefined}
+            /* The cover is one real asset's bytes, and a memory can be built
+               from a shared audience's photo — so the card names the scope its
+               background-image must be fetched in (issue #599). */
+            data-scope={scopeAttr(m.coverScopeId)}
             aria-label={`Open ${m.title}`}
             onClick={m.onOpen}
           >

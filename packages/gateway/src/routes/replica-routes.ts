@@ -86,7 +86,7 @@ type BootstrapWireRow = NonNullable<ReturnType<typeof shapeReplicaRow>>;
 // Contract (the wave-2 client builds against exactly this):
 //   • Trigger: `?window=<1..20000>` and/or `?after=<token>`. Absent ⇒ legacy.
 //   • Page 1 (`?window=n`, no `after`): the full single-shot envelope
-//     (protocolVersion, vaultId, schemaEpoch, cursor, shapes, shapeIds, trust,
+//     (protocolVersion, vaultId, schemaEpoch, cursor, shapes, shapeIds, role,
 //     rememberDevice) PLUS `rows` (first window), `complete`, and — when more
 //     remain — an opaque `next` continuation token.
 //   • Page N (`?after=<token>`[&window=n]): `{protocolVersion, vaultId,
@@ -681,7 +681,7 @@ function handleWindowedBootstrap(
     ...base,
     shapes: replicaShapesWire(value.shapes),
     shapeIds: value.shapeIds,
-    trust: access.trust,
+    role: access.role,
     rememberDevice: access.rememberDevice,
   });
 }
@@ -815,7 +815,7 @@ export function makeReplicaRouteHandler(
         shapes: replicaShapesWire(snapshot.value.shapes),
         shapeIds: replicaShapeIds(snapshot.value.shapes),
         rows: snapshot.value.rows,
-        trust: access.trust,
+        role: access.role,
         rememberDevice: access.rememberDevice,
       });
     }

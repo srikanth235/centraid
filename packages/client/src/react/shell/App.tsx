@@ -1,9 +1,9 @@
-// governance: allow-repo-hygiene file-size-limit (#382) the shell root
-// wiring every route + the grouped switcher's popover callbacks crossed 500
-// by 16 lines; a route-wiring extraction is a reasonable follow-up but not
-// warranted for this margin.
+// governance: allow-repo-hygiene file-size-limit (#382) the shell root wires
+// every route plus the sidebar's conversation actions and the surviving gateway
+// switcher's popover callbacks. A route-wiring extraction remains the right
+// follow-up; #599 shrank this file rather than growing it (the space switcher's
+// callbacks and the New-space modal left for Household).
 import { type JSX, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { IconName } from '@centraid/design-tokens';
 import type { ShellRoute } from '../../app-shell-context.js';
 import PaletteScreen from '../screens/PaletteScreen.js';
 import { type ShellActions, ShellActionsProvider } from './actions.js';
@@ -24,7 +24,8 @@ import {
 import { buildPaletteGroups } from './routes/paletteData.js';
 import { createPaletteConversationSearch } from './routes/paletteConversationSearch.js';
 import { downloadConversation, type ExportFormat } from './routes/conversationExport.js';
-import ProfileSwitcherHead from './ProfileSwitcherHead.js';
+import { conversationScope, conversationScopes } from './routes/conversationScopes.js';
+import IdentityHead from './IdentityHead.js';
 import Sidebar, {
   type ShellMenuAnchor,
   type SidebarConversation,
@@ -33,7 +34,7 @@ import Sidebar, {
 import ShellApp, { type ShellNav } from './ShellApp.js';
 import { showToast } from './toast.js';
 import { PageEmpty } from './status.js';
-import { useActiveVault } from './useActiveVault.js';
+import { useMemberScopes } from './useMemberScopes.js';
 import { useAppearance } from './useAppearance.js';
 import { useBuilderEnabled } from './useBuilderEnabled.js';
 import { useAssistantConversations } from './useAssistantConversations.js';
@@ -43,9 +44,12 @@ import { useShellApps } from './useShellApps.js';
 import { useStarred } from './useStarred.js';
 import WhatsNewModal from '../screens/WhatsNewModal.js';
 import { relaunchToUpdate, updatePillTitle, useUpdateStatus } from './useUpdateStatus.js';
-import { applySelection, resolveSelection, type PairRow } from './flatVaultSwitcher-core.js';
-import { getCachedGroupedRows, openGroupedVaultRegistry } from './flatVaultSwitcherRegistry.js';
-import { closeVaultSwitcher, openVaultSwitcher, updateVaultSwitcherRows } from './vaultSwitcher.js';
+import { countGateways, getCachedGatewayRows, openGatewayRegistry } from './gatewayRegistry.js';
+import {
+  closeGatewaySwitcher,
+  openGatewaySwitcher,
+  updateGatewaySwitcherRows,
+} from './gatewaySwitcher.js';
 import ApprovalsRoute from './routes/ApprovalsRoute.js';
 import AppViewRoute from './routes/AppViewRoute.js';
 import InlineAppRoute from './routes/InlineAppRoute.js';
@@ -62,12 +66,11 @@ import ConnectorsRoute from './routes/ConnectorsRoute.js';
 import DiscoverRoute from './routes/DiscoverRoute.js';
 import GatewayRoute from './routes/GatewayRoute.js';
 import HomeRoute from './routes/HomeRoute.js';
+import HouseholdRoute from './routes/HouseholdRoute.js';
 import InsightsRoute from './routes/InsightsRoute.js';
 import RenameGatewayModal from './routes/RenameGatewayModal.js';
 import RunViewRoute from './routes/RunViewRoute.js';
 import SettingsRoute from './routes/SettingsRoute.js';
-import SpaceModal, { DEFAULT_SPACE_ICON, randomSpaceColor } from './routes/SpaceModal.js';
-import { createSpace } from './routes/spaceModals.js';
 import StarredRoute from './routes/StarredRoute.js';
 import TemplatesRoute from './routes/TemplatesRoute.js';
 import TestConnectionModal from './routes/TestConnectionModal.js';
@@ -115,6 +118,7 @@ function activePageFor(route: ShellRoute): SidebarPage | undefined {
     case 'connectors':
     case 'approvals':
     case 'gateway':
+    case 'household':
     case 'storage':
     case 'atlas':
       return route.kind;
@@ -172,7 +176,7 @@ export default function App(): JSX.Element {
     () => new Set(),
   );
   const { isStarred, toggleStar } = useStarred();
-  const activeVault = useActiveVault();
+  const memberScopes = useMemberScopes();
   const blockingCount = useBlockingCount();
   const updateStatus = useUpdateStatus();
   // I12 / #501 — What's new re-wired to GitHub release notes (main changelog.ts).
@@ -241,14 +245,19 @@ export default function App(): JSX.Element {
       search: (query, limit) => searchConversations(ASSISTANT_APP_ID, query, limit),
     }),
   );
-  const [vaultSwitcherOpen, setVaultSwitcherOpen] = useState(false);
-  // The switcher's per-gateway actions (issue #382) — "New space…", "Test
-  // connection…", "Rename…" and the footer "Add gateway…" all open one of
-  // these small modals; the switcher popover itself already closed by the
-  // time any of them fires (vaultSwitcher.ts closes before invoking a
-  // callback), so there's never a stacking concern.
+  const [gatewaySwitcherOpen, setGatewaySwitcherOpen] = useState(false);
+  // How many gateways this client knows. The gateway switcher is the ONE
+  // switcher that survived Decision 14 (#599), and it only earns sidebar space
+  // when there is something to switch between — a single-gateway household
+  // never sees it. Re-counted whenever the active gateway changes (which is
+  // also what a fresh pairing broadcasts).
+  const [gatewayCount, setGatewayCount] = useState(0);
+  // The switcher's per-gateway actions (issue #382) — "Test connection…",
+  // "Rename…" and the footer "Add gateway…" all open one of these small modals;
+  // the popover itself already closed by the time any of them fires
+  // (gatewaySwitcher.ts closes before invoking a callback), so there's never a
+  // stacking concern.
   const [addGatewayOpen, setAddGatewayOpen] = useState(false);
-  const [newSpaceGatewayId, setNewSpaceGatewayId] = useState<string | null>(null);
   const [testConnectionTarget, setTestConnectionTarget] = useState<{
     gatewayId: string;
     label: string;
@@ -300,11 +309,19 @@ export default function App(): JSX.Element {
     };
     window.CentraidApi.onGatewayChanged?.(reScope);
     window.CentraidApi.onVaultChanged?.(reScope);
+
+    const recount = (): void => {
+      void countGateways()
+        .then(setGatewayCount)
+        .catch(() => undefined);
+    };
+    recount();
+    window.CentraidApi.onGatewayChanged?.(recount);
     return () => {
       document.removeEventListener('keydown', onKey);
-      // The vault switcher is a body-portalled overlay outside React's tree —
+      // The gateway switcher is a body-portalled overlay outside React's tree —
       // drop it explicitly so it can't outlive the shell root (tests, HMR).
-      closeVaultSwitcher();
+      closeGatewaySwitcher();
     };
   }, []);
 
@@ -333,8 +350,9 @@ export default function App(): JSX.Element {
       showUndoToast(`Deleted “${target?.title || 'New conversation'}”`, unhide, {
         onExpire: () => {
           void (async () => {
-            await deleteConversation(ASSISTANT_APP_ID, id).catch((err: unknown) =>
-              showToast(`Couldn't delete: ${err instanceof Error ? err.message : String(err)}`),
+            await deleteConversation(ASSISTANT_APP_ID, id, conversationScope(id)).catch(
+              (err: unknown) =>
+                showToast(`Couldn't delete: ${err instanceof Error ? err.message : String(err)}`),
             );
             unhide();
             await assistantConversations.refresh();
@@ -357,8 +375,9 @@ export default function App(): JSX.Element {
           confirmLabel: 'Rename',
         });
         if (!next) return;
-        await renameConversation(ASSISTANT_APP_ID, id, next).catch((err: unknown) =>
-          showToast(`Couldn't rename: ${err instanceof Error ? err.message : String(err)}`),
+        await renameConversation(ASSISTANT_APP_ID, id, next, conversationScope(id)).catch(
+          (err: unknown) =>
+            showToast(`Couldn't rename: ${err instanceof Error ? err.message : String(err)}`),
         );
         await assistantConversations.refresh();
       })();
@@ -370,8 +389,8 @@ export default function App(): JSX.Element {
   const pinAssistantConversation = useCallback(
     (id: string, pinned: boolean) => {
       void (async () => {
-        await setConversationPinned(ASSISTANT_APP_ID, id, pinned).catch((err: unknown) =>
-          showToast(`Couldn't ${pinned ? 'pin' : 'unpin'}: ${errMsg(err)}`),
+        await setConversationPinned(ASSISTANT_APP_ID, id, pinned, conversationScope(id)).catch(
+          (err: unknown) => showToast(`Couldn't ${pinned ? 'pin' : 'unpin'}: ${errMsg(err)}`),
         );
         await assistantConversations.refresh();
       })();
@@ -384,8 +403,9 @@ export default function App(): JSX.Element {
   const archiveAssistantConversation = useCallback(
     (id: string, archived: boolean) => {
       void (async () => {
-        await setConversationArchived(ASSISTANT_APP_ID, id, archived).catch((err: unknown) =>
-          showToast(`Couldn't ${archived ? 'archive' : 'unarchive'}: ${errMsg(err)}`),
+        await setConversationArchived(ASSISTANT_APP_ID, id, archived, conversationScope(id)).catch(
+          (err: unknown) =>
+            showToast(`Couldn't ${archived ? 'archive' : 'unarchive'}: ${errMsg(err)}`),
         );
         const cur = navRef.current?.route;
         if (archived && cur?.kind === 'assistant' && cur.conversationId === id) {
@@ -401,7 +421,7 @@ export default function App(): JSX.Element {
   const exportAssistantConversation = useCallback((id: string, format: ExportFormat) => {
     void (async () => {
       try {
-        const conv = await loadConversation(ASSISTANT_APP_ID, id);
+        const conv = await loadConversation(ASSISTANT_APP_ID, id, conversationScope(id));
         downloadConversation(conv, format);
       } catch (err: unknown) {
         showToast(`Couldn't export: ${errMsg(err)}`);
@@ -457,98 +477,97 @@ export default function App(): JSX.Element {
     (nav: ShellNav) => {
       const page = activePageFor(nav.route);
       const go = (route: ShellRoute) => () => nav.navigate(route);
-      const headSlot = (
-        <ProfileSwitcherHead
-          active={
-            activeVault.active
-              ? {
-                  id: activeVault.active.vaultId,
-                  name: activeVault.active.name,
-                  color: activeVault.active.color ?? '#4E68DD',
-                  icon: (activeVault.active.icon as IconName) || 'Sparkle',
-                }
-              : undefined
-          }
-          subtitle={
-            activeVault.loading || !activeVault.active
-              ? '—'
-              : // (#382) the switcher IS the pair manager now — the sidebar
-                // head's subtitle always names the active gateway (not just
-                // remote ones, and no longer the app count), so "which pair
-                // am I in" reads at a glance for every gateway kind.
-                (activeVault.activeGatewayKind === 'local'
-                  ? 'This Mac'
-                  : activeVault.activeGatewayLabel) || 'This Mac'
-          }
-          open={vaultSwitcherOpen}
-          onToggle={(anchor) => {
-            setVaultSwitcherOpen(true);
-            const activeGatewayId = activeVault.activeGatewayId;
-            if (!activeGatewayId) return;
-            const active = { gatewayId: activeGatewayId, vaultId: activeVault.activeVaultId };
-            const select = (row: PairRow): void => {
-              const plan = resolveSelection(row, active.gatewayId);
-              void applySelection(plan, {
-                setActiveGateway: (input) => window.CentraidApi.setActiveGateway(input),
-                setActiveVault: (input) => window.CentraidApi.setActiveVault(input),
-              });
-            };
-            // Grouped (gateway, vault) switcher (#382): paint instantly from
-            // whatever's cached from a prior open, then refresh every
-            // registered gateway concurrently and patch the list in place
-            // as each settles (stale-while-revalidate).
-            openVaultSwitcher({
-              anchor,
-              groups: getCachedGroupedRows(active),
-              onAddGateway: () => setAddGatewayOpen(true),
-              onNewSpace: (gatewayId) => setNewSpaceGatewayId(gatewayId),
-              onRemoveGateway: (gatewayId) => {
-                void (async () => {
-                  const ok = await openConfirm({
-                    confirmLabel: 'Remove',
-                    danger: true,
-                    message:
-                      'This desktop stops talking to it — the gateway and its vaults are untouched.',
-                    title: 'Remove this gateway connection?',
-                  });
-                  if (!ok) return;
-                  await window.CentraidApi.removeGateway({ id: gatewayId }).catch((err: unknown) =>
-                    showToast(
-                      `Couldn't remove: ${err instanceof Error ? err.message : String(err)}`,
-                    ),
-                  );
-                })();
-              },
-              onRenameGateway: (gatewayId) => {
-                const label =
-                  getCachedGroupedRows(active).find((g) => g.gatewayId === gatewayId)
-                    ?.gatewayLabel ?? '';
-                setRenameTarget({ gatewayId, label });
-              },
-              onSelectVault: select,
-              onTestConnection: (gatewayId) => {
-                const label =
-                  getCachedGroupedRows(active).find((g) => g.gatewayId === gatewayId)
-                    ?.gatewayLabel ?? gatewayId;
-                setTestConnectionTarget({ gatewayId, label });
-              },
-              onClose: () => setVaultSwitcherOpen(false),
-            });
-            void openGroupedVaultRegistry(active, updateVaultSwitcherRows).then(({ rows }) =>
-              updateVaultSwitcherRows(rows),
+      // The sidebar head is an IDENTITY row now, not a switcher (#599,
+      // Decision 14): it names the member's own space and the gateway it lives
+      // on, and it opens Household. Choosing a space is no longer a mode —
+      // Household lists them and every creation flow names its own target.
+      const activeGatewayId = memberScopes.gatewayId ?? '';
+      const openGatewayPicker = (anchor: DOMRect): void => {
+        setGatewaySwitcherOpen(true);
+        const labelOf = (gatewayId: string): string =>
+          getCachedGatewayRows(activeGatewayId).find((g) => g.gatewayId === gatewayId)
+            ?.gatewayLabel ?? gatewayId;
+        // Paint instantly from whatever a prior open cached, then probe every
+        // registered gateway concurrently and patch rows in place as each
+        // settles (stale-while-revalidate).
+        openGatewaySwitcher({
+          anchor,
+          rows: getCachedGatewayRows(activeGatewayId),
+          onAddGateway: () => setAddGatewayOpen(true),
+          onSelectGateway: (gatewayId) => {
+            void window.CentraidApi.setActiveGateway({ id: gatewayId }).catch((err: unknown) =>
+              showToast(`Couldn't switch gateway: ${errMsg(err)}`),
             );
-          }}
+          },
+          onRemoveGateway: (gatewayId) => {
+            void (async () => {
+              const ok = await openConfirm({
+                confirmLabel: 'Remove',
+                danger: true,
+                message:
+                  'This device stops talking to it — the gateway and its spaces are untouched.',
+                title: 'Remove this gateway connection?',
+              });
+              if (!ok) return;
+              await window.CentraidApi.removeGateway({ id: gatewayId }).catch((err: unknown) =>
+                showToast(`Couldn't remove: ${errMsg(err)}`),
+              );
+            })();
+          },
+          onRenameGateway: (gatewayId) => setRenameTarget({ gatewayId, label: labelOf(gatewayId) }),
+          onTestConnection: (gatewayId) =>
+            setTestConnectionTarget({ gatewayId, label: labelOf(gatewayId) }),
+          onClose: () => setGatewaySwitcherOpen(false),
+        });
+        void openGatewayRegistry(activeGatewayId, updateGatewaySwitcherRows).then(
+          updateGatewaySwitcherRows,
+        );
+      };
+      const headSlot = (
+        <IdentityHead
+          {...(memberScopes.primary
+            ? {
+                space: {
+                  name: memberScopes.primary.label,
+                  color: memberScopes.primary.color ?? '#4E68DD',
+                  icon: memberScopes.primary.icon ?? 'Sparkle',
+                },
+              }
+            : {})}
+          gatewayLabel={
+            memberScopes.loading
+              ? '—'
+              : (memberScopes.gatewayKind === 'local' ? 'This Mac' : memberScopes.gatewayLabel) ||
+                'This Mac'
+          }
+          onOpenHousehold={() => nav.navigate({ kind: 'household' })}
+          {...(gatewayCount > 1
+            ? { onSwitchGateway: openGatewayPicker, switcherOpen: gatewaySwitcherOpen }
+            : {})}
         />
       );
+      // Rows carry their space only when it is NOT the member's own — a
+      // conversation belongs to one space for life (#599), and saying so on
+      // every row would drown the useful case.
+      const scopeById = conversationScopes();
+      const ownScopeId = memberScopes.primary?.id;
       const conversations: SidebarConversation[] = assistantConversations.conversations
         .filter((c) => !pendingConversationDeletes.has(c.id))
-        .map((c) => ({
-          id: c.id,
-          title: c.title || 'New conversation',
-          timeLabel: relativeTime(new Date(c.updatedAt).toISOString()),
-          pinned: c.pinned,
-          archived: c.archived,
-        }));
+        .map((c) => {
+          const scopeId = scopeById[c.id];
+          const label =
+            scopeId && scopeId !== ownScopeId
+              ? memberScopes.scopes.find((s) => s.id === scopeId)?.label
+              : undefined;
+          return {
+            id: c.id,
+            title: c.title || 'New conversation',
+            timeLabel: relativeTime(new Date(c.updatedAt).toISOString()),
+            pinned: c.pinned,
+            archived: c.archived,
+            ...(label ? { scopeLabel: label } : {}),
+          };
+        });
       return (
         <Sidebar
           activePage={page}
@@ -556,7 +575,7 @@ export default function App(): JSX.Element {
           activeConversationId={
             nav.route.kind === 'assistant' ? nav.route.conversationId : undefined
           }
-          headSlot={activeVault.loading || activeVault.vaults.length > 0 ? headSlot : undefined}
+          headSlot={memberScopes.loading || memberScopes.scopes.length > 0 ? headSlot : undefined}
           onHome={go({ kind: 'home' })}
           onSearch={() => setPaletteOpen(true)}
           onAssistant={go({ kind: 'assistant' })}
@@ -568,6 +587,7 @@ export default function App(): JSX.Element {
           approvalsCount={blockingCount}
           onGateway={go({ kind: 'gateway' })}
           gatewayStatus={gatewayStatus}
+          onHousehold={go({ kind: 'household' })}
           onStorage={go({ kind: 'storage' })}
           onAtlas={go({ kind: 'atlas' })}
           onSettings={go({ kind: 'settings' })}
@@ -590,8 +610,9 @@ export default function App(): JSX.Element {
     },
     [
       builderEnabled,
-      activeVault,
-      vaultSwitcherOpen,
+      memberScopes,
+      gatewayCount,
+      gatewaySwitcherOpen,
       blockingCount,
       updateStatus,
       gatewayStatus,
@@ -632,6 +653,8 @@ export default function App(): JSX.Element {
           return <ApprovalsRoute />;
         case 'gateway':
           return <GatewayRoute />;
+        case 'household':
+          return <HouseholdRoute />;
         case 'storage':
           return <StorageRoute />;
         case 'atlas':
@@ -822,34 +845,6 @@ export default function App(): JSX.Element {
             // The commit already switched the active gateway+vault, which
             // fires onGatewayChanged/onVaultChanged — the reScope effect
             // above picks it up and refreshes the app list + navigates home.
-          }}
-        />
-      ) : null}
-      {newSpaceGatewayId ? (
-        <SpaceModal
-          mode="add"
-          initial={{ color: randomSpaceColor(), icon: DEFAULT_SPACE_ICON }}
-          onCancel={() => setNewSpaceGatewayId(null)}
-          onCommit={(data) => {
-            const gatewayId = newSpaceGatewayId;
-            setNewSpaceGatewayId(null);
-            void (async () => {
-              try {
-                // `createVault`/`createSpace` operate on the ACTIVE gateway —
-                // switch first when the target isn't already active, so "New
-                // space" on a non-active gateway's header row is one action
-                // from the user's point of view (design doc step C note).
-                if (gatewayId !== activeVault.activeGatewayId) {
-                  await window.CentraidApi.setActiveGateway({ id: gatewayId });
-                }
-                await createSpace(data);
-                showToast(`Space created · ${data.name}`);
-              } catch (err) {
-                showToast(
-                  `Couldn't create space: ${err instanceof Error ? err.message : String(err)}`,
-                );
-              }
-            })();
           }}
         />
       ) : null}

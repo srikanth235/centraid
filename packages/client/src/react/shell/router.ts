@@ -42,6 +42,7 @@ export function routeKey(route: ShellRoute): string {
     case 'connectors':
     case 'approvals':
     case 'gateway':
+    case 'household':
     case 'storage':
     case 'atlas':
     case 'templates':

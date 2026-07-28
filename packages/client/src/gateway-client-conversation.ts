@@ -19,7 +19,14 @@
  * Re-exported from `gateway-client.ts` so call sites import from one barrel.
  */
 
-import { auth, authHeaders, doFetch, readJson, GatewayClientError } from './gateway-client-core.js';
+import {
+  auth,
+  authHeaders,
+  doFetch,
+  readJson,
+  scopedAuthHeaders,
+  GatewayClientError,
+} from './gateway-client-core.js';
 import type { CentraidAgentsStatus, CentraidRunnerStatus } from './centraid-api.js';
 // Shared chat-client core (issue #420): the ONE SSE parser + wire-route
 // builders + the documented TurnStreamEvent union, from the canonical kit copy.
@@ -127,6 +134,14 @@ export interface StreamTurnInput {
   additionalDirectories?: string[];
   /** Centraid-owned primary workspace selector (the host resolves the path). */
   workspaceKind?: 'vault-data' | 'app' | 'draft';
+  /**
+   * The space this conversation reads and writes (issue #599). A conversation
+   * is pinned to exactly ONE space for its whole life: the picker records the
+   * choice when the conversation is created, and every later turn/load repeats
+   * it. Omitted degrades to the shell's internal default-scope pointer, which
+   * is what every conversation created before the picker existed relies on.
+   */
+  scopeId?: string;
 }
 
 /** Result of a driven turn: whether the stream ended cleanly server-side. */
@@ -155,12 +170,13 @@ async function postTurnWithRetry(
   body: string,
   signal: AbortSignal,
   errLabel: string,
+  scopeId?: string,
 ): Promise<Response> {
   const { baseUrl, token } = await auth();
   for (let attempt = 0; ; attempt++) {
     const res = await doFetch(baseUrl, path, {
       method: 'POST',
-      headers: authHeaders(token, 'application/json'),
+      headers: scopedAuthHeaders(token, scopeId, 'application/json'),
       body,
       signal,
     });
@@ -209,11 +225,15 @@ export async function uploadConversationAttachment(
   bytes: Uint8Array,
   mime: string,
   filename?: string,
+  scopeId?: string,
 ): Promise<ConversationAttachmentRef> {
   const { baseUrl, token } = await auth();
+  // The blob CAS is vault-partitioned: an attachment staged in the ambient
+  // space while the turn resolves its hash in the conversation's space would
+  // silently break — so the conversation's scope rides the upload too (#599).
   const res = await doFetch(baseUrl, blobsPath(appId), {
     method: 'POST',
-    headers: { ...authHeaders(token), 'content-type': mime },
+    headers: scopedAuthHeaders(token, scopeId, mime),
     body: bytes as BodyInit,
   });
   if (!res.ok) {
@@ -256,6 +276,7 @@ export async function streamTurn(
     }),
     signal,
     'chat',
+    input.scopeId,
   );
   // `res.body` is guaranteed by postTurnWithRetry.
   return consumeSse(res.body!, onEvent, { signal });
@@ -307,6 +328,7 @@ export async function streamAssistantTurn(
     }),
     signal,
     'assistant',
+    input.scopeId,
   );
   return consumeSse(res.body!, onEvent, { signal });
 }
@@ -319,11 +341,12 @@ export async function streamAssistantTurn(
 export async function conversationStatus(
   appId: string,
   sessionId: string,
+  scopeId?: string,
 ): Promise<{ turnCount: number; updatedAt: number }> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, conversationStatusPath(appId, sessionId), {
     method: 'GET',
-    headers: authHeaders(token),
+    headers: scopedAuthHeaders(token, scopeId),
   });
   return readJson(res, 'conversation status');
 }
@@ -343,183 +366,7 @@ export async function resolveAssistantRefs(
   return out.cards ?? [];
 }
 
-// ───────────────────────── chat history ─────────────────────
-// Routes single-sourced in @centraid/blueprints/kit/conversation-client.js (#420).
-
-/** List this app's persisted chat sessions, newest first. */
-export async function listConversations(appId: string): Promise<CentraidConversationSummary[]> {
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, conversationsPath(appId), {
-    method: 'GET',
-    headers: authHeaders(token),
-  });
-  const out = await readJson<{ sessions: CentraidConversationSummary[] }>(res, 'list chats');
-  return out.sessions ?? [];
-}
-
-/** Create a fresh chat session row (the chat session id the turn streams to). */
-export async function createConversation(
-  appId: string,
-  title = '',
-): Promise<CentraidConversationSummary> {
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, conversationsPath(appId), {
-    method: 'POST',
-    headers: authHeaders(token, 'application/json'),
-    body: JSON.stringify({ title }),
-  });
-  return readJson<CentraidConversationSummary>(res, 'create chat');
-}
-
-/**
- * Fetch an attachment blob's bytes (auth-aware) and return an object URL for an
- * inline `<img>` thumbnail (issue #420, Wave 2). The blob GET route lives behind
- * the same bearer auth as the rest of the conversation surface, so an `<img
- * src>` cannot carry it — we fetch the bytes and mint a local object URL. The
- * caller must `URL.revokeObjectURL` it when the image unmounts.
- */
-export async function fetchAssistantAttachmentUrl(
-  appId: string,
-  hash: string,
-  mime: string,
-): Promise<string> {
-  const { baseUrl, token } = await auth();
-  const path = `${blobsPath(appId)}/${encodeURIComponent(hash)}?mime=${encodeURIComponent(mime)}`;
-  const res = await doFetch(baseUrl, path, { method: 'GET', headers: authHeaders(token) });
-  if (!res.ok) {
-    throw new GatewayClientError('gateway_error', `attachment fetch failed (HTTP ${res.status})`);
-  }
-  const blob = await res.blob();
-  return URL.createObjectURL(blob);
-}
-
-/**
- * Load one chat session with its reconstructed transcript. When cold ranges
- * were archived + custody-gated-pruned (issue #438 wave 3), the server merges
- * them back read-only: `hasArchivedHistory` flags that some messages carry
- * `fromArchive`, and `archiveUnavailable` flags that a segment blob couldn't be
- * fetched (the render is the live rows only).
- */
-export async function loadConversation(
-  appId: string,
-  sessionId: string,
-): Promise<
-  CentraidConversationSummary & {
-    messages: Array<{
-      idx: number;
-      payload: CentraidConversationHistoryMessage;
-      createdAt: number;
-    }>;
-    hasArchivedHistory?: boolean;
-    archivedTurnCount?: number;
-    archiveUnavailable?: boolean;
-    workspace?: {
-      primaryKind: 'vault-data' | 'app' | 'draft';
-      additionalDirectories: string[];
-      updatedAt: number;
-    };
-  }
-> {
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, conversationPath(appId, sessionId), {
-    method: 'GET',
-    headers: authHeaders(token),
-  });
-  return readJson(res, 'load chat');
-}
-
-/** Rename a chat session. */
-export async function renameConversation(
-  appId: string,
-  sessionId: string,
-  title: string,
-): Promise<void> {
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, conversationPath(appId, sessionId), {
-    method: 'PATCH',
-    headers: authHeaders(token, 'application/json'),
-    body: JSON.stringify({ title }),
-  });
-  await readJson(res, 'rename chat');
-}
-
-/**
- * FTS search over this app's chat sessions — titles + inbound message text
- * (issue #420). Powers the ⌘K palette's "Conversations" category. Each hit
- * carries a highlighted `snippet` for match context; archived threads are
- * excluded server-side.
- */
-export async function searchConversations(
-  appId: string,
-  query: string,
-  limit = 20,
-): Promise<CentraidConversationSearchResult[]> {
-  if (!query.trim()) return [];
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, conversationSearchPath(appId, query, limit), {
-    method: 'GET',
-    headers: authHeaders(token),
-  });
-  const out = await readJson<{ results: CentraidConversationSearchResult[] }>(res, 'search chats');
-  return out.results ?? [];
-}
-
-/** Pin or unpin a chat session (pinned threads sort first). */
-export async function setConversationPinned(
-  appId: string,
-  sessionId: string,
-  pinned: boolean,
-): Promise<void> {
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, conversationPath(appId, sessionId), {
-    method: 'PATCH',
-    headers: authHeaders(token, 'application/json'),
-    body: JSON.stringify({ pinned }),
-  });
-  await readJson(res, 'pin chat');
-}
-
-/** Archive or unarchive a chat session. */
-export async function setConversationArchived(
-  appId: string,
-  sessionId: string,
-  archived: boolean,
-): Promise<void> {
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, conversationPath(appId, sessionId), {
-    method: 'PATCH',
-    headers: authHeaders(token, 'application/json'),
-    body: JSON.stringify({ archived }),
-  });
-  await readJson(res, 'archive chat');
-}
-
-/**
- * Set (or clear, with `null`) the reader's 👍/👎 on one answer turn
- * (`PATCH .../sessions/<id>/turns/<turnId>/feedback`, issue #420).
- */
-export async function setConversationFeedback(
-  appId: string,
-  sessionId: string,
-  turnId: string,
-  feedback: 'up' | 'down' | null,
-): Promise<void> {
-  const { baseUrl, token } = await auth();
-  const path = `${conversationPath(appId, sessionId)}/turns/${encodeURIComponent(turnId)}/feedback`;
-  const res = await doFetch(baseUrl, path, {
-    method: 'PATCH',
-    headers: authHeaders(token, 'application/json'),
-    body: JSON.stringify({ feedback }),
-  });
-  await readJson(res, 'set feedback');
-}
-
-/** Delete a chat session. */
-export async function deleteConversation(appId: string, sessionId: string): Promise<void> {
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, conversationPath(appId, sessionId), {
-    method: 'DELETE',
-    headers: authHeaders(token),
-  });
-  await readJson(res, 'delete chat').catch(() => undefined);
-}
+// The chat-history CRUD (list/create/load/rename/search/pin/archive/delete)
+// lives beside this file; re-exported so the conversation surface stays one
+// import for every call site.
+export * from './gateway-client-conversation-history.js';

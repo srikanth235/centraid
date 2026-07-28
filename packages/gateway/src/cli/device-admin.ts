@@ -21,7 +21,7 @@ import {
   VaultRegistryError,
   type VaultRegistry,
 } from '../serve/vault-registry.js';
-import { EnrollmentStore, type GrantableTrust } from '../serve/enrollment-store.js';
+import { EnrollmentStore, type GrantableRole } from '../serve/enrollment-store.js';
 import { GatewayDatabase, GatewayLockError } from '../serve/gateway-db.js';
 import { daemonLayoutFor } from './paths.js';
 import { daemonKeyStore } from './key-store.js';
@@ -43,9 +43,15 @@ interface DeviceArgs {
   vault?: string;
   label?: string;
   ttlMinutes?: number;
-  trust?: GrantableTrust;
-  /** Exact vault name required when the requested revoke removes its last owner. */
-  confirmLastOwner?: string;
+  role?: GrantableRole;
+  /** Existing member (id or exact label) this invitation is minted for. */
+  member?: string;
+  /** …or a brand-new person, created at mint time so no phantom can appear. */
+  newMember?: string;
+  /** Repeatable `--grant <vaultId>:<role>` — one scan, many vaults, atomic. */
+  grants?: Array<{ vaultId: string; role: GrantableRole }>;
+  /** Exact vault name required when the requested revoke removes its last admin. */
+  confirmLastAdmin?: string;
   /** Emit machine-readable JSON instead of human text (issue #382, `pair` only). */
   json?: boolean;
   /**
@@ -94,16 +100,33 @@ function parseDeviceArgs(args: string[], fail: (msg: string, code?: number) => n
         out.ttlMinutes = n;
         break;
       }
-      case '--trust': {
-        const trust = next();
-        if (trust !== 'owner' && trust !== 'full' && trust !== 'readonly') {
-          fail('--trust must be "owner", "full", or "readonly"', 2);
+      case '--role': {
+        const role = next();
+        if (role !== 'admin' && role !== 'write' && role !== 'read') {
+          fail('--role must be "admin", "write", or "read"', 2);
         }
-        out.trust = trust;
+        out.role = role;
         break;
       }
-      case '--confirm-last-owner':
-        out.confirmLastOwner = next();
+      case '--member':
+        out.member = next();
+        break;
+      case '--new-member':
+        out.newMember = next();
+        break;
+      case '--grant': {
+        const raw = next();
+        const split = raw.lastIndexOf(':');
+        const vaultId = split === -1 ? '' : raw.slice(0, split);
+        const role = split === -1 ? '' : raw.slice(split + 1);
+        if (!vaultId || (role !== 'admin' && role !== 'write' && role !== 'read')) {
+          fail('--grant must read "<vaultId>:<admin|write|read>"', 2);
+        }
+        (out.grants ??= []).push({ vaultId, role });
+        break;
+      }
+      case '--confirm-last-admin':
+        out.confirmLastAdmin = next();
         break;
       case '--json':
         out.json = true;
@@ -203,7 +226,10 @@ export async function commandPair(
         body: JSON.stringify({
           ...(parsed.vault !== undefined ? { vaultId: parsed.vault } : {}),
           ...(parsed.ttlMinutes !== undefined ? { ttlMinutes: parsed.ttlMinutes } : {}),
-          ...(parsed.trust !== undefined ? { trust: parsed.trust } : {}),
+          ...(parsed.role !== undefined ? { role: parsed.role } : {}),
+          ...(parsed.member !== undefined ? { memberId: parsed.member } : {}),
+          ...(parsed.newMember !== undefined ? { newMemberLabel: parsed.newMember } : {}),
+          ...(parsed.grants !== undefined ? { grants: parsed.grants } : {}),
         }),
       });
     } catch (error) {
@@ -220,7 +246,10 @@ export async function commandPair(
       vaultId?: string;
       vaultName?: string;
       expiresAt?: string;
-      trust?: GrantableTrust;
+      role?: GrantableRole;
+      memberId?: string;
+      memberLabel?: string;
+      grants?: Array<{ vaultId: string; vaultName?: string; role: GrantableRole }>;
     };
     if (
       !response.ok ||
@@ -229,7 +258,7 @@ export async function commandPair(
       typeof result.vaultId !== 'string' ||
       typeof result.vaultName !== 'string' ||
       typeof result.expiresAt !== 'string' ||
-      (result.trust !== 'owner' && result.trust !== 'full' && result.trust !== 'readonly')
+      (result.role !== 'admin' && result.role !== 'write' && result.role !== 'read')
     ) {
       localFail(
         result.message ?? `daemon refused pairing ticket (${result.error ?? response.status})`,
@@ -238,23 +267,28 @@ export async function commandPair(
     }
     const token = result.ticket;
     const vault = { vaultId: result.vaultId, name: result.vaultName };
-    const trust = result.trust;
+    const role = result.role;
     if (json) {
       process.stdout.write(
         `${JSON.stringify({
           ok: true,
           ticket: token,
+          memberId: result.memberId,
+          memberLabel: result.memberLabel,
+          grants: result.grants,
           vaultId: vault.vaultId,
           vaultName: vault.name,
           expiresAt: result.expiresAt,
-          trust,
+          role,
         })}\n`,
       );
       return;
     }
     const lines = [
-      `Pairing ticket for vault "${vault.name}" (${vault.vaultId})`,
-      `Trust: ${trust}`,
+      `Pairing ticket for ${result.memberLabel ?? 'a new member'} (${result.memberId ?? 'unknown'})`,
+      ...(result.grants ?? [{ vaultId: vault.vaultId, vaultName: vault.name, role }]).map(
+        (grant) => `  ${grant.vaultName ?? grant.vaultId} (${grant.vaultId}): ${grant.role}`,
+      ),
       `Expires: ${result.expiresAt}`,
       '',
       'Desktop / PWA: paste this one-line ticket into "Add gateway":',
@@ -354,11 +388,21 @@ export async function commandDevices(
       });
       try {
         const vault = resolveVault(registry, parsed.vault, fail);
+        // No `--member`: the device becomes its own low-trust member, which
+        // is the honest reading of a communal box added from the host (#599
+        // Decision 4) and never an "Unassigned" bucket.
+        const member =
+          parsed.member === undefined ? undefined : devices.members.find(parsed.member);
+        if (parsed.member !== undefined && !member) {
+          fail(`no member matches "${parsed.member}" — try \`members list\``, 1);
+        }
         const row = devices.enroll({
           endpointId,
           vaultId: vault.vaultId,
           label: parsed.label ?? `device ${endpointId.slice(0, 10)}…`,
-          ...(parsed.trust ? { trust: parsed.trust } : {}),
+          ...(parsed.role ? { role: parsed.role } : {}),
+          ...(member ? { memberId: member.memberId } : {}),
+          ...(parsed.newMember !== undefined ? { memberLabel: parsed.newMember } : {}),
         });
         process.stdout.write(`${JSON.stringify(row)}\n`);
       } catch (err) {
@@ -390,28 +434,39 @@ export async function commandDevices(
       enableWalShipper: false,
     });
     try {
-      const lastOwners = candidates.filter(
-        (row) =>
-          row.trust === 'owner' &&
-          devices.listByVault(row.vaultId).filter((candidate) => candidate.trust === 'owner')
-            .length === 1,
-      );
-      if (lastOwners.length > 1) {
+      // The ≥1-admin invariant is authored on MEMBERS now (#599), so a device
+      // revocation only endangers it when this is the last live device of the
+      // vault's last admin member.
+      const liveEndpointsOf = (memberId: string): Set<string> =>
+        new Set(
+          devices
+            .list()
+            .filter((row) => row.memberId === memberId && row.role !== 'revoked')
+            .map((row) => row.endpointId),
+        );
+      const lastAdmins = candidates.filter((row) => {
+        if (row.role !== 'admin') return false;
+        const admins = devices.members.adminsOf(row.vaultId);
+        if (admins.length !== 1 || admins[0] !== row.memberId) return false;
+        const live = liveEndpointsOf(row.memberId);
+        return live.size === 1 && live.has(row.endpointId);
+      });
+      if (lastAdmins.length > 1) {
         fail(
-          'this endpoint is the last owner of multiple vaults; revoke each enrollment id separately',
+          'this endpoint is the last admin of multiple vaults; revoke each enrollment id separately',
           1,
         );
       }
-      const lastOwner = lastOwners[0];
-      if (lastOwner) {
+      const lastAdmin = lastAdmins[0];
+      if (lastAdmin) {
         const vaultName =
-          cleanupRegistry.get(lastOwner.vaultId)?.name ??
-          cleanupRegistry.list().find((vault) => vault.vaultId === lastOwner.vaultId)?.name ??
-          lastOwner.vaultId;
-        if (parsed.confirmLastOwner !== vaultName) {
+          cleanupRegistry.get(lastAdmin.vaultId)?.name ??
+          cleanupRegistry.list().find((vault) => vault.vaultId === lastAdmin.vaultId)?.name ??
+          lastAdmin.vaultId;
+        if (parsed.confirmLastAdmin !== vaultName) {
           fail(
-            `this is the last owner enrollment; pass --confirm-last-owner ${JSON.stringify(vaultName)}. ` +
-              'Losing it requires filesystem access and `centraid-gateway devices add --trust owner` to recover.',
+            `this is the last admin enrollment; pass --confirm-last-admin ${JSON.stringify(vaultName)}. ` +
+              'Losing it requires filesystem access and `centraid-gateway devices add --role admin` to recover.',
             1,
           );
         }

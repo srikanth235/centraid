@@ -63,7 +63,7 @@ test('erasing the last vault cascades gateway state, destroys its DEK, and prese
     endpointId: 'owner-device',
     vaultId: vault.vaultId,
     label: 'Owner laptop',
-    trust: 'owner',
+    role: 'admin',
   });
   WebControlSessionStore.open(database).establish({
     tokenHash: 'session-hash',
@@ -71,13 +71,15 @@ test('erasing the last vault cascades gateway state, destroys its DEK, and prese
     deviceKey: 'owner-device',
     shellOrigin: 'http://127.0.0.1:4173',
   });
+  const invitedMember = enrollments.members.create('Invited');
   database.run(
     `INSERT INTO tickets (
-      ticket_id, kind, secret_hash, vault_id, trust, created_at, expires_at
-    ) VALUES (?, 'enroll', ?, ?, 'full', ?, ?)`,
+      ticket_id, kind, secret_hash, member_id, grants_json, created_at, expires_at
+    ) VALUES (?, 'enroll', ?, ?, ?, ?, ?)`,
     'pending-pair',
     'secret-hash',
-    vault.vaultId,
+    invitedMember.memberId,
+    JSON.stringify([{ vaultId: vault.vaultId, role: 'write' }]),
     new Date(0).toISOString(),
     Date.now() + 60_000,
   );
@@ -178,7 +180,7 @@ test('a crash after erase state commit is completed before the next registry mou
     endpointId: 'owner-device',
     vaultId: vault.vaultId,
     label: 'Owner laptop',
-    trust: 'owner',
+    role: 'admin',
   });
   const recoveryKit = new RecoveryKitStateStore(database);
   await markKitVerified(recoveryKit);
@@ -248,7 +250,7 @@ test('a crash after erase state commit is completed before the next registry mou
  * between a mistaken click and a destroyed vault.
  */
 async function eraseFixture(
-  options: { trust?: 'owner' | 'full'; custody?: boolean } = {},
+  options: { role?: 'admin' | 'write'; custody?: boolean } = {},
 ): Promise<{
   base: string;
   vaultName: string;
@@ -276,7 +278,7 @@ async function eraseFixture(
     endpointId: 'caller-device',
     vaultId: vault.vaultId,
     label: 'Caller',
-    trust: options.trust ?? 'owner',
+    role: options.role ?? 'admin',
   });
   const recoveryKit = new RecoveryKitStateStore(database);
   const handler = makeVaultRouteHandler(registry, {
@@ -315,10 +317,10 @@ async function eraseFixture(
 }
 
 test('erase refuses a non-owner caller', async () => {
-  const fixture = await eraseFixture({ trust: 'full' });
+  const fixture = await eraseFixture({ role: 'write' });
   const response = await fixture.erase({ name: fixture.vaultName });
   expect(response.status).toBe(403);
-  expect(await response.json()).toMatchObject({ error: 'owner_required' });
+  expect(await response.json()).toMatchObject({ error: 'admin_required' });
 });
 
 test('erase refuses a host with no custody wiring', async () => {

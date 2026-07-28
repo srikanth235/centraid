@@ -31,6 +31,7 @@ import {
   doFetch,
   enc,
   readJson,
+  scopedAuthHeaders,
 } from './gateway-client-core.js';
 
 // One open editing session per app id, opened lazily and reused across
@@ -247,13 +248,17 @@ export async function createApp(input: {
    *  the gateway defaults to Sparkle/violet when omitted. */
   iconKey?: string;
   colorKey?: string;
+  /** The space the new app is created in (issue #599). A creation flow names
+   *  its target explicitly; omitted falls back to the internal default. */
+  scopeId?: string;
 }): Promise<{ id: string; name?: string; kind?: 'app' | 'automation' }> {
+  const { scopeId, ...body } = input;
   const sessionId = await ensureAppSession(input.id);
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, `/centraid/_apps`, {
     method: 'POST',
-    headers: authHeaders(token, 'application/json'),
-    body: JSON.stringify({ ...input, sessionId, publish: true }),
+    headers: scopedAuthHeaders(token, scopeId, 'application/json'),
+    body: JSON.stringify({ ...body, sessionId, publish: true }),
   });
   const out = await readJson<{
     app: { id: string; name?: string; kind?: 'app' | 'automation' };
@@ -300,14 +305,19 @@ export async function cloneTemplate(input: { templateId: string }): Promise<{
  * (still used for automations, which fork into the code store), this app
  * serves straight from the shipped package and upgrades with every release.
  */
-export async function installTemplate(input: { templateId: string }): Promise<{
+export async function installTemplate(input: {
+  templateId: string;
+  /** The space the app is installed into (issue #599) — Discover's target
+   *  picker names it; omitted falls back to the internal default. */
+  scopeId?: string;
+}): Promise<{
   app: { id: string; name?: string; description?: string; iconKey?: string; colorKey?: string };
   alreadyInstalled: boolean;
 }> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, `/centraid/_apps/_install`, {
     method: 'POST',
-    headers: authHeaders(token, 'application/json'),
+    headers: scopedAuthHeaders(token, input.scopeId, 'application/json'),
     body: JSON.stringify({ templateId: input.templateId }),
   });
   const out = await readJson<{

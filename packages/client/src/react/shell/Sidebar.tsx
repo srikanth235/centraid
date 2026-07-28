@@ -35,6 +35,7 @@ export type SidebarPage =
   | 'connectors'
   | 'approvals'
   | 'gateway'
+  | 'household'
   | 'storage'
   | 'atlas'
   | 'settings';
@@ -59,6 +60,11 @@ export interface SidebarConversation {
   pinned?: boolean;
   /** Archived threads render behind a collapsed group at the bottom. */
   archived?: boolean;
+  /** The space this conversation reads, when it is NOT the member's own
+   *  (issue #599). A conversation is pinned to one space for life, so the row
+   *  says which — but only when that is news; labelling every row with the
+   *  member's own space would be noise. */
+  scopeLabel?: string;
 }
 
 export interface SidebarProps {
@@ -104,6 +110,8 @@ export interface SidebarProps {
   onGateway?: () => void;
   /** Live heartbeat status pill next to "Gateway" — omitted shows no pill. */
   gatewayStatus?: 'up' | 'down' | 'unknown';
+  /** People, devices and spaces (issue #599). */
+  onHousehold?: () => void;
   onStorage?: () => void;
   onAtlas?: () => void;
   /** @deprecated Apps list is no longer shown in the sidebar. */
@@ -186,7 +194,11 @@ function ConversationRow({
     <SbItem
       icon={<SparkleGlyph size={13} />}
       label={conversation.title}
-      meta={conversation.timeLabel}
+      meta={
+        conversation.scopeLabel
+          ? `${conversation.scopeLabel} · ${conversation.timeLabel}`
+          : conversation.timeLabel
+      }
       active={active}
       onClick={onClick}
     />
@@ -413,6 +425,13 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
             </StatusPill>
           ) : undefined
         }
+      />
+      <SbItem
+        icon={<Icon name="Users" size={15} />}
+        label="Household"
+        active={props.activePage === 'household'}
+        disabled={!props.onHousehold}
+        onClick={props.onHousehold}
       />
       <SbItem
         icon={<Icon name="Save" size={15} />}

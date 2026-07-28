@@ -137,6 +137,9 @@ import { EnrollmentStore } from './enrollment-store.js';
 import { PairingTicketStore } from './pairing-store.js';
 import { makeVaultRouteHandler } from '../routes/vault-routes.js';
 import { makeDevicesRouteHandler } from '../routes/devices-routes.js';
+import { makeMembersRouteHandler } from '../routes/members-routes.js';
+import { makeScopesRouteHandler, SCOPES_PATH } from '../routes/scopes-routes.js';
+import { makeShareRouteHandler, SHARE_PATH } from '../routes/share-routes.js';
 import { makeDeviceWorkRouteHandler } from '../routes/device-work-routes.js';
 import { companionRequestAllowed } from './companion-access.js';
 import { makeReplicaRouteHandler } from '../routes/replica-routes.js';
@@ -543,8 +546,8 @@ function isFreshGatewayScopePath(pathname: string): boolean {
   return FRESH_GATEWAY_SCOPE_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 }
 
-/** Shared device-tier gate, before any owner/app/action route can dispatch. */
-function readonlyRequestAllowed(req: IncomingMessage): boolean {
+/** Shared device-role gate, before any owner/app/action route can dispatch. */
+function readRoleRequestAllowed(req: IncomingMessage): boolean {
   const method = (req.method ?? 'GET').toUpperCase();
   let url = new URL(req.url ?? '/', 'http://gateway.local');
   if (url.pathname === '/centraid/_web/control') {
@@ -555,7 +558,7 @@ function readonlyRequestAllowed(req: IncomingMessage): boolean {
   if (method !== 'POST') return false;
   // A query invocation is a read; an action invocation is a write. The
   // app-scoped RPC routes carry the kind in the path (issue #505), so a
-  // read-only device may POST to `queries/<name>` but not `actions/<name>`.
+  // read-role device may POST to `queries/<name>` but not `actions/<name>`.
   // `_describe` moved to GET and is covered by the read-method branch above.
   if (
     /^\/centraid\/[^_/][^/]*\/queries\/[^/]+$/.test(url.pathname) ||
@@ -1329,7 +1332,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       vaultId: kitlessCreated.vaultId,
       label: options.hostDeviceEndpointId ? 'desktop host' : 'kitless gateway host',
       platform: 'loopback',
-      trust: 'owner',
+      role: 'admin',
     });
   }
   const directHostEndpointId = options.hostDeviceEndpointId;
@@ -1953,6 +1956,46 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       }
     });
     await reconcileScheduler(id);
+  };
+
+  /**
+   * Install a BUNDLED app into an EXPLICIT vault (issue #599 Phase 4) — the
+   * auto-mount seam behind `/centraid/_vault/scopes`: an app a member already
+   * uses follows them into an audience vault they were added to.
+   *
+   * Same machinery as the `installBundledApp` lifecycle seam, with one
+   * critical difference: that seam closes over the AMBIENT request vault,
+   * while this one is handed a vault id. Everything vault-sensitive therefore
+   * runs inside `runWithVaultContext(vaultId, …)` — `registry.ensureUploaded`
+   * resolves `appsDir()` off the ambient scope, so calling it unscoped would
+   * install into whatever vault the caller happened to be on. Idempotent, and
+   * fail-soft: a refusal or failure resolves `false` rather than throwing, so
+   * the listing degrades to `installed: false` instead of a 500.
+   */
+  const ensureBundledAppInstalled = async (vaultId: string, appId: string): Promise<boolean> => {
+    if (!bundledAppIds.has(appId)) return false;
+    const plane = vaultRegistry.get(vaultId);
+    if (!plane) return false;
+    if (plane.installedAppIds().has(appId)) return true;
+    try {
+      // Mount the target vault's host first: the registry's providers read the
+      // ambient workspace, and the mount is cached per vault.
+      await hostFor(plane);
+      return await runWithVaultContext({ vaultId }, async () => {
+        const meta = await readBundledAppMeta(bundledAppDir(appId));
+        plane.installApp(appId, meta.name);
+        await requireRuntime().registry.ensureUploaded(appId);
+        await grantDeclaredBundledScopes(plane, appId);
+        await prewarmApp(appId, bundledAppDir(appId));
+        return true;
+      });
+    } catch (err) {
+      logger.warn(
+        `scopes: auto-install of "${appId}" into vault ${vaultId} failed: ` +
+          (err instanceof Error ? err.message : String(err)),
+      );
+      return false;
+    }
   };
 
   // Drop an app from the registry AND delete its wrapper dir under the
@@ -3289,6 +3332,26 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
               },
             }),
           ),
+          // Household roster (issue #599): members are the principals roles
+          // are authored on; the devices route above only binds hardware.
+          forRoutePrefixes(
+            '/centraid/_gateway/members',
+            makeMembersRouteHandler({
+              enrollments: options.devicePairing.enrollments,
+              vaultName: (id) => vaultRegistry.get(id)?.name,
+              ...(options.canMintFoundingTicket
+                ? { isHostCustody: options.canMintFoundingTicket }
+                : {}),
+              onEndpointRevoked: options.devicePairing.onEndpointRevoked,
+              onRevoked: (rows) => {
+                for (const row of rows) {
+                  const plane = vaultRegistry.get(row.vaultId);
+                  plane?.forgetReplicaDevice(row.endpointId);
+                  plane?.db.blobTransfers.revokePairedDevice(row.endpointId);
+                }
+              },
+            }),
+          ),
           forRoutePrefixes(
             '/centraid/_gateway/device-work',
             makeDeviceWorkRouteHandler({
@@ -3603,6 +3666,26 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     return true;
   };
 
+  // Deliberately NOT in `routeEntries`: the share plane is dispatched from
+  // `composedHandler` outside the per-vault scope (see its call site), so it
+  // must not also be reachable through the in-scope chain.
+  const shareHandler = makeShareRouteHandler({
+    enrollments: foundingEnrollments,
+    vaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
+    ...(options.canMintFoundingTicket ? { isHostCustody: options.canMintFoundingTicket } : {}),
+  });
+
+  // Deliberately NOT in `routeEntries` either, for the same reason as the
+  // share plane: the scopes listing spans every vault the caller holds a role
+  // in, so it is dispatched outside the per-vault scope (see its call site).
+  const scopesHandler = makeScopesRouteHandler({
+    enrollments: foundingEnrollments,
+    listVaults: () => vaultRegistry.list(),
+    installedApps: (vaultId) => vaultRegistry.get(vaultId)?.installedAppIds(),
+    ensureAppInstalled: ensureBundledAppInstalled,
+    ...(options.canMintFoundingTicket ? { isHostCustody: options.canMintFoundingTicket } : {}),
+  });
+
   const composedHandler: RouteHandler = async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://gateway.local');
     // The Rust-owned iroh relay calls this metadata-only control surface
@@ -3617,10 +3700,37 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     ) {
       return true;
     }
+    // The CLI lane into ticket minting is always open, by design: the landlord
+    // has shell access on this box, and `centraid-gateway pair` carries no
+    // device identity — which is precisely what the route's own host-custody
+    // check (`canMintPairingTicket` → `isDirectHostRequest`) exists to
+    // authorize. Demanding a proved device HERE made that hatch unreachable,
+    // so after founding a headless daemon could never enroll a SECOND device
+    // from the CLI. (The FIRST device never came through here — founding runs
+    // on `foundingHandler`, mounted outside this handler entirely.)
+    //
+    // Skipping ahead grants nothing. The bearer was already enforced upstream
+    // by `startRuntimeHttpServer` (this path is not in `publicPaths`), and the
+    // route still applies host-custody-or-vault-owner itself. `isDirectHostRequest`
+    // keeps the skip narrow: an iroh-forwarded request arrives on loopback too
+    // but carries device headers, so it falls through to the identity gate.
+    if (
+      url.pathname === '/centraid/_gateway/devices/ticket' &&
+      isDirectHostRequest(req) &&
+      (await prefixDispatch(req, res))
+    ) {
+      return true;
+    }
     if (vaultRegistry.isFresh()) {
       const method = req.method ?? 'GET';
       if (method === 'GET' && url.pathname === '/centraid/_vault/vaults') {
         return sendJson(res, 200, { vaults: [] });
+      }
+      // A fresh gateway has no vault, so a member holds a role in none: the
+      // honest answer is an empty scope list, not a 409 (same reasoning as
+      // `/centraid/_vault/vaults` above).
+      if (method === 'GET' && url.pathname === SCOPES_PATH) {
+        return sendJson(res, 200, { scopes: [] });
       }
       if (method === 'GET' && url.pathname === '/centraid/_apps') {
         return sendJson(res, 200, []);
@@ -3663,6 +3773,18 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         message: 'this device is not enrolled in any vault on this gateway',
       });
     }
+    // The cross-vault share plane (issue #599 decision 11) is dispatched HERE
+    // — after the device identity is proved, and BEFORE the single-vault
+    // `runWithVaultContext` scope below. A share spans two vaults, so running
+    // it inside a scope that names one would be a lie; and the `x-centraid-vault`
+    // header is irrelevant to it, so the per-vault resolution that follows must
+    // not get a chance to refuse the request over a vault it never uses. The
+    // route resolves and authorizes both vaults itself, from `member_roles`.
+    if (url.pathname.startsWith(SHARE_PATH) && (await shareHandler(req, res))) return true;
+    // Same placement, same reason (issue #599 Phase 4): the scopes listing
+    // answers "which vaults may I work in", which is by definition not one
+    // vault, so it must run before the `x-centraid-vault` resolution below.
+    if (url.pathname === SCOPES_PATH && (await scopesHandler(req, res))) return true;
     if (requested !== undefined && !enrolled.includes(requested)) {
       return sendJson(res, 403, {
         error: 'vault_not_enrolled',
@@ -3677,10 +3799,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       });
     }
     const enrollment = foundingEnrollments.get(deviceKey, vaultId);
-    if (enrollment?.trust === 'readonly' && !readonlyRequestAllowed(req)) {
+    if (enrollment?.role === 'read' && !readRoleRequestAllowed(req)) {
       return sendJson(res, 403, {
-        error: 'readonly_device',
-        message: 'this device is enrolled read-only and cannot mutate the gateway',
+        error: 'read_role_device',
+        message: 'this device is enrolled at the read role and cannot mutate the gateway',
       });
     }
     if (enrollment?.grantProfile !== undefined) {
@@ -3696,6 +3818,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       {
         vaultId,
         deviceKey,
+        // L4 attribution (#599): resolve the ACTING MEMBER once, here, from
+        // the device binding, so everything downstream reads "who did this"
+        // off the request scope instead of re-deriving it from hardware.
+        ...(enrollment ? { memberId: enrollment.memberId, memberRole: enrollment.role } : {}),
         ...(enrollment?.grantProfile !== undefined
           ? { grantProfile: enrollment.grantProfile }
           : {}),

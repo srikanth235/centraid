@@ -183,9 +183,9 @@ export function Chrome({ narrow, ready, slots }: ChromeProps): ReactNode {
         </div>
 
         <div id="consentBanner" className="kit-banner" hidden>
-          <strong>No vault access yet.</strong>{' '}
+          <strong>No access yet.</strong>{' '}
           <span id="consentDetail">
-            Ask the owner to approve this app&apos;s requested scopes in vault settings.
+            Ask the owner to approve this app&apos;s requested scopes in settings.
           </span>
         </div>
         {/* <output>'s implicit role IS `status`, so the live region survives the

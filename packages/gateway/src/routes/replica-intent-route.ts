@@ -5,6 +5,7 @@ import {
   recordReplicaIntentOutcome,
   type ReplicaIntentOutcome,
 } from '@centraid/vault';
+import { canWrite } from '../serve/enrollment-store.js';
 import type { VaultPlane } from '../serve/vault-plane.js';
 import { runWithReplicaIntent } from '../serve/replica-intent-context.js';
 import { readJson, sendJson } from './route-helpers.js';
@@ -30,7 +31,7 @@ export type ReplicaIntentDispatcher = (
 
 export interface ReplicaIntentRouteContext {
   plane: VaultPlane;
-  access: ReplicaShapeAccess & { deviceId: string };
+  access: ReplicaShapeAccess & { deviceId: string; memberId?: string };
   dispatch: ReplicaIntentDispatcher;
 }
 
@@ -172,8 +173,12 @@ export async function handleReplicaIntent(
     if (replicaOutcomeWire(existing)) return sendOutcome(res, existing);
   }
 
-  const deniedReason =
-    context.access.trust !== 'full' ? 'read-only devices cannot submit actions' : undefined;
+  // `canWrite` is the one predicate for "may this role mutate" — admin is
+  // write's superset, so a hand-rolled `!== 'write'` here silently denied
+  // every admin device, including the founding one.
+  const deniedReason = !canWrite(context.access.role)
+    ? 'read-only devices cannot submit actions'
+    : undefined;
   if (deniedReason) {
     try {
       const denied = recordReplicaIntentOutcome(context.plane.db.vault, {
@@ -206,8 +211,16 @@ export async function handleReplicaIntent(
   const canonicalCommitExistedBeforeDispatch = hasCanonicalCommit(context.plane, intentId, 'any');
   let dispatched: ReplicaIntentDispatchOutcome;
   try {
-    dispatched = await runWithReplicaIntent({ intentId, appId, deviceId: identity.deviceId }, () =>
-      context.dispatch({ intentId, appId, action, input: body.input }),
+    dispatched = await runWithReplicaIntent(
+      {
+        intentId,
+        appId,
+        deviceId: identity.deviceId,
+        // L4 attribution (#599): the acting member travels with the intent so
+        // a replayed offline write names the person, not only the hardware.
+        ...(context.access.memberId !== undefined ? { memberId: context.access.memberId } : {}),
+      },
+      () => context.dispatch({ intentId, appId, action, input: body.input }),
     );
   } catch {
     // Dispatch/transport failure is ambiguous: the canonical command may

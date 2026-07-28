@@ -7,7 +7,7 @@ import { act, narrate } from './outcomes.ts';
 
 export async function trashDuplicateAssets(
   ids: string[],
-  { refresh }: { refresh: () => Promise<void> },
+  { refresh, scope }: { refresh: () => Promise<void>; scope?: string | null },
 ): Promise<number> {
   let ok = 0;
   let parked = 0;
@@ -15,7 +15,7 @@ export async function trashDuplicateAssets(
   let failed = 0;
   let lastBad: VaultOutcome | undefined = undefined;
   for (const id of ids) {
-    const outcome = await act('delete-asset', { asset_id: id });
+    const outcome = await act('delete-asset', { asset_id: id }, scope);
     if (outcome?.status === 'executed') ok += 1;
     else if (outcome?.status === 'parked') parked += 1;
     else if (outcome?.status === 'queued' || outcome?.status === 'in-flight') queued += 1;
