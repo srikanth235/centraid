@@ -1,77 +1,51 @@
-import crypto from 'node:crypto';
+import { tempDir } from '@centraid/test-kit/temp-dir';
+/*
+ * Stopped-daemon filesystem maintenance (issue #289):
+ * `centraid-gateway vault|devices|pair` plus the daemon device plane. Tests
+ * call the dispatched command functions, asserting stdout + gateway.db rows.
+ */
+
+import { describe, afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import http from 'node:http';
-
+import crypto from 'node:crypto';
 import { buildGatewayInfoPayload } from '@centraid/protocol';
-import { tempDir } from '@centraid/test-kit/temp-dir';
 import { endpointIdForSecret } from '@centraid/tunnel';
 import { KeyStore } from '@centraid/vault';
-import { describe, afterEach, beforeEach, expect, test, vi } from 'vitest';
-
+import { commandVault } from './vault-admin.ts';
+import { commandDevices, commandPair } from './device-admin.ts';
+import { DEVICE_HEADER, DEVICE_PROOF_HEADER, makeDaemonDevicePlane } from './endpoint-host.ts';
+import { daemonLayoutFor } from './paths.ts';
+import { openVaultRegistry } from '../serve/vault-registry.ts';
+import { daemonKeyStore } from './key-store.ts';
+import { landlordBearerForEndpointSecret } from './landlord-auth.ts';
 import { EnrollmentStore } from '../serve/enrollment-store.ts';
 import { MemberStore } from '../serve/member-store.ts';
 import { encodePairingTicket, PairingTicketStore } from '../serve/pairing-store.ts';
-import { openVaultRegistry } from '../serve/vault-registry.ts';
-import { commandDevices, commandPair } from './device-admin.ts';
-import { DEVICE_HEADER, DEVICE_PROOF_HEADER, makeDaemonDevicePlane } from './endpoint-host.ts';
-import { daemonKeyStore } from './key-store.ts';
-import { landlordBearerForEndpointSecret } from './landlord-auth.ts';
-import { daemonLayoutFor } from './paths.ts';
-import { commandVault } from './vault-admin.ts';
+import { capture, CliFailError, fail, lastJson } from './admin-test-kit.ts';
 
-const silentLogger = {
-  info: () => undefined,
-  warn: () => undefined,
-  error: () => undefined,
-};
+const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
+// The slowest file in the suite: every test bootstraps a real vault/daemon
+// layout on disk, so it is the most fsync-bound thing we run. It needs an
+// escalation ABOVE the 30s node-project default in @centraid/test-kit/vitest
+// (see the measurements there). Sizing: the slowest single test here measured
+// ~5.6s on a fast host; at the ~10x worst observed hosted-runner disk penalty
+// that is ~56s, so 60s. The earlier 15s budget blamed v8 coverage
+// instrumentation, which was the wrong variable — coverage runs in the ci lane
+// too and passes there — and 15s was duly still too small: this file timed out
+// twice in nightly run 29733737906 (102s wall for 13 tests vs 20s in ci).
 vi.setConfig({ testTimeout: 60_000 });
 
 let dataDir: string;
-let out: string[];
 
-class CliFailError extends Error {
-  constructor(
-    message: string,
-    readonly code: number,
-  ) {
-    super(message);
-    this.name = 'CliFailError';
-  }
-}
-const fail = (message: string, code = 1): never => {
-  throw new CliFailError(message, code);
-};
-
-async function capture(fn: () => Promise<void> | void): Promise<string> {
-  const original = process.stdout.write.bind(process.stdout);
-  const chunks: string[] = [];
-  process.stdout.write = ((chunk: unknown): boolean => {
-    chunks.push(String(chunk));
-    return true;
-  }) as typeof process.stdout.write;
-  try {
-    await fn();
-  } finally {
-    process.stdout.write = original;
-  }
-  const joined = chunks.join('');
-  out.push(joined);
-  return joined;
-}
-describe('admin suite', () => {
+describe('admin scenarios', () => {
   beforeEach(async () => {
     dataDir = await tempDir(`admin-${crypto.randomUUID()}-`);
-    out = [];
   });
 
   afterEach(async () => {
     await fs.rm(dataDir, { recursive: true, force: true });
   });
-
-  function lastJson(text: string): Record<string, unknown> {
-    const lines = text.trim().split('\n').filter(Boolean);
-    return JSON.parse(lines[lines.length - 1]!) as Record<string, unknown>;
-  }
 
   async function fakePairDaemon(): Promise<typeof fetch> {
     const layout = daemonLayoutFor(dataDir);
@@ -83,6 +57,7 @@ describe('admin suite', () => {
         typeof input === 'string' || input instanceof URL ? input.toString() : input.url,
       );
       if (url.pathname === '/centraid/_gateway/info') {
+        // Mirror production #568 item C: dial tickets only for authenticated callers.
         const headers = new Headers(init?.headers);
         const authorized =
           headers.get('authorization') === `Bearer ${landlordBearerForEndpointSecret(secret)}`;
@@ -91,6 +66,7 @@ describe('admin suite', () => {
             instanceId: 'test-daemon',
             startedAt: Date.now(),
             uptimeMs: 1,
+            authenticated: authorized,
             endpointId,
             ...(authorized ? { endpointTicket: 'gw-ticket-base32' } : {}),
           }),
@@ -107,6 +83,9 @@ describe('admin suite', () => {
       };
       const registry = openVaultRegistry({
         rootDir: layout.vaultDir,
+        // The daemon this stands in for opens custody the same way; a bare
+        // KeyStore cannot unwrap a protected sealkey and would mount nothing
+        // (issue #568 item D).
         keyStore: daemonKeyStore(layout.keysDir),
         logger: silentLogger,
         enableWalShipper: false,
@@ -119,9 +98,8 @@ describe('admin suite', () => {
         if (!vault) {
           return Response.json(
             {
-              error: 'uninitialized',
-              message:
-                'gateway has no vault yet — run `centraid-gateway init-ticket` and complete founding first',
+              error: 'vault_required',
+              message: 'this gateway has no vault to invite into',
             },
             { status: 409 },
           );
@@ -137,6 +115,8 @@ describe('admin suite', () => {
         }
         const role = body.role ?? 'write';
         const tickets = PairingTicketStore.open(layout.gatewayDbFile);
+        // The daemon owns the invitation: it names the member and the grant
+        // list; the CLI only carries the token (#599 Decision 5).
         const label = typeof body.newMemberLabel === 'string' ? body.newMemberLabel : 'New member';
         const member = MemberStore.open(tickets.gatewayDatabase).create(label);
         const grants = [{ vaultId: vault.vaultId, vaultName: vault.name, role }];
@@ -167,6 +147,8 @@ describe('admin suite', () => {
     }) as typeof fetch;
   }
 
+  // ── devices admin ─────────────────────────────────────────────────────
+
   test('devices add / list / revoke, scoped by vault', async () => {
     const family = lastJson(
       await capture(() =>
@@ -192,11 +174,7 @@ describe('admin suite', () => {
         ),
       ),
     );
-    expect(added).toMatchObject({
-      endpointId: 'ep-laptop',
-      vaultId,
-      label: 'Priya laptop',
-    });
+    expect(added).toMatchObject({ endpointId: 'ep-laptop', vaultId, label: 'Priya laptop' });
 
     const listed = (
       await capture(() =>
@@ -212,6 +190,7 @@ describe('admin suite', () => {
       await capture(() => commandDevices(['revoke', '--data-dir', dataDir, 'ep-laptop'], fail)),
     );
     expect(revoked).toHaveProperty('revoked');
+    // Revoking an unknown device fails loudly.
     await expect(
       capture(() => commandDevices(['revoke', '--data-dir', dataDir, 'ep-gone'], fail)),
     ).rejects.toThrow(/no enrollment/u);
@@ -248,10 +227,7 @@ describe('admin suite', () => {
         ),
       ),
     );
-    expect(recovered).toMatchObject({
-      endpointId: 'ep-recovery',
-      role: 'admin',
-    });
+    expect(recovered).toMatchObject({ endpointId: 'ep-recovery', role: 'admin' });
   });
 
   test('devices admin rejects bad usage + unknown vault', async () => {
@@ -268,7 +244,11 @@ describe('admin suite', () => {
     ).rejects.toThrow(/no vault named/u);
   });
 
+  // ── pair ──────────────────────────────────────────────────────────────
+
   test('pair needs the daemon endpoint identity, then mints a pasteable ticket', async () => {
+    // Host custody key is required before the daemon handshake (auth-gated
+    // endpointTicket, #568 item C) — empty data dir fails for that reason first.
     await expect(
       capture(() =>
         commandPair(['--data-dir', dataDir], fail, async () => {
@@ -278,7 +258,9 @@ describe('admin suite', () => {
     ).rejects.toThrow(/no gateway endpoint identity/u);
 
     const layout = daemonLayoutFor(dataDir);
+    // Bootstrap a vault the ticket can name.
     await capture(() => commandVault(['create', '--data-dir', dataDir, '--name', 'Family'], fail));
+    // Key present but daemon unreachable → "daemon not running".
     new KeyStore(layout.keysDir).store('endpoint-key.bin', Buffer.alloc(32, 3));
     await expect(
       capture(() =>
@@ -299,6 +281,7 @@ describe('admin suite', () => {
     );
     expect(text).toMatch(/Pairing ticket for New member/u);
     expect(text).toMatch(/Family \(.*\): read/u);
+    // The pasteable token is the sole base64url line in the human block.
     const token = text
       .split('\n')
       .map((l) => l.trim())
@@ -332,6 +315,7 @@ describe('admin suite', () => {
     );
     expect(text).toMatch(/Pairing ticket for New member/u);
     expect(text).toMatch(/Phone: scan this QR/u);
+    // Token still present and decodable.
     const token = text
       .split('\n')
       .map((l) => l.trim())
@@ -341,6 +325,7 @@ describe('admin suite', () => {
       kind: string;
     };
     expect(payload.kind).toBe('centraid-gw-pair');
+    // Terminal QR is multi-line block art.
     expect(text.split('\n').length).toBeGreaterThan(12);
     expect(text).toMatch(/[█▄▀ ]/u);
   });
@@ -358,19 +343,19 @@ describe('admin suite', () => {
     expect(parsed).toHaveProperty('vaultId');
     expect(parsed).toMatchObject({ vaultName: 'Family' });
     expect(parsed.expiresAt).toBeTypeOf('string');
+    // The ticket itself still decodes to the same payload shape as the human path.
     const payload = JSON.parse(
       Buffer.from(parsed.ticket as string, 'base64url').toString('utf8'),
     ) as { kind: string; vaultName: string };
-    expect(payload).toMatchObject({
-      kind: 'centraid-gw-pair',
-      vaultName: 'Family',
-    });
+    expect(payload).toMatchObject({ kind: 'centraid-gw-pair', vaultName: 'Family' });
   });
 
   test('ordinary pair grants write even for the first device and refuses admin escalation', async () => {
     await capture(() => commandVault(['create', '--data-dir', dataDir, '--name', 'Family'], fail));
     const daemon = await fakePairDaemon();
 
+    // Ordinary pairing is never sensitive to whether this happens to be the
+    // first enrollment row.
     const first = lastJson(
       await capture(() =>
         commandPair(['--data-dir', dataDir, '--vault', 'Family', '--json'], fail, daemon),
@@ -378,10 +363,12 @@ describe('admin suite', () => {
     );
     expect(first.role).toBe('write');
 
+    // Enroll a device so the vault is no longer empty.
     await capture(() =>
       commandDevices(['add', '--data-dir', dataDir, 'ep-first', '--vault', 'Family'], fail),
     );
 
+    // A later pairing also defaults to full.
     const second = lastJson(
       await capture(() =>
         commandPair(['--data-dir', dataDir, '--vault', 'Family', '--json'], fail, daemon),
@@ -419,11 +406,14 @@ describe('admin suite', () => {
     expect(parsed.message).toBeTypeOf('string');
   });
 
+  // ── daemon device plane (deviceAccess + ticket redemption) ─────────────
+
   test('device plane: deviceKeyFor trusts only the in-process proof header', async () => {
     const layout = daemonLayoutFor(dataDir);
     await fs.mkdir(dataDir, { recursive: true });
     await capture(() => commandVault(['create', '--data-dir', dataDir, '--name', 'Family'], fail));
 
+    // Enroll a device out of band, then check the deviceAccess resolution.
     const registry = openVaultRegistry({
       rootDir: layout.vaultDir,
       keyStore: daemonKeyStore(layout.keysDir),
@@ -435,20 +425,20 @@ describe('admin suite', () => {
       vaultId,
       label: 'known',
     });
-    const plane = makeDaemonDevicePlane({
-      layout,
-      vaults: () => registry,
-      logger: silentLogger,
-    });
+    const plane = makeDaemonDevicePlane({ layout, vaults: () => registry, logger: silentLogger });
 
+    // No headers → not a device transport (shared bearer).
     const bare = { headers: {} } as unknown as http.IncomingMessage;
     expect(plane.deviceAccess.deviceKeyFor(bare)).toBeUndefined();
 
+    // Device header WITHOUT the process proof → refused (a bearer-holder
+    // cannot stamp an identity).
     const spoof = {
       headers: { [DEVICE_HEADER]: 'ep-known', [DEVICE_PROOF_HEADER]: 'forged' },
     } as unknown as http.IncomingMessage;
     expect(plane.deviceAccess.deviceKeyFor(spoof)).toBeUndefined();
 
+    // Enrollment lookup works regardless of proof.
     expect(plane.deviceAccess.vaultsFor('ep-known')).toStrictEqual([vaultId]);
     expect(plane.deviceAccess.vaultsFor('ep-nobody')).toStrictEqual([]);
     registry.stop();
@@ -468,15 +458,13 @@ describe('admin suite', () => {
       logger: silentLogger,
       relays: 'disabled',
     });
-    plane.pairing.tickets.mintFounding();
     expect(registry.isFresh()).toBe(true);
-    expect(plane.dataPlaneControl.authorize('first-device')).toMatchObject({
-      allowed: true,
-    });
-    const handle = await plane.startEndpoint({
-      baseUrl: 'http://127.0.0.1:1',
-      token: 't',
-    });
+    // #603 retired the admit-anyone founding window: an enrollment is now the
+    // ONLY admission, so an unknown EndpointId is refused even on a fresh dir.
+    expect(plane.dataPlaneControl.authorize('first-device')).toMatchObject({ allowed: false });
+    // Relays disabled keeps the endpoint offline; identity remains derivable
+    // from the custody key without a stale address cache.
+    const handle = await plane.startEndpoint({ baseUrl: 'http://127.0.0.1:1', token: 't' });
     try {
       expect(handle?.endpointId).toBeTruthy();
       const secret = new KeyStore(layout.keysDir).load('endpoint-key.bin');

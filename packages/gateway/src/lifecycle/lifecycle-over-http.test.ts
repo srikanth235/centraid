@@ -1,4 +1,4 @@
-import crypto from 'node:crypto';
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * Gateway-owned app lifecycle over HTTP (issue #141, Phase 2). The
  * deterministic builder — scaffold / clone / update-meta / automation
@@ -12,14 +12,13 @@ import crypto from 'node:crypto';
  *   - automation create mints a webhook secret (returned once) and the
  *     toggled/deleted automation flows through publish.
  */
+
+import { describe, afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-
-import type { GatewayPaths } from '../paths.ts';
+import crypto from 'node:crypto';
 import { serve, type GatewayServeHandle } from '../serve/serve.ts';
+import type { GatewayPaths } from '../paths.ts';
 // lifecycle-routes is exercised through serve() HTTP paths below (#545 B7).
 
 let dataDir: string;
@@ -43,28 +42,19 @@ function auth(extra: Record<string, string> = {}): Record<string, string> {
 async function listApps(): Promise<Array<{ id: string; name?: string; kind?: string }>> {
   const res = await fetch(`${handle.url}/centraid/_apps`, { headers: auth() });
   expect(res.status).toBe(200);
-  return (await res.json()) as Array<{
-    id: string;
-    name?: string;
-    kind?: string;
-  }>;
+  return (await res.json()) as Array<{ id: string; name?: string; kind?: string }>;
 }
 
 async function listSessions(): Promise<string[]> {
-  const res = await fetch(`${handle.url}/centraid/_apps/_sessions`, {
-    headers: auth(),
-  });
+  const res = await fetch(`${handle.url}/centraid/_apps/_sessions`, { headers: auth() });
   expect(res.status).toBe(200);
   return ((await res.json()) as { sessions: string[] }).sessions;
 }
 
-describe('lifecycle-over-http', () => {
+describe('lifecycle-over-http scenarios', () => {
   beforeEach(async () => {
     dataDir = await tempDir(`gw-lifecycle-${crypto.randomUUID()}-`);
-    handle = await serve({
-      initVaultName: "Owner's vault",
-      paths: pathsUnder(dataDir),
-    });
+    handle = await serve({ paths: pathsUnder(dataDir) });
   });
 
   afterEach(async () => {
@@ -82,10 +72,7 @@ describe('lifecycle-over-http', () => {
       body: JSON.stringify({ id: 'jotter', name: 'Jotter' }),
     });
     expect(staged.status).toBe(201);
-    const stagedBody = (await staged.json()) as {
-      sessionId: string;
-      staged: boolean;
-    };
+    const stagedBody = (await staged.json()) as { sessionId: string; staged: boolean };
     expect(stagedBody.staged).toBe(true);
     expect(stagedBody.sessionId).toBeTypeOf('string');
     expect(stagedBody.sessionId.length).toBeGreaterThan(0);
@@ -120,12 +107,7 @@ describe('lifecycle-over-http', () => {
     const published = await fetch(`${handle.url}/centraid/_apps`, {
       method: 'POST',
       headers: auth({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({
-        id: 'todos',
-        name: 'Todos',
-        iconKey: 'Todo',
-        publish: true,
-      }),
+      body: JSON.stringify({ id: 'todos', name: 'Todos', iconKey: 'Todo', publish: true }),
     });
     expect(published.status).toBe(201);
     const rows = (await (
@@ -318,10 +300,7 @@ describe('lifecycle-over-http', () => {
       headers: auth(),
     });
     expect(del.status).toBe(200);
-    const body = (await del.json()) as {
-      deleted: boolean;
-      codeRemoved: boolean;
-    };
+    const body = (await del.json()) as { deleted: boolean; codeRemoved: boolean };
     expect(body.deleted).toBe(true);
     expect(body.codeRemoved).toBe(false);
     // The teardown still ran: registry/data dir are cleaned.

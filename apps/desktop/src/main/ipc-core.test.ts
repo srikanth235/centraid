@@ -7,6 +7,7 @@ import {
   Channel,
   gatewayChangedPayload,
   hostCapabilities,
+  keychainPromptExpected,
   vaultChangedPayload,
 } from './ipc-core.js';
 import { UPDATE_AVAILABLE_CHANNEL } from './update-watcher.js';
@@ -96,5 +97,33 @@ describe(hostCapabilities, () => {
         backgroundTransfer: false,
       },
     });
+  });
+});
+
+describe(keychainPromptExpected, () => {
+  it('is false whenever safeStorage has no encryption to offer', () => {
+    for (const platform of ['darwin', 'linux', 'win32'] as const) {
+      expect(
+        keychainPromptExpected({ platform, encryptionAvailable: false, packaged: false }),
+      ).toBe(false);
+    }
+  });
+
+  it('warns on an unpackaged macOS build but not a packaged one', () => {
+    expect(
+      keychainPromptExpected({ platform: 'darwin', encryptionAvailable: true, packaged: false }),
+    ).toBe(true);
+    expect(
+      keychainPromptExpected({ platform: 'darwin', encryptionAvailable: true, packaged: true }),
+    ).toBe(false);
+  });
+
+  it('warns on Linux with a live keyring and never on Windows DPAPI', () => {
+    expect(
+      keychainPromptExpected({ platform: 'linux', encryptionAvailable: true, packaged: true }),
+    ).toBe(true);
+    expect(
+      keychainPromptExpected({ platform: 'win32', encryptionAvailable: true, packaged: true }),
+    ).toBe(false);
   });
 });

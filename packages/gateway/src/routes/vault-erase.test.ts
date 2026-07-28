@@ -1,44 +1,39 @@
-import { randomBytes } from 'node:crypto';
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { forEachSequentially } from '@centraid/test-kit/sequential';
+import { describe, afterEach, expect, test, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { randomBytes } from 'node:crypto';
 import path from 'node:path';
-
-import { forEachSequentially } from '@centraid/test-kit/sequential';
-import { plainSqliteRow, plainSqliteRows } from '@centraid/test-kit/sqlite';
-import { tempDir } from '@centraid/test-kit/temp-dir';
 import { KeyStore } from '@centraid/vault';
-import { describe, afterEach, expect, test, vi } from 'vitest';
-
 import { RecoveryKitStateStore } from '../backup/recovery-kit-state.js';
 import { daemonLayoutFor } from '../cli/paths.js';
 import { EnrollmentStore } from '../serve/enrollment-store.js';
-import { recoverPendingVaultErases } from '../serve/erase-recovery.js';
 import { GatewayDatabase } from '../serve/gateway-db.js';
 import { runWithVaultContext } from '../serve/vault-context.js';
 import { openVaultRegistry } from '../serve/vault-registry.js';
 import { WebControlSessionStore } from '../serve/web-session-store.js';
-import { makeVaultRouteHandler, type VaultRouteOptions } from './vault-routes.js';
+import { recoverPendingVaultErases } from '../serve/erase-recovery.js';
+import { makeVaultRouteHandler } from './vault-routes.js';
 
 const cleanups: Array<() => Promise<void> | void> = [];
-describe('vault-erase suite', () => {
-  afterEach(async () => {
-    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
-  });
+describe('vault-erase scenarios', () => {
+  afterEach(async () =>
+    forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup()),
+  );
 
   async function treeShape(root: string, relative = ''): Promise<string[]> {
     const dir = path.join(root, relative);
     const entries = await fs.readdir(dir, { withFileTypes: true });
-    const rows = (
-      await Promise.all(
-        entries.map(async (entry) => {
-          const child = path.join(relative, entry.name);
-          const row = `${entry.isDirectory() ? 'd' : 'f'}:${child}`;
-          return entry.isDirectory() ? [row, ...(await treeShape(root, child))] : [row];
-        }),
-      )
-    ).flat();
-    return rows.sort();
+    const rows = await Promise.all(
+      entries.map(async (entry) => {
+        const child = path.join(relative, entry.name);
+        const row = `${entry.isDirectory() ? 'd' : 'f'}:${child}`;
+        return entry.isDirectory() ? [row, ...(await treeShape(root, child))] : [row];
+      }),
+    );
+    return rows.flat().sort();
   }
 
   async function markKitVerified(store: RecoveryKitStateStore): Promise<void> {
@@ -60,11 +55,7 @@ describe('vault-erase suite', () => {
     const registry = openVaultRegistry({
       rootDir: layout.vaultDir,
       cacheRootDir: layout.cacheDir,
-      logger: {
-        info: () => undefined,
-        warn: () => undefined,
-        error: () => undefined,
-      },
+      logger: { info: () => undefined, warn: () => undefined, error: () => undefined },
     });
     cleanups.push(() => registry.stop());
     const vault = registry.create('Family');
@@ -86,8 +77,8 @@ describe('vault-erase suite', () => {
     const invitedMember = enrollments.members.create('Invited');
     database.run(
       `INSERT INTO tickets (
-      ticket_id, kind, secret_hash, member_id, grants_json, created_at, expires_at
-    ) VALUES (?, 'enroll', ?, ?, ?, ?, ?)`,
+      ticket_id, secret_hash, member_id, grants_json, created_at, expires_at
+    ) VALUES (?, ?, ?, ?, ?, ?)`,
       'pending-pair',
       'secret-hash',
       invitedMember.memberId,
@@ -112,12 +103,10 @@ describe('vault-erase suite', () => {
     );
     const recoveryKit = new RecoveryKitStateStore(database);
     await markKitVerified(recoveryKit);
-    const fenceVaultForErase = vi.fn<NonNullable<VaultRouteOptions['fenceVaultForErase']>>(
-      async (vaultId) => {
-        expect(vaultId).toBe(vault.vaultId);
-        expect(registry.get(vaultId)).toBeTruthy();
-      },
-    );
+    const fenceVaultForErase = vi.fn<(vaultId: string) => Promise<void>>(async (vaultId) => {
+      expect(vaultId).toBe(vault.vaultId);
+      expect(registry.get(vaultId)).toBeTruthy();
+    });
 
     const handler = makeVaultRouteHandler(registry, {
       enrollments,
@@ -144,15 +133,13 @@ describe('vault-erase suite', () => {
     await expect(response.json()).resolves.toMatchObject({
       ok: true,
       erasedVaultId: vault.vaultId,
-      status: 'uninitialized',
+      remainingVaults: 0,
     });
     expect(fenceVaultForErase).toHaveBeenCalledOnce();
 
     expect(registry.isFresh()).toBe(true);
     expect(enrollments.list()).toStrictEqual([]);
-    expect(
-      plainSqliteRow(database.db.prepare('SELECT COUNT(*) AS count FROM web_sessions').get()),
-    ).toStrictEqual({
+    expect(database.db.prepare('SELECT COUNT(*) AS count FROM web_sessions').get()).toStrictEqual({
       count: 0,
     });
     const tables = database.db
@@ -164,20 +151,16 @@ describe('vault-erase suite', () => {
       }>;
       if (!columns.some((column) => column.name === 'vault_id')) continue;
       expect(
-        plainSqliteRow(
-          database.db
-            .prepare(`SELECT COUNT(*) AS count FROM "${name}" WHERE vault_id = ?`)
-            .get(vault.vaultId),
-        ),
+        database.db
+          .prepare(`SELECT COUNT(*) AS count FROM "${name}" WHERE vault_id = ?`)
+          .get(vault.vaultId),
         `${name} retained the erased vault id`,
       ).toStrictEqual({ count: 0 });
     }
     expect(keys.export(`${vault.vaultId}.sealkey`)).toBeNull();
     expect(keys.export(`${vault.vaultId}.sealkey.next`)).toBeNull();
     expect(keys.export('endpoint-key.bin')).toStrictEqual(endpointBefore);
-    await expect(recoveryKit.status()).resolves.toMatchObject({
-      confirmedAt: expect.any(Number),
-    });
+    await expect(recoveryKit.status()).resolves.toMatchObject({ confirmedAt: expect.any(Number) });
     await expect(treeShape(dataDir)).resolves.toStrictEqual(vaultlessShape);
   });
 
@@ -192,11 +175,7 @@ describe('vault-erase suite', () => {
       rootDir: layout.vaultDir,
       cacheRootDir: layout.cacheDir,
       keyStore: keys,
-      logger: {
-        info: () => undefined,
-        warn: () => undefined,
-        error: () => undefined,
-      },
+      logger: { info: () => undefined, warn: () => undefined, error: () => undefined },
     });
     const vault = registry.create('Crash test');
     const enrollments = EnrollmentStore.open(database);
@@ -239,9 +218,9 @@ describe('vault-erase suite', () => {
     });
     expect(response.status).toBe(500);
     expect(enrollments.list()).toStrictEqual([]);
-    expect(
-      plainSqliteRows(database.db.prepare('SELECT vault_id FROM erase_intents').all()),
-    ).toStrictEqual([{ vault_id: vault.vaultId }]);
+    expect(database.db.prepare('SELECT vault_id FROM erase_intents').all()).toStrictEqual([
+      { vault_id: vault.vaultId },
+    ]);
     await expect(
       fs.access(path.join(layout.vaultDir, vault.vaultId, 'vault.db')),
     ).resolves.toBeUndefined();
@@ -253,19 +232,13 @@ describe('vault-erase suite', () => {
         vaultRoot: layout.vaultDir,
         cacheRoot: layout.cacheDir,
         keys,
-        logger: {
-          info: () => undefined,
-          warn: () => undefined,
-          error: () => undefined,
-        },
+        logger: { info: () => undefined, warn: () => undefined, error: () => undefined },
       }),
     ).toStrictEqual([vault.vaultId]);
-    expect(
-      plainSqliteRow(database.db.prepare('SELECT COUNT(*) AS count FROM erase_intents').get()),
-    ).toStrictEqual({
+    expect(database.db.prepare('SELECT COUNT(*) AS count FROM erase_intents').get()).toStrictEqual({
       count: 0,
     });
-    await expect(fs.access(path.join(layout.vaultDir, vault.vaultId))).rejects.toThrow(/ENOENT/u);
+    await expect(fs.access(path.join(layout.vaultDir, vault.vaultId))).rejects.toThrow('ENOENT');
     expect(keys.export(`${vault.vaultId}.sealkey`)).toBeNull();
   });
 
@@ -299,11 +272,7 @@ describe('vault-erase suite', () => {
     const registry = openVaultRegistry({
       rootDir: layout.vaultDir,
       cacheRootDir: layout.cacheDir,
-      logger: {
-        info: () => undefined,
-        warn: () => undefined,
-        error: () => undefined,
-      },
+      logger: { info: () => undefined, warn: () => undefined, error: () => undefined },
     });
     cleanups.push(() => registry.stop());
     const vault = registry.create('Family');
@@ -347,9 +316,7 @@ describe('vault-erase suite', () => {
       eraseWithMethod: (method: string) =>
         fetch(`${base}/centraid/_vault/vaults:erase`, { method }),
       deleteVault: () =>
-        fetch(`${base}/centraid/_vault/vaults/${vault.vaultId}`, {
-          method: 'DELETE',
-        }),
+        fetch(`${base}/centraid/_vault/vaults/${vault.vaultId}`, { method: 'DELETE' }),
     };
   }
 
@@ -357,18 +324,14 @@ describe('vault-erase suite', () => {
     const fixture = await eraseFixture({ role: 'write' });
     const response = await fixture.erase({ name: fixture.vaultName });
     expect(response.status).toBe(403);
-    await expect(response.json()).resolves.toMatchObject({
-      error: 'admin_required',
-    });
+    await expect(response.json()).resolves.toMatchObject({ error: 'admin_required' });
   });
 
   test('erase refuses a host with no custody wiring', async () => {
     const fixture = await eraseFixture({ custody: false });
     const response = await fixture.erase({ name: fixture.vaultName });
     expect(response.status).toBe(503);
-    await expect(response.json()).resolves.toMatchObject({
-      error: 'erase_unavailable',
-    });
+    await expect(response.json()).resolves.toMatchObject({ error: 'erase_unavailable' });
   });
 
   test('erase refuses a wrong, missing, or near-miss typed name', async () => {
@@ -382,15 +345,11 @@ describe('vault-erase suite', () => {
       { name: 'Family ' },
       { name: 'Personal' },
     ];
-    await Promise.all(
-      bodies.map(async (body) => {
-        const response = await fixture.erase(body);
-        expect(response.status, JSON.stringify(body)).toBe(409);
-        await expect(response.json()).resolves.toMatchObject({
-          error: 'typed_name_required',
-        });
-      }),
-    );
+    await forEachSequentially(bodies, async (body) => {
+      const response = await fixture.erase(body);
+      expect(response.status, JSON.stringify(body)).toBe(409);
+      await expect(response.json()).resolves.toMatchObject({ error: 'typed_name_required' });
+    });
   });
 
   test('erase refuses while the recovery kit is unverified', async () => {
@@ -399,9 +358,7 @@ describe('vault-erase suite', () => {
     await fixture.recoveryKit.begin('unverified-fingerprint');
     const response = await fixture.erase({ name: fixture.vaultName });
     expect(response.status).toBe(409);
-    await expect(response.json()).resolves.toMatchObject({
-      error: 'recovery_kit_not_verified',
-    });
+    await expect(response.json()).resolves.toMatchObject({ error: 'recovery_kit_not_verified' });
   });
 
   test('a generic vault DELETE is refused and redirected to the erase ceremony', async () => {
@@ -409,17 +366,13 @@ describe('vault-erase suite', () => {
     await markKitVerified(fixture.recoveryKit);
     const response = await fixture.deleteVault();
     expect(response.status).toBe(405);
-    await expect(response.json()).resolves.toMatchObject({
-      error: 'erase_ceremony_required',
-    });
+    await expect(response.json()).resolves.toMatchObject({ error: 'erase_ceremony_required' });
   });
 
   test('erase refuses a non-POST method before any guard runs', async () => {
     const fixture = await eraseFixture();
     const response = await fixture.eraseWithMethod('GET');
     expect(response.status).toBe(405);
-    await expect(response.json()).resolves.toMatchObject({
-      error: 'method_not_allowed',
-    });
+    await expect(response.json()).resolves.toMatchObject({ error: 'method_not_allowed' });
   });
 });

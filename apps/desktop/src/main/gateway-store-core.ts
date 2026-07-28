@@ -18,7 +18,6 @@ export interface GatewayProfileShape {
   /** Refreshable address cache; never connection identity. */
   readonly relayHint?: string;
   readonly rememberDevice?: boolean;
-  readonly ssh?: { destination: string; dataDir?: string; remoteCli?: string };
   readonly createdAt: string;
 }
 
@@ -59,19 +58,6 @@ export function isValidAvatarColor(value: unknown): value is string {
   return typeof value === 'string' && /^#[0-9a-fA-F]{6}$/u.test(value);
 }
 
-/** Shape-validate a persisted `ssh` block (issue #382) at read time —
- *  corrupt/malformed JSON degrades to "no ssh block" rather than throwing. */
-export function isValidSshBlock(
-  value: unknown,
-): value is { destination: string; dataDir?: string; remoteCli?: string } {
-  if (!value || typeof value !== 'object') return false;
-  const v = value as Record<string, unknown>;
-  if (typeof v.destination !== 'string' || v.destination.length === 0) return false;
-  if (v.dataDir !== undefined && typeof v.dataDir !== 'string') return false;
-  if (v.remoteCli !== undefined && typeof v.remoteCli !== 'string') return false;
-  return true;
-}
-
 export const ENDPOINT_ID_RE = /^[0-9a-f]{64}$/u;
 
 /**
@@ -104,7 +90,6 @@ export function normalizeProfile(
   const avatarColor = isValidAvatarColor(parsed.avatarColor)
     ? parsed.avatarColor
     : defaultAvatarColor(parsed.id);
-  const ssh = isValidSshBlock(parsed.ssh) ? parsed.ssh : undefined;
   if (
     parsed.kind === 'remote' &&
     (typeof parsed.endpointId !== 'string' ||
@@ -126,7 +111,6 @@ export function normalizeProfile(
       ? { relayHint: parsed.relayHint }
       : {}),
     rememberDevice: parsed.rememberDevice === true,
-    ...(ssh ? { ssh } : {}),
     createdAt: parsed.createdAt,
   };
 }
@@ -165,11 +149,7 @@ export function validateAddGatewayFields(input: {
 }): AddGatewayFieldError {
   const label = input.label.trim();
   if (!label)
-    return {
-      ok: false,
-      code: 'invalid_input',
-      message: 'Gateway label cannot be empty.',
-    };
+    return { ok: false, code: 'invalid_input', message: 'Gateway label cannot be empty.' };
   const endpointId = input.endpointId.trim();
   if (!endpointId || !isValidGatewayId(endpointId)) {
     return {

@@ -17,14 +17,11 @@
  * doubles as the row's "N spaces" subtitle.
  */
 
-/** Minimal shape of a gateway profile these rows need. `ssh` is read
- *  defensively (the field post-dates some profiles) and only decides the
- *  transport chip. */
+/** Minimal shape of a gateway profile these rows need. */
 export interface RegistryGateway {
   gatewayId: string;
   gatewayLabel: string;
   gatewayKind: 'local' | 'remote';
-  hasSsh?: boolean;
 }
 
 /** Why a gateway's probe didn't come back, plus `'loading'` for one still in
@@ -48,7 +45,7 @@ export interface GatewayProbeEntry {
 export type GatewayProbeCache = Record<string, GatewayProbeEntry>;
 
 /** User-facing transport chip. */
-export type GatewayTransportBadge = 'This Mac' | 'iroh' | 'SSH';
+export type GatewayTransportBadge = 'This Mac' | 'iroh';
 
 /** One row of the gateway switcher. */
 export interface GatewayRow {
@@ -88,8 +85,9 @@ export function applyProbeOutcome(
 }
 
 function transportBadgeFor(gw: RegistryGateway): GatewayTransportBadge {
-  if (gw.gatewayKind === 'local') return 'This Mac';
-  return gw.hasSsh ? 'SSH' : 'iroh';
+  // Every remote gateway is reached over iroh — the SSH admin channel and its
+  // chip were deleted with the SSH connect method (issue #603).
+  return gw.gatewayKind === 'local' ? 'This Mac' : 'iroh';
 }
 
 /**
@@ -130,22 +128,17 @@ export function buildGatewayRows(
 let cache: GatewayProbeCache = {};
 let lastGateways: RegistryGateway[] = [];
 
-// `ssh` isn't on `CentraidGatewayProfile` in every host build; read it through
-// a widened shape so this degrades to "no SSH chip" rather than failing to
-// type-check against an older bridge.
-type ProfileWithSsh = {
+type ProfileShape = {
   id: string;
   label: string;
   kind: 'local' | 'remote';
-  ssh?: unknown;
 };
 
-function toRegistryGateway(p: ProfileWithSsh): RegistryGateway {
+function toRegistryGateway(p: ProfileShape): RegistryGateway {
   return {
     gatewayId: p.id,
     gatewayKind: p.kind,
     gatewayLabel: p.label,
-    hasSsh: p.ssh !== undefined,
   };
 }
 

@@ -1,5 +1,4 @@
 import { describe, expect, test } from 'vitest';
-
 import {
   GATEWAY_MIN_PROTOCOL_VERSION,
   GATEWAY_PROTOCOL_VERSION,
@@ -11,7 +10,7 @@ import {
   ROUTES,
 } from './index.ts';
 
-describe('handshake', () => {
+describe('handshake scenarios', () => {
   test('version constants: product string + protocol ints', () => {
     expect(GATEWAY_VERSION).toBe('0.1.0');
     expect(GATEWAY_PROTOCOL_VERSION).toBe(2);
@@ -86,10 +85,7 @@ describe('handshake', () => {
       minSupportedProtocol: 99,
     });
     expect(bad).toMatchObject({ ok: false, reason: 'protocol_mismatch' });
-    expect(judgeGatewayInfo(null)).toMatchObject({
-      ok: false,
-      reason: 'malformed',
-    });
+    expect(judgeGatewayInfo(null)).toMatchObject({ ok: false, reason: 'malformed' });
   });
 
   test('buildGatewayInfoPayload ships product + protocol fields', () => {
@@ -97,34 +93,41 @@ describe('handshake', () => {
       instanceId: 'i1',
       startedAt: 1,
       uptimeMs: 2,
+      authenticated: true,
     });
     expect(payload.version).toBe(GATEWAY_VERSION);
     expect(payload.protocolVersion).toBe(GATEWAY_PROTOCOL_VERSION);
     expect(payload.minSupportedProtocol).toBe(GATEWAY_MIN_PROTOCOL_VERSION);
     expect(payload.schemaEpoch).toBe(GATEWAY_SCHEMA_EPOCH);
-    expect(payload.status).toBe('ready');
     expect(payload.capabilities?.devicePairing).toBe(true);
     expect(ROUTES.gatewayInfo).toBe('/centraid/_gateway/info');
   });
 
-  test('gateway status is additive and older payloads default to ready', () => {
-    const uninitialized = buildGatewayInfoPayload({
+  test('the authenticated flag survives the judge, and is absent when not reported', () => {
+    const anonymous = buildGatewayInfoPayload({
       instanceId: 'i1',
       startedAt: 1,
       uptimeMs: 2,
-      status: 'uninitialized',
+      authenticated: false,
     });
-    expect(judgeGatewayInfo(uninitialized)).toMatchObject({
+    expect(anonymous.authenticated).toBe(false);
+    expect(judgeGatewayInfo(anonymous)).toMatchObject({
       ok: true,
-      info: { status: 'uninitialized' },
+      info: { authenticated: false },
     });
-    expect(
-      judgeGatewayInfo({
-        version: GATEWAY_VERSION,
-        protocolVersion: GATEWAY_PROTOCOL_VERSION,
-        minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
-      }),
-    ).toMatchObject({ ok: true, info: { status: 'ready' } });
+    const authed = judgeGatewayInfo({
+      version: GATEWAY_VERSION,
+      protocolVersion: GATEWAY_PROTOCOL_VERSION,
+      minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
+      authenticated: true,
+    });
+    expect(authed).toMatchObject({ ok: true, info: { authenticated: true } });
+    const silent = judgeGatewayInfo({
+      version: GATEWAY_VERSION,
+      protocolVersion: GATEWAY_PROTOCOL_VERSION,
+      minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
+    });
+    expect(silent.ok && 'authenticated' in silent.info).toBe(false);
   });
 
   test('gateway endpoint identity and dial hints are preserved only when strings', () => {
@@ -132,6 +135,7 @@ describe('handshake', () => {
       instanceId: 'i1',
       startedAt: 1,
       uptimeMs: 2,
+      authenticated: true,
       endpointId: 'endpoint-1',
       endpointTicket: 'ticket-1',
     });

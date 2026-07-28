@@ -1,18 +1,12 @@
-import { readFileSync } from 'node:fs';
+import { tempDirSync } from '@centraid/test-kit/temp-dir';
+import { forEachSequentially } from '@centraid/test-kit/sequential';
 import http from 'node:http';
-import type { IncomingMessage, ServerResponse } from 'node:http';
 import { AddressInfo } from 'node:net';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { Readable } from 'node:stream';
-
-import { tempDirSync } from '@centraid/test-kit/temp-dir';
-import {
-  DEVICE_IDENTITY_HEADER,
-  DEVICE_PROOF_HEADER,
-  TUNNEL_FORWARDED_HEADER,
-} from '@centraid/tunnel';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import { afterEach, describe, expect, it, test } from 'vitest';
-
 import {
   writeFileMap,
   readFileMap,
@@ -24,6 +18,11 @@ import {
   isDirectHostRequest,
   isLoopbackRequest,
 } from './route-helpers.js';
+import {
+  DEVICE_IDENTITY_HEADER,
+  DEVICE_PROOF_HEADER,
+  TUNNEL_FORWARDED_HEADER,
+} from '@centraid/tunnel';
 
 function tmp(): string {
   return tempDirSync('centraid-route-helpers-');
@@ -34,10 +33,7 @@ function mockReq(body: string | Buffer): IncomingMessage {
   return Readable.from([buf]) as unknown as IncomingMessage;
 }
 
-function mockRes(): {
-  res: ServerResponse;
-  out: { status: number; body: string };
-} {
+function mockRes(): { res: ServerResponse; out: { status: number; body: string } } {
   const out = { status: 0, body: '' };
   const res = {
     statusCode: 0,
@@ -51,15 +47,13 @@ function mockRes(): {
 }
 
 const servers: http.Server[] = [];
-describe('route-helpers', () => {
-  afterEach(async () => {
-    await Promise.all(
-      servers
-        .splice(0)
-        .toReversed()
-        .map((server) => new Promise<void>((resolve) => server.close(() => resolve()))),
-    );
-  });
+describe('route-helpers scenarios', () => {
+  afterEach(async () =>
+    forEachSequentially(
+      servers.splice(0).toReversed(),
+      (server) => new Promise<void>((resolve) => server.close(() => resolve())),
+    ),
+  );
 
   async function endpoint(body: unknown): Promise<string> {
     const server = http.createServer((_req, res) => {
@@ -71,15 +65,8 @@ describe('route-helpers', () => {
   }
 
   test('gateway-native JSON compresses large responses asynchronously (#456 C8)', async () => {
-    const body = {
-      rows: Array.from({ length: 500 }, (_, id) => ({
-        id,
-        title: `row-${id}`,
-      })),
-    };
-    const response = await fetch(await endpoint(body), {
-      headers: { 'accept-encoding': 'br' },
-    });
+    const body = { rows: Array.from({ length: 500 }, (_, id) => ({ id, title: `row-${id}` })) };
+    const response = await fetch(await endpoint(body), { headers: { 'accept-encoding': 'br' } });
     expect(response.headers.get('content-encoding')).toBe('br');
     expect(response.headers.get('vary')).toContain('Accept-Encoding');
     await expect(response.json()).resolves.toStrictEqual(body);
@@ -94,12 +81,7 @@ describe('route-helpers', () => {
   });
 
   test('encoding negotiation honors explicit q=0 exclusions', async () => {
-    const body = {
-      rows: Array.from({ length: 500 }, (_, id) => ({
-        id,
-        title: `row-${id}`,
-      })),
-    };
+    const body = { rows: Array.from({ length: 500 }, (_, id) => ({ id, title: `row-${id}` })) };
     const response = await fetch(await endpoint(body), {
       headers: { 'accept-encoding': 'br;q=0, gzip;q=0.7' },
     });
@@ -146,10 +128,7 @@ describe('route-helpers', () => {
       const { res, out } = mockRes();
       sendError(res, new Error('kaboom'));
       expect(out.status).toBe(500);
-      expect(JSON.parse(out.body)).toStrictEqual({
-        error: 'internal_error',
-        message: 'kaboom',
-      });
+      expect(JSON.parse(out.body)).toStrictEqual({ error: 'internal_error', message: 'kaboom' });
     });
 
     it('sendError stringifies a non-Error throw', () => {
@@ -169,9 +148,7 @@ describe('route-helpers', () => {
     });
 
     it('parses a JSON object body', async () => {
-      await expect(readJson(mockReq('{"a":1}'))).resolves.toStrictEqual({
-        a: 1,
-      });
+      await expect(readJson(mockReq('{"a":1}'))).resolves.toStrictEqual({ a: 1 });
     });
 
     it('returns {} for an empty body', async () => {
@@ -194,7 +171,7 @@ describe('route-helpers', () => {
 
   /*
    * `isDirectHostRequest` — the real host-only capability gate (issue #568
-   * items A/B). The founding tests stub `canMintFoundingTicket: () => true`, so
+   * items A/B). Route tests stub `isHostCustody: () => true`, so
    * without this nothing exercises the predicate the product actually installs.
    *
    * The organising rule: LOOPBACK IS NOT AN IDENTITY. Every forwarder in the
@@ -241,9 +218,7 @@ describe('route-helpers', () => {
     it('is strictly stronger than the bare-loopback gate it replaced', () => {
       // The pre-#566 gate that `buildGateway` still fell back to for the
       // embedded desktop (item B) said yes to exactly this request.
-      const forwarded = fakeRequest('127.0.0.1', {
-        [TUNNEL_FORWARDED_HEADER]: '1',
-      });
+      const forwarded = fakeRequest('127.0.0.1', { [TUNNEL_FORWARDED_HEADER]: '1' });
       expect(isLoopbackRequest(forwarded)).toBe(true);
       expect(isDirectHostRequest(forwarded)).toBe(false);
     });

@@ -1,4 +1,4 @@
-import crypto from 'node:crypto';
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * Draft preview through the gateway (issue #141, "preview first").
  *
@@ -11,15 +11,14 @@ import crypto from 'node:crypto';
  * index.html + query handler (the draft). The live path keeps serving the
  * published version; the `_draft` path serves the staged edits.
  */
+
+import { describe, afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-
-import type { GatewayPaths } from '../paths.ts';
-import { serve, type GatewayServeHandle } from '../serve/serve.ts';
+import crypto from 'node:crypto';
 import type { WorktreeStore } from '../worktree-store/index.js';
+import { serve, type GatewayServeHandle } from '../serve/serve.ts';
+import type { GatewayPaths } from '../paths.ts';
 
 let dataDir: string;
 let handle: GatewayServeHandle;
@@ -43,11 +42,7 @@ const MANIFEST = (appId: string): string =>
         {
           name: 'ping',
           description: 'returns a marker',
-          input: {
-            type: 'object',
-            properties: {},
-            additionalProperties: false,
-          },
+          input: { type: 'object', properties: {}, additionalProperties: false },
         },
       ],
     },
@@ -70,7 +65,7 @@ async function seedApp(store: WorktreeStore, appId: string): Promise<void> {
   await store.closeSession('seed');
 }
 
-describe('draft-preview-over-http', () => {
+describe('draft-preview-over-http scenarios', () => {
   beforeEach(async () => {
     dataDir = await tempDir(`gateway-draft-${crypto.randomUUID()}-`);
   });
@@ -81,10 +76,7 @@ describe('draft-preview-over-http', () => {
   });
 
   test('serves a staged draft (static + handlers) while live keeps the published version', async () => {
-    handle = await serve({
-      initVaultName: "Owner's vault",
-      paths: pathsUnder(dataDir),
-    });
+    handle = await serve({ paths: pathsUnder(dataDir) });
     const store = await handle.appsStore();
     await seedApp(store, 'app');
     await handle.syncApps();
@@ -101,9 +93,7 @@ describe('draft-preview-over-http', () => {
     const auth = { Authorization: `Bearer ${handle.token}` };
 
     // Live path: unchanged published static + handler.
-    const liveHtml = await fetch(`${handle.url}/centraid/app/`, {
-      headers: auth,
-    });
+    const liveHtml = await fetch(`${handle.url}/centraid/app/`, { headers: auth });
     expect(liveHtml.status).toBe(200);
     await expect(liveHtml.text()).resolves.toMatch(/PUBLISHED/u);
 
@@ -112,14 +102,10 @@ describe('draft-preview-over-http', () => {
       headers: { ...auth, 'Content-Type': 'application/json' },
       body: JSON.stringify({ input: {} }),
     });
-    await expect(liveRead.json()).resolves.toStrictEqual({
-      marker: 'published',
-    });
+    await expect(liveRead.json()).resolves.toStrictEqual({ marker: 'published' });
 
     // Draft path: staged static + the staged handler, against the same data.
-    const draftHtml = await fetch(`${handle.url}/centraid/_draft/draft1/app/`, {
-      headers: auth,
-    });
+    const draftHtml = await fetch(`${handle.url}/centraid/_draft/draft1/app/`, { headers: auth });
     expect(draftHtml.status).toBe(200);
     const draftBody = await draftHtml.text();
     expect(draftBody).toMatch(/DRAFT/u);
@@ -137,10 +123,7 @@ describe('draft-preview-over-http', () => {
   });
 
   test('an unknown draft session yields 503 (no live fallback)', async () => {
-    handle = await serve({
-      initVaultName: "Owner's vault",
-      paths: pathsUnder(dataDir),
-    });
+    handle = await serve({ paths: pathsUnder(dataDir) });
     await seedApp(await handle.appsStore(), 'app');
     await handle.syncApps();
 

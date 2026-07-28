@@ -1,7 +1,7 @@
 /*
  * Pure state machine for ConnectFlow (issue #382) — the wizard shared by
- * onboarding step 2 ("Where does your data live?") and the switcher's
- * "Add gateway" action. Three top-level methods:
+ * onboarding's ticket path and the switcher's "Add gateway" action. Two
+ * top-level methods:
  *
  *   - `local`  — the embedded gateway on this Mac. Nothing to configure or
  *     test (it's always reachable); the flow skips straight to picking or
@@ -9,26 +9,27 @@
  *   - `gateway` — an existing gateway elsewhere, reached ONLY by a pairing
  *     ticket over iroh. URL pairing and per-device bearers were retired in
  *     issue #555; the QUIC identity is the enrollment credential.
- *   - `ssh`    — drive a remote `centraid-gateway` CLI over SSH (issue #382
- *     design doc "SSH support (v0 scope = admin channel)").
+ *
+ * The third method, `ssh`, was deleted in issue #603: driving a remote
+ * `centraid-gateway` CLI over SSH was an admin channel, not an onboarding
+ * path, and a pair ticket now covers every remote connect.
  *
  * Steps: method → details → test → vault → committing → done | error.
  * `local` skips `details`/`test` (nothing to fill in, nothing to probe) and
  * goes straight to `vault`. Every transition here is a synchronous reducer
  * over an explicit event — no `window.CentraidApi`, no timers, no DOM. The
  * impure IO (testGatewayConnection / redeemGatewayPairing / addGateway /
- * sshConnectGateway / listVaults) lives in `connectFlowIO.ts` and feeds
- * results back in as events, mirroring the gatewayRegistry.ts pure-core /
- * impure-glue split.
+ * listVaults) lives in `connectFlowIO.ts` and feeds results back in as
+ * events, mirroring the gatewayRegistry.ts pure-core / impure-glue split.
  */
 
-export type ConnectMethod = 'local' | 'gateway' | 'ssh';
+export type ConnectMethod = 'local' | 'gateway';
 export type ConnectStep = 'method' | 'details' | 'test' | 'vault' | 'committing' | 'done' | 'error';
 
 /** One stage of the "handshake ladder" — mirrors the design doc's
  *  `ConnectivityReport.stages[]` contract (GATEWAY_TEST_CONNECTION output). */
 export interface ConnectivityStage {
-  id: 'reach' | 'identify' | 'auth' | 'vaults' | 'ssh' | 'cli' | 'daemon' | 'decode';
+  id: 'reach' | 'identify' | 'auth' | 'vaults' | 'decode';
   label: string;
   status: 'pass' | 'fail' | 'skip';
   detail?: string;
@@ -60,7 +61,6 @@ export interface ConnectivityReport {
 /** The input union GATEWAY_TEST_CONNECTION accepts (design doc). */
 export type ConnectTestInput =
   | { kind: 'ticket'; ticket: string }
-  | { kind: 'ssh'; destination: string; dataDir?: string }
   | { kind: 'gateway'; gatewayId: string };
 
 export type VaultChoice = { kind: 'existing'; vaultId: string } | { kind: 'create' };
@@ -70,6 +70,13 @@ export interface ConnectFlowResult {
   vaultId: string;
   displayLabel: string;
 }
+
+/** Outcome of reading the local gateway's vaults (issue #603 W4). A transport
+ *  failure is NOT an empty registry — the vault step renders them differently,
+ *  so the two cases stay distinguishable all the way to the UI. */
+export type LocalVaultsResult =
+  | { ok: true; vaults: ConnectivityVaultPreview[] }
+  | { ok: false; message: string };
 
 export interface ConnectFlowState {
   step: ConnectStep;
@@ -81,10 +88,6 @@ export interface ConnectFlowState {
   /** Explicit consent for a durable replica, intent queue, and media cache. */
   rememberDevice: boolean;
 
-  // "ssh" method details.
-  sshDestination: string;
-  sshDataDir: string;
-
   // test step.
   testing: boolean;
   report: ConnectivityReport | null;
@@ -93,6 +96,9 @@ export interface ConnectFlowState {
   // vault step. `newVaultName` backs `vaultChoice.kind === 'create'`.
   vaultChoice: VaultChoice | null;
   newVaultName: string;
+  /** Why the local vault list could not be read. Never set for an empty but
+   *  successfully-read registry. */
+  vaultsError: string | null;
 
   // commit step.
   committing: boolean;
@@ -100,8 +106,15 @@ export interface ConnectFlowState {
   result: ConnectFlowResult | null;
 }
 
-export function createInitialConnectFlowState(): ConnectFlowState {
-  return {
+/**
+ * `method` pre-selects a method and lands on its first real step — used when
+ * the host already made the choice (onboarding's ticket path, issue #603) and
+ * a one-card method grid would just be a redundant click.
+ */
+export function createInitialConnectFlowState(
+  method: ConnectMethod | null = null,
+): ConnectFlowState {
+  const base: ConnectFlowState = {
     commitError: null,
     committing: false,
     label: '',
@@ -110,22 +123,17 @@ export function createInitialConnectFlowState(): ConnectFlowState {
     report: null,
     result: null,
     rememberDevice: false,
-    sshDataDir: '',
-    sshDestination: '',
     step: 'method',
     testError: null,
     testing: false,
     ticket: '',
     vaultChoice: null,
+    vaultsError: null,
   };
+  return method ? connectFlowReducer(base, { method, type: 'selectMethod' }) : base;
 }
 
-export type ConnectFlowTextField =
-  | 'ticket'
-  | 'label'
-  | 'sshDestination'
-  | 'sshDataDir'
-  | 'newVaultName';
+export type ConnectFlowTextField = 'ticket' | 'label' | 'newVaultName';
 
 export type ConnectFlowEvent =
   | { type: 'selectMethod'; method: ConnectMethod }
@@ -134,7 +142,7 @@ export type ConnectFlowEvent =
   | { type: 'setRememberDevice'; value: boolean }
   | { type: 'startTest' }
   | { type: 'testSettled'; report: ConnectivityReport }
-  | { type: 'localVaultsLoaded'; vaults: ConnectivityVaultPreview[] }
+  | { type: 'localVaultsLoaded'; result: LocalVaultsResult }
   | { type: 'continueToVault' }
   | { type: 'selectVault'; choice: VaultChoice }
   | { type: 'commit' }
@@ -173,6 +181,7 @@ export function connectFlowReducer(
         step: prev,
         testError: null,
         vaultChoice: null,
+        vaultsError: null,
       };
     }
     case 'setField':
@@ -190,10 +199,19 @@ export function connectFlowReducer(
     case 'testSettled':
       return { ...state, report: event.report, testing: false };
     case 'localVaultsLoaded':
-      return {
-        ...state,
-        report: { ok: true, stages: [], vaults: event.vaults },
-      };
+      // A failed read still settles `report` so the step leaves its loading
+      // state — `vaultsError` is what tells the UI it settled UNHAPPILY.
+      return event.result.ok
+        ? {
+            ...state,
+            report: { ok: true, stages: [], vaults: event.result.vaults },
+            vaultsError: null,
+          }
+        : {
+            ...state,
+            report: { ok: false, stages: [], vaults: [] },
+            vaultsError: event.result.message,
+          };
     case 'continueToVault': {
       const options = state.report?.vaults ?? [];
       const defaultChoice: VaultChoice | null =
@@ -245,14 +263,6 @@ export function buildTestInput(state: ConnectFlowState): ConnectTestInput | null
     if (!state.ticket.trim()) return null;
     return { kind: 'ticket', ticket: state.ticket.trim() };
   }
-  if (state.method === 'ssh') {
-    if (!state.sshDestination.trim()) return null;
-    return {
-      dataDir: state.sshDataDir.trim() || undefined,
-      destination: state.sshDestination.trim(),
-      kind: 'ssh',
-    };
-  }
   return null;
 }
 
@@ -261,10 +271,10 @@ export function canStartTest(state: ConnectFlowState): boolean {
 }
 
 /** Whether the current method can create a brand-new vault as part of this
- *  flow (design doc step C): local and SSH admin the vault lifecycle
- *  directly; a ticket's vault is fixed by the ticket payload. */
+ *  flow (design doc step C): the desktop admins its own embedded gateway's
+ *  vault lifecycle; a ticket's vault is fixed by the ticket payload. */
 export function canCreateVaultFor(state: ConnectFlowState): boolean {
-  return state.method === 'local' || state.method === 'ssh';
+  return state.method === 'local';
 }
 
 export interface ConnectVaultCapability {
@@ -292,16 +302,11 @@ export function vaultCapability(state: ConnectFlowState): ConnectVaultCapability
 
 export function canCommitConnectFlow(state: ConnectFlowState): boolean {
   if (state.method === 'local') {
-    if (!state.vaultChoice) return false;
+    if (state.vaultsError || !state.vaultChoice) return false;
     return state.vaultChoice.kind === 'existing' || state.newVaultName.trim().length > 0;
   }
   if (state.method === 'gateway') {
     return state.ticket.trim().length > 0;
-  }
-  if (state.method === 'ssh') {
-    if (!state.sshDestination.trim() || !state.vaultChoice) return false;
-    if (state.vaultChoice.kind === 'create' && !state.newVaultName.trim()) return false;
-    return true;
   }
   return false;
 }

@@ -1,4 +1,4 @@
-import crypto from 'node:crypto';
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * `centraid-gateway status` (issue #382) — a data-dir-only unit test:
  * `--data-dir` given but no service ever installed, so `queryServiceStatus`
@@ -9,19 +9,18 @@ import crypto from 'node:crypto';
  * runner would hit the "not supported" branch instead — acceptable, `status`
  * inherits `service`'s two-platform scope.
  */
+
+import { describe, afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-
+import crypto from 'node:crypto';
 import { buildGatewayInfoPayload } from '@centraid/protocol';
-import { tempDir } from '@centraid/test-kit/temp-dir';
 import { endpointIdForSecret } from '@centraid/tunnel';
 import { KeyStore } from '@centraid/vault';
-import { describe, afterEach, beforeEach, expect, test } from 'vitest';
-
-import { landlordBearerForEndpointSecret } from './landlord-auth.ts';
-import { daemonLayoutFor } from './paths.ts';
 import { commandStatus } from './status-admin.ts';
 import { commandVault } from './vault-admin.ts';
+import { daemonLayoutFor } from './paths.ts';
+import { landlordBearerForEndpointSecret } from './landlord-auth.ts';
 
 class CliFailError extends Error {
   constructor(
@@ -57,7 +56,8 @@ function lastJson(text: string): Record<string, unknown> {
   const lines = text.trim().split('\n').filter(Boolean);
   return JSON.parse(lines[lines.length - 1]!) as Record<string, unknown>;
 }
-describe('status-admin suite', () => {
+
+describe('status-admin scenarios', () => {
   beforeEach(async () => {
     dataDir = await tempDir(`status-admin-${crypto.randomUUID()}-`);
   });
@@ -79,11 +79,7 @@ describe('status-admin suite', () => {
         await capture(() => commandStatus(['--data-dir', dataDir, '--json'], fail, offlineFetch)),
       );
       expect(parsed.ok).toBe(true);
-      expect(parsed.dataDir).toMatchObject({
-        dataDir,
-        exists: true,
-        daemonRunning: false,
-      });
+      expect(parsed.dataDir).toMatchObject({ dataDir, exists: true, daemonRunning: false });
       const service = parsed.service as { installed: boolean; label: string };
       expect(service.installed).toBe(false);
       expect(service.label).toBeTypeOf('string');
@@ -114,6 +110,7 @@ describe('status-admin suite', () => {
             instanceId: 'daemon',
             startedAt: Date.now(),
             uptimeMs: 1,
+            authenticated: authorized,
             endpointId,
             ...(authorized ? { endpointTicket: 'gw-ticket-base32' } : {}),
           }),
@@ -145,10 +142,7 @@ describe('status-admin suite', () => {
         await capture(() => commandStatus(['--data-dir', missing, '--json'], fail, offlineFetch)),
       );
       expect(parsed.ok).toBe(true);
-      const summary = parsed.dataDir as {
-        exists: boolean;
-        endpointId?: string;
-      };
+      const summary = parsed.dataDir as { exists: boolean; endpointId?: string };
       expect(summary.exists).toBe(false);
       expect(summary.endpointId).toBeUndefined();
     },

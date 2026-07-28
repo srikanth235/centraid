@@ -1,11 +1,10 @@
-import { promises as fs } from 'node:fs';
-
 import { buildGatewayInfoPayload } from '@centraid/protocol';
+import { forEachSequentially } from '@centraid/test-kit/sequential';
 import { tempDir } from '@centraid/test-kit/temp-dir';
 import { endpointIdForSecret } from '@centraid/tunnel';
 import { KeyStore } from '@centraid/vault';
-import { afterEach, describe, expect, test } from 'vitest';
-
+import { describe, afterEach, expect, test } from 'vitest';
+import { promises as fs } from 'node:fs';
 import { GatewayDatabase } from '../serve/gateway-db.js';
 import { commandDevices } from './device-admin.js';
 import { commandLockStatus } from './lock-admin.js';
@@ -14,10 +13,12 @@ import { commandVault } from './vault-admin.js';
 
 const roots: string[] = [];
 
-describe('lock-admin', () => {
-  afterEach(async () => {
-    await Promise.all(roots.splice(0).map((root) => fs.rm(root, { recursive: true, force: true })));
-  });
+describe('lock-admin scenarios', () => {
+  afterEach(async () =>
+    forEachSequentially(roots.splice(0).toReversed(), (root) =>
+      fs.rm(root, { recursive: true, force: true }),
+    ),
+  );
 
   const fail = (message: string): never => {
     throw new Error(message);
@@ -105,6 +106,7 @@ describe('lock-admin', () => {
           instanceId: 'answering',
           startedAt: Date.now(),
           uptimeMs: 1,
+          authenticated: true,
           endpointId,
         }),
       )) as typeof fetch;

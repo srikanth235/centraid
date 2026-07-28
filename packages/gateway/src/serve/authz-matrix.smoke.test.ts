@@ -1,15 +1,13 @@
-import crypto from 'node:crypto';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-
 /**
  * Authz matrix smoke (#496 G1): table-driven role/session × critical routes
  * against a real `serve()` daemon. Complements the denser per-route suites
  * with one compact cross-surface table the matrix can own.
  */
 import { tempDir } from '@centraid/test-kit/temp-dir';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-
+import { describe, afterEach, beforeEach, expect, test } from 'vitest';
+import crypto from 'node:crypto';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
 import type { GatewayPaths } from '../paths.js';
 import { serve, type GatewayServeHandle } from './serve.js';
 
@@ -22,11 +20,10 @@ function pathsUnder(dir: string): GatewayPaths {
   return { vaultDir: path.join(dir, 'vault') };
 }
 
-describe('authz-matrix.smoke', () => {
+describe('authz-matrix.smoke scenarios', () => {
   beforeEach(async () => {
     dataDir = await tempDir(`authz-smoke-${crypto.randomUUID()}-`);
     handle = await serve({
-      initVaultName: "Owner's vault",
       paths: pathsUnder(dataDir),
       token: ADMIN,
     });
@@ -100,32 +97,13 @@ describe('authz-matrix.smoke', () => {
     },
     /*
      * `publicPaths` regression guard (issue #568 item L). Only the handshake
-     * route is bearer-free; the founding verbs and the pairing-ticket mint are
-     * capability-granting and must 401 without a credential. Re-adding any of
-     * them to `serve()`'s `publicPaths` now fails CI here rather than shipping
-     * an anonymous path to a founding ticket.
+     * route is bearer-free; every capability-granting verb must 401 without a
+     * credential. Re-adding one to `serve()`'s `publicPaths` fails CI here
+     * rather than shipping an anonymous path to a capability.
      */
     {
-      name: 'no bearer → 401 on founding ticket mint',
-      route: '/centraid/_gateway/founding/ticket',
-      method: 'POST',
-      expect: 401,
-    },
-    {
-      name: 'no bearer → 401 on vaults:initialize',
-      route: '/centraid/_vault/vaults:initialize',
-      method: 'POST',
-      expect: 401,
-    },
-    {
-      name: 'no bearer → 401 on vaults:initialize/verify',
-      route: '/centraid/_vault/vaults:initialize/verify',
-      method: 'POST',
-      expect: 401,
-    },
-    {
-      name: 'no bearer → 401 on vaults:restore',
-      route: '/centraid/_vault/vaults:restore',
+      name: 'no bearer → 401 on the vault erase ceremony',
+      route: '/centraid/_vault/vaults:erase',
       method: 'POST',
       expect: 401,
     },
@@ -147,17 +125,14 @@ describe('authz-matrix.smoke', () => {
       authorization: c.authorization,
       method: c.method,
     });
-    expect(
-      typeof c.expect === 'function' ? c.expect(status) : status === c.expect,
-      `status ${status} for ${c.route}`,
-    ).toBe(true);
+    const passed = typeof c.expect === 'function' ? c.expect(status) : status === c.expect;
+    expect(passed, `status ${status} for ${c.route}`).toBe(true);
   });
 
   /*
    * Issue #568 item C. `/centraid/_gateway/info` is public so a client can read
    * the version/schema handshake before it can pair — but `endpointTicket` is
-   * this gateway's iroh DIAL ticket, and the founding window admits an
-   * unenrolled EndpointId. A browser fetch to `http://127.0.0.1:<port>` from any
+   * this gateway's iroh DIAL ticket. A browser fetch to `http://127.0.0.1:<port>` from any
    * page the owner visits IS a loopback socket, a plain GET needs no preflight,
    * and `decideCors` answers a foreign origin `*` — so loopback cannot be the
    * gate. Only a presented credential may see it.

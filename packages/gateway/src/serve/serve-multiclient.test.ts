@@ -1,4 +1,4 @@
-import crypto from 'node:crypto';
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * Multi-client integration: prove that two independent HTTP clients
  * pointed at the same daemon see consistent gateway state. The "two
@@ -16,15 +16,14 @@ import crypto from 'node:crypto';
  * covered in `cli.test.ts`. This test focuses on the runtime contract
  * a second client expects after the gateway holds a published app.
  */
+
+import { describe, afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-
-import type { GatewayPaths } from '../paths.ts';
+import crypto from 'node:crypto';
 import type { WorktreeStore } from '../worktree-store/index.js';
 import { serve, type GatewayServeHandle } from './serve.ts';
+import type { GatewayPaths } from '../paths.ts';
 
 let dataDir: string;
 let handle: GatewayServeHandle;
@@ -42,25 +41,17 @@ async function seedApp(store: WorktreeStore, appId: string): Promise<void> {
   await fs.mkdir(appDir, { recursive: true });
   await fs.writeFile(
     path.join(appDir, 'app.json'),
-    JSON.stringify({
-      manifestVersion: 1,
-      id: appId,
-      name: 'multiclient-test',
-      version: '0.1.0',
-    }),
+    JSON.stringify({ manifestVersion: 1, id: appId, name: 'multiclient-test', version: '0.1.0' }),
   );
   await fs.writeFile(path.join(appDir, 'index.html'), '<!doctype html><title>mc</title>');
   await store.publish({ sessionId: 'seed', appId, message: 'seed' });
   await store.closeSession('seed');
 }
 
-describe('serve-multiclient', () => {
+describe('serve-multiclient scenarios', () => {
   beforeEach(async () => {
     dataDir = await tempDir(`mc-gateway-${crypto.randomUUID()}-`);
-    handle = await serve({
-      initVaultName: "Owner's vault",
-      paths: pathsUnder(dataDir),
-    });
+    handle = await serve({ paths: pathsUnder(dataDir) });
     await seedApp(await handle.appsStore(), 'multiclient-test');
     await handle.syncApps();
   });

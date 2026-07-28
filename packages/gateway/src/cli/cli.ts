@@ -42,33 +42,31 @@
 import { promises as fs, realpathSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-
 import type { GatewayEndpointHandle } from '@centraid/tunnel';
-
-import { assistOAuthFromEnvironment } from '../serve/assist-oauth.js';
-import { GatewayDatabase } from '../serve/gateway-db.js';
-import { kitlessHostIdentity } from '../serve/host-identity.js';
 import { serve } from '../serve/serve.js';
-import { WebControlSessionStore } from '../serve/web-session-store.js';
-import { mergeAllowedHosts } from './allowed-hosts.js';
-import { commandBackup } from './backup-admin.js';
-import { parseServeArgsPure, type ParsedServe } from './cli-serve-args.js';
-import { type DaemonConfig } from './config.js';
-import { commandDevices, commandPair } from './device-admin.js';
-import { makeDaemonDevicePlane } from './endpoint-host.js';
-import { commandInitTicket } from './founding-admin.js';
-import { commandKey } from './key-admin.js';
-import { daemonKeyStore } from './key-store.js';
-import { landlordBearerForEndpointSecret } from './landlord-auth.js';
-import { commandLockStatus } from './lock-admin.js';
-import { commandMembers } from './member-admin.js';
+import { assistOAuthFromEnvironment } from '../serve/assist-oauth.js';
 import { daemonLayoutFor } from './paths.js';
-import { commandRecover } from './recover-admin.js';
+import { type DaemonConfig } from './config.js';
 import { resolveDaemonConfig } from './resolve-config.js';
 import { seedRunnerPrefs } from './runner-prefs.js';
+import { commandVault } from './vault-admin.js';
+import { commandDevices, commandPair } from './device-admin.js';
+import { commandMembers } from './member-admin.js';
+import { commandKey } from './key-admin.js';
+import { commandBackup } from './backup-admin.js';
+import { commandRecover } from './recover-admin.js';
 import { commandService } from './service-admin.js';
 import { commandStatus } from './status-admin.js';
-import { commandVault } from './vault-admin.js';
+import { commandLockStatus } from './lock-admin.js';
+import { kitlessHostIdentity } from '../serve/host-identity.js';
+import { makeDaemonDevicePlane } from './endpoint-host.js';
+import { mergeAllowedHosts } from './allowed-hosts.js';
+import { parseServeArgsPure, type ParsedServe } from './cli-serve-args.js';
+import { GatewayDatabase } from '../serve/gateway-db.js';
+import { WebControlSessionStore } from '../serve/web-session-store.js';
+import { daemonKeyStore } from './key-store.js';
+import { landlordBearerForEndpointSecret } from './landlord-auth.js';
+import { findSequentially } from '../serve/sequential.js';
 
 const PKG_VERSION = '0.1.0';
 
@@ -77,18 +75,15 @@ async function bundledWebRoot(): Promise<string | undefined> {
     fileURLToPath(new URL('../web', import.meta.url)),
     fileURLToPath(new URL('../../dist/web', import.meta.url)),
   ];
-  const findBundledWebRoot = async (index: number): Promise<string | undefined> => {
-    const candidate = candidates[index];
-    if (!candidate) return undefined;
+  return findSequentially(candidates, async (candidate) => {
     try {
       await fs.access(path.join(candidate, 'index.html'));
-      return candidate;
+      return true;
     } catch {
       // Try the source-runner/built-package alternative.
-      return findBundledWebRoot(index + 1);
+      return false;
     }
-  };
-  return findBundledWebRoot(0);
+  });
 }
 
 function fail(message: string, code = 1): never {
@@ -100,7 +95,7 @@ function usage(): never {
   process.stderr.write(
     [
       'Usage:',
-      '  centraid-gateway serve [--config <path>] [--data-dir <path>] [--init-vault <name>] [--host <h>] [--port <p>] [--allowed-host <name>]…',
+      '  centraid-gateway serve [--config <path>] [--data-dir <path>] [--host <h>] [--port <p>] [--allowed-host <name>]…',
       '  centraid-gateway vault list --data-dir <path> [--json]',
       '  centraid-gateway vault create --data-dir <path> [--name <name>] [--json]',
       '  centraid-gateway vault rename --data-dir <path> <vaultId> <name>',
@@ -202,9 +197,7 @@ async function commandServe(args: string[]): Promise<void> {
   const layout = daemonLayoutFor(config.dataDir);
 
   await fs.mkdir(config.dataDir, { recursive: true });
-  const gatewayDatabase = GatewayDatabase.open(config.dataDir, {
-    lock: 'exclusive',
-  });
+  const gatewayDatabase = GatewayDatabase.open(config.dataDir, { lock: 'exclusive' });
 
   // Loopback bearer (issue #505 phase 7, corrected by #568 item J). This is
   // the bearer the in-process iroh endpoint host forwards with when it hands a
@@ -237,11 +230,10 @@ async function commandServe(args: string[]): Promise<void> {
   const loopbackSecret =
     process.env.CENTRAID_GATEWAY_TOKEN?.trim() ||
     landlordBearerForEndpointSecret(keyStore.loadOrCreate('endpoint-key.bin'));
+  // The daemon always has a host identity: it is the device the auto-founded
+  // vaults are owned by (issue #603), and the identity `pair` mints against.
   const hostEndpointId =
-    desktopEndpointId ??
-    (parsed.initVaultName
-      ? kitlessHostIdentity(keyStore.loadOrCreate('endpoint-key.bin'))
-      : undefined);
+    desktopEndpointId ?? kitlessHostIdentity(keyStore.loadOrCreate('endpoint-key.bin'));
   let vaultsRef: import('../serve/vault-registry.js').VaultRegistry | undefined;
   const devicePlane = makeDaemonDevicePlane({
     layout,
@@ -250,7 +242,7 @@ async function commandServe(args: string[]): Promise<void> {
     logger,
     keyStore,
     ...(dataPlaneSecret ? { controlSecret: dataPlaneSecret } : {}),
-    ...(hostEndpointId ? { loopbackEndpointId: hostEndpointId } : {}),
+    loopbackEndpointId: hostEndpointId,
   });
 
   // The ephemeral secret opens only the process-local HTTP listener. Device
@@ -263,7 +255,6 @@ async function commandServe(args: string[]): Promise<void> {
     assistOAuth: assistOAuthFromEnvironment(process.env),
     paths: layout,
     gatewayDatabase,
-    ...(parsed.initVaultName ? { initVaultName: parsed.initVaultName } : {}),
     ...(config.host === undefined ? {} : { host: config.host }),
     ...(config.port === undefined ? {} : { port: config.port }),
     ...(allowedHosts.length > 0 ? { allowedHosts } : {}),
@@ -272,9 +263,9 @@ async function commandServe(args: string[]): Promise<void> {
     token: loopbackSecret,
     logTag: 'centraid-gateway',
     deviceAccess: devicePlane.deviceAccess,
-    canMintFoundingTicket: devicePlane.canMintFoundingTicket,
+    isHostCustody: devicePlane.isHostCustody,
     keyStore,
-    ...(hostEndpointId ? { hostDeviceEndpointId: hostEndpointId } : {}),
+    hostDeviceEndpointId: hostEndpointId,
     dataPlaneControl: devicePlane.dataPlaneControl,
     ...(dataPlaneSecret && dataPlaneHttpUrl
       ? {
@@ -378,9 +369,6 @@ async function main(): Promise<void> {
       return;
     case 'pair':
       await commandPair(rest, fail);
-      return;
-    case 'init-ticket':
-      await commandInitTicket(rest, fail);
       return;
     case 'members':
       commandMembers(rest, fail);

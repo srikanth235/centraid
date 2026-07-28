@@ -5,10 +5,9 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const listVaults = vi.fn<typeof import('../../../gateway-client.js').listVaults>();
-const connectGateway =
-  vi.fn<(...args: unknown[]) => Promise<import('./gatewayModals.js').GatewayConnectResult>>();
-const friendlyGatewayError = vi.fn<(e: unknown) => string>((e) =>
+const listVaults = vi.fn<(...args: unknown[]) => unknown>();
+const connectGateway = vi.fn<(...args: unknown[]) => unknown>();
+const friendlyGatewayError = vi.fn<(...args: unknown[]) => unknown>((e: unknown) =>
   e instanceof Error ? e.message : String(e),
 );
 
@@ -23,34 +22,31 @@ vi.mock(import('./gatewayModals.js'), () => ({
 
 import {
   commitConnectFlow,
-  type ConnectFlowBridge,
+  connectFreshLocalGateway,
   loadLocalVaults,
   runConnectivityTest,
 } from './connectFlowIO.js';
 
-describe('connectFlowIO', () => {
+describe('connectFlowIO scenarios', () => {
   beforeEach(() => {
     listVaults.mockReset();
     connectGateway.mockReset();
     window.CentraidApi = {
       getSettings: vi
-        .fn<() => Promise<{ activeGatewayId: string }>>()
+        .fn<(...args: unknown[]) => unknown>()
         .mockResolvedValue({ activeGatewayId: 'local' }),
-      setActiveGateway: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+      setActiveGateway: vi.fn<(...args: unknown[]) => unknown>().mockResolvedValue(undefined),
       createVault: vi
-        .fn<() => Promise<{ vaultId: string; name: string }>>()
+        .fn<(...args: unknown[]) => unknown>()
         .mockResolvedValue({ vaultId: 'v-new', name: 'New' }),
-      setActiveVault: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+      setActiveVault: vi.fn<(...args: unknown[]) => unknown>().mockResolvedValue(undefined),
     } as unknown as typeof window.CentraidApi;
   });
 
   describe(runConnectivityTest, () => {
     it('fails closed when bridge is missing', async () => {
       window.CentraidApi = {} as typeof window.CentraidApi;
-      const report = await runConnectivityTest({
-        method: 'gateway',
-        url: 'http://x',
-      } as never);
+      const report = await runConnectivityTest({ method: 'gateway', url: 'http://x' } as never);
       expect(report.ok).toBe(false);
       expect(report.error).toBe('unavailable');
     });
@@ -58,13 +54,10 @@ describe('connectFlowIO', () => {
     it('folds bridge throw into unreachable reach stage', async () => {
       window.CentraidApi = {
         testGatewayConnection: vi
-          .fn<ConnectFlowBridge['testGatewayConnection']>()
+          .fn<(...args: unknown[]) => unknown>()
           .mockRejectedValue(new Error('ECONNREFUSED')),
       } as unknown as typeof window.CentraidApi;
-      const report = await runConnectivityTest({
-        method: 'gateway',
-        url: 'http://x',
-      } as never);
+      const report = await runConnectivityTest({ method: 'gateway', url: 'http://x' } as never);
       expect(report.ok).toBe(false);
       expect(report.error).toBe('unreachable');
       expect(report.stages?.[0]?.detail).toMatch(/ECONNREFUSED/u);
@@ -77,7 +70,7 @@ describe('connectFlowIO', () => {
         vaults: [],
       };
       window.CentraidApi = {
-        testGatewayConnection: vi.fn<() => Promise<typeof ok>>().mockResolvedValue(ok),
+        testGatewayConnection: vi.fn<(...args: unknown[]) => unknown>().mockResolvedValue(ok),
       } as unknown as typeof window.CentraidApi;
       await expect(
         runConnectivityTest({ method: 'gateway', url: 'http://x' } as never),
@@ -86,21 +79,52 @@ describe('connectFlowIO', () => {
   });
 
   describe('loadLocalVaults / commitConnectFlow', () => {
-    it('maps listVaults rows and tolerates failure', async () => {
+    it('maps listVaults rows on a successful read', async () => {
       listVaults.mockResolvedValue([
-        {
-          vaultId: 'v1',
-          name: 'Home',
-          ownerPartyId: 'party-1',
-          color: '#fff',
-          icon: 'Folder',
-        },
-      ]);
-      await expect(loadLocalVaults()).resolves.toStrictEqual([
         { vaultId: 'v1', name: 'Home', color: '#fff', icon: 'Folder' },
       ]);
+      await expect(loadLocalVaults()).resolves.toStrictEqual({
+        ok: true,
+        vaults: [{ vaultId: 'v1', name: 'Home', color: '#fff', icon: 'Folder' }],
+      });
+    });
+
+    // Issue #603 W4: an unreachable gateway used to fold into an empty list,
+    // which the UI then rendered as "no spaces here" and offered to create one
+    // against. Failure must stay distinguishable from an empty registry.
+    it('reports a transport failure instead of an empty list', async () => {
       listVaults.mockRejectedValue(new Error('down'));
-      await expect(loadLocalVaults()).resolves.toStrictEqual([]);
+      const result = await loadLocalVaults();
+      expect(result.ok).toBe(false);
+      expect(result.ok === false && result.message).toMatch(/down/u);
+    });
+
+    it('reports a gateway with no vault route as a failure too', async () => {
+      listVaults.mockResolvedValue(undefined);
+      expect((await loadLocalVaults()).ok).toBe(false);
+    });
+
+    it('an empty-but-readable registry is a success with zero vaults', async () => {
+      listVaults.mockResolvedValue([]);
+      await expect(loadLocalVaults()).resolves.toStrictEqual({ ok: true, vaults: [] });
+    });
+
+    it('connectFreshLocalGateway addresses the auto-founded Personal vault', async () => {
+      listVaults.mockResolvedValue([
+        { vaultId: 'shared', name: 'Shared' },
+        { vaultId: 'personal', name: 'Personal' },
+      ]);
+      await expect(connectFreshLocalGateway()).resolves.toStrictEqual({
+        displayLabel: 'This Mac',
+        gatewayId: 'local',
+        vaultId: 'personal',
+      });
+      expect(window.CentraidApi.setActiveVault).toHaveBeenCalledWith({ vaultId: 'personal' });
+    });
+
+    it('connectFreshLocalGateway surfaces an unreachable gateway', async () => {
+      listVaults.mockRejectedValue(new Error('ECONNREFUSED'));
+      await expect(connectFreshLocalGateway()).rejects.toThrow(/ECONNREFUSED/u);
     });
 
     it('rejects commit without a method or vault choice', async () => {

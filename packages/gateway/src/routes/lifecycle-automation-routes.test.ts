@@ -1,23 +1,34 @@
-import crypto from 'node:crypto';
+import { tempDir } from '@centraid/test-kit/temp-dir';
+/*
+ * `POST /centraid/_automations/update?ref=` — the instructions-first
+ * editor's save path (automations UI revamp). Boots a real gateway and
+ * drives the wire path end to end, mirroring
+ * `../lifecycle/automation-lifecycle-over-http.test.ts`'s style for the
+ * sibling create/set-enabled/rotate-webhook/delete routes.
+ */
+
+import { describe, afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { hashWebhookSecret } from '@centraid/automation';
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { describe, afterEach, beforeEach, expect, test, vi } from 'vitest';
-
-import type { GatewayPaths } from '../paths.ts';
 import { serve, type GatewayServeHandle } from '../serve/serve.ts';
+import type { GatewayPaths } from '../paths.ts';
+// lifecycle-automation-routes is exercised through serve() HTTP paths below (#545 B3).
 
 let dataDir: string;
 let handle: GatewayServeHandle;
+
 function pathsUnder(dir: string): GatewayPaths {
   return {
     vaultDir: path.join(dir, 'vault'),
   };
 }
+
 function auth(): Record<string, string> {
   return { Authorization: `Bearer ${handle.token}` };
 }
+
 interface CreatedAutomation {
   row: {
     ref: string;
@@ -30,6 +41,7 @@ interface CreatedAutomation {
   };
   webhook?: { id: string; secret: string; url: string };
 }
+
 /** Scaffold + publish a fresh automation app via the real create route. */
 async function createAutomation(
   id: string,
@@ -50,6 +62,7 @@ async function createAutomation(
   expect(res.status).toBe(201);
   return (await res.json()) as CreatedAutomation;
 }
+
 async function update(
   ref: string,
   body: Record<string, unknown>,
@@ -62,27 +75,28 @@ async function update(
       body: JSON.stringify({ publish: true, ...body }),
     },
   );
-  return {
-    status: res.status,
-    json: (await res.json()) as Record<string, unknown>,
-  };
+  return { status: res.status, json: (await res.json()) as Record<string, unknown> };
 }
-describe('lifecycle-automation-routes suite', () => {
+
+describe('lifecycle-automation-routes scenarios', () => {
   beforeEach(async () => {
     dataDir = await tempDir(`gw-autoupdate-${crypto.randomUUID()}-`);
-    // Keep compile observable without spawning an ACP agent in tests.
+    // Headless compile (and any builder turn) would spawn a real coding agent
+    // and hang on agentless CI/local hosts. Inject a failing runTurn so the
+    // compile path still exercises ledger finish + HTTP 202 without ACP.
     handle = await serve({
-      initVaultName: "Owner's vault",
       paths: pathsUnder(dataDir),
       runTurn: async () => {
         throw new Error('compiler unavailable');
       },
     });
   });
+
   afterEach(async () => {
     await handle?.close().catch(() => undefined);
     await fs.rm(dataDir, { recursive: true, force: true });
   });
+
   test('create mints a webhook plaintext once and persists only the hash', async () => {
     const created = await createAutomation('minted-hook', {
       triggers: [{ kind: 'webhook' }],
@@ -97,19 +111,16 @@ describe('lifecycle-automation-routes suite', () => {
     };
     expect(trigger.kind).toBe('webhook');
     expect(trigger.id).toBe(created.webhook!.id);
+    // Plaintext is returned once; the manifest stores only SHA-256(secret).
     expect(trigger.secretHash).toBe(hashWebhookSecret(secret));
     expect(JSON.stringify(created.row.manifest)).not.toContain(secret);
   });
 
   test('update patches only the name, leaving prompt/triggers untouched', async () => {
     const created = await createAutomation('renamer');
-    const { status, json } = await update(created.row.ref, {
-      name: 'Renamed Automation',
-    });
+    const { status, json } = await update(created.row.ref, { name: 'Renamed Automation' });
     expect(status).toBe(200);
-    const row = json.row as {
-      manifest: { name: string; prompt: string; triggers: unknown[] };
-    };
+    const row = json.row as { manifest: { name: string; prompt: string; triggers: unknown[] } };
     expect(row.manifest.name).toBe('Renamed Automation');
     expect(row.manifest.prompt).toBe('do the thing');
     expect(row.manifest.triggers).toStrictEqual([{ kind: 'cron', expr: '0 9 * * *' }]);
@@ -117,13 +128,9 @@ describe('lifecycle-automation-routes suite', () => {
 
   test('update patches only the prompt, leaving name/triggers untouched', async () => {
     const created = await createAutomation('reprompter');
-    const { status, json } = await update(created.row.ref, {
-      prompt: 'do a different thing now',
-    });
+    const { status, json } = await update(created.row.ref, { prompt: 'do a different thing now' });
     expect(status).toBe(200);
-    const row = json.row as {
-      manifest: { name: string; prompt: string; triggers: unknown[] };
-    };
+    const row = json.row as { manifest: { name: string; prompt: string; triggers: unknown[] } };
     expect(row.manifest.prompt).toBe('do a different thing now');
     expect(row.manifest.name).toBe('reprompter');
     expect(row.manifest.triggers).toStrictEqual([{ kind: 'cron', expr: '0 9 * * *' }]);
@@ -139,19 +146,13 @@ describe('lifecycle-automation-routes suite', () => {
       model: 'claude-custom',
     });
 
-    const changed = await update(created.row.ref, {
-      runner: 'codex',
-      model: 'gpt-custom',
-    });
+    const changed = await update(created.row.ref, { runner: 'codex', model: 'gpt-custom' });
     expect(changed.status).toBe(200);
     expect(
       (changed.json.row as { manifest: { requires: Record<string, unknown> } }).manifest.requires,
     ).toStrictEqual({ runner: 'codex', model: 'gpt-custom' });
 
-    const cleared = await update(created.row.ref, {
-      runner: null,
-      model: null,
-    });
+    const cleared = await update(created.row.ref, { runner: null, model: null });
     expect(cleared.status).toBe(200);
     expect(
       (cleared.json.row as { manifest: { requires: Record<string, unknown> } }).manifest.requires,
@@ -235,15 +236,9 @@ describe('lifecycle-automation-routes suite', () => {
     expect(webhook.id).toBeTruthy();
     expect(webhook.secret).toBeTruthy();
     expect(webhook.url).toMatch(/\/_centraid-hook\//u);
-    const row = json.row as {
-      manifest: { triggers: Array<{ kind: string; id?: string }> };
-    };
+    const row = json.row as { manifest: { triggers: Array<{ kind: string; id?: string }> } };
     expect(row.manifest.triggers).toStrictEqual([
-      {
-        kind: 'webhook',
-        id: webhook.id,
-        secretHash: hashWebhookSecret(webhook.secret),
-      },
+      { kind: 'webhook', id: webhook.id, secretHash: hashWebhookSecret(webhook.secret) },
     ]);
     expect(JSON.stringify(row.manifest)).not.toContain(webhook.secret);
   });
@@ -254,14 +249,12 @@ describe('lifecycle-automation-routes suite', () => {
     });
     expect(created.webhook).toBeTruthy();
     const originalSecretHash = (
-      created.row.manifest.triggers[0] as {
-        kind: string;
-        id: string;
-        secretHash: string;
-      }
+      created.row.manifest.triggers[0] as { kind: string; id: string; secretHash: string }
     ).secretHash;
 
-    // Re-declaring an existing webhook is a no-op, not a fresh secret mint.
+    // Rename in the same edit that re-declares the webhook trigger — the
+    // webhook entry must be a no-op (no fresh mint, no `webhook` in the
+    // response) since it already existed.
     const { status, json } = await update(created.row.ref, {
       name: 'Keeps Its Hook (renamed)',
       triggers: [{ kind: 'webhook' }],
@@ -269,18 +262,11 @@ describe('lifecycle-automation-routes suite', () => {
     expect(status).toBe(200);
     expect(json.webhook).toBeUndefined();
     const row = json.row as {
-      manifest: {
-        name: string;
-        triggers: Array<{ kind: string; id: string; secretHash: string }>;
-      };
+      manifest: { name: string; triggers: Array<{ kind: string; id: string; secretHash: string }> };
     };
     expect(row.manifest.name).toBe('Keeps Its Hook (renamed)');
     expect(row.manifest.triggers).toStrictEqual([
-      {
-        kind: 'webhook',
-        id: created.webhook!.id,
-        secretHash: originalSecretHash,
-      },
+      { kind: 'webhook', id: created.webhook!.id, secretHash: originalSecretHash },
     ]);
   });
 
@@ -330,9 +316,7 @@ describe('lifecycle-automation-routes suite', () => {
   });
 
   test('headless compile returns a turn id and records failure in the automation thread', async () => {
-    const created = await createAutomation('compile-ledger', {
-      enabled: false,
-    });
+    const created = await createAutomation('compile-ledger', { enabled: false });
     const res = await fetch(
       `${handle.url}/centraid/_automations/compile?ref=${encodeURIComponent(created.row.ref)}`,
       {
@@ -345,7 +329,16 @@ describe('lifecycle-automation-routes suite', () => {
     const { compileTurnId } = (await res.json()) as { compileTurnId: string };
     expect(compileTurnId).toContain(':compile:');
 
-    // Wall-clock poll: the run must end before teardown can remove its data dir.
+    // Wait on a wall-clock deadline, not an iteration count. A compile spawns a
+    // real app-server subprocess; the old 20x25ms budget was 500ms, which a
+    // loaded CI runner blows through routinely. When it expired the loop simply
+    // fell through and the assertions below still passed against a run row that
+    // had not ended yet — so the test proved nothing it claimed, and afterEach
+    // then deleted the data dir while the compile was still writing objects into
+    // code/apps.git, surfacing as ENOTEMPTY from an unrelated-looking rm.
+    // Asserting endedAt is what makes the wait real: the run must be over before
+    // this test returns, which is also what makes teardown safe.
+    // #496 H1 — poll with vi.waitFor rather than a fixed-sleep loop.
     await vi.waitFor(
       async () => {
         const feed = await fetch(
@@ -361,7 +354,10 @@ describe('lifecycle-automation-routes suite', () => {
           }>;
         };
         const found = body.turns.find((candidate) => candidate.turnId === compileTurnId);
-        // A terminal failure has both ok=false and a finished timestamp.
+        // Terminal failure: ok is false AND endedAt is a number. Accepting
+        // endedAt null/undefined reduced the wait to `ok === false` and
+        // reinstated the ENOTEMPTY teardown race this comment warns about —
+        // the run must be fully over before this test returns.
         expect(found).toMatchObject({ triggerKind: 'compile', ok: false });
         expect(found?.endedAt).toBeTypeOf('number');
       },
@@ -375,7 +371,6 @@ describe('lifecycle-automation-routes suite', () => {
     dataDir = await tempDir(`gw-compile-failover-${crypto.randomUUID()}-`);
     const attempted: string[] = [];
     handle = await serve({
-      initVaultName: "Owner's vault",
       paths: pathsUnder(dataDir),
       runTurn: async (input, config) => {
         const runner = config.prefs.kind;
@@ -397,9 +392,7 @@ describe('lifecycle-automation-routes suite', () => {
       'runner.ladder.automations': ['codex', 'claude-code'],
     });
 
-    const created = await createAutomation('compile-failover', {
-      enabled: false,
-    });
+    const created = await createAutomation('compile-failover', { enabled: false });
     const res = await fetch(
       `${handle.url}/centraid/_automations/compile?ref=${encodeURIComponent(created.row.ref)}`,
       {
@@ -429,10 +422,7 @@ describe('lifecycle-automation-routes suite', () => {
         const fallback = body.turns.find((candidate) =>
           candidate.turnId.startsWith(`${compileTurnId}:failover:1:claude-code`),
         );
-        expect(first).toMatchObject({
-          note: 'Compiling plan with codex',
-          ok: false,
-        });
+        expect(first).toMatchObject({ note: 'Compiling plan with codex', ok: false });
         expect(first?.endedAt).toBeTypeOf('number');
         expect(fallback).toMatchObject({
           note:
@@ -460,9 +450,7 @@ describe('lifecycle-automation-routes suite', () => {
     const res = await fetch(endpoint, {
       method: 'POST',
       headers: { ...auth(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message: 'Only include messages from customers.',
-      }),
+      body: JSON.stringify({ message: 'Only include messages from customers.' }),
     });
     expect(res.status).toBe(202);
     const body = (await res.json()) as { compileTurnId: string };
@@ -476,12 +464,7 @@ describe('lifecycle-automation-routes suite', () => {
         );
         const turns = (
           (await feed.json()) as {
-            turns: Array<{
-              turnId: string;
-              ok: boolean;
-              endedAt?: number;
-              error?: string;
-            }>;
+            turns: Array<{ turnId: string; ok: boolean; endedAt?: number; error?: string }>;
           }
         ).turns;
         const revision = turns.find((turn) => turn.turnId === revisionTurnId);

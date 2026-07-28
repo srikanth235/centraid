@@ -115,24 +115,11 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   listGatewayVaults: (input: { gatewayId: string }) =>
     ipcRenderer.invoke(Channel.GATEWAYS_LIST_VAULTS, input),
   // ConnectFlow "handshake ladder" (issue #382): staged connectivity check
-  // for url/ticket/ssh/gateway inputs. Never rejects.
+  // for ticket/gateway inputs. Never rejects. (Issue #603 deleted the ssh
+  // variant along with the whole SSH-connect feature.)
   testGatewayConnection: (
-    input:
-      | { kind: 'ticket'; ticket: string }
-      | { kind: 'ssh'; destination: string; dataDir?: string }
-      | { kind: 'gateway'; gatewayId: string },
+    input: { kind: 'ticket'; ticket: string } | { kind: 'gateway'; gatewayId: string },
   ) => ipcRenderer.invoke(Channel.GATEWAY_TEST_CONNECTION, input),
-  // ConnectFlow "Over SSH" commit (issue #382): (optional) create a vault
-  // remotely, mint+redeem a pairing ticket, persist the ssh block on the
-  // resulting profile. On success the active gateway AND vault both flip,
-  // same as `redeemGatewayPairing`.
-  sshConnectGateway: (input: {
-    destination: string;
-    dataDir?: string;
-    label?: string;
-    rememberDevice?: boolean;
-    vault: { kind: 'existing'; vaultId: string } | { kind: 'create'; name: string };
-  }) => ipcRenderer.invoke(Channel.GATEWAY_SSH_CONNECT, input),
   // Gateway runtime watch: latest heartbeat snapshot for first paint, plus
   // the per-poll push stream the Gateway page (and sidebar pill) subscribe to.
   getGatewayRuntime: () => ipcRenderer.invoke(Channel.GATEWAY_RUNTIME_GET),
@@ -263,6 +250,12 @@ contextBridge.exposeInMainWorld('CentraidApi', {
     ipcRenderer.on(Channel.UPDATE_AVAILABLE, handler);
     return () => ipcRenderer.off(Channel.UPDATE_AVAILABLE, handler);
   },
+
+  // Keychain pre-write note (issue #603): true when starting the local
+  // gateway on THIS host is expected to pop an OS credential prompt, so the
+  // first-run chooser can say so before the dialog appears.
+  keychainPromptExpected: (): Promise<boolean> =>
+    ipcRenderer.invoke(Channel.KEYCHAIN_PROMPT_EXPECTED),
 
   // "What's new" changelog — main fetches the project's GitHub Releases
   // (cached) and returns the running build's version plus the release list.

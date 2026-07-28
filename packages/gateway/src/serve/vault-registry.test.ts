@@ -1,46 +1,32 @@
-import { existsSync, promises as fs } from 'node:fs';
-import http from 'node:http';
-import path from 'node:path';
-
-import { forEachSequentially } from '@centraid/test-kit/sequential';
 import { tempDir } from '@centraid/test-kit/temp-dir';
+import { forEachSequentially } from '@centraid/test-kit/sequential';
 import { describe, afterEach, expect, test, vi } from 'vitest';
-
+import { existsSync, promises as fs } from 'node:fs';
+import path from 'node:path';
+import http from 'node:http';
+import { openVaultRegistry, VaultRegistryError, type VaultRegistry } from './vault-registry.js';
+import { runWithVaultContext } from './vault-context.js';
 import { makeVaultRouteHandler } from '../routes/vault-routes.js';
 import { EnrollmentStore } from './enrollment-store.js';
 import { GatewayDatabase } from './gateway-db.js';
-import { runWithVaultContext } from './vault-context.js';
-import { openVaultRegistry, VaultRegistryError, type VaultRegistry } from './vault-registry.js';
 
-const silentLogger = {
-  info: () => undefined,
-  warn: () => undefined,
-  error: () => undefined,
-};
+const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
 
 const cleanups: Array<() => Promise<void> | void> = [];
-describe('vault-registry suite', () => {
-  afterEach(async () => {
-    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
-  });
+describe('vault-registry scenarios', () => {
+  afterEach(async () =>
+    forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup()),
+  );
   function openRegistry(rootDir: string): VaultRegistry {
-    const registry = openVaultRegistry({
-      rootDir,
-      logger: silentLogger,
-      ownerName: 'Priya',
-    });
+    const registry = openVaultRegistry({ rootDir, logger: silentLogger, ownerName: 'Priya' });
     if (registry.list().length === 0) registry.create();
     cleanups.push(() => registry.stop());
     return registry;
   }
 
-  test('a fresh root stays uninitialized until an explicit create', async () => {
+  test('a fresh root holds no vault until an explicit create', async () => {
     const root = await tempDir();
-    const registry = openVaultRegistry({
-      rootDir: root,
-      logger: silentLogger,
-      ownerName: 'Priya',
-    });
+    const registry = openVaultRegistry({ rootDir: root, logger: silentLogger, ownerName: 'Priya' });
     cleanups.push(() => registry.stop());
     expect(registry.list()).toStrictEqual([]);
     expect(registry.isFresh()).toBe(true);
@@ -104,11 +90,7 @@ describe('vault-registry suite', () => {
 
   test('the registry survives a restart: same vaults, same names', async () => {
     const root = await tempDir();
-    const first = openVaultRegistry({
-      rootDir: root,
-      logger: silentLogger,
-      ownerName: 'Priya',
-    });
+    const first = openVaultRegistry({ rootDir: root, logger: silentLogger, ownerName: 'Priya' });
     first.create();
     first.create('Work');
     const ids = first
@@ -170,11 +152,7 @@ describe('vault-registry suite', () => {
     const registry = openRegistry(root);
 
     // Second process (the admin CLI) creates a vault in the same root.
-    const cli = openVaultRegistry({
-      rootDir: root,
-      logger: silentLogger,
-      ownerName: 'Priya',
-    });
+    const cli = openVaultRegistry({ rootDir: root, logger: silentLogger, ownerName: 'Priya' });
     const fresh = cli.create('Guest');
     cli.stop();
 
@@ -189,11 +167,7 @@ describe('vault-registry suite', () => {
     const mounted: string[] = [];
     const unsubscribe = registry.onMount((plane) => mounted.push(plane.boot.vaultId));
 
-    const cli = openVaultRegistry({
-      rootDir: root,
-      logger: silentLogger,
-      ownerName: 'Priya',
-    });
+    const cli = openVaultRegistry({ rootDir: root, logger: silentLogger, ownerName: 'Priya' });
     const fresh = cli.create('Recovered');
     cli.stop();
     expect(registry.get(fresh.vaultId)).toBeDefined();
@@ -250,22 +224,16 @@ describe('vault-registry suite', () => {
     expect(created.status).toBe(201);
     const family = (await created.json()) as { vaultId: string; name: string };
     expect(enrollments.get('owner-device', family.vaultId)?.role).toBe('admin');
-    const listed = (await (await fetch(`${base}/vaults`)).json()) as {
-      vaults: unknown[];
-    };
+    const listed = (await (await fetch(`${base}/vaults`)).json()) as { vaults: unknown[] };
     expect(listed.vaults).toHaveLength(2);
 
     // Per-vault addressing: enroll an app only in the new vault, then read
     // both consent surfaces — they are disjoint.
     registry.get(family.vaultId)!.enrollApp('planner');
-    const defaultApps = (await (await fetch(`${base}/apps`)).json()) as {
-      apps: unknown[];
-    };
+    const defaultApps = (await (await fetch(`${base}/apps`)).json()) as { apps: unknown[] };
     expect(defaultApps.apps).toHaveLength(0);
     const familyApps = (await (
-      await fetch(`${base}/apps`, {
-        headers: { 'x-centraid-vault': family.vaultId },
-      })
+      await fetch(`${base}/apps`, { headers: { 'x-centraid-vault': family.vaultId } })
     ).json()) as { apps: Array<{ name: string }> };
     expect(familyApps.apps).toMatchObject([{ name: 'planner' }]);
 
@@ -279,9 +247,7 @@ describe('vault-registry suite', () => {
     expect(patched).toMatchObject({ name: 'Sharma family', color: '#aa3355' });
 
     // DELETE cannot bypass the typed-name recovery-kit erase ceremony.
-    const veto = await fetch(`${base}/vaults/${family.vaultId}`, {
-      method: 'DELETE',
-    });
+    const veto = await fetch(`${base}/vaults/${family.vaultId}`, { method: 'DELETE' });
     expect(veto.status).toBe(405);
     expect(registry.list()).toHaveLength(2);
   });
@@ -386,11 +352,7 @@ describe('vault-registry suite', () => {
 
     // The blank machine remains empty until recovery adopts the restored vault.
     const root = await tempDir();
-    const registry = openVaultRegistry({
-      rootDir: root,
-      logger: silentLogger,
-      ownerName: 'Priya',
-    });
+    const registry = openVaultRegistry({ rootDir: root, logger: silentLogger, ownerName: 'Priya' });
     cleanups.push(() => registry.stop());
     expect(registry.list()).toHaveLength(0);
 
@@ -428,12 +390,13 @@ describe('vault-registry suite', () => {
     // a new id instead of colliding.
     const dupeDir = path.join(root, 'dupe-of-first');
     await fs.mkdir(dupeDir, { recursive: true });
-    await Promise.all(
-      ['vault.db', 'journal.db', 'vault.db-wal', 'journal.db-wal'].map((name) =>
-        fs.copyFile(path.join(firstDir, name), path.join(dupeDir, name)).catch((err) => {
+    await forEachSequentially(
+      ['vault.db', 'journal.db', 'vault.db-wal', 'journal.db-wal'],
+      async (name) => {
+        await fs.copyFile(path.join(firstDir, name), path.join(dupeDir, name)).catch((err) => {
           if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
-        }),
-      ),
+        });
+      },
     );
 
     registry.rescan();

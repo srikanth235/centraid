@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-
 import { parsePairingInput, parsePairQr } from './phone-link-parse';
 
 function encodeGwPair(payload: {
@@ -12,13 +11,6 @@ function encodeGwPair(payload: {
   const json = JSON.stringify({ v: 1, kind: 'centraid-gw-pair', ...payload });
   // Node Buffer is available under vitest; mirrors gateway encodePairingTicket.
   return Buffer.from(json, 'utf8').toString('base64url');
-}
-
-function encodeFounding(payload: { gw: string; t: string; s: string; exp: number }): string {
-  return Buffer.from(
-    JSON.stringify({ v: 1, kind: 'centraid-gw-found', ...payload }),
-    'utf8',
-  ).toString('base64url');
 }
 
 describe(parsePairingInput, () => {
@@ -34,10 +26,7 @@ describe(parsePairingInput, () => {
       ticket: 'ep-ticket',
       code: 'ABCD',
     });
-    expect(parsePairQr(raw)).toStrictEqual({
-      ticket: 'ep-ticket',
-      code: 'ABCD',
-    });
+    expect(parsePairQr(raw)).toStrictEqual({ ticket: 'ep-ticket', code: 'ABCD' });
   });
 
   it('parses headless centraid-gw-pair one-line tickets', () => {
@@ -70,21 +59,21 @@ describe(parsePairingInput, () => {
     expect(parsePairingInput(bad)).toBeUndefined();
   });
 
-  it('parses a founding ticket without treating it as ordinary pairing', () => {
-    const exp = Date.now() + 60_000;
-    const token = encodeFounding({
-      gw: 'refreshable-endpoint-hint',
-      t: 'one-time-id',
-      s: 'one-time-secret',
-      exp,
-    });
-    expect(parsePairingInput(token)).toStrictEqual({
-      kind: 'centraid-gw-found',
-      gw: 'refreshable-endpoint-hint',
-      t: 'one-time-id',
-      s: 'one-time-secret',
-      exp,
-    });
+  it('rejects unknown gateway ticket kinds — the pair ticket is the only ticket (#603)', () => {
+    // The retired founding-ticket kind lands in this bucket too: the parser
+    // no longer special-cases it, so any non-pair kind is refused the same way.
+    const token = Buffer.from(
+      JSON.stringify({
+        v: 1,
+        kind: 'centraid-gw-legacy',
+        gw: 'refreshable-endpoint-hint',
+        t: 'one-time-id',
+        s: 'one-time-secret',
+        exp: Date.now() + 60_000,
+      }),
+      'utf8',
+    ).toString('base64url');
+    expect(parsePairingInput(token)).toBeUndefined();
     expect(parsePairQr(token)).toBeUndefined();
   });
 

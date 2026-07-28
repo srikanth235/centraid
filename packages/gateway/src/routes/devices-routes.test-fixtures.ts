@@ -40,7 +40,7 @@ export interface DevicesHarness {
 
 export async function harness(
   overrides: Partial<
-    Pick<DevicesRouteDeps, 'endpointTicket' | 'isUninitialized' | 'vaultName'>
+    Pick<DevicesRouteDeps, 'endpointTicket' | 'defaultVaultId' | 'vaultName'>
   > = {},
 ): Promise<DevicesHarness> {
   const dir = await tempDir('devices-routes-');

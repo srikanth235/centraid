@@ -15,14 +15,12 @@ const removedPath = path.join(root, '.github/workflows/pairing-relay-e2e.yml');
 
 const requiredFlowScripts = [
   'tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs',
-  'tests/agent-e2e-pairing/flows/vps-phone-founding.mjs',
   'tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs',
   'tests/agent-e2e-pairing/flows/cross-network-relay.mjs',
 ];
 
 const requiredJobs = [
   'pairing-lifecycle:',
-  'pairing-founding:',
   'pairing-ticket-hygiene:',
   'pairing-cross-network-relay:',
   // #532 — mutation scores must reach the report job via nightly-evidence-*.
@@ -31,7 +29,6 @@ const requiredJobs = [
 
 const requiredArtifactNames = [
   'nightly-evidence-pairing-lifecycle',
-  'nightly-evidence-pairing-founding',
   'nightly-evidence-pairing-ticket-hygiene',
   'nightly-evidence-pairing-cross-network-relay',
   'nightly-evidence-mutation',
@@ -74,7 +71,6 @@ if (reportIdx === -1) {
   for (const need of [
     'mobile-e2e-android',
     'pairing-lifecycle',
-    'pairing-founding',
     'pairing-ticket-hygiene',
     'pairing-cross-network-relay',
     'mutation-testing',
@@ -142,6 +138,6 @@ if (errors.length) {
   process.exitCode = 1;
 } else {
   console.log(
-    'nightly-wiring: e2e.yml owns pairing lifecycle, founding, ticket-hygiene, cross-network-relay, and mutation-testing; standalone pairing-relay-e2e removed',
+    'nightly-wiring: e2e.yml owns pairing lifecycle, ticket-hygiene, cross-network-relay, and mutation-testing; standalone pairing-relay-e2e removed',
   );
 }

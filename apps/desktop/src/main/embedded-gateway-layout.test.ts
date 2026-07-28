@@ -1,24 +1,22 @@
 // @vitest-environment node
 
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-
 import { serve } from '@centraid/gateway';
 import { forEachSequentially } from '@centraid/test-kit/sequential';
 import { tempDir } from '@centraid/test-kit/temp-dir';
 import { aesGcmKeyProtector, KeyStore } from '@centraid/vault';
-import { afterEach, describe, expect, test } from 'vitest';
-
+import { describe, afterEach, expect, test } from 'vitest';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
 import { startDesktopEmbeddedGateway } from './embedded-gateway.js';
 
 const roots: string[] = [];
 
-describe('embedded-gateway-layout', () => {
-  afterEach(async () => {
-    await forEachSequentially(roots.splice(0).toReversed(), (root) =>
+describe('embedded-gateway-layout scenarios', () => {
+  afterEach(async () =>
+    forEachSequentially(roots.splice(0).toReversed(), (root) =>
       fs.rm(root, { recursive: true, force: true }),
-    );
-  });
+    ),
+  );
 
   function pathsFor(root: string) {
     return {
@@ -53,19 +51,15 @@ describe('embedded-gateway-layout', () => {
   }
 
   async function treeShape(root: string, relative = ''): Promise<string[]> {
-    const entries = await fs.readdir(path.join(root, relative), {
-      withFileTypes: true,
-    });
-    const result = (
-      await Promise.all(
-        entries.map(async (entry) => {
-          const child = path.join(relative, entry.name);
-          const row = `${entry.isDirectory() ? 'd' : 'f'}:${child}`;
-          return entry.isDirectory() ? [row, ...(await treeShape(root, child))] : [row];
-        }),
-      )
-    ).flat();
-    return result.sort();
+    const entries = await fs.readdir(path.join(root, relative), { withFileTypes: true });
+    const result = await Promise.all(
+      entries.map(async (entry) => {
+        const child = path.join(relative, entry.name);
+        const row = `${entry.isDirectory() ? 'd' : 'f'}:${child}`;
+        return entry.isDirectory() ? [row, ...(await treeShape(root, child))] : [row];
+      }),
+    );
+    return result.flat().sort();
   }
 
   function normalizeDynamicNames(entries: string[]): string[] {
@@ -75,8 +69,11 @@ describe('embedded-gateway-layout', () => {
           entry
             .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gu, '<vault-id>')
             .replace(/[0-9a-f]{40}/gu, '<git-object>')
-            .replace(/(?:apps\.git\/objects\/)[0-9a-f]{2}(?=\/|$)/u, '$1<git-prefix>')
-            .replace(/(?:apps\.git\/objects\/<git-prefix>\/)[0-9a-f]{38}$/u, '$1<git-rest>')
+            .replace(/(?<prefix>apps\.git\/objects\/)[0-9a-f]{2}(?=\/|$)/u, '$<prefix><git-prefix>')
+            .replace(
+              /(?<prefix>apps\.git\/objects\/<git-prefix>\/)[0-9a-f]{38}$/u,
+              '$<prefix><git-rest>',
+            )
             .replace(/[0-9a-f]{32}/gu, '<wal-generation>')
             .replace(/\d{13}(?=\.(?:tick|seg)$)/gu, '<tick-ms>')
             .replace(/\d{12}-\d{12}-<tick-ms>\.seg$/u, '<wal-segment>.seg')
@@ -98,13 +95,11 @@ describe('embedded-gateway-layout', () => {
       keyStore: new KeyStore(path.join(desktopRoot, 'keys'), { protector }),
       token: 'desktop-layout-token',
       ownerEndpointId: 'desktop-device',
-      initVaultName: 'Family',
     });
     desktop.vaults.current().walShipper?.tick();
     await desktop.close();
 
     const headless = await serve({
-      initVaultName: 'Family',
       paths: { ...pathsFor(headlessRoot), dataDir: headlessRoot },
       keyStore: new KeyStore(path.join(headlessRoot, 'keys'), { protector }),
       token: 'headless-layout-token',
@@ -118,8 +113,12 @@ describe('embedded-gateway-layout', () => {
     );
   }, 15_000);
 
-  test('actual Electron embed can complete the direct-host founding ceremony', async () => {
-    const root = await tempDir('desktop-embedded-founding-');
+  test('actual Electron embed auto-founds Shared + Personal on a fresh data dir', async () => {
+    // Issue #603: the desktop passes no founding options at all — a fresh data
+    // dir is founded by the gateway itself at construction. This is the desktop
+    // half of that contract: start the real embed, ask it for its vault list,
+    // and expect the two auto-founded vaults with no ceremony in between.
+    const root = await tempDir('desktop-embedded-autofound-');
     roots.push(root);
     await seedFreshPricingCache(root);
     const gateway = await startDesktopEmbeddedGateway({
@@ -128,58 +127,19 @@ describe('embedded-gateway-layout', () => {
       keyStore: new KeyStore(path.join(root, 'keys'), {
         protector: aesGcmKeyProtector(Buffer.alloc(32, 0x43)),
       }),
-      token: 'desktop-founding-token',
+      token: 'desktop-autofound-token',
       ownerEndpointId: 'a'.repeat(64),
     });
     try {
-      const headers = { Authorization: 'Bearer desktop-founding-token' };
-      const mintedResponse = await fetch(`${gateway.url}/centraid/_gateway/founding/ticket`, {
-        method: 'POST',
-        headers,
+      const response = await fetch(`${gateway.url}/centraid/_vault/vaults`, {
+        headers: { Authorization: 'Bearer desktop-autofound-token' },
       });
-      const minted = (await mintedResponse.json()) as {
-        ticket?: string;
-        error?: string;
-        message?: string;
-      };
-      expect({
-        status: mintedResponse.status,
-        ticket: typeof minted.ticket,
-        error: minted.error,
-        message: minted.message,
-      }).toStrictEqual({
-        status: 200,
-        ticket: 'string',
-        error: undefined,
-        message: undefined,
-      });
-
-      const initializedResponse = await fetch(`${gateway.url}/centraid/_vault/vaults:initialize`, {
-        method: 'POST',
-        headers: { ...headers, 'content-type': 'application/json' },
-        body: JSON.stringify({
-          ticket: minted.ticket,
-          name: 'Personal',
-          password: 'correct horse battery staple',
-          deviceName: 'Desktop host',
-          platform: 'desktop',
-        }),
-      });
-      const initialized = (await initializedResponse.json()) as {
-        kit?: unknown;
-      };
-      expect(initializedResponse.status).toBe(201);
-
-      const verified = await fetch(`${gateway.url}/centraid/_vault/vaults:initialize/verify`, {
-        method: 'POST',
-        headers: { ...headers, 'content-type': 'application/json' },
-        body: JSON.stringify({
-          kit: initialized.kit,
-          password: 'correct horse battery staple',
-          lossConsent: true,
-        }),
-      });
-      expect(verified.status).toBe(200);
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { vaults?: Array<{ name?: string }> };
+      expect((body.vaults ?? []).map((vault) => vault.name).sort()).toStrictEqual([
+        'Personal',
+        'Shared',
+      ]);
     } finally {
       await gateway.close();
     }

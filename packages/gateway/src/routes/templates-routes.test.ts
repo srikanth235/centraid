@@ -1,4 +1,4 @@
-import crypto from 'node:crypto';
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * Template catalog over HTTP (issue #141). The gateway owns the bundled
  * @centraid/blueprints catalog and serves its display metadata at
@@ -6,15 +6,14 @@ import crypto from 'node:crypto';
  * through a desktop IPC. We boot serve() and assert the route returns the
  * stripped metadata rows (no `files`/`source`), behind the bearer check.
  */
+
+import { describe, afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-
-import type { GatewayPaths } from '../paths.ts';
+import crypto from 'node:crypto';
 import { serve, type GatewayServeHandle } from '../serve/serve.ts';
 import { makeTemplatesRouteHandler } from './templates-routes.ts';
+import type { GatewayPaths } from '../paths.ts';
 
 let dataDir: string;
 let handle: GatewayServeHandle;
@@ -25,7 +24,7 @@ function pathsUnder(dir: string): GatewayPaths {
   };
 }
 
-describe('templates-routes', () => {
+describe('templates-routes scenarios', () => {
   beforeEach(async () => {
     dataDir = await tempDir(`gateway-templates-${crypto.randomUUID()}-`);
   });
@@ -36,10 +35,7 @@ describe('templates-routes', () => {
   });
 
   test('GET /centraid/_templates returns stripped bundled metadata behind auth', async () => {
-    handle = await serve({
-      initVaultName: "Owner's vault",
-      paths: pathsUnder(dataDir),
-    });
+    handle = await serve({ paths: pathsUnder(dataDir) });
 
     // No bearer → 401.
     const unauth = await fetch(`${handle.url}/centraid/_templates`);
@@ -84,10 +80,7 @@ describe('templates-routes', () => {
     const photos = templates.find((t) => t.id === 'photos');
     expect(photos).toBeDefined();
     const vault = photos?.vault as
-      | {
-          why?: string;
-          scopes?: Array<{ schema: string; table?: string; verbs: string }>;
-        }
+      | { why?: string; scopes?: Array<{ schema: string; table?: string; verbs: string }> }
       | undefined;
     expect(vault).toBeDefined();
     expect(vault?.why).toBeTypeOf('string');
@@ -128,10 +121,7 @@ describe('templates-routes', () => {
       return new Response(null, { status: 404 });
     }) as typeof fetch;
 
-    makeTemplatesRouteHandler({
-      cacheDir: path.join(dataDir, 'tmpl-cache'),
-      fetchImpl,
-    });
+    makeTemplatesRouteHandler({ cacheDir: path.join(dataDir, 'tmpl-cache'), fetchImpl });
     // Allow a microtask turn for any accidental fire-and-forget, then assert quiet.
     await Promise.resolve();
     await Promise.resolve();

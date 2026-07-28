@@ -391,6 +391,38 @@
   color: #ffb8b8;
 }
 
+/* "Back" to the desktop first-run chooser (issue #603) — a quiet text link,
+   deliberately not competing with the primary CTA above it. */
+.backBtn {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  background: none;
+  border: none;
+  font: inherit;
+  font-size: 12.5px;
+  color: color-mix(in srgb, #b9bcd1 60%, transparent);
+  cursor: pointer;
+  transition: color 160ms;
+}
+.backBtn:hover:not(:disabled) {
+  color: #e8eaf2;
+}
+.backBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* One-line heads-up shown only where the OS keychain will prompt on the
+   first secret write (dev/unsigned builds, some Linux keyrings — issue
+   #603): the dialog should be expected, not spooky. */
+.keychainNote {
+  margin-top: 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: color-mix(in srgb, #b9bcd1 70%, transparent);
+}
+
 /* Hosts the shared ConnectFlow wizard (kit-token styled — the switcher's
    Add-gateway modal uses it unwrapped too). `data-theme="dark"` on this
    element re-anchors --ink/--line/--accent/etc to the dark ramp regardless

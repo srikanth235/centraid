@@ -1,15 +1,13 @@
-import crypto from 'node:crypto';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-
-import { recordQualityResult } from '@centraid/test-kit/quality-result';
 /**
  * Gateway multi-session headroom (#496 PE1).
  * Spins many concurrent session-shaped HTTP probes against a real serve().
  */
 import { tempDir } from '@centraid/test-kit/temp-dir';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-
+import { recordQualityResult } from '@centraid/test-kit/quality-result';
+import crypto from 'node:crypto';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
+import { describe, afterEach, beforeEach, expect, test } from 'vitest';
 import { serve, type GatewayServeHandle } from '../../packages/gateway/src/serve/serve.js';
 
 const OWNER = 'tests/scale/gateway-sessions.scale.test.ts';
@@ -19,12 +17,13 @@ const BUDGET_MS = 15_000;
 let dataDir: string;
 let handle: GatewayServeHandle;
 
-describe('gateway-sessions.scale', () => {
+describe('gateway-sessions.scale scenarios', () => {
   beforeEach(async () => {
     dataDir = await tempDir(`gw-scale-${crypto.randomUUID()}-`);
     handle = await serve({
+      // A fresh vaultDir auto-founds Shared + Personal at construction (#603),
+      // which is all the fixture needs — no named init vault any more.
       paths: { vaultDir: path.join(dataDir, 'vault') },
-      initVaultName: 'Scale fixture',
       token: 'scale-admin-token',
     });
   });
@@ -53,12 +52,7 @@ describe('gateway-sessions.scale', () => {
       name: `Gateway ${SESSIONS} concurrent session probes`,
       status: passed ? 'passed' : 'failed',
       measurements: [
-        {
-          name: 'wall clock',
-          value: durationMs,
-          unit: 'ms',
-          budget: BUDGET_MS,
-        },
+        { name: 'wall clock', value: durationMs, unit: 'ms', budget: BUDGET_MS },
         { name: 'sessions', value: SESSIONS, unit: 'count' },
       ],
     });

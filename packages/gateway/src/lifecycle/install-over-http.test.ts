@@ -1,4 +1,4 @@
-import crypto from 'node:crypto';
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * Bundled-app install over HTTP (issue #434). "Use template" cloned a
  * blueprint into the vault's git code store; install instead registers the
@@ -9,14 +9,13 @@ import crypto from 'node:crypto';
  * nothing in git) → reinstall (fresh consent). `tasks` is a real bundled app
  * (kind 'app', 15 declared scopes) so the grants are load-bearing.
  */
+
+import { describe, afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-
-import type { GatewayPaths } from '../paths.ts';
+import crypto from 'node:crypto';
 import { serve, type GatewayServeHandle } from '../serve/serve.ts';
+import type { GatewayPaths } from '../paths.ts';
 
 let dataDir: string;
 let handle: GatewayServeHandle;
@@ -58,9 +57,7 @@ interface VaultAppRow {
 }
 
 async function vaultApps(): Promise<VaultAppRow[]> {
-  const res = await fetch(`${handle.url}/centraid/_vault/apps`, {
-    headers: auth(),
-  });
+  const res = await fetch(`${handle.url}/centraid/_vault/apps`, { headers: auth() });
   const body = (await res.json()) as { apps: VaultAppRow[] };
   return body.apps;
 }
@@ -73,13 +70,10 @@ async function install(templateId: string): Promise<Response> {
   });
 }
 
-describe('install-over-http', () => {
+describe('install-over-http scenarios', () => {
   beforeEach(async () => {
     dataDir = await tempDir(`gw-install-${crypto.randomUUID()}-`);
-    handle = await serve({
-      initVaultName: "Owner's vault",
-      paths: pathsUnder(dataDir),
-    });
+    handle = await serve({ paths: pathsUnder(dataDir) });
   });
 
   afterEach(async () => {
@@ -145,24 +139,14 @@ describe('install-over-http', () => {
   });
 
   test('the catalog reports per-vault install state', async () => {
-    const before = await fetch(`${handle.url}/centraid/_templates`, {
-      headers: auth(),
-    });
-    const beforeRows = (await before.json()) as {
-      id: string;
-      installed?: boolean;
-    }[];
+    const before = await fetch(`${handle.url}/centraid/_templates`, { headers: auth() });
+    const beforeRows = (await before.json()) as { id: string; installed?: boolean }[];
     expect(beforeRows.find((t) => t.id === 'tasks')?.installed).toBe(false);
 
     await install('tasks');
 
-    const after = await fetch(`${handle.url}/centraid/_templates`, {
-      headers: auth(),
-    });
-    const afterRows = (await after.json()) as {
-      id: string;
-      installed?: boolean;
-    }[];
+    const after = await fetch(`${handle.url}/centraid/_templates`, { headers: auth() });
+    const afterRows = (await after.json()) as { id: string; installed?: boolean }[];
     expect(afterRows.find((t) => t.id === 'tasks')?.installed).toBe(true);
     // A non-installed bundled app still reads false.
     expect(afterRows.find((t) => t.id === 'notes')?.installed).toBe(false);
@@ -175,11 +159,7 @@ describe('install-over-http', () => {
     const create = await fetch(`${handle.url}/centraid/_apps`, {
       method: 'POST',
       headers: jsonAuth(),
-      body: JSON.stringify({
-        id: 'myscratch',
-        name: 'My Scratch',
-        publish: true,
-      }),
+      body: JSON.stringify({ id: 'myscratch', name: 'My Scratch', publish: true }),
     });
     expect(create.status).toBe(201);
 
@@ -243,23 +223,15 @@ describe('install-over-http', () => {
       headers: auth(),
     });
     expect(del.status).toBe(200);
-    const delBody = (await del.json()) as {
-      deleted: boolean;
-      codeRemoved: boolean;
-    };
+    const delBody = (await del.json()) as { deleted: boolean; codeRemoved: boolean };
     expect(delBody.deleted).toBe(true);
     expect(delBody.codeRemoved).toBe(false); // there was never any code in git
 
     // Gone from the listing and no longer an active enrollment.
     expect((await listApps()).some((a) => a.id === 'tasks')).toBe(false);
     expect((await vaultApps()).some((a) => a.name === 'tasks')).toBe(false);
-    const afterCat = await fetch(`${handle.url}/centraid/_templates`, {
-      headers: auth(),
-    });
-    const catRows = (await afterCat.json()) as {
-      id: string;
-      installed?: boolean;
-    }[];
+    const afterCat = await fetch(`${handle.url}/centraid/_templates`, { headers: auth() });
+    const catRows = (await afterCat.json()) as { id: string; installed?: boolean }[];
     expect(catRows.find((t) => t.id === 'tasks')?.installed).toBe(false);
 
     // Reinstall — fresh consent: the declared scopes are granted again (the

@@ -108,8 +108,8 @@ async function runInternal() {
   let handle;
   try {
     handle = await serve({
+      // A fresh vaultDir auto-founds Shared + Personal at construction (#603).
       paths: { vaultDir: path.join(root, 'vault') },
-      initVaultName: 'Low-end benchmark',
       logger: quietLogger(),
       token: 'centraid-low-end-benchmark-token',
     });

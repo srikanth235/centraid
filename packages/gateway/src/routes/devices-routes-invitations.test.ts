@@ -7,11 +7,10 @@
  */
 
 import { describe, afterEach, expect, test } from 'vitest';
-
 import { parsePairingTicket } from '../serve/pairing-store.js';
 import { cleanupHarnesses, deviceHeaders, harness } from './devices-routes.test-fixtures.js';
 
-describe('devices-routes-invitations suite', () => {
+describe('devices-routes-invitations scenarios', () => {
   afterEach(cleanupHarnesses);
 
   test('minting splits by target: self-pair is open, inviting is an ownership act', async () => {
@@ -54,14 +53,10 @@ describe('devices-routes-invitations suite', () => {
     const escalated = await fetch(`${f.base}/centraid/_gateway/devices/ticket`, {
       method: 'POST',
       headers: deviceHeaders('full-key'),
-      body: JSON.stringify({
-        grants: [{ vaultId: 'vault-a', role: 'admin' }],
-      }),
+      body: JSON.stringify({ grants: [{ vaultId: 'vault-a', role: 'admin' }] }),
     });
     expect(escalated.status).toBe(403);
-    await expect(escalated.json()).resolves.toMatchObject({
-      error: 'role_above_own',
-    });
+    await expect(escalated.json()).resolves.toMatchObject({ error: 'role_above_own' });
 
     // …and never for another person.
     const denied = await fetch(`${f.base}/centraid/_gateway/devices/ticket`, {
@@ -119,9 +114,7 @@ describe('devices-routes-invitations suite', () => {
       body: JSON.stringify({ vaultId: 'vault-a', role: 'superuser' }),
     });
     expect(nonsense.status).toBe(400);
-    await expect(nonsense.json()).resolves.toMatchObject({
-      error: 'invalid_role',
-    });
+    await expect(nonsense.json()).resolves.toMatchObject({ error: 'invalid_role' });
   });
 
   test('an owner invites a new person into two vaults with one ticket', async () => {
@@ -212,9 +205,7 @@ describe('devices-routes-invitations suite', () => {
       body: JSON.stringify({ vaultId: 'no-such-vault' }),
     });
     expect(unknownTarget.status).toBe(400);
-    await expect(unknownTarget.json()).resolves.toMatchObject({
-      error: 'vault_required',
-    });
+    await expect(unknownTarget.json()).resolves.toMatchObject({ error: 'vault_required' });
   });
 
   test('a gateway with no iroh endpoint refuses to mint a dud ticket', async () => {
@@ -231,13 +222,44 @@ describe('devices-routes-invitations suite', () => {
       body: JSON.stringify({ vaultId: 'vault-a' }),
     });
     expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({ error: 'no_iroh_endpoint' });
+  });
+
+  test('an unnamed target mints against the registry default vault (Shared)', async () => {
+    const f = await harness({
+      vaultName: (vaultId) =>
+        vaultId === 'vault-shared' ? 'Shared' : vaultId === 'vault-a' ? 'Personal' : undefined,
+      defaultVaultId: () => 'vault-shared',
+    });
+    f.enrollments.enroll({
+      endpointId: 'owner-key',
+      vaultId: 'vault-a',
+      label: 'Owner',
+      role: 'admin',
+    });
+    f.enrollments.enroll({
+      endpointId: 'owner-key',
+      vaultId: 'vault-shared',
+      label: 'Owner',
+      role: 'admin',
+    });
+    const response = await fetch(`${f.base}/centraid/_gateway/devices/ticket`, {
+      method: 'POST',
+      headers: deviceHeaders('owner-key'),
+      // An INVITE (not a self-pair, which grants everything the caller holds),
+      // so the single grant lands on whichever vault the fallback picks.
+      body: JSON.stringify({ newMemberLabel: 'Rhea' }),
+    });
+    expect(response.status).toBe(200);
+    // Not `vault-a`, which sorts first among the caller's enrollments.
     await expect(response.json()).resolves.toMatchObject({
-      error: 'no_iroh_endpoint',
+      vaultId: 'vault-shared',
+      vaultName: 'Shared',
     });
   });
 
-  test('a pre-founding gateway refuses ordinary pairing with uninitialized', async () => {
-    const f = await harness({ isUninitialized: () => true });
+  test('a default the caller cannot address falls back to a vault it holds', async () => {
+    const f = await harness({ defaultVaultId: () => 'vault-someone-else' });
     f.enrollments.enroll({
       endpointId: 'owner-key',
       vaultId: 'vault-a',
@@ -247,11 +269,9 @@ describe('devices-routes-invitations suite', () => {
     const response = await fetch(`${f.base}/centraid/_gateway/devices/ticket`, {
       method: 'POST',
       headers: deviceHeaders('owner-key'),
-      body: JSON.stringify({ vaultId: 'vault-a' }),
+      body: JSON.stringify({ newMemberLabel: 'Rhea' }),
     });
-    expect(response.status).toBe(409);
-    await expect(response.json()).resolves.toMatchObject({
-      error: 'uninitialized',
-    });
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ vaultId: 'vault-a' });
   });
 });

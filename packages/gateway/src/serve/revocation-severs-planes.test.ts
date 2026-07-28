@@ -4,10 +4,10 @@
  * iroh admission row and device-bound web sessions.
  */
 
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { describe, afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-
-import { tempDir } from '@centraid/test-kit/temp-dir';
 import {
   createTunnelClient,
   startGatewayEndpoint,
@@ -15,12 +15,10 @@ import {
   type GatewayEndpointHandle,
   type TunnelClient,
 } from '@centraid/tunnel';
-import { describe, afterEach, beforeEach, expect, test, vi } from 'vitest';
-
+import { serve, type GatewayServeHandle } from './serve.ts';
 import { EnrollmentStore } from './enrollment-store.ts';
 import { GatewayDatabase } from './gateway-db.ts';
 import { PairingTicketStore } from './pairing-store.ts';
-import { serve, type GatewayServeHandle } from './serve.ts';
 import { hashControlToken, WebControlSessionStore } from './web-session-store.ts';
 
 const LOOPBACK_SECRET = 'loopback-secret-for-tests';
@@ -29,7 +27,8 @@ let database: GatewayDatabase;
 let handle: GatewayServeHandle;
 let endpoint: GatewayEndpointHandle | undefined;
 let memberClient: TunnelClient | undefined;
-describe('revocation-severs-planes suite', () => {
+
+describe('revocation-severs-planes scenarios', () => {
   beforeEach(async () => {
     dataDir = await tempDir('revoke-planes-');
     database = GatewayDatabase.open(dataDir, { lock: 'exclusive' });
@@ -47,13 +46,10 @@ describe('revocation-severs-planes suite', () => {
     const enrollments = EnrollmentStore.open(database);
     const tickets = PairingTicketStore.open(database);
     const sessions = WebControlSessionStore.open(database);
-    const onEndpointRevoked = vi.fn<
-      NonNullable<NonNullable<Parameters<typeof serve>[0]['devicePairing']>['onEndpointRevoked']>
-    >(async (endpointId) => {
+    const onEndpointRevoked = vi.fn<(endpointId: string) => Promise<void>>(async (endpointId) => {
       await endpoint?.revokeEndpoint(endpointId);
     });
     handle = await serve({
-      initVaultName: "Owner's vault",
       paths: {
         dataDir,
         vaultDir: path.join(dataDir, 'vault'),
@@ -103,12 +99,7 @@ describe('revocation-severs-planes suite', () => {
     });
     const admitted = await memberClient.connect(endpoint.ticket());
     expect(
-      (
-        await tunnelRequest(admitted, {
-          method: 'GET',
-          target: '/centraid/_apps',
-        })
-      ).status,
+      (await tunnelRequest(admitted, { method: 'GET', target: '/centraid/_apps' })).status,
     ).toBe(200);
 
     const response = await fetch(
@@ -129,6 +120,6 @@ describe('revocation-severs-planes suite', () => {
     const refused = await memberClient.connect(endpoint.ticket());
     await expect(
       tunnelRequest(refused, { method: 'GET', target: '/centraid/_apps' }),
-    ).rejects.toThrow(Error);
+    ).rejects.toThrow('unauthorized');
   });
 });

@@ -1,4 +1,4 @@
-import crypto from 'node:crypto';
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * (gateway, vault) addressing over HTTP (issue #289).
  *
@@ -12,16 +12,15 @@ import crypto from 'node:crypto';
  *      enrollments: implied vault with no header, 403 outside it, and a
  *      vault list that shows no evidence of the others.
  */
+
+import { describe, afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-
-import type { GatewayPaths } from '../paths.ts';
+import crypto from 'node:crypto';
 import type { WorktreeStore } from '../worktree-store/index.js';
 import { serve, type GatewayServeHandle } from './serve.ts';
 import { runWithVaultContext } from './vault-context.ts';
+import type { GatewayPaths } from '../paths.ts';
 
 let dataDir: string;
 let handle: GatewayServeHandle;
@@ -40,12 +39,7 @@ async function seedApp(store: WorktreeStore, appId: string): Promise<void> {
   await fs.mkdir(appDir, { recursive: true });
   await fs.writeFile(
     path.join(appDir, 'app.json'),
-    JSON.stringify({
-      manifestVersion: 1,
-      id: appId,
-      name: appId,
-      version: '0.1.0',
-    }),
+    JSON.stringify({ manifestVersion: 1, id: appId, name: appId, version: '0.1.0' }),
   );
   await fs.writeFile(path.join(appDir, 'index.html'), `<!doctype html><title>${appId}</title>`);
   await store.publish({ sessionId: `seed-${appId}`, appId, message: 'seed' });
@@ -54,11 +48,10 @@ async function seedApp(store: WorktreeStore, appId: string): Promise<void> {
 
 const DEVICE_HEADER = 'x-test-device';
 
-describe('serve-vault-addressing', () => {
+describe('serve-vault-addressing scenarios', () => {
   beforeEach(async () => {
     dataDir = await tempDir(`addr-gateway-${crypto.randomUUID()}-`);
     handle = await serve({
-      initVaultName: "Owner's vault",
       paths: pathsUnder(dataDir),
       // A fake device transport: the test names its device in a header the
       // way the iroh forwarder stamps the QUIC-proved EndpointId.
@@ -129,9 +122,7 @@ describe('serve-vault-addressing', () => {
   test('an un-enrolled vault header fails closed, never falls back', async () => {
     const res = await get('/centraid/_apps', { 'x-centraid-vault': 'nope' });
     expect(res.status).toBe(403);
-    await expect(res.json()).resolves.toMatchObject({
-      error: 'vault_not_enrolled',
-    });
+    await expect(res.json()).resolves.toMatchObject({ error: 'vault_not_enrolled' });
   });
 
   test('a device is confined to its enrollments (issue #289 phase 2)', async () => {
@@ -147,18 +138,12 @@ describe('serve-vault-addressing', () => {
       'x-centraid-vault': vaultA,
     });
     expect(denied.status).toBe(403);
-    await expect(denied.json()).resolves.toMatchObject({
-      error: 'vault_not_enrolled',
-    });
+    await expect(denied.json()).resolves.toMatchObject({ error: 'vault_not_enrolled' });
 
     // A device with no enrollments opens nothing.
-    const stranger = await get('/centraid/_apps', {
-      [DEVICE_HEADER]: 'stolen-laptop',
-    });
+    const stranger = await get('/centraid/_apps', { [DEVICE_HEADER]: 'stolen-laptop' });
     expect(stranger.status).toBe(403);
-    await expect(stranger.json()).resolves.toMatchObject({
-      error: 'device_not_enrolled',
-    });
+    await expect(stranger.json()).resolves.toMatchObject({ error: 'device_not_enrolled' });
 
     // The vault list shows the device ITS vaults — no evidence of others.
     const listed = (await (

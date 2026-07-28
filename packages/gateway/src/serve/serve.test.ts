@@ -1,12 +1,10 @@
-import crypto from 'node:crypto';
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { describe, afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-
-import type { GatewayPaths } from '../paths.ts';
+import crypto from 'node:crypto';
 import { serve, type GatewayServeHandle } from './serve.ts';
+import type { GatewayPaths } from '../paths.ts';
 
 let dataDir: string;
 let handle: GatewayServeHandle;
@@ -38,13 +36,10 @@ async function verifyCurrentRecoveryKit(
   return confirm.json() as Promise<{ confirmedAt: number }>;
 }
 
-describe('serve/serve', () => {
+describe('serve scenarios', () => {
   beforeEach(async () => {
     dataDir = await tempDir(`gateway-runtime-${crypto.randomUUID()}-`);
-    handle = await serve({
-      initVaultName: "Owner's vault",
-      paths: pathsUnder(dataDir),
-    });
+    handle = await serve({ paths: pathsUnder(dataDir) });
   });
 
   afterEach(async () => {
@@ -88,7 +83,6 @@ describe('serve/serve', () => {
     await handle.close();
     const fixed = 'fixed-token-for-test-purposes-only-do-not-use-elsewhere';
     handle = await serve({
-      initVaultName: "Owner's vault",
       paths: pathsUnder(dataDir),
       token: fixed,
     });
@@ -102,7 +96,6 @@ describe('serve/serve', () => {
   test('honors a caller-supplied host (loopback alias still resolves)', async () => {
     await handle.close();
     handle = await serve({
-      initVaultName: "Owner's vault",
       paths: pathsUnder(dataDir),
       host: '127.0.0.1',
       port: 0,
@@ -133,12 +126,7 @@ describe('serve/serve', () => {
     // gateway probes its own host).
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
-      agents: Array<{
-        kind: string;
-        label: string;
-        available: boolean;
-        minVersion: string;
-      }>;
+      agents: Array<{ kind: string; label: string; available: boolean; minVersion: string }>;
     };
     expect(Array.isArray(body.agents)).toBe(true);
     expect(body.agents.length).toBeGreaterThan(0);
@@ -174,11 +162,7 @@ describe('serve/serve', () => {
       runtime: { platform: string; arch: string; nodeVersion: string };
       health: { status: string };
       logs: unknown[];
-      vaults: Array<{
-        vaultId: string;
-        name: string;
-        files: Record<string, number | null>;
-      }>;
+      vaults: Array<{ vaultId: string; name: string; files: Record<string, number | null> }>;
       config: unknown;
     };
     expect(body.gateway.version).toBeTypeOf('string');
@@ -186,8 +170,8 @@ describe('serve/serve', () => {
     expect(body.runtime.nodeVersion).toBe(process.version);
     expect(body.health.status).toStrictEqual(expect.any(String));
     expect(Array.isArray(body.logs)).toBe(true);
-    // The boot vault is mounted, sized off vault.db/journal.db statSync.
-    expect(body.vaults).toHaveLength(1);
+    // Both auto-founded vaults are mounted, sized off vault.db/journal.db.
+    expect(body.vaults).toHaveLength(2);
     expect(body.vaults[0]!.vaultId).toBe(handle.vaults.current().boot.vaultId);
     expect(body.vaults[0]!.files.vaultDbBytes).toBeTypeOf('number');
   });
@@ -218,7 +202,7 @@ describe('serve/serve', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       configured: boolean;
-      vaults: unknown[];
+      vaults: Array<Record<string, unknown>>;
       recoveryKit: { confirmedAt: number | null };
     };
     // recoveryKit (issue #351 wave 4) reads "never confirmed" — there's no
@@ -228,15 +212,14 @@ describe('serve/serve', () => {
     expect(body).toMatchObject({
       configured: false,
       recoveryKit: { confirmedAt: null },
-      vaults: [
-        {
-          vaultId: handle.vaults.current().boot.vaultId,
-          name: "Owner's vault",
-          running: false,
-          destination: { kind: 'gateway-local' },
-          pendingOffsite: { count: 0, bytes: 0 },
-        },
-      ],
+    });
+    expect(body.vaults).toHaveLength(2);
+    expect(body.vaults[0]).toMatchObject({
+      vaultId: handle.vaults.current().boot.vaultId,
+      name: 'Shared',
+      running: false,
+      destination: { kind: 'gateway-local' },
+      pendingOffsite: { count: 0, bytes: 0 },
     });
   });
 
@@ -254,7 +237,6 @@ describe('serve/serve', () => {
     await handle.close();
     const providerDir = await tempDir('backup-provider-');
     handle = await serve({
-      initVaultName: "Owner's vault",
       paths: pathsUnder(dataDir),
       backup: {
         enabled: true,
@@ -264,21 +246,14 @@ describe('serve/serve', () => {
     const vaultId = handle.vaults.current().boot.vaultId;
     const auth = { Authorization: `Bearer ${handle.token}` };
 
-    const before = await fetch(`${handle.url}/centraid/_gateway/backup`, {
-      headers: auth,
-    });
+    const before = await fetch(`${handle.url}/centraid/_gateway/backup`, { headers: auth });
     expect(before.status).toBe(200);
     const beforeBody = (await before.json()) as {
       configured: boolean;
-      vaults: Array<{
-        vaultId: string;
-        name?: string;
-        lastBackupAt?: string;
-        running?: boolean;
-      }>;
+      vaults: Array<{ vaultId: string; name?: string; lastBackupAt?: string; running?: boolean }>;
     };
     expect(beforeBody.configured).toBe(true);
-    expect(beforeBody.vaults).toHaveLength(1);
+    expect(beforeBody.vaults).toHaveLength(2);
     expect(beforeBody.vaults[0]).toMatchObject({ vaultId, running: false });
     expect(beforeBody.vaults[0]?.lastBackupAt).toBeUndefined();
 
@@ -299,15 +274,14 @@ describe('serve/serve', () => {
     // Ordinary staleness is a re-download prompt, not a gateway outage; observe
     // completion through the returned host-side service handle.
     let lastBackupAt: string | undefined;
-    const waitForBackup = async (attempt: number): Promise<void> => {
-      if (attempt >= 50 || lastBackupAt) return;
+    const awaitBackup = async (remaining: number): Promise<void> => {
       const poll = await handle.backup!.status();
       lastBackupAt = poll[vaultId]?.lastBackupAt;
-      if (lastBackupAt) return;
+      if (lastBackupAt || remaining === 0) return;
       await new Promise((resolve) => setTimeout(resolve, 20));
-      return waitForBackup(attempt + 1);
+      return awaitBackup(remaining - 1);
     };
-    await waitForBackup(0);
+    await awaitBackup(50);
     expect(lastBackupAt).toBeTruthy();
   });
 
@@ -323,15 +297,12 @@ describe('serve/serve', () => {
       provider: { kind: 'local' as const, dir: providerDir },
     };
     handle = await serve({
-      initVaultName: "Owner's vault",
       paths: pathsUnder(dataDir),
       backup: backupConfig,
     });
     const auth = { Authorization: `Bearer ${handle.token}` };
 
-    const before = await fetch(`${handle.url}/centraid/_gateway/backup`, {
-      headers: auth,
-    });
+    const before = await fetch(`${handle.url}/centraid/_gateway/backup`, { headers: auth });
     const beforeBody = (await before.json()) as {
       recoveryKit: { confirmedAt: number | null; kitFingerprint?: string };
     };
@@ -347,15 +318,12 @@ describe('serve/serve', () => {
     // on-disk dataDir (same gateway.db recovery-kit row).
     await handle.close();
     handle = await serve({
-      initVaultName: "Owner's vault",
       paths: pathsUnder(dataDir),
       backup: backupConfig,
     });
     const authAfter = { Authorization: `Bearer ${handle.token}` }; // token is re-minted per boot
 
-    const after = await fetch(`${handle.url}/centraid/_gateway/backup`, {
-      headers: authAfter,
-    });
+    const after = await fetch(`${handle.url}/centraid/_gateway/backup`, { headers: authAfter });
     expect(after.status).toBe(200);
     const afterBody = (await after.json()) as {
       recoveryKit: { confirmedAt: number | null; kitFingerprint?: string };

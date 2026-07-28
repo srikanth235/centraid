@@ -153,25 +153,29 @@ npm install --prefix $env:USERPROFILE\.centraid @centraid/gateway
 
 ### Pair clients after install (VPS / headless)
 
-Start the gateway, then either found its first vault or pair into an existing one:
+Start the gateway — a fresh data dir **auto-founds** two vaults, **Shared** and
+**Personal**, at construction (issue #603). There is no founding ceremony, no
+founding ticket, and no first-run wall; the only ticket concept left is the
+**pair ticket**, which always means *join an existing gateway*. An existing data
+dir is never modified.
 
 ```sh
-# Zero-vault VPS: host possession mints a 10-minute founding capability.
-centraid-gateway init-ticket --data-dir "$DATA_DIR" --qr
-# The phone scans it, chooses Create or Restore, saves and re-opens the
-# recovery kit, and becomes the first owner.
+# Fresh VPS: serve creates Shared + Personal silently, then keeps serving.
+centraid-gateway serve --data-dir "$DATA_DIR"
 
-# Already founded: mint an ordinary enrollment ticket.
-centraid-gateway pair --data-dir "$DATA_DIR" --vault Family
-centraid-gateway pair --data-dir "$DATA_DIR" --vault Family --qr
+# Mint a one-time pair ticket for a phone / PWA / desktop.
+# No --vault → the registry default, which is Shared.
+centraid-gateway pair --data-dir "$DATA_DIR"
+centraid-gateway pair --data-dir "$DATA_DIR" --qr
 
-# Automation-only bootstrap (explicitly KIT-LESS):
-centraid-gateway serve --data-dir "$DATA_DIR" --init-vault Family
+# Or name a target vault explicitly.
+centraid-gateway pair --data-dir "$DATA_DIR" --vault Personal
 ```
 
 | Client | How to enroll |
 | --- | --- |
-| **Desktop / PWA** | Paste the one-line ticket into **Add gateway** |
+| **Desktop** | First run offers **Start fresh on this Mac** or **Connect with a ticket**; a registered desktop pastes the ticket into **Add gateway** |
+| **PWA** | Ticket only — paste the one-line ticket into the first-run flow or **Add gateway** |
 | **Phone** | Scan the `--qr` terminal QR, **or** paste the same ticket under Settings → Gateway link |
 
 Tickets burn on first successful redeem (or wrong secret). See [docs/recovery/pairing.md](docs/recovery/pairing.md).

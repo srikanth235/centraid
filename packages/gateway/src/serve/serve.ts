@@ -46,13 +46,7 @@ export interface ServeOptions extends BuildGatewayOptions {
 
 export interface GatewayServeHandle extends Omit<
   BuiltGateway,
-  | 'extraHandlers'
-  | 'composedHandler'
-  | 'webhookHandler'
-  | 'foundingHandler'
-  | 'webAppSessions'
-  | 'start'
-  | 'stop'
+  'extraHandlers' | 'composedHandler' | 'webhookHandler' | 'webAppSessions' | 'start' | 'stop'
 > {
   /** Bound base URL — `http://<host>:<port>`. */
   url: string;
@@ -73,12 +67,11 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
   // every one of them. The webhook handler is tried FIRST and stands
   // outside that per-request vault scope (it resolves its own owning
   // vault across all of them); it falls through (`false`) for any other
-  // URL, so `composedHandler` still sees everything else. The recover
-  // The two founding verbs sit behind `foundingHandler`; no wildcard bearer
+  // URL, so `composedHandler` still sees everything else. No wildcard bearer
   // recovery/admin mount exists.
   const serverOptions: Parameters<typeof startRuntimeHttpServer>[0] = {
     runtime: gateway.runtime,
-    extraHandlers: [gateway.foundingHandler, gateway.webhookHandler, gateway.composedHandler],
+    extraHandlers: [gateway.webhookHandler, gateway.composedHandler],
     exposeUserStoreRoute: false,
     exposeConversationRoute: false,
     // The OAuth consent callback (issue #304) is the one bearer-free path:

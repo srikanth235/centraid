@@ -237,19 +237,6 @@ export async function renameGateway(id: string, nextLabel: string): Promise<Gate
   return next;
 }
 
-export async function updateGatewaySsh(
-  id: string,
-  ssh: { destination: string; dataDir?: string; remoteCli?: string } | undefined,
-): Promise<GatewayProfile> {
-  const current = await readProfile(id);
-  if (!current) throw new GatewayError('unknown_gateway', `No such gateway: ${id}`);
-  if (id === LOCAL_GATEWAY_ID) return current;
-  const { ssh: _old, ...rest } = current;
-  const next: GatewayProfile = ssh ? { ...rest, ssh } : rest;
-  await replaceProfile(next);
-  return next;
-}
-
 export async function resolveGateway(id: string): Promise<ResolvedGateway | undefined> {
   const profile = await readProfile(id);
   if (!profile) return undefined;

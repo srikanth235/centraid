@@ -257,11 +257,10 @@ export function makeVaultRouteHandler(
           options
             .gatewayDatabase!.db.prepare(
               `DELETE FROM tickets
-                WHERE kind = 'enroll'
-                  AND EXISTS (
-                    SELECT 1 FROM json_each(tickets.grants_json)
-                     WHERE json_extract(json_each.value, '$.vaultId') = ?
-                  )`,
+                WHERE EXISTS (
+                  SELECT 1 FROM json_each(tickets.grants_json)
+                   WHERE json_extract(json_each.value, '$.vaultId') = ?
+                )`,
             )
             .run(vaultId);
           options
@@ -282,7 +281,7 @@ export function makeVaultRouteHandler(
         return sendJson(res, 200, {
           ok: true,
           erasedVaultId: vaultId,
-          status: vaults.isFresh() ? 'uninitialized' : 'ready',
+          remainingVaults: vaults.list().length,
         });
       }
 
@@ -1097,7 +1096,13 @@ async function handleVaultsRoute(
 ): Promise<boolean> {
   try {
     if (method === 'GET' && segments.length === 1) {
-      return sendJson(res, 200, { vaults: visibleVaults() });
+      // A vault directory that failed to mount is invisible in `vaults` — it
+      // has no plane to describe. Reporting the failures alongside (issue
+      // #603 X1) is the difference between "you have one vault" and "one of
+      // your two vaults would not open". Every caller here is an
+      // authenticated device; the entries carry only a directory and the
+      // mount error, never vault contents.
+      return sendJson(res, 200, { vaults: visibleVaults(), failedMounts: vaults.failedMounts() });
     }
 
     if (method === 'POST' && segments.length === 1) {

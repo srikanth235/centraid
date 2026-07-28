@@ -3,7 +3,12 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-
+import {
+  GATEWAY_MIN_PROTOCOL_VERSION,
+  GATEWAY_PROTOCOL_VERSION,
+  GATEWAY_SCHEMA_EPOCH,
+  GATEWAY_VERSION,
+} from './version.js';
 import {
   buildGatewayInfoPayload,
   handshakeGateway,
@@ -12,27 +17,6 @@ import {
   readProtocolFromInfo,
 } from './handshake.js';
 import { ROUTES } from './routes.js';
-import {
-  GATEWAY_MIN_PROTOCOL_VERSION,
-  GATEWAY_PROTOCOL_VERSION,
-  GATEWAY_SCHEMA_EPOCH,
-  GATEWAY_VERSION,
-} from './version.js';
-
-/**
- * `handshakeGateway` only reads `.ok`, `.status`, and `.json()` off the response,
- * so the stubs below model that slice of `fetch` rather than the whole Response
- * (hence the `as never` at each call site).
- */
-type StubResponse = {
-  ok: boolean;
-  status: number;
-  json: () => Promise<unknown>;
-};
-type StubFetch = (
-  url: string,
-  init?: { headers?: Record<string, string> },
-) => Promise<StubResponse>;
 
 describe(readProtocolFromInfo, () => {
   it('prefers protocolVersion and falls back to schemaEpoch / peer=min', () => {
@@ -57,14 +41,8 @@ describe(readProtocolFromInfo, () => {
 
 describe('judgeGatewayInfo branches', () => {
   it('malformed: non-object, missing version, missing protocol', () => {
-    expect(judgeGatewayInfo(null)).toMatchObject({
-      ok: false,
-      reason: 'malformed',
-    });
-    expect(judgeGatewayInfo([])).toMatchObject({
-      ok: false,
-      reason: 'malformed',
-    });
+    expect(judgeGatewayInfo(null)).toMatchObject({ ok: false, reason: 'malformed' });
+    expect(judgeGatewayInfo([])).toMatchObject({ ok: false, reason: 'malformed' });
     expect(judgeGatewayInfo({ protocolVersion: 2 })).toMatchObject({
       ok: false,
       reason: 'malformed',
@@ -132,7 +110,7 @@ describe('handshakeGateway network branches', () => {
   });
 
   it('unreachable on fetch throw and non-2xx', async () => {
-    const fetchThrow = vi.fn<StubFetch>(async () => {
+    const fetchThrow = vi.fn<(...args: unknown[]) => unknown>(async () => {
       throw new Error('ECONNREFUSED');
     });
     await expect(
@@ -143,7 +121,7 @@ describe('handshakeGateway network branches', () => {
       detail: 'ECONNREFUSED',
     });
 
-    const fetch404 = vi.fn<StubFetch>(async () => ({
+    const fetch404 = vi.fn<(...args: unknown[]) => unknown>(async () => ({
       ok: false,
       status: 404,
       json: async () => ({}),
@@ -158,7 +136,7 @@ describe('handshakeGateway network branches', () => {
   });
 
   it('malformed when body is not JSON; ok when body is a valid info payload', async () => {
-    const badJson = vi.fn<StubFetch>(async () => ({
+    const badJson = vi.fn<(...args: unknown[]) => unknown>(async () => ({
       ok: true,
       status: 200,
       json: async () => {
@@ -170,20 +148,23 @@ describe('handshakeGateway network branches', () => {
       reason: 'malformed',
     });
 
-    const good = vi.fn<StubFetch>(async (url, init) => {
-      expect(url).toContain(ROUTES.gatewayInfo);
-      expect(init?.headers?.Authorization).toBe('Bearer tok');
-      return {
-        ok: true,
-        status: 200,
-        json: async () =>
-          buildGatewayInfoPayload({
-            instanceId: 'i',
-            startedAt: 1,
-            uptimeMs: 2,
-          }),
-      };
-    });
+    const good = vi.fn<(...args: unknown[]) => unknown>(
+      async (url: string, init?: { headers?: Record<string, string> }) => {
+        expect(url).toContain(ROUTES.gatewayInfo);
+        expect(init?.headers?.Authorization).toBe('Bearer tok');
+        return {
+          ok: true,
+          status: 200,
+          json: async () =>
+            buildGatewayInfoPayload({
+              instanceId: 'i',
+              startedAt: 1,
+              uptimeMs: 2,
+              authenticated: true,
+            }),
+        };
+      },
+    );
     const result = await handshakeGateway('http://gw', 'tok', good as never);
     expect(result.ok).toBe(true);
     if (!result.ok) return;

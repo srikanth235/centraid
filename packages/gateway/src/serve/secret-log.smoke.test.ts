@@ -1,7 +1,3 @@
-import crypto from 'node:crypto';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-
 /**
  * Secret-in-logs / token leakage smoke (#496 G3).
  * Drives a real `serve()` instance and asserts error/auth paths never echo
@@ -9,8 +5,11 @@ import path from 'node:path';
  * on-disk gateway JSONL log ring (when logsDir is configured).
  */
 import { tempDir } from '@centraid/test-kit/temp-dir';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-
+import { forEachSequentially } from '@centraid/test-kit/sequential';
+import { describe, afterEach, beforeEach, expect, test } from 'vitest';
+import crypto from 'node:crypto';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
 import type { GatewayPaths } from '../paths.js';
 import { serve, type GatewayServeHandle } from './serve.js';
 
@@ -32,24 +31,23 @@ function pathsUnder(dir: string, logs: string): GatewayPaths {
 async function readAllLogs(): Promise<string> {
   try {
     const names = await fs.readdir(logsDir);
-    const chunks = await Promise.all(
-      names
-        .filter((name) => name.endsWith('.jsonl'))
-        .map((name) => fs.readFile(path.join(logsDir, name), 'utf8')),
-    );
+    const chunks: string[] = [];
+    await forEachSequentially(names, async (name) => {
+      if (!name.endsWith('.jsonl')) return;
+      chunks.push(await fs.readFile(path.join(logsDir, name), 'utf8'));
+    });
     return chunks.join('\n');
   } catch {
     return '';
   }
 }
 
-describe('secret-log.smoke', () => {
+describe('secret-log.smoke scenarios', () => {
   beforeEach(async () => {
     dataDir = await tempDir(`secret-log-${crypto.randomUUID()}-`);
     logsDir = path.join(dataDir, 'gateway-logs');
     await fs.mkdir(logsDir, { recursive: true });
     handle = await serve({
-      initVaultName: "Owner's vault",
       paths: pathsUnder(dataDir, logsDir),
       token: ADMIN,
     });

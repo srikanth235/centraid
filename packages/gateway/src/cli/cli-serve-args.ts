@@ -11,8 +11,6 @@ export interface ParsedServe {
   dataDir?: string;
   host?: string;
   port?: number;
-  /** Explicit kit-less zero→one bootstrap for automation/tests only. */
-  initVaultName?: string;
   /** Extra Hostnames from repeated `--allowed-host` (issue #504 packaging). */
   allowedHosts?: string[];
 }
@@ -80,26 +78,8 @@ export function parseServeArgsPure(args: string[]): ParseServeArgsResult {
         const v = readValue();
         if (typeof v !== 'string') return { ok: false, message: v.error, code: 2 };
         const name = v.trim();
-        if (!name)
-          return {
-            ok: false,
-            message: '--allowed-host requires a hostname',
-            code: 2,
-          };
+        if (!name) return { ok: false, message: '--allowed-host requires a hostname', code: 2 };
         out.allowedHosts = [...(out.allowedHosts ?? []), name];
-        break;
-      }
-      case '--init-vault': {
-        const v = readValue();
-        if (typeof v !== 'string') return { ok: false, message: v.error, code: 2 };
-        const name = v.trim();
-        if (!name)
-          return {
-            ok: false,
-            message: '--init-vault requires a non-empty name',
-            code: 2,
-          };
-        out.initVaultName = name;
         break;
       }
       case '--help':

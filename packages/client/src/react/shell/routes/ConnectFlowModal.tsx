@@ -1,31 +1,26 @@
 import { type JSX, useEffect } from 'react';
-
-import { cx } from '../../ui/cx.js';
 import { iconSvg } from '../iconSvg.js';
-import ConnectFlow, { type ConnectFlowProps } from './ConnectFlow.js';
-
-import controlsCss from '../../styles/controls.module.css';
 // Reuses SpaceModal's overlay/scrim/head/foot chrome verbatim, same
 // precedent the retired GatewayModal.tsx set (issue #376) for the "Add X"
 // dialog family — one implementation of the overlay/backdrop/pop-animation
 // CSS shared by every "Add ___" modal in Settings/the switcher.
 import spaceModalStyles from './SpaceModal.module.css';
+import controlsCss from '../../styles/controls.module.css';
+import { cx } from '../../ui/cx.js';
+import ConnectFlow, { type ConnectFlowProps } from './ConnectFlow.js';
 
 export interface ConnectFlowModalProps extends Omit<ConnectFlowProps, 'onCancel'> {
   onCancel: () => void;
 }
 
-const MODAL_CONNECT_METHODS: readonly NonNullable<ConnectFlowProps['methods']>[number][] = [
-  'gateway',
-  'ssh',
-];
-
 /** The switcher's "Add gateway…" modal (issue #382) — dialog chrome around
- *  the shared ConnectFlow wizard, offering "Existing gateway" and "Over SSH"
- *  only ('local' is always already registered, so re-offering it here would
- *  be a dead end rather than a new connection). */
+ *  the shared ConnectFlow wizard, offering "Existing gateway" only ('local'
+ *  is always already registered, so re-offering it here would be a dead end
+ *  rather than a new connection). */
+const DEFAULT_METHODS: ConnectFlowModalProps['methods'] = ['gateway'];
+
 export default function ConnectFlowModal({
-  methods = MODAL_CONNECT_METHODS,
+  methods = DEFAULT_METHODS,
   onCancel,
   onDone,
   context,

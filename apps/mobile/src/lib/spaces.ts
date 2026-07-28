@@ -30,8 +30,8 @@ import { hydrateSecure, setSecure } from './secure-storage';
 // registry now writes them from whichever Space is active. Kept as the exact
 // same key strings so an already-paired install keeps its tunnel + replica DB.
 // Persisted key names retain "ticket" for migration compatibility, but their
-// value is only an EndpointTicket dial hint. One-time pairing/founding
-// capabilities (`t` + `s`) are never stored.
+// value is only an EndpointTicket dial hint. The one-time pairing capabilities
+// (`t` + `s`) are never stored.
 export const LINK_ENDPOINT_HINT_KEY = 'phoneLink.ticket'; // secure
 export const LINK_DESKTOP_NAME_KEY = 'phoneLink.desktopName';
 export const LINK_DEVICE_ID_KEY = 'phoneLink.deviceId';

@@ -1,58 +1,57 @@
 import { useState, type JSX } from 'react';
-
-import FoundingScreen, { type FoundingScreenBridge } from './FoundingScreen.js';
-import OnboardingScreen, { type OnboardingCompleteInput } from './OnboardingScreen.js';
-
+import OnboardingScreen, {
+  type OnboardingCompleteInput,
+  type OnboardingPath,
+} from './OnboardingScreen.js';
+import { isWebHost } from '../host-platform.js';
 import styles from './RecoverScreen.module.css';
 
 /**
- * First run branches on gateway state, not installation state. A founded
- * gateway only accepts device onboarding; Create / Restore appears solely on
- * a verified zero-vault gateway and both founding peers use the same screen.
+ * First run branches on PLATFORM, not on gateway state (issue #603).
+ *
+ * There is no founding ceremony and no "uninitialized" gateway any more: a
+ * fresh gateway founds "Shared" + "Personal" at construction, so the only
+ * question left is which gateway this device should talk to.
+ *
+ *   - Desktop (Electron) can answer two ways, so it gets a chooser: start a
+ *     fresh gateway on this Mac, or join one that already exists with a pair
+ *     ticket.
+ *   - Web (PWA) can only ever join — there is no gateway to start inside a
+ *     browser tab — so it renders the ticket path directly, with no chooser
+ *     and no probe.
+ *
+ * Both paths end at the same profile step (docs/platform-gating.md: presentation
+ * branch, never an auth branch).
  */
 export interface FirstRunGateProps {
   /** Fresh path completion (identity + connected gateway) — boot writes the
    *  profile + onboarding stamp and swaps in the app. */
   onOnboardingComplete: (input: OnboardingCompleteInput) => Promise<void> | void;
-  onFoundingComplete: () => Promise<void> | void;
-  founding: FoundingScreenBridge;
-  gatewayStatus: 'uninitialized' | 'ready' | 'unreachable';
-  /**
-   * The gateway created its vault but never verified the kit (issue #568
-   * item G). Without this the choice screen is a dead end after a restart:
-   * Create 409s `already_initialized`, Restore 409s, and erase 409s
-   * `recovery_kit_not_verified` — only `vaults:initialize/verify` moves.
-   */
-  foundingPending?: boolean;
+  /** Override the platform decision. Defaults to `isWebHost()`. */
+  host?: 'desktop' | 'web';
 }
 
 export default function FirstRunGate({
   onOnboardingComplete,
-  onFoundingComplete,
-  founding,
-  gatewayStatus,
-  foundingPending = false,
+  host = isWebHost() ? 'web' : 'desktop',
 }: FirstRunGateProps): JSX.Element {
-  const [mode, setMode] = useState<'choice' | 'create' | 'restore' | 'verify'>(
-    foundingPending ? 'verify' : 'choice',
-  );
+  const [path, setPath] = useState<OnboardingPath | null>(null);
 
-  if (gatewayStatus !== 'uninitialized') {
-    return <OnboardingScreen onComplete={onOnboardingComplete} />;
+  if (host === 'web') {
+    return <OnboardingScreen path="ticket" onComplete={onOnboardingComplete} />;
   }
-  if (mode === 'create' || mode === 'restore' || mode === 'verify') {
+  if (path) {
     return (
-      <FoundingScreen
-        {...founding}
-        mode={mode}
-        onComplete={onFoundingComplete}
-        onBack={() => setMode('choice')}
+      <OnboardingScreen
+        path={path}
+        onComplete={onOnboardingComplete}
+        onBack={() => setPath(null)}
       />
     );
   }
 
   return (
-    <div className={styles.view} data-mounted="true">
+    <div className={styles.view} data-mounted="true" data-testid="first-run-choice">
       <div className={styles.stageBg} aria-hidden="true" />
       <div className={styles.stageGlow} aria-hidden="true" />
       <div className={styles.card} data-theme="dark">
@@ -63,25 +62,16 @@ export default function FirstRunGate({
         <h1 className={styles.title}>
           Welcome to <em>Centraid</em>.
         </h1>
-        <p className={styles.sub}>Starting fresh, or bringing a vault back from a backup?</p>
+        <p className={styles.sub}>Starting something new, or joining what you already run?</p>
         <div className={styles.choiceGrid}>
-          <button type="button" className={styles.choiceBtn} onClick={() => setMode('create')}>
-            <span className={styles.choiceBtnTitle}>Create vault</span>
-            <span className={styles.choiceBtnSub}>Found a brand-new vault on this gateway.</span>
+          <button type="button" className={styles.choiceBtn} onClick={() => setPath('fresh')}>
+            <span className={styles.choiceBtnTitle}>Start fresh on this Mac</span>
+            <span className={styles.choiceBtnSub}>Your data stays on this computer.</span>
           </button>
-          <button type="button" className={styles.choiceBtn} onClick={() => setMode('restore')}>
-            <span className={styles.choiceBtnTitle}>Restore vault</span>
+          <button type="button" className={styles.choiceBtn} onClick={() => setPath('ticket')}>
+            <span className={styles.choiceBtnTitle}>Connect with a ticket</span>
             <span className={styles.choiceBtnSub}>
-              Bring backed-up vaults back from your recovery kit.
-            </span>
-          </button>
-          {/* Always offered, not only when the gateway reports the pending
-              ceremony: an older gateway omits `foundingPending`, and the user
-              who closed the app mid-ceremony still needs a way back in. */}
-          <button type="button" className={styles.choiceBtn} onClick={() => setMode('verify')}>
-            <span className={styles.choiceBtnTitle}>I already have my kit</span>
-            <span className={styles.choiceBtnSub}>
-              Finish an interrupted setup by verifying the kit this gateway downloaded.
+              Join a gateway you already run — paste or scan a pair ticket.
             </span>
           </button>
         </div>

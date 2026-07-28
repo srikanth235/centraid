@@ -1,35 +1,30 @@
 /*
  * GATEWAY_TEST_CONNECTION (issue #382) — the ConnectFlow "handshake ladder".
- * Wires the currently-orphaned `handshakeGateway` (version-handshake.ts) and
- * `fetchGatewayVaults`/`foldVaultsResponse` (gateway-vaults-core.ts) plus the
- * new ssh-host module through the pure fold functions in
- * `gateway-connectivity-core.ts`. Never throws — every failure is a failed
- * stage with a human-actionable detail, per the frozen IPC contract.
+ * Wires `handshakeGateway` (version-handshake.ts) and
+ * `fetchGatewayVaults`/`foldVaultsResponse` (gateway-vaults-core.ts) through
+ * the pure fold functions in `gateway-connectivity-core.ts`. Never throws —
+ * every failure is a failed stage with a human-actionable detail, per the
+ * frozen IPC contract. (Issue #603 deleted the `ssh` ladder with the rest of
+ * the SSH-connect feature; only ticket + known-gateway remain.)
  */
 
+import { handshakeGateway } from './version-handshake.js';
+import { fetchGatewayVaults } from './gateway-vaults-core.js';
+import { resolveGateway } from './gateway-store.js';
 import {
   assembleReport,
   buildTicketReport,
-  foldSshStatusStage,
-  foldSshVaultsStage,
-  foldSshVersionStages,
   foldUrlIdentityStages,
   foldVaultsStageFromHttp,
   reachGuardFailureStages,
-  skippedSshStage,
   stage,
   type ConnectivityReport,
 } from './gateway-connectivity-core.js';
-import { resolveGateway } from './gateway-store.js';
-import { fetchGatewayVaults } from './gateway-vaults-core.js';
-import { sshStatus, sshVaultList, sshVersion, type SshHostProfile } from './ssh-host.js';
-import { handshakeGateway } from './version-handshake.js';
 
 export type { ConnectivityReport } from './gateway-connectivity-core.js';
 
 export type TestConnectionInput =
   | { kind: 'ticket'; ticket: string }
-  | { kind: 'ssh'; destination: string; dataDir?: string }
   | { kind: 'gateway'; gatewayId: string };
 
 /** Run the known-gateway ladder against its local iroh proxy. */
@@ -61,36 +56,6 @@ async function testUrl(url: string, token: string | undefined): Promise<Connecti
   });
 }
 
-/** Run the ssh ladder (ssh → cli → daemon → vaults), skipping each
- *  subsequent stage once an earlier one fails. */
-async function testSsh(profile: SshHostProfile): Promise<ConnectivityReport> {
-  const versionResult = await sshVersion(profile);
-  const versionFold = foldSshVersionStages(versionResult);
-
-  if (versionFold.cli.status !== 'pass') {
-    return assembleReport(
-      [versionFold.ssh, versionFold.cli, skippedSshStage('daemon'), skippedSshStage('vaults')],
-      versionFold.errorCode ? { error: versionFold.errorCode } : {},
-    );
-  }
-
-  const statusResult = await sshStatus(profile);
-  const statusFold = foldSshStatusStage(statusResult);
-  if (statusFold.stage.status !== 'pass') {
-    return assembleReport(
-      [versionFold.ssh, versionFold.cli, statusFold.stage, skippedSshStage('vaults')],
-      statusFold.errorCode ? { error: statusFold.errorCode } : {},
-    );
-  }
-
-  const vaultsResult = await sshVaultList(profile);
-  const vaultsFold = foldSshVaultsStage(vaultsResult);
-  return assembleReport([versionFold.ssh, versionFold.cli, statusFold.stage, vaultsFold.stage], {
-    ...(vaultsFold.vaults ? { vaults: vaultsFold.vaults } : {}),
-    ...(vaultsFold.errorCode ? { error: vaultsFold.errorCode } : {}),
-  });
-}
-
 export async function testGatewayConnection(
   input: TestConnectionInput,
 ): Promise<ConnectivityReport> {
@@ -98,12 +63,6 @@ export async function testGatewayConnection(
     switch (input.kind) {
       case 'ticket':
         return buildTicketReport(input.ticket);
-
-      case 'ssh':
-        return await testSsh({
-          destination: input.destination,
-          dataDir: input.dataDir,
-        });
 
       case 'gateway': {
         const resolved = await resolveGateway(input.gatewayId);
@@ -121,8 +80,6 @@ export async function testGatewayConnection(
   } catch (err) {
     // Belt-and-suspenders: the contract promises this never throws even if
     // something upstream (a store read, a malformed input) does.
-    return assembleReport([], {
-      error: err instanceof Error ? err.message : String(err),
-    });
+    return assembleReport([], { error: err instanceof Error ? err.message : String(err) });
   }
 }

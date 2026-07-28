@@ -5,26 +5,23 @@
  * device identity — the devices route authorizes it through its own
  * host-custody check (`canMintPairingTicket` → `isDirectHostRequest`). The
  * composed handler's global "proved enrolled device" gate used to run first,
- * so that hatch was unreachable and a headless daemon could not enroll a
- * second device from the CLI after founding. (Founding itself is unaffected:
- * it runs on `foundingHandler`, mounted outside the composed handler.)
+ * so that hatch was unreachable and a headless daemon could not enroll any
+ * device from the CLI at all.
  *
  * The bypass must stay narrow — a loopback, non-forwarded caller only. An
  * iroh-forwarded request carries device headers and must still be gated.
  */
 
-import { promises as fs } from 'node:fs';
-import http from 'node:http';
-import path from 'node:path';
-
 import { tempDir } from '@centraid/test-kit/temp-dir';
 import { describe, afterEach, beforeEach, expect, test } from 'vitest';
-
-import { isDirectHostRequest } from '../routes/route-helpers.ts';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
+import http from 'node:http';
 import { buildGateway, type BuiltGateway } from './build-gateway.ts';
 import { EnrollmentStore } from './enrollment-store.ts';
 import { GatewayDatabase } from './gateway-db.ts';
 import { PairingTicketStore } from './pairing-store.ts';
+import { isDirectHostRequest } from '../routes/route-helpers.ts';
 
 const TICKET_PATH = '/centraid/_gateway/devices/ticket';
 /** Stands in for the daemon's per-boot device proof. */
@@ -35,22 +32,18 @@ let database: GatewayDatabase;
 let gateway: BuiltGateway;
 let server: http.Server;
 let base: string;
-describe('pairing-ticket-host-custody suite', () => {
+
+describe('pairing-ticket-host-custody scenarios', () => {
   beforeEach(async () => {
     dataDir = await tempDir('pair-host-custody-');
     database = GatewayDatabase.open(dataDir, { lock: 'exclusive' });
     const enrollments = EnrollmentStore.open(database);
     const tickets = PairingTicketStore.open(database);
     gateway = await buildGateway({
-      initVaultName: "Owner's vault",
       paths: { dataDir, vaultDir: path.join(dataDir, 'vault') },
       gatewayDatabase: database,
-      devicePairing: {
-        enrollments,
-        tickets,
-        endpointTicket: () => 'endpoint-ticket',
-      },
-      canMintFoundingTicket: isDirectHostRequest,
+      devicePairing: { enrollments, tickets, endpointTicket: () => 'endpoint-ticket' },
+      isHostCustody: isDirectHostRequest,
       // Mirrors the daemon's resolver rather than letting buildGateway fall back
       // to `embeddedAccess`, which resolves EVERY loopback request to the
       // embedded owner and would make the negative case pass vacuously.
@@ -87,10 +80,7 @@ describe('pairing-ticket-host-custody suite', () => {
     });
 
     expect(minted.status).toBe(200);
-    await expect(minted.json()).resolves.toMatchObject({
-      ok: true,
-      role: 'write',
-    });
+    await expect(minted.json()).resolves.toMatchObject({ ok: true, role: 'write' });
   });
 
   test('an iroh-forwarded caller never reaches the host-custody hatch', async () => {
@@ -126,9 +116,6 @@ describe('pairing-ticket-host-custody suite', () => {
     });
 
     expect(minted.status).toBe(200);
-    await expect(minted.json()).resolves.toMatchObject({
-      ok: true,
-      role: 'admin',
-    });
+    await expect(minted.json()).resolves.toMatchObject({ ok: true, role: 'admin' });
   });
 });

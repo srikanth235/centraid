@@ -35,21 +35,39 @@ bun run build && centraid-gateway serve --data-dir ./gw-data --host 127.0.0.1 --
 | **desktop** | `bun run dev:desktop` | Electron window; gateway loopback (often ephemeral until H4) | Embeds gateway today; H1 targets detached |
 | **web** | `bun run dev:web` | Vite default (see `apps/web`) | Needs a reachable gateway or ticket path |
 | **mobile** | `bun run dev:mobile` | Metro **8081** | Pair via desktop Settings → Phone |
-| **gateway-daemon** | `CENTRAID_GATEWAY_TOKEN=<hex> centraid-gateway serve --data-dir <dir> --host 127.0.0.1 --port 8765` | **8765** (example) | No `print-token` (retired #505); set `CENTRAID_GATEWAY_TOKEN` to pin the loopback secret, or `centraid-gateway pair` for a device ticket |
+| **gateway-daemon** | `centraid-gateway serve --data-dir <dir> --host 127.0.0.1 --port 8765` | **8765** (example) | No `print-token` (retired #505). **Do not pin `CENTRAID_GATEWAY_TOKEN`** — see below. A fresh `<dir>` auto-founds `Shared` + `Personal` (#603); `centraid-gateway pair` mints a device ticket |
 | **product CLI** | `centraid status --url http://127.0.0.1:8765 --token <hex>` | (client) | Wire client (`@centraid/cli`); auth via `--token` / `CENTRAID_TOKEN` / `CENTRAID_GATEWAY_TOKEN` |
 | **docs site** | `bun run docs:serve` | **4173** on 127.0.0.1 | After `docs:build` / `docs:bundle` |
 
 Parameterize ports via CLI flags / env documented on each package; do not hardcode foreign ports into other apps without a single config owner.
 
+### `CENTRAID_GATEWAY_TOKEN`: do not pin it by hand
+
+The daemon's loopback bearer is **derived from custody, not minted per boot**:
+`HMAC(endpoint-key.bin, "centraid/landlord-http/v1")` ([SECURITY.md](../SECURITY.md)).
+Every local process that can open the gateway's `KeyStore` — the admin CLI
+included — derives the same value, so **the default needs no configuration**.
+
+Pinning `CENTRAID_GATEWAY_TOKEN` is only for a **parent process that spawns the
+daemon** and needs to know the bearer without deriving it (the desktop does
+this). If you pin it in your shell and then run `centraid-gateway pair` (or any
+admin verb) in a shell that does not carry the same value, the daemon rejects
+the CLI's derived bearer and `pair` now fails with an explicit bearer-mismatch
+error naming `CENTRAID_GATEWAY_TOKEN` (issue #603 — it used to lie and say "the
+iroh endpoint is not ready"). Either restart the daemon without the pin, or
+export the identical value in both shells.
+
+The product CLI's `--token` / `CENTRAID_TOKEN` is a separate, wire-client
+concern and is unaffected.
+
 ## Preview the web app in a browser against an existing vault
 
-The desktop app provisions its vault **in-process**, so a fresh browser origin
-served by a standalone gateway lands on onboarding rather than your data. Do
-**not** pick **This Mac** in that onboarding — it tries to *create* a vault over
-HTTP, which the gateway rejects (vault creation is admin-only, issue #289, so you
-get `Create vaults on the gateway host`). The supported way to reach an existing
-vault from a browser is **pair a device**, exactly like a phone or a second
-desktop:
+The desktop app runs its gateway **in-process**, so a fresh browser origin served
+by a standalone gateway lands on onboarding rather than your data. Web onboarding
+is **ticket-only** since issue #603 — there is no "This Mac" card and no founding
+probe in a browser tab, because a browser cannot start a gateway. The supported
+(and only) way to reach an existing vault from a browser is **pair a device**,
+exactly like a phone or a second desktop:
 
 1. **Serve the existing vault.** Point a gateway at the data dir that already has
    the vault. Desktop's lives at
@@ -76,6 +94,9 @@ desktop:
    centraid-gateway pair --data-dir "<same data-dir>" --vault "<name-or-id>"
    ```
 
+   Omitting `--vault` targets the registry default — `Shared` on an
+   auto-founded gateway.
+
 3. **Open the web UI in the browser pane.** Register the web port in
    `.claude/launch.json` and start it with the preview tool — ad-hoc navigation to
    a bare `http://localhost:<port>` is policy-blocked, but a `preview_start`-managed
@@ -87,13 +108,18 @@ desktop:
      "configurations": [{ "name": "centraid-web", "url": "http://127.0.0.1:17833", "port": 17833 }] }
    ```
 
-4. In onboarding choose **Existing gateway → paste the ticket** (the ConnectFlow,
-   `packages/client/src/react/shell/routes/ConnectFlow.tsx`). The ticket redeems
-   over iroh, records this device's EndpointId enrollment, and connects to the existing vault — its
+4. Web onboarding opens straight on the ticket path — paste the ticket, then
+   fill in the profile step (display name + avatar colour). The ConnectFlow
+   (`packages/client/src/react/shell/routes/ConnectFlow.tsx`) is shared with
+   desktop's **Connect with a ticket** option and the switcher's **Add
+   gateway**; it offers two methods (**This Mac** / **Existing gateway**), and
+   web only ever reaches the second. The ticket redeems over iroh, records this
+   device's EndpointId enrollment, and connects to the existing vault — its
    automations, runs, and data appear as in desktop.
 
-There is no remote URL+token connection path. Browser clients use iroh-wasm and
-the same EndpointId pairing contract. Do not point a standalone gateway at a
+There is no remote URL+token connection path and no SSH-routed connect (the SSH
+code was deleted in #603). Browser clients use iroh-wasm and the same EndpointId
+pairing contract. Do not point a standalone gateway at a
 data dir the desktop app is **also** running against: `gateway.db` rejects the
 second writer immediately (see [traps/wal-checkpoint.md](traps/wal-checkpoint.md)).
 

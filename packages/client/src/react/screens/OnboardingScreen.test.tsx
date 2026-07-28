@@ -1,50 +1,36 @@
 import { act } from 'react';
+import { forEachSequentially } from '@centraid/test-kit/sequential';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import OnboardingScreen, { type OnboardingScreenProps } from './OnboardingScreen.js';
 
 vi.mock(import('../../gateway-client.js'), () => ({
   listVaults: () => listVaultsMock(),
 }));
 
-const listVaultsMock = vi.fn<typeof import('../../gateway-client.js').listVaults>();
-const getSettings = vi.fn<typeof window.CentraidApi.getSettings>();
-const setActiveGateway = vi.fn<typeof window.CentraidApi.setActiveGateway>();
-const setActiveVault = vi.fn<typeof window.CentraidApi.setActiveVault>();
-const createVault = vi.fn<typeof window.CentraidApi.createVault>();
-const redeemGatewayPairing = vi.fn<typeof window.CentraidApi.redeemGatewayPairing>();
-const testGatewayConnection = vi.fn<typeof window.CentraidApi.testGatewayConnection>();
+const listVaultsMock = vi.fn<(...args: unknown[]) => unknown>();
+const getSettings = vi.fn<(...args: unknown[]) => unknown>();
+const setActiveGateway = vi.fn<(...args: unknown[]) => unknown>();
+const setActiveVault = vi.fn<(...args: unknown[]) => unknown>();
+const createVault = vi.fn<(...args: unknown[]) => unknown>();
+const redeemGatewayPairing = vi.fn<(...args: unknown[]) => unknown>();
 
-function currentSettings(): Awaited<ReturnType<typeof window.CentraidApi.getSettings>> {
-  return {
-    activeGatewayId: 'local',
-    activeGatewayKind: 'local',
-    activeGatewayLabel: 'This Mac',
-    activeProfileDisplayName: 'This Mac',
-    activeProfileAvatarColor: '#4E68DD',
-    gatewayUrl: 'http://127.0.0.1:49152',
-  };
-}
-
-describe('screens/OnboardingScreen', () => {
+describe('OnboardingScreen scenarios', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    listVaultsMock.mockResolvedValue([
-      { vaultId: 'a', name: 'Personal', ownerPartyId: 'party-personal' },
-    ]);
-    getSettings.mockResolvedValue(currentSettings());
-    setActiveGateway.mockResolvedValue(currentSettings());
-    setActiveVault.mockResolvedValue(currentSettings());
+    listVaultsMock.mockResolvedValue([{ vaultId: 'a', name: 'Personal' }]);
+    getSettings.mockResolvedValue({ activeGatewayId: 'local' });
+    setActiveGateway.mockResolvedValue({});
+    setActiveVault.mockResolvedValue({});
     createVault.mockResolvedValue({ vaultId: 'new1' });
     (globalThis as unknown as { CentraidApi: unknown }).CentraidApi = {
-      addGateway: vi.fn<typeof window.CentraidApi.addGateway>(),
+      addGateway: vi.fn<(...args: unknown[]) => unknown>(),
       createVault,
       getSettings,
       redeemGatewayPairing,
       setActiveGateway,
       setActiveVault,
-      testGatewayConnection,
+      testGatewayConnection: async () => ({ ok: false }),
     };
   });
 
@@ -57,12 +43,15 @@ describe('screens/OnboardingScreen', () => {
     container = null;
   });
 
-  function mount(props: OnboardingScreenProps): HTMLDivElement {
+  function mount(
+    props: Partial<OnboardingScreenProps> & Pick<OnboardingScreenProps, 'onComplete'>,
+  ): HTMLDivElement {
+    const full: OnboardingScreenProps = { path: 'ticket', ...props };
     container = document.createElement('div');
     document.body.appendChild(container);
     act(() => {
       root = createRoot(container as HTMLDivElement);
-      root.render(<OnboardingScreen {...props} />);
+      root.render(<OnboardingScreen {...full} />);
     });
     return container;
   }
@@ -88,24 +77,17 @@ describe('screens/OnboardingScreen', () => {
     return el?.querySelector<HTMLInputElement>('input[type="radio"]') ?? null;
   }
 
-  function radioLabelled(el: HTMLElement, text: string): HTMLInputElement | null {
-    return radioIn([...el.querySelectorAll('label')].find((l) => l.textContent?.includes(text)));
-  }
-
   async function flush(times = 3): Promise<void> {
-    const flushNext = async (index: number): Promise<void> => {
-      if (index >= times) return;
-      await act(async () => {});
-      return flushNext(index + 1);
-    };
-    return flushNext(0);
+    await forEachSequentially(Array.from({ length: times }), async () => {
+      await act(async () => {
+        await Promise.resolve();
+      });
+    });
   }
 
   describe(OnboardingScreen, () => {
     it('renders the identity step with 8 swatches and a disabled CTA until a name is entered', () => {
-      const el = mount({
-        onComplete: vi.fn<OnboardingScreenProps['onComplete']>(),
-      });
+      const el = mount({ onComplete: vi.fn<(...args: unknown[]) => unknown>() });
       expect(el.textContent).toContain('Make yourself');
       expect(el.querySelectorAll('.swatch')).toHaveLength(8);
       const cta = el.querySelector('.cta') as HTMLButtonElement;
@@ -116,30 +98,65 @@ describe('screens/OnboardingScreen', () => {
     });
 
     it('selects a swatch on click', () => {
-      const el = mount({
-        onComplete: vi.fn<OnboardingScreenProps['onComplete']>(),
-      });
+      const el = mount({ onComplete: vi.fn<(...args: unknown[]) => unknown>() });
       const swatch = el.querySelectorAll('.swatch')[3] as HTMLLabelElement;
       click(radioIn(swatch));
       expect(swatch.dataset.selected).toBe('true');
       expect(el.querySelectorAll('[data-selected="true"]')).toHaveLength(1);
     });
 
-    it('Continue moves to step 2, showing the three method cards', () => {
-      const el = mount({
-        onComplete: vi.fn<OnboardingScreenProps['onComplete']>(),
-      });
+    it('the ticket path goes from identity straight into the ticket paste', () => {
+      const el = mount({ onComplete: vi.fn<(...args: unknown[]) => unknown>() });
       typeName(el.querySelector('.input') as HTMLInputElement, 'Ada');
       click(el.querySelector('.cta'));
-      expect(el.textContent).toContain('Where does your');
-      expect(el.querySelectorAll('input[type="radio"]')).toHaveLength(3);
+      expect(el.textContent).toContain('Connect your');
+      // No method grid at all — the host already chose (issue #603).
+      expect(el.querySelectorAll('input[type="radio"]')).toHaveLength(0);
+      expect(el.querySelector('textarea')).toBeTruthy();
       expect(el.querySelector('.cta')).toBeNull();
     });
 
-    it('"Start over" from step 2 returns to the identity step', () => {
-      const el = mount({
-        onComplete: vi.fn<OnboardingScreenProps['onComplete']>(),
+    it('the fresh path skips connect entirely and completes on the local Personal vault', async () => {
+      listVaultsMock.mockResolvedValue([
+        { vaultId: 'shared', name: 'Shared' },
+        { vaultId: 'personal', name: 'Personal' },
+      ]);
+      const onComplete = vi.fn<(...args: unknown[]) => unknown>().mockResolvedValue(undefined);
+      const el = mount({ path: 'fresh', onComplete });
+      typeName(el.querySelector('.input') as HTMLInputElement, 'Grace');
+      click(el.querySelector('.cta'));
+      await flush(4);
+      expect(setActiveVault).toHaveBeenCalledWith({ vaultId: 'personal' });
+      expect(onComplete).toHaveBeenCalledWith({
+        avatarColor: expect.any(String),
+        displayName: 'Grace',
+        gatewayId: 'local',
+        path: 'fresh',
+        vaultId: 'personal',
       });
+    });
+
+    it('the fresh path surfaces an unreachable local gateway inline', async () => {
+      listVaultsMock.mockRejectedValue(new Error('ECONNREFUSED'));
+      const el = mount({ path: 'fresh', onComplete: vi.fn<(...args: unknown[]) => unknown>() });
+      typeName(el.querySelector('.input') as HTMLInputElement, 'Grace');
+      click(el.querySelector('.cta'));
+      await flush(4);
+      expect(el.querySelector('.error')?.textContent).toContain('ECONNREFUSED');
+    });
+
+    it('renders a Back affordance only when the host supplies one', () => {
+      const withBack = mount({
+        onBack: vi.fn<(...args: unknown[]) => unknown>(),
+        onComplete: vi.fn<(...args: unknown[]) => unknown>(),
+      });
+      expect([...withBack.querySelectorAll('button')].some((b) => b.textContent === 'Back')).toBe(
+        true,
+      );
+    });
+
+    it('"Start over" from the connect step returns to the identity step', () => {
+      const el = mount({ onComplete: vi.fn<(...args: unknown[]) => unknown>() });
       typeName(el.querySelector('.input') as HTMLInputElement, 'Ada');
       click(el.querySelector('.cta'));
       click([...el.querySelectorAll('button')].find((b) => b.textContent === 'Start over'));
@@ -147,33 +164,30 @@ describe('screens/OnboardingScreen', () => {
       expect(el.querySelector('.cta')).toBeTruthy();
     });
 
-    it('picking "This Mac" with exactly one existing vault completes onboarding automatically', async () => {
-      const onComplete = vi.fn<OnboardingScreenProps['onComplete']>();
-      const el = mount({ onComplete });
+    it('trims the name and carries the chosen swatch through', async () => {
+      listVaultsMock.mockResolvedValue([{ vaultId: 'personal', name: 'Personal' }]);
+      const onComplete = vi.fn<(...args: unknown[]) => unknown>().mockResolvedValue(undefined);
+      const el = mount({ path: 'fresh', onComplete });
       typeName(el.querySelector('.input') as HTMLInputElement, '  Grace  ');
-      const swatch = el.querySelectorAll('.swatch')[2] as HTMLLabelElement;
-      click(radioIn(swatch));
+      click(radioIn(el.querySelectorAll('.swatch')[2] as HTMLLabelElement));
       click(el.querySelector('.cta'));
-      click(radioLabelled(el, 'This Mac'));
       await flush(4);
       expect(onComplete).toHaveBeenCalledWith({
         avatarColor: '#E36AD2',
         displayName: 'Grace',
         gatewayId: 'local',
+        path: 'fresh',
+        vaultId: 'personal',
       });
     });
 
     it('completing the "Existing gateway" ticket flow finishes onboarding with the connected gatewayId', async () => {
-      vi.spyOn(
-        (
-          globalThis as unknown as {
-            CentraidApi: {
-              testGatewayConnection: (...args: unknown[]) => Promise<unknown>;
-            };
-          }
-        ).CentraidApi,
-        'testGatewayConnection',
-      ).mockResolvedValue({
+      const api = (
+        globalThis as unknown as {
+          CentraidApi: { testGatewayConnection: () => Promise<unknown> };
+        }
+      ).CentraidApi;
+      vi.spyOn(api, 'testGatewayConnection').mockResolvedValue({
         ok: true,
         stages: [],
         ticket: { expiresAt: '', gatewayEndpointId: '', vaultName: 'Office' },
@@ -184,12 +198,11 @@ describe('screens/OnboardingScreen', () => {
         vaultId: 'v1',
         vaultName: 'Office',
       });
-      const onComplete = vi.fn<OnboardingScreenProps['onComplete']>().mockResolvedValue(undefined);
+      const onComplete = vi.fn<(...args: unknown[]) => unknown>().mockResolvedValue(undefined);
       const el = mount({ onComplete });
       typeName(el.querySelector('.input') as HTMLInputElement, 'Ada');
       click(el.querySelector('.cta'));
 
-      click(radioLabelled(el, 'Existing gateway'));
       await flush();
       const textarea = el.querySelector('textarea') as HTMLTextAreaElement;
       const setter = Object.getOwnPropertyDescriptor(
@@ -215,20 +228,20 @@ describe('screens/OnboardingScreen', () => {
         avatarColor: expect.any(String),
         displayName: 'Ada',
         gatewayId: 'gw1',
+        path: 'ticket',
+        vaultId: 'v1',
       });
     });
 
     it('surfaces an error inline when onComplete rejects', async () => {
+      listVaultsMock.mockResolvedValue([{ vaultId: 'personal', name: 'Personal' }]);
       const onComplete = vi
-        .fn<OnboardingScreenProps['onComplete']>()
+        .fn<(...args: unknown[]) => unknown>()
         .mockRejectedValue(new Error('nope'));
-      const el = mount({ onComplete });
+      const el = mount({ path: 'fresh', onComplete });
       typeName(el.querySelector('.input') as HTMLInputElement, 'X');
       click(el.querySelector('.cta'));
-      await flush();
-      click(radioLabelled(el, 'This Mac'));
-      await new Promise<void>((resolve) => setTimeout(resolve, 20));
-      act(() => undefined);
+      await flush(4);
       expect(el.querySelector('.error')?.textContent).toContain('nope');
     });
   });

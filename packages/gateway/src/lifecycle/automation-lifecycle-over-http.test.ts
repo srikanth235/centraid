@@ -1,16 +1,26 @@
-import crypto from 'node:crypto';
-import { promises as fs } from 'node:fs';
-/** Automation CRUD wire paths: edit an app-owned manifest, publish, and reconcile its scheduler. */
-import path from 'node:path';
-
-import * as automation from '@centraid/automation';
-import { scaffoldAppFiles, type ScaffoldFile } from '@centraid/blueprints';
-import { forEachSequentially } from '@centraid/test-kit/sequential';
 import { tempDir } from '@centraid/test-kit/temp-dir';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+import { forEachSequentially } from '@centraid/test-kit/sequential';
+/*
+ * Automation CRUD over HTTP (issue #141, C7). The desktop no longer
+ * mutates an automation in a local worktree — it reads the app's draft
+ * over HTTP, applies the file-map transform (toggle / delete), writes the
+ * changed/removed files back through the git-store session routes, and
+ * publishes. The gateway reconciles the OS scheduler on publish, so the
+ * desktop registers nothing itself. This boots a real gateway and drives
+ * two of those wire paths end to end:
+ *   1. toggle an app-owned automation's `enabled` flag and republish, and
+ *   2. delete an app-owned automation's subdir (file DELETE + republish)
+ *      while the owning UI app survives.
+ */
 
-import type { GatewayPaths } from '../paths.ts';
+import { describe, afterEach, beforeEach, expect, test } from 'vitest';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import { scaffoldAppFiles, type ScaffoldFile } from '@centraid/blueprints';
+import * as automation from '@centraid/automation';
 import { serve, type GatewayServeHandle } from '../serve/serve.ts';
+import type { GatewayPaths } from '../paths.ts';
 
 let dataDir: string;
 let handle: GatewayServeHandle;
@@ -68,13 +78,13 @@ async function openSession(sessionId: string): Promise<void> {
 }
 
 async function putFiles(appId: string, sessionId: string, files: ScaffoldFile[]): Promise<void> {
-  await forEachSequentially(files, async (file) => {
+  await forEachSequentially(files, async (f) => {
     const res = await fetch(
-      `${handle.url}/centraid/_apps/${appId}/files/${file.path
+      `${handle.url}/centraid/_apps/${appId}/files/${f.path
         .split('/')
         .map(encodeURIComponent)
         .join('/')}?sessionId=${sessionId}`,
-      { method: 'PUT', headers: auth(), body: file.content },
+      { method: 'PUT', headers: auth(), body: f.content },
     );
     expect(res.status).toBe(200);
   });
@@ -97,13 +107,10 @@ async function readDraft(appId: string, sessionId: string): Promise<ScaffoldFile
   return out.files ?? [];
 }
 
-describe('automation-lifecycle-over-http', () => {
+describe('automation-lifecycle-over-http scenarios', () => {
   beforeEach(async () => {
     dataDir = await tempDir(`gw-autocrud-${crypto.randomUUID()}-`);
-    handle = await serve({
-      initVaultName: "Owner's vault",
-      paths: pathsUnder(dataDir),
-    });
+    handle = await serve({ paths: pathsUnder(dataDir) });
   });
 
   afterEach(async () => {
@@ -148,10 +155,7 @@ describe('automation-lifecycle-over-http', () => {
     const ok = await fetch(`${handle.url}/centraid/_automations`, {
       method: 'POST',
       headers: { ...auth(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        id: 'minutely',
-        triggers: [{ expr: '* * * * *' }],
-      }),
+      body: JSON.stringify({ id: 'minutely', triggers: [{ expr: '* * * * *' }] }),
     });
     expect(ok.status).toBe(201);
   });
@@ -162,13 +166,7 @@ describe('automation-lifecycle-over-http', () => {
       headers: { ...auth(), 'Content-Type': 'application/json' },
       body: JSON.stringify({
         id: 'watcher-data',
-        triggers: [
-          {
-            kind: 'data',
-            entities: ['core.content_derivative'],
-            every: '*/5 * * * *',
-          },
-        ],
+        triggers: [{ kind: 'data', entities: ['core.content_derivative'], every: '*/5 * * * *' }],
         vault: {
           purpose: 'dpv:ServiceProvision',
           scopes: [{ schema: 'core', table: 'content_derivative', verbs: 'read' }],
@@ -177,15 +175,9 @@ describe('automation-lifecycle-over-http', () => {
       }),
     });
     expect(res.status).toBe(201);
-    const out = (await res.json()) as {
-      row: { manifest: { triggers: unknown[] } } | null;
-    };
+    const out = (await res.json()) as { row: { manifest: { triggers: unknown[] } } | null };
     expect(out.row?.manifest.triggers).toStrictEqual([
-      {
-        kind: 'data',
-        entities: ['core.content_derivative'],
-        every: '*/5 * * * *',
-      },
+      { kind: 'data', entities: ['core.content_derivative'], every: '*/5 * * * *' },
     ]);
   });
 
@@ -210,9 +202,7 @@ describe('automation-lifecycle-over-http', () => {
       }),
     });
     expect(res.status).toBe(201);
-    const out = (await res.json()) as {
-      row: { manifest: { triggers: unknown[] } } | null;
-    };
+    const out = (await res.json()) as { row: { manifest: { triggers: unknown[] } } | null };
     expect(out.row?.manifest.triggers).toStrictEqual([
       {
         kind: 'condition',
@@ -326,10 +316,7 @@ describe('automation-lifecycle-over-http', () => {
   test('rotating a webhook secret on an unknown ref is a 404', async () => {
     const res = await fetch(
       `${handle.url}/centraid/_automations/rotate-webhook?ref=${encodeURIComponent('nope/nope')}`,
-      {
-        method: 'POST',
-        headers: { ...auth(), 'Content-Type': 'application/json' },
-      },
+      { method: 'POST', headers: { ...auth(), 'Content-Type': 'application/json' } },
     );
     expect(res.status).toBe(404);
     const out = (await res.json()) as { error: string };
@@ -390,11 +377,7 @@ describe('automation-lifecycle-over-http', () => {
     };
     const putRes = await fetch(
       `${handle.url}/centraid/_apps/digest-app/files/automations/digest-app/automation.json?sessionId=s4`,
-      {
-        method: 'PUT',
-        headers: auth(),
-        body: JSON.stringify(badManifest, null, 2),
-      },
+      { method: 'PUT', headers: auth(), body: JSON.stringify(badManifest, null, 2) },
     );
     expect(putRes.status).toBe(200);
 
@@ -444,11 +427,7 @@ describe('automation-lifecycle-over-http', () => {
     };
     const putRes = await fetch(
       `${handle.url}/centraid/_apps/digest-app2/files/automations/digest-app2/automation.json?sessionId=s5`,
-      {
-        method: 'PUT',
-        headers: auth(),
-        body: JSON.stringify(goodManifest, null, 2),
-      },
+      { method: 'PUT', headers: auth(), body: JSON.stringify(goodManifest, null, 2) },
     );
     expect(putRes.status).toBe(200);
     await publish('digest-app2', 's5', 'reschedule digest hourly');
@@ -473,9 +452,9 @@ describe('automation-lifecycle-over-http', () => {
       'automations/digest/automation.json',
       'automations/digest/handler.js',
     ]);
-    await forEachSequentially(removed, async (relativePath) => {
+    await forEachSequentially(removed, async (rel) => {
       const res = await fetch(
-        `${handle.url}/centraid/_apps/notes/files/${relativePath
+        `${handle.url}/centraid/_apps/notes/files/${rel
           .split('/')
           .map(encodeURIComponent)
           .join('/')}?sessionId=s2`,
@@ -486,9 +465,7 @@ describe('automation-lifecycle-over-http', () => {
     await publish('notes', 's2', 'delete digest');
 
     // The app survives on `main`; the automation's files are gone.
-    const listRes = await fetch(`${handle.url}/centraid/_apps`, {
-      headers: auth(),
-    });
+    const listRes = await fetch(`${handle.url}/centraid/_apps`, { headers: auth() });
     const list = (await listRes.json()) as Array<{ id: string }>;
     expect(list.some((a) => a.id === 'notes')).toBeTruthy();
     const after = await readDraft('notes', 's2');

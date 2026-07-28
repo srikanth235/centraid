@@ -126,14 +126,10 @@ async function reserveLoopbackPort() {
  * printed both its HTTP listener line and its iroh endpoint id. stdout+stderr
  * stream to `logFile` so a failed run keeps the daemon's own story.
  */
-async function spawnDaemon(
-  dataDir,
-  logFile,
-  { timeoutMs = 60000, initVaultName = 'Pairing E2E', port, controlSecret } = {},
-) {
+async function spawnDaemon(dataDir, logFile, { timeoutMs = 60000, port, controlSecret } = {}) {
   const log = createWriteStream(logFile, { flags: 'a' });
+  // No --init-vault: a fresh data dir auto-founds Shared + Personal (#603).
   const args = [GATEWAY_CLI, 'serve', '--data-dir', dataDir, '--port', String(port)];
-  if (initVaultName) args.push('--init-vault', initVaultName);
   const child = spawn(process.execPath, args, {
     env: { ...process.env, CENTRAID_DATA_PLANE_SECRET: controlSecret },
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -236,7 +232,7 @@ export function parseTicket(raw) {
  *
  * Throw on failure, return { pass: true, notes } on success.
  */
-export async function runFlow(slug, fn, { fresh = false } = {}) {
+export async function runFlow(slug, fn, { fresh: _fresh = false } = {}) {
   await ensureBuilt();
   const runId = `${slug}-${defaultRunId()}`;
   const runDir = path.join(RUNS_DIR, runId);
@@ -265,7 +261,6 @@ export async function runFlow(slug, fn, { fresh = false } = {}) {
   const t0 = Date.now();
   try {
     state.gateway = await spawnDaemon(dataDir, logFile, {
-      initVaultName: fresh ? null : 'Pairing E2E',
       port: state.port,
       controlSecret: state.controlSecret,
     });
@@ -280,13 +275,7 @@ export async function runFlow(slug, fn, { fresh = false } = {}) {
         return state.gateway;
       },
       cli: (args, opts) =>
-        cli(
-          dataDir,
-          args[0] === 'pair' || args[0] === 'init-ticket'
-            ? [...args, '--port', String(state.port)]
-            : args,
-          opts,
-        ),
+        cli(dataDir, args[0] === 'pair' ? [...args, '--port', String(state.port)] : args, opts),
       mintTicket: async ({ vault, ttlMinutes } = {}) => {
         const args = ['pair'];
         if (vault) args.push('--vault', vault);
@@ -378,7 +367,6 @@ export async function runFlow(slug, fn, { fresh = false } = {}) {
         await killAndWait(state.gateway.pid);
         state.gateway = undefined; // a failed respawn must not leave the killed daemon looking live
         state.gateway = await spawnDaemon(dataDir, logFile, {
-          initVaultName: fresh ? null : 'Pairing E2E',
           port: state.port,
           controlSecret: state.controlSecret,
         });

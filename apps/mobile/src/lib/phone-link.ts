@@ -21,20 +21,17 @@
 // — one EndpointId enrolls with every desktop — so it is never per-Space.
 
 import { Platform } from 'react-native';
-
 import {
   addTunnelStatusListener,
   generateSecretKey,
-  getTunnelStatus,
-  isTunnelAvailable,
+  getTunnelStatus as getTunnelStatusImpl,
+  isTunnelAvailable as isTunnelAvailableImpl,
   pairWithDesktop,
   pairWithGateway,
   startTunnel,
   stopTunnel,
 } from '../../modules/centraid-tunnel';
 import type { TunnelStatus } from '../../modules/centraid-tunnel';
-import { Store } from '../storage';
-import { parsePairingInput } from './phone-link-parse';
 import { getSecure, hydrateSecure, setSecure } from './secure-storage';
 import {
   LINK_DESKTOP_NAME_KEY,
@@ -48,10 +45,8 @@ import {
   setActiveSpace,
   type Space,
 } from './spaces';
-
-export { getTunnelStatus, isTunnelAvailable } from '../../modules/centraid-tunnel';
-export { type TunnelStatus } from '../../modules/centraid-tunnel';
-export { parsePairingInput } from './phone-link-parse';
+import { Store } from '../storage';
+import { parsePairingInput } from './phone-link-parse';
 
 // The active-slot keys now live in their new owner, lib/spaces (the Spaces
 // registry projects the active (gateway, vault) tuple into them); imported above
@@ -97,7 +92,7 @@ export async function pair(
   deviceName: string,
 ): Promise<{ desktopName: string; deviceId: string }> {
   const parsed = parsePairingInput(qrPayloadString);
-  if (!parsed || parsed.kind === 'centraid-gw-found') {
+  if (!parsed) {
     throw new PhoneLinkError(
       'invalid_qr',
       'That is not a Centraid pairing code. Scan the desktop QR, or paste a ticket from `centraid-gateway pair`.',
@@ -109,7 +104,7 @@ export async function pair(
       'This pairing ticket has expired — mint a new one on the gateway.',
     );
   }
-  if (!isTunnelAvailable()) {
+  if (!isTunnelAvailableImpl()) {
     throw new PhoneLinkError(
       'module_unavailable',
       'Pairing needs the native tunnel module — use a development build, not Expo Go.',
@@ -203,7 +198,7 @@ export async function pair(
  */
 export async function unpair(): Promise<void> {
   await hydrateSpaces();
-  if (isTunnelAvailable()) {
+  if (isTunnelAvailableImpl()) {
     await stopTunnel().catch(() => {
       /* already stopped */
     });
@@ -225,7 +220,7 @@ export async function switchSpace(id: string): Promise<Space | undefined> {
   if (prev?.id === id) return prev;
   const next = await setActiveSpace(id);
   if (!next) return undefined;
-  if (isTunnelAvailable() && prev && prev.gatewayId !== next.gatewayId) {
+  if (isTunnelAvailableImpl() && prev && prev.gatewayId !== next.gatewayId) {
     await stopTunnel().catch(() => {
       /* not running */
     });
@@ -242,7 +237,7 @@ export async function switchSpace(id: string): Promise<Space | undefined> {
 export async function forgetSpace(id: string): Promise<void> {
   await hydrateSpaces();
   const wasActive = getActiveSpace()?.id === id;
-  if (wasActive && isTunnelAvailable()) {
+  if (wasActive && isTunnelAvailableImpl()) {
     await stopTunnel().catch(() => {
       /* not running */
     });
@@ -263,8 +258,8 @@ export async function ensureTunnelStarted(): Promise<{ baseUrl: string } | undef
   if (startInFlight) return startInFlight;
   startInFlight = (async () => {
     await hydratePhoneLink();
-    if (!isPaired() || !isTunnelAvailable()) return undefined;
-    const status = await getTunnelStatus();
+    if (!isPaired() || !isTunnelAvailableImpl()) return undefined;
+    const status = await getTunnelStatusImpl();
     if (status.state === 'running' && status.port) {
       return { baseUrl: `http://127.0.0.1:${status.port}` };
     }
@@ -289,10 +284,8 @@ export async function ensureTunnelStarted(): Promise<{ baseUrl: string } | undef
 }
 
 /** Status subscription passthrough — no-op remover when the module is unavailable. */
-export function subscribeTunnelStatus(cb: (status: TunnelStatus) => void): {
-  remove: () => void;
-} {
-  if (!isTunnelAvailable()) {
+export function subscribeTunnelStatus(cb: (status: TunnelStatus) => void): { remove: () => void } {
+  if (!isTunnelAvailableImpl()) {
     return {
       remove: () => {
         /* noop */
@@ -301,3 +294,6 @@ export function subscribeTunnelStatus(cb: (status: TunnelStatus) => void): {
   }
   return addTunnelStatusListener(cb);
 }
+
+export { getTunnelStatus, isTunnelAvailable } from '../../modules/centraid-tunnel';
+export type { TunnelStatus } from '../../modules/centraid-tunnel';

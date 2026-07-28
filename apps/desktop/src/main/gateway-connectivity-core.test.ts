@@ -1,11 +1,7 @@
 import { describe, expect, it } from 'vitest';
-
 import {
   assembleReport,
   buildTicketReport,
-  foldSshStatusStage,
-  foldSshVaultsStage,
-  foldSshVersionStages,
   foldUrlIdentityStages,
   foldVaultsStageFromHttp,
   reachGuardFailureStages,
@@ -86,11 +82,7 @@ describe(foldUrlIdentityStages, () => {
   });
 
   it('fails auth (reach passes) on a 401/403, skipping identify', () => {
-    const result = foldUrlIdentityStages({
-      ok: false,
-      reason: 'unreachable',
-      detail: 'HTTP 401',
-    });
+    const result = foldUrlIdentityStages({ ok: false, reason: 'unreachable', detail: 'HTTP 401' });
     expect(result.stages.map((s) => [s.id, s.status])).toStrictEqual([
       ['reach', 'pass'],
       ['identify', 'skip'],
@@ -121,11 +113,7 @@ describe(foldUrlIdentityStages, () => {
   });
 
   it('fails identify on a non-401/403 HTTP error status (e.g. 500)', () => {
-    const result = foldUrlIdentityStages({
-      ok: false,
-      reason: 'unreachable',
-      detail: 'HTTP 500',
-    });
+    const result = foldUrlIdentityStages({ ok: false, reason: 'unreachable', detail: 'HTTP 500' });
     expect(result.stages.map((s) => [s.id, s.status])).toStrictEqual([
       ['reach', 'pass'],
       ['identify', 'fail'],
@@ -209,68 +197,5 @@ describe(buildTicketReport, () => {
     const report = buildTicketReport(raw, now);
     expect(report.ok).toBe(false);
     expect(report.error).toBe('ticket_expired');
-  });
-});
-
-describe('ssh-kind fold helpers', () => {
-  it('foldSshVersionStages: success passes both ssh + cli, carrying the version in detail', () => {
-    const result = foldSshVersionStages({ ok: true, value: '0.1.0' });
-    expect(result.ssh).toStrictEqual({
-      id: 'ssh',
-      label: 'Reach host',
-      status: 'pass',
-    });
-    expect(result.cli).toStrictEqual({
-      id: 'cli',
-      label: 'centraid-gateway CLI',
-      status: 'pass',
-      detail: '0.1.0',
-    });
-  });
-
-  it('foldSshVersionStages: cli_not_found still passes ssh (host was reachable)', () => {
-    const result = foldSshVersionStages({
-      ok: false,
-      error: 'cli_not_found',
-      message: 'bash: centraid-gateway: command not found',
-    });
-    expect(result.ssh.status).toBe('pass');
-    expect(result.cli.status).toBe('fail');
-    expect(result.errorCode).toBe('cli_not_found');
-  });
-
-  it('foldSshVersionStages: ssh_unreachable/ssh_auth fail ssh and skip cli', () => {
-    for (const error of ['ssh_unreachable', 'ssh_auth'] as const) {
-      const result = foldSshVersionStages({
-        ok: false,
-        error,
-        message: 'nope',
-      });
-      expect(result.ssh.status).toBe('fail');
-      expect(result.cli.status).toBe('skip');
-      expect(result.errorCode).toBe(error);
-    }
-  });
-
-  it('foldSshStatusStage passes/fails on the daemon stage', () => {
-    expect(foldSshStatusStage({ ok: true, value: { ok: true } }).stage.status).toBe('pass');
-    const failed = foldSshStatusStage({
-      ok: false,
-      error: 'daemon_error',
-      message: 'boom',
-    });
-    expect(failed.stage.status).toBe('fail');
-    expect(failed.errorCode).toBe('daemon_error');
-  });
-
-  it('foldSshVaultsStage maps well-formed rows and drops malformed ones', () => {
-    const result = foldSshVaultsStage({
-      ok: true,
-      value: {
-        vaults: [{ vaultId: 'v1', name: 'Family' }, { vaultId: 'v2' }, { garbage: true }],
-      },
-    });
-    expect(result.stage.status).toBe('pass');
-    expect(result.vaults).toStrictEqual([{ vaultId: 'v1', name: 'Family' }]);
   });
 });

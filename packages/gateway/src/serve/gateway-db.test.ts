@@ -1,12 +1,9 @@
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import path from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
-
-import { plainSqliteRow } from '@centraid/test-kit/sqlite';
 import { tempDir } from '@centraid/test-kit/temp-dir';
 import { aesGcmKeyProtector, KeyStore } from '@centraid/vault';
 import { describe, afterEach, expect, test } from 'vitest';
-
+import { DatabaseSync } from 'node:sqlite';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import path from 'node:path';
 import { StorageConnectionStore } from '../backup/storage-connections.js';
 import {
   darwinNetworkFileSystem,
@@ -17,7 +14,7 @@ import {
 import { openVaultRegistry } from './vault-registry.js';
 
 const opened: GatewayDatabase[] = [];
-describe('gateway-db suite', () => {
+describe('gateway-db scenarios', () => {
   afterEach(() => {
     while (opened.length > 0) opened.pop()?.close();
   });
@@ -38,7 +35,6 @@ describe('gateway-db suite', () => {
       'device_checkpoints',
       'devices',
       'erase_intents',
-      'founding_ticket_reservations',
       'gateway_meta',
       'member_roles',
       'members',
@@ -50,13 +46,14 @@ describe('gateway-db suite', () => {
       'web_sessions',
     ]);
     expect(tables).not.toContain('vaults');
+    // #603 retired the founding ceremony: no reservation table, and a ticket
+    // has one shape (an invitation) rather than a `kind` discriminant.
+    expect(tables).not.toContain('founding_ticket_reservations');
     expect(
-      (
-        gateway.db.prepare('PRAGMA table_info(founding_ticket_reservations)').all() as Array<{
-          name: string;
-        }>
-      ).map((column) => column.name),
-    ).toContain('pending_vault_ids_json');
+      (gateway.db.prepare('PRAGMA table_info(tickets)').all() as Array<{ name: string }>).map(
+        (column) => column.name,
+      ),
+    ).not.toContain('kind');
     expect(existsSync(path.join(dir, 'gateway.db-shm'))).toBe(false);
     for (const retired of [
       'prefs.json',
@@ -96,13 +93,9 @@ describe('gateway-db suite', () => {
 
     first.close();
     opened.pop();
-    const afterStop = new DatabaseSync(path.join(dir, 'gateway.db'), {
-      readOnly: true,
-    });
+    const afterStop = new DatabaseSync(path.join(dir, 'gateway.db'), { readOnly: true });
     expect(
-      plainSqliteRow(
-        afterStop.prepare("SELECT value FROM gateway_meta WHERE key = 'schema'").get(),
-      ),
+      afterStop.prepare("SELECT value FROM gateway_meta WHERE key = 'schema'").get(),
     ).toStrictEqual({
       value: '1',
     });
@@ -145,9 +138,7 @@ describe('gateway-db suite', () => {
 
     gateway.run('DELETE FROM devices WHERE enrollment_id = ?', 'enrollment');
 
-    expect(
-      plainSqliteRow(gateway.db.prepare('SELECT count(*) AS n FROM web_sessions').get()),
-    ).toStrictEqual({
+    expect(gateway.db.prepare('SELECT count(*) AS n FROM web_sessions').get()).toStrictEqual({
       n: 0,
     });
   });
@@ -169,11 +160,7 @@ describe('gateway-db suite', () => {
       rootDir: path.join(dir, 'vault'),
       cacheRootDir: path.join(dir, 'cache'),
       keyStore,
-      logger: {
-        info: () => undefined,
-        warn: () => undefined,
-        error: () => undefined,
-      },
+      logger: { info: () => undefined, warn: () => undefined, error: () => undefined },
       ownerName: 'Priya',
     });
     const vault = registry.create('Protected vault');
@@ -194,10 +181,7 @@ describe('gateway-db suite', () => {
     expect(vaultSecret).toHaveLength(32);
     registry.stop();
     const secrets = [endpointSecret, vaultSecret!, connectionsSecret, keyringSecret];
-    const connections = await StorageConnectionStore.open({
-      database: gateway,
-      keyStore,
-    });
+    const connections = await StorageConnectionStore.open({ database: gateway, keyStore });
     await connections.create({
       kind: 'provider',
       name: 'Encrypted provider',

@@ -1,4 +1,5 @@
-import crypto from 'node:crypto';
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { forEachSequentially } from '@centraid/test-kit/sequential';
 /*
  * The ext band over HTTP (issue #286 phase 2) — the successor to the
  * silo's seed-draft-data + publish-migrations coverage.
@@ -9,14 +10,13 @@ import crypto from 'node:crypto';
  * reset-data re-snapshots it, and a spec the vault refuses aborts the
  * publish with the vault untouched.
  */
+
+import { describe, afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-
-import type { GatewayPaths } from '../paths.ts';
+import crypto from 'node:crypto';
 import { serve, type GatewayServeHandle } from '../serve/serve.ts';
+import type { GatewayPaths } from '../paths.ts';
 
 let dataDir: string;
 let handle: GatewayServeHandle;
@@ -55,13 +55,10 @@ const EXT_V1 = {
   ],
 };
 
-describe('ext-band-over-http', () => {
+describe('ext-band-over-http scenarios', () => {
   beforeEach(async () => {
     dataDir = await tempDir(`gw-ext-${crypto.randomUUID()}-`);
-    handle = await serve({
-      initVaultName: "Owner's vault",
-      paths: pathsUnder(dataDir),
-    });
+    handle = await serve({ paths: pathsUnder(dataDir) });
   });
 
   afterEach(async () => {
@@ -74,13 +71,11 @@ describe('ext-band-over-http', () => {
     files: Record<string, string>,
   ): Promise<void> {
     const appDir = await (await handle.appsStore()).snapshotSessionAppDir(sessionId, 'gym');
-    await Promise.all(
-      Object.entries(files).map(async ([rel, content]) => {
-        const abs = path.join(appDir, rel);
-        await fs.mkdir(path.dirname(abs), { recursive: true });
-        await fs.writeFile(abs, content);
-      }),
-    );
+    await forEachSequentially(Object.entries(files), async ([rel, content]) => {
+      const abs = path.join(appDir, rel);
+      await fs.mkdir(path.dirname(abs), { recursive: true });
+      await fs.writeFile(abs, content);
+    });
   }
 
   async function publish(sessionId: string, message: string): Promise<Response> {
@@ -162,26 +157,16 @@ describe('ext-band-over-http', () => {
       'app.json': manifest(EXT_V1),
       'index.html': '<!doctype html>gym',
     });
-    const preview = await fetch(`${handle.url}/centraid/_draft/draft1/gym/`, {
-      headers: auth(),
-    });
+    const preview = await fetch(`${handle.url}/centraid/_draft/draft1/gym/`, { headers: auth() });
     expect(preview.status).toBe(200);
-    // node:sqlite hands back null-prototype rows; spreading compares the column
-    // data (which is the contract) without asserting the driver's prototype.
-    expect(
-      ownerSql('SELECT notes FROM extdraft_gym_workout').map((row) => ({
-        ...row,
-      })),
-    ).toStrictEqual([{ notes: 'live row' }]);
+    expect(ownerSql('SELECT notes FROM extdraft_gym_workout')).toStrictEqual([
+      { notes: 'live row' },
+    ]);
 
     // Draft writes stay scratch.
     const draftWrite = await plane.invokeAsAssistant({
       command: 'ext.gym.insert',
-      input: {
-        table: 'workout',
-        values: { notes: 'draft only' },
-        band: 'draft',
-      },
+      input: { table: 'workout', values: { notes: 'draft only' }, band: 'draft' },
       purpose: 'dpv:ServiceProvision',
     });
     expect(draftWrite.status).toBe('executed');

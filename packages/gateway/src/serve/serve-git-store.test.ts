@@ -1,4 +1,4 @@
-import crypto from 'node:crypto';
+import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * Git-store backend integration (issue #137, per-vault since #280). The
  * gateway constructs a `WorktreeStore` inside the ACTIVE vault's directory,
@@ -11,15 +11,14 @@ import crypto from 'node:crypto';
  * + the three-tool dispatch + the registry list — all reading from the
  * git worktree.
  */
+
+import { describe, afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-
-import type { GatewayPaths } from '../paths.ts';
+import crypto from 'node:crypto';
 import type { WorktreeStore } from '../worktree-store/index.js';
 import { serve, type GatewayServeHandle } from './serve.ts';
+import type { GatewayPaths } from '../paths.ts';
 
 let dataDir: string;
 let handle: GatewayServeHandle;
@@ -49,11 +48,7 @@ async function seedApp(store: WorktreeStore, appId: string): Promise<void> {
           {
             name: 'ping',
             description: 'returns pong',
-            input: {
-              type: 'object',
-              properties: {},
-              additionalProperties: false,
-            },
+            input: { type: 'object', properties: {}, additionalProperties: false },
           },
         ],
       },
@@ -70,7 +65,7 @@ async function seedApp(store: WorktreeStore, appId: string): Promise<void> {
   await store.closeSession('seed');
 }
 
-describe('serve-git-store', () => {
+describe('serve-git-store scenarios', () => {
   beforeEach(async () => {
     dataDir = await tempDir(`gateway-git-store-${crypto.randomUUID()}-`);
   });
@@ -81,10 +76,7 @@ describe('serve-git-store', () => {
   });
 
   test('serves an app from the git-store main worktree, not versions/', async () => {
-    handle = await serve({
-      initVaultName: "Owner's vault",
-      paths: pathsUnder(dataDir),
-    });
+    handle = await serve({ paths: pathsUnder(dataDir) });
 
     // The ACTIVE vault owns the code store (#280) — seed through it, then
     // re-settle the workspace so the registry syncs the published app.
@@ -110,10 +102,7 @@ describe('serve-git-store', () => {
     // App RPC dispatch resolves the query handler from the worktree.
     const read = await fetch(`${handle.url}/centraid/gitapp/queries/ping`, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${handle.token}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { Authorization: `Bearer ${handle.token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ input: {} }),
     });
     expect(read.status).toBe(200);
@@ -121,10 +110,7 @@ describe('serve-git-store', () => {
   });
 
   test('the code store lives inside the active vault directory (#280)', async () => {
-    handle = await serve({
-      initVaultName: "Owner's vault",
-      paths: pathsUnder(dataDir),
-    });
+    handle = await serve({ paths: pathsUnder(dataDir) });
     const store = await handle.appsStore();
     const vaultId = handle.vaults.current().boot.vaultId;
     expect(

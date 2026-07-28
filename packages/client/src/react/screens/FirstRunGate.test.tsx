@@ -1,7 +1,7 @@
 import { act } from 'react';
+import { forEachSequentially } from '@centraid/test-kit/sequential';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-
 import FirstRunGate, { type FirstRunGateProps } from './FirstRunGate.js';
 
 // FirstRunGate pulls in OnboardingScreen (→ ConnectFlow → gateway-client),
@@ -11,30 +11,21 @@ vi.hoisted(() => {
   (window as unknown as { CentraidApi: Record<string, unknown> }).CentraidApi = {
     onGatewayChanged: () => () => undefined,
     onVaultChanged: () => () => undefined,
-    getGatewayAuth: async () => ({
-      baseUrl: 'https://gateway.test',
-      token: 't',
-    }),
+    getGatewayAuth: async () => ({ baseUrl: 'https://gateway.test', token: 't' }),
   };
 });
 
 function makeProps(over: Partial<FirstRunGateProps> = {}): FirstRunGateProps {
   return {
-    onOnboardingComplete: vi.fn<FirstRunGateProps['onOnboardingComplete']>(),
-    onFoundingComplete: vi.fn<FirstRunGateProps['onFoundingComplete']>(),
-    gatewayStatus: 'uninitialized',
-    founding: {
-      initialize: vi.fn<FirstRunGateProps['founding']['initialize']>(),
-      verify: vi.fn<FirstRunGateProps['founding']['verify']>(),
-      restore: vi.fn<FirstRunGateProps['founding']['restore']>(),
-    },
+    onOnboardingComplete: vi.fn<(...args: unknown[]) => unknown>(),
+    host: 'desktop',
     ...over,
   };
 }
 
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
-describe('screens/FirstRunGate', () => {
+describe('FirstRunGate scenarios', () => {
   afterEach(() => {
     act(() => root?.unmount());
     root = null;
@@ -44,12 +35,11 @@ describe('screens/FirstRunGate', () => {
   });
 
   async function flush(times = 3): Promise<void> {
-    const flushNext = async (index: number): Promise<void> => {
-      if (index >= times) return;
-      await act(async () => {});
-      return flushNext(index + 1);
-    };
-    return flushNext(0);
+    await forEachSequentially(Array.from({ length: times }), async () => {
+      await act(async () => {
+        await Promise.resolve();
+      });
+    });
   }
 
   async function mount(props: FirstRunGateProps): Promise<HTMLDivElement> {
@@ -69,43 +59,46 @@ describe('screens/FirstRunGate', () => {
   }
 
   describe(FirstRunGate, () => {
-    it('offers exactly the two first-run choices', async () => {
+    it('desktop offers exactly the two first-run choices — and no founding ceremony', async () => {
       const el = await mount(makeProps());
-      expect(el.textContent).toContain('Create vault');
-      expect(el.textContent).toContain('Restore vault');
-      expect(el.textContent).toContain('Starting fresh, or bringing a vault back');
+      expect(el.textContent).toContain('Start fresh on this Mac');
+      expect(el.textContent).toContain('Connect with a ticket');
+      expect(el.textContent).not.toContain('Create vault');
+      expect(el.textContent).not.toContain('Restore vault');
+      expect(el.querySelectorAll('button')).toHaveLength(2);
     });
 
-    it('"Create vault" opens the founding ceremony', async () => {
+    it('"Start fresh on this Mac" goes straight to the profile step', async () => {
       const el = await mount(makeProps());
-      clickIncludes(el, 'Create vault');
+      clickIncludes(el, 'Start fresh on this Mac');
       await flush();
-      expect(el.textContent).toContain('Create your vault');
-      expect(el.textContent).toContain('Recovery-kit password');
+      expect(el.textContent).toContain('Make yourself');
+      expect(el.querySelector('[data-testid="onboarding-view"]')).toBeTruthy();
     });
 
-    it('"Restore vault" opens the restore peer of the same ceremony', async () => {
+    it('"Connect with a ticket" also starts at the profile step', async () => {
       const el = await mount(makeProps());
-      clickIncludes(el, 'Restore vault');
+      clickIncludes(el, 'Connect with a ticket');
       await flush();
-      expect(el.textContent).toContain('Restore your vault');
-      expect(el.textContent).toContain('Storage-provider key');
+      expect(el.textContent).toContain('Make yourself');
     });
 
-    it('"Back" from founding returns to the choice', async () => {
+    it('"Back" from a chosen path returns to the chooser', async () => {
       const el = await mount(makeProps());
-      clickIncludes(el, 'Restore vault');
+      clickIncludes(el, 'Connect with a ticket');
       await flush();
       clickIncludes(el, 'Back');
       await flush();
-      expect(el.textContent).toContain('Starting fresh, or bringing a vault back');
+      expect(el.querySelector('[data-testid="first-run-choice"]')).toBeTruthy();
     });
 
-    it('never shows Create / Restore for an already-founded gateway', async () => {
-      const el = await mount(makeProps({ gatewayStatus: 'ready' }));
+    it('web never shows the chooser — the ticket path is the only path', async () => {
+      const el = await mount(makeProps({ host: 'web' }));
+      expect(el.querySelector('[data-testid="first-run-choice"]')).toBeNull();
       expect(el.textContent).toContain('Make yourself');
-      expect(el.textContent).not.toContain('Create vault');
-      expect(el.textContent).not.toContain('Restore vault');
+      expect(el.textContent).not.toContain('this Mac');
+      // No chooser to go back to, so no back affordance either.
+      expect([...el.querySelectorAll('button')].some((b) => b.textContent === 'Back')).toBe(false);
     });
   });
 });

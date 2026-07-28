@@ -1,11 +1,12 @@
 import { listVaults } from '../../../gateway-client.js';
+import { connectGateway } from './gatewayModals.js';
 import {
   type ConnectFlowResult,
   type ConnectFlowState,
   type ConnectTestInput,
   type ConnectivityReport,
+  type LocalVaultsResult,
 } from './connectFlow-core.js';
-import { connectGateway, friendlyGatewayError } from './gatewayModals.js';
 
 /*
  * Impure IO for ConnectFlow (issue #382) — mirrors the
@@ -13,36 +14,17 @@ import { connectGateway, friendlyGatewayError } from './gatewayModals.js';
  * `window.CentraidApi` call and error-shape decision lives here, so
  * `connectFlow-core.ts` and the component stay pure/presentational.
  *
- * `testGatewayConnection` and `sshConnectGateway` are new IPC methods added
- * by the backend half of #382 (packages/gateway + apps/desktop/src/main +
- * preload.ts + centraid-api.d.ts), landing concurrently with this file. This
+ * `testGatewayConnection` is an IPC method the host bridge supplies. This
  * renderer half doesn't own centraid-api.d.ts, so the contract is declared
- * locally against the design doc rather than imported — `ConnectFlowBridge`
- * below is the exact shape the design doc specifies. A real integration
- * typecheck reconciles the two once both halves land; until then this file
- * (and its callers) type-check against this local contract, which Vitest's
- * esbuild transform doesn't need resolved against the real global anyway.
+ * locally as `ConnectFlowBridge` and reconciled by the integration typecheck.
  */
 
-export type SshVaultInput =
-  | { kind: 'existing'; vaultId: string }
-  | { kind: 'create'; name: string };
-
-export interface SshConnectInput {
-  destination: string;
-  dataDir?: string;
-  label?: string;
-  rememberDevice?: boolean;
-  vault: SshVaultInput;
-}
-
-export type SshConnectResult =
-  | { ok: true; gatewayId: string; vaultId: string; vaultName: string }
-  | { ok: false; error: string; message: string };
+/** The vault a fresh gateway auto-founds for its owner (issue #603). Its peer
+ *  is "Shared", which is the default for everyone the owner invites. */
+const PERSONAL_VAULT_NAME = 'Personal';
 
 export interface ConnectFlowBridge {
   testGatewayConnection: (input: ConnectTestInput) => Promise<ConnectivityReport>;
-  sshConnectGateway: (input: SshConnectInput) => Promise<SshConnectResult>;
 }
 
 function bridge(): ConnectFlowBridge {
@@ -80,16 +62,58 @@ export async function runConnectivityTest(input: ConnectTestInput): Promise<Conn
   }
 }
 
-/** The local gateway's existing vaults, shaped like a ConnectivityReport's
- *  `vaults[]` so the vault step's rendering stays method-agnostic. */
-export async function loadLocalVaults(): Promise<ConnectivityReport['vaults']> {
-  const vaults = await listVaults().catch(() => undefined);
-  return (vaults ?? []).map((v) => ({
-    color: v.color,
-    icon: v.icon,
-    name: v.name,
-    vaultId: v.vaultId,
-  }));
+/**
+ * The local gateway's existing vaults, shaped like a ConnectivityReport's
+ * `vaults[]` so the vault step's rendering stays method-agnostic.
+ *
+ * The catch is a typed translation, not a swallow (issue #603 W4): an
+ * unreachable gateway used to fold into an empty list, which the vault step
+ * then rendered as "this gateway has no spaces" and the onboarding host
+ * auto-committed a create against. The caller now sees WHY the list is empty.
+ */
+export async function loadLocalVaults(): Promise<LocalVaultsResult> {
+  try {
+    const vaults = await listVaults();
+    if (!vaults) {
+      return { ok: false, message: 'This gateway does not serve a vault list.' };
+    }
+    return {
+      ok: true,
+      vaults: vaults.map((v) => ({
+        color: v.color,
+        icon: v.icon,
+        name: v.name,
+        vaultId: v.vaultId,
+      })),
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      message: `Couldn't read this gateway's spaces: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    };
+  }
+}
+
+/**
+ * First run's "Start fresh on this Mac" commit (issue #603). The embedded
+ * gateway founds "Shared" + "Personal" at construction, so there is no
+ * ceremony and no vault to create here — this only makes the local gateway
+ * active and addresses the owner's own vault. Throws with a user-facing
+ * message the onboarding host renders inline.
+ */
+export async function connectFreshLocalGateway(): Promise<ConnectFlowResult> {
+  await ensureLocalGatewayActive();
+  const loaded = await loadLocalVaults();
+  if (!loaded.ok) throw new Error(loaded.message);
+  const personal =
+    loaded.vaults.find((v) => v.name === PERSONAL_VAULT_NAME) ?? loaded.vaults[0] ?? null;
+  if (!personal) {
+    throw new Error('The gateway on this Mac has no spaces yet — restart Centraid and try again.');
+  }
+  await window.CentraidApi.setActiveVault({ vaultId: personal.vaultId });
+  return { displayLabel: 'This Mac', gatewayId: 'local', vaultId: personal.vaultId };
 }
 
 /**
@@ -103,33 +127,31 @@ export async function commitConnectFlow(state: ConnectFlowState): Promise<Connec
   if (state.method === 'gateway') {
     return commitGateway(state);
   }
-  if (state.method === 'ssh') {
-    return commitSsh(state);
-  }
   throw new Error('No connection method selected.');
 }
 
 async function ensureLocalGatewayActive(): Promise<void> {
-  const settings = await window.CentraidApi.getSettings().catch(() => undefined);
-  if (settings?.activeGatewayId !== 'local') {
-    await window.CentraidApi.setActiveGateway({ id: 'local' });
-  }
+  // Always the explicit call, even when 'local' is already the active id (it
+  // is the virgin-install default): on a true first run the desktop DEFERS
+  // starting the local gateway until this deliberate act (issue #603 — no
+  // keychain prompt before the user chooses), and `setActiveGateway` is what
+  // lifts that deferral. Skipping it when the id already matches would leave
+  // the gateway unstarted and every follow-up read hanging on an empty URL.
+  await window.CentraidApi.setActiveGateway({ id: 'local' });
 }
 
 async function commitLocal(state: ConnectFlowState): Promise<ConnectFlowResult> {
   if (!state.vaultChoice) throw new Error('Pick or create a space first.');
   await ensureLocalGatewayActive();
   if (state.vaultChoice.kind === 'create') {
+    const create = window.CentraidApi.createVault;
+    if (typeof create !== 'function') {
+      throw new Error('This host cannot create spaces — use the desktop app or the gateway CLI.');
+    }
     const name = state.newVaultName.trim();
-    const created = await window.CentraidApi.createVault({
-      name: name || undefined,
-    });
+    const created = await create({ name: name || undefined });
     await window.CentraidApi.setActiveVault({ vaultId: created.vaultId });
-    return {
-      displayLabel: 'This Mac',
-      gatewayId: 'local',
-      vaultId: created.vaultId,
-    };
+    return { displayLabel: 'This Mac', gatewayId: 'local', vaultId: created.vaultId };
   }
   const { vaultId } = state.vaultChoice;
   await window.CentraidApi.setActiveVault({ vaultId });
@@ -145,30 +167,5 @@ async function commitGateway(state: ConnectFlowState): Promise<ConnectFlowResult
     ticket: state.ticket.trim(),
   });
   if (!result.ok) throw new Error(result.message);
-  return {
-    displayLabel: result.label,
-    gatewayId: result.gatewayId,
-    vaultId: result.vaultId ?? '',
-  };
-}
-
-async function commitSsh(state: ConnectFlowState): Promise<ConnectFlowResult> {
-  if (!state.vaultChoice) throw new Error('Pick or create a space first.');
-  const vault: SshVaultInput =
-    state.vaultChoice.kind === 'create'
-      ? { kind: 'create', name: state.newVaultName.trim() }
-      : { kind: 'existing', vaultId: state.vaultChoice.vaultId };
-  const result = await bridge().sshConnectGateway({
-    dataDir: state.sshDataDir.trim() || undefined,
-    destination: state.sshDestination.trim(),
-    label: state.label.trim() || undefined,
-    rememberDevice: state.rememberDevice,
-    vault,
-  });
-  if (!result.ok) throw new Error(friendlyGatewayError(result.error, result.message));
-  return {
-    displayLabel: result.vaultName || result.gatewayId,
-    gatewayId: result.gatewayId,
-    vaultId: result.vaultId,
-  };
+  return { displayLabel: result.label, gatewayId: result.gatewayId, vaultId: result.vaultId ?? '' };
 }

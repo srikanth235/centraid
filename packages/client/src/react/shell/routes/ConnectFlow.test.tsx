@@ -1,48 +1,29 @@
 import { act } from 'react';
+import { forEachSequentially } from '@centraid/test-kit/sequential';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import ConnectFlow, { type ConnectFlowProps } from './ConnectFlow.js';
 
 vi.mock(import('../../../gateway-client.js'), () => ({
   listVaults: () => listVaultsMock(),
 }));
 
-const listVaultsMock = vi.fn<typeof import('../../../gateway-client.js').listVaults>();
-const getSettings = vi.fn<typeof window.CentraidApi.getSettings>();
-const setActiveGateway = vi.fn<typeof window.CentraidApi.setActiveGateway>();
-const setActiveVault = vi.fn<typeof window.CentraidApi.setActiveVault>();
-const createVault = vi.fn<typeof window.CentraidApi.createVault>();
-const redeemGatewayPairing = vi.fn<typeof window.CentraidApi.redeemGatewayPairing>();
-const addGateway = vi.fn<typeof window.CentraidApi.addGateway>();
-const testGatewayConnection = vi.fn<typeof window.CentraidApi.testGatewayConnection>();
-const sshConnectGateway = vi.fn<typeof window.CentraidApi.sshConnectGateway>();
+const listVaultsMock = vi.fn<(...args: unknown[]) => unknown>();
+const getSettings = vi.fn<(...args: unknown[]) => unknown>();
+const setActiveGateway = vi.fn<(...args: unknown[]) => unknown>();
+const setActiveVault = vi.fn<(...args: unknown[]) => unknown>();
+const createVault = vi.fn<(...args: unknown[]) => unknown>();
+const redeemGatewayPairing = vi.fn<(...args: unknown[]) => unknown>();
+const addGateway = vi.fn<(...args: unknown[]) => unknown>();
+const testGatewayConnection = vi.fn<(...args: unknown[]) => unknown>();
 
-function currentSettings(): Awaited<ReturnType<typeof window.CentraidApi.getSettings>> {
-  return {
-    activeGatewayId: 'local',
-    activeGatewayKind: 'local',
-    activeGatewayLabel: 'This Mac',
-    activeProfileDisplayName: 'This Mac',
-    activeProfileAvatarColor: '#4E68DD',
-    gatewayUrl: 'http://127.0.0.1:49152',
-  };
-}
-
-describe('routes/ConnectFlow', () => {
+describe('ConnectFlow scenarios', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    listVaultsMock.mockResolvedValue([
-      {
-        vaultId: 'a',
-        name: 'Personal',
-        ownerPartyId: 'party-personal',
-        color: '#4E68DD',
-      },
-    ]);
-    getSettings.mockResolvedValue(currentSettings());
-    setActiveGateway.mockResolvedValue(currentSettings());
-    setActiveVault.mockResolvedValue(currentSettings());
+    listVaultsMock.mockResolvedValue([{ vaultId: 'a', name: 'Personal', color: '#4E68DD' }]);
+    getSettings.mockResolvedValue({ activeGatewayId: 'local' });
+    setActiveGateway.mockResolvedValue({});
+    setActiveVault.mockResolvedValue({});
     createVault.mockResolvedValue({ vaultId: 'new1' });
     (globalThis as unknown as { CentraidApi: unknown }).CentraidApi = {
       addGateway,
@@ -51,7 +32,6 @@ describe('routes/ConnectFlow', () => {
       redeemGatewayPairing,
       setActiveGateway,
       setActiveVault,
-      sshConnectGateway,
       testGatewayConnection,
     };
   });
@@ -78,12 +58,11 @@ describe('routes/ConnectFlow', () => {
   }
 
   async function flush(times = 3): Promise<void> {
-    const flushNext = async (index: number): Promise<void> => {
-      if (index >= times) return;
-      await act(async () => {});
-      return flushNext(index + 1);
-    };
-    return flushNext(0);
+    await forEachSequentially(Array.from({ length: times }), async () => {
+      await act(async () => {
+        await Promise.resolve();
+      });
+    });
   }
 
   function click(el: Element | null | undefined): void {
@@ -112,45 +91,60 @@ describe('routes/ConnectFlow', () => {
   }
 
   describe(ConnectFlow, () => {
-    it('renders all three method cards by default', () => {
-      const el = mount({
-        context: 'onboarding',
-        onDone: vi.fn<ConnectFlowProps['onDone']>(),
-      });
-      expect(el.querySelectorAll('input[type="radio"]')).toHaveLength(3);
+    it('renders both surviving method cards by default — SSH is gone (#603)', () => {
+      const el = mount({ context: 'onboarding', onDone: vi.fn<(...args: unknown[]) => unknown>() });
+      expect(el.querySelectorAll('input[type="radio"]')).toHaveLength(2);
       expect(el.textContent).toContain('This Mac');
       expect(el.textContent).toContain('Existing gateway');
-      expect(el.textContent).toContain('Over SSH');
+      expect(el.textContent).not.toContain('Over SSH');
     });
 
     it('a switcher ConnectFlowModal-style caller can omit the "This Mac" card', () => {
       const el = mount({
         context: 'switcher',
-        methods: ['gateway', 'ssh'],
-        onDone: vi.fn<ConnectFlowProps['onDone']>(),
+        methods: ['gateway'],
+        onDone: vi.fn<(...args: unknown[]) => unknown>(),
       });
-      expect(el.querySelectorAll('input[type="radio"]')).toHaveLength(2);
+      expect(el.querySelectorAll('input[type="radio"]')).toHaveLength(1);
       expect(el.textContent).not.toContain('This Mac');
     });
 
-    it('onboarding + "This Mac" with exactly one existing vault completes without another click', async () => {
-      const onDone = vi.fn<ConnectFlowProps['onDone']>();
-      const el = mount({ context: 'onboarding', onDone });
+    it('initialMethod skips the method grid entirely', () => {
+      const el = mount({
+        context: 'onboarding',
+        initialMethod: 'gateway',
+        methods: ['gateway'],
+        onDone: vi.fn<(...args: unknown[]) => unknown>(),
+      });
+      expect(el.querySelector('textarea')).toBeTruthy();
+      expect(el.textContent).not.toContain('Existing gateway');
+    });
+
+    // #603: a fresh gateway auto-founds TWO vaults, so onboarding no longer
+    // auto-commits a local connect — the pick is always an explicit act.
+    it('onboarding + "This Mac" shows the picker rather than auto-committing', async () => {
+      const el = mount({ context: 'onboarding', onDone: vi.fn<(...args: unknown[]) => unknown>() });
       click(radios(el, 'This Mac')[0]);
       await flush(4);
-      expect(setActiveVault).toHaveBeenCalledWith({ vaultId: 'a' });
-      expect(onDone).toHaveBeenCalledWith({
-        displayLabel: 'This Mac',
-        gatewayId: 'local',
-        vaultId: 'a',
-      });
+      expect(el.querySelector('[role="radiogroup"][aria-label="Space"]')).toBeTruthy();
+      expect(setActiveVault).not.toHaveBeenCalled();
+    });
+
+    it('a failed local vault read shows the honest error instead of offering a create', async () => {
+      listVaultsMock.mockRejectedValue(new Error('gateway is down'));
+      const el = mount({ context: 'onboarding', onDone: vi.fn<(...args: unknown[]) => unknown>() });
+      click(radios(el, 'This Mac')[0]);
+      await flush(4);
+      expect(el.querySelector('[role="alert"]')?.textContent).toContain('gateway is down');
+      expect(el.textContent).not.toContain('Create new space');
+      const cta = [...el.querySelectorAll('button')].find(
+        (b) => b.textContent === 'Enter Centraid',
+      ) as HTMLButtonElement;
+      expect(cta.disabled).toBe(true);
     });
 
     it('switcher + "This Mac" with one vault still shows the picker (no auto-commit)', async () => {
-      const el = mount({
-        context: 'switcher',
-        onDone: vi.fn<ConnectFlowProps['onDone']>(),
-      });
+      const el = mount({ context: 'switcher', onDone: vi.fn<(...args: unknown[]) => unknown>() });
       click(radios(el, 'This Mac')[0]);
       await flush(3);
       expect(el.querySelector('[role="radiogroup"][aria-label="Space"]')).toBeTruthy();
@@ -159,10 +153,10 @@ describe('routes/ConnectFlow', () => {
 
     it('local: picking a different existing vault and committing calls setActiveVault + onDone', async () => {
       listVaultsMock.mockResolvedValue([
-        { vaultId: 'a', name: 'Personal', ownerPartyId: 'party-personal' },
-        { vaultId: 'b', name: 'Work', ownerPartyId: 'party-work' },
+        { vaultId: 'a', name: 'Personal' },
+        { vaultId: 'b', name: 'Work' },
       ]);
-      const onDone = vi.fn<ConnectFlowProps['onDone']>();
+      const onDone = vi.fn<(...args: unknown[]) => unknown>();
       const el = mount({ context: 'switcher', onDone });
       click(radios(el, 'This Mac')[0]);
       await flush(3);
@@ -183,13 +177,10 @@ describe('routes/ConnectFlow', () => {
 
     it('local: creating a new vault calls createVault + setActiveVault', async () => {
       listVaultsMock.mockResolvedValue([
-        { vaultId: 'a', name: 'Personal', ownerPartyId: 'party-personal' },
-        { vaultId: 'b', name: 'Work', ownerPartyId: 'party-work' },
+        { vaultId: 'a', name: 'Personal' },
+        { vaultId: 'b', name: 'Work' },
       ]);
-      const el = mount({
-        context: 'switcher',
-        onDone: vi.fn<ConnectFlowProps['onDone']>(),
-      });
+      const el = mount({ context: 'switcher', onDone: vi.fn<(...args: unknown[]) => unknown>() });
       click(radios(el, 'This Mac')[0]);
       await flush(3);
       const createRow = radios(el, 'Create new space')[0];
@@ -220,7 +211,7 @@ describe('routes/ConnectFlow', () => {
         vaultId: 'v1',
         vaultName: 'Office',
       });
-      const onDone = vi.fn<ConnectFlowProps['onDone']>();
+      const onDone = vi.fn<(...args: unknown[]) => unknown>();
       const el = mount({ context: 'onboarding', onDone });
       click(radios(el, 'Existing gateway')[0]);
       await flush();
@@ -230,10 +221,7 @@ describe('routes/ConnectFlow', () => {
       );
       click(continueBtn1);
       await flush(3);
-      expect(testGatewayConnection).toHaveBeenCalledWith({
-        kind: 'ticket',
-        ticket: 'a-ticket',
-      });
+      expect(testGatewayConnection).toHaveBeenCalledWith({ kind: 'ticket', ticket: 'a-ticket' });
       expect(el.textContent).toContain('Decode ticket');
 
       const continueBtn2 = [...el.querySelectorAll('button')].find(
@@ -266,10 +254,7 @@ describe('routes/ConnectFlow', () => {
         ok: false,
         stages: [{ id: 'decode', label: 'Decode ticket', status: 'fail' }],
       });
-      const el = mount({
-        context: 'onboarding',
-        onDone: vi.fn<ConnectFlowProps['onDone']>(),
-      });
+      const el = mount({ context: 'onboarding', onDone: vi.fn<(...args: unknown[]) => unknown>() });
       click(radios(el, 'Existing gateway')[0]);
       await flush();
       typeInto(el.querySelector('textarea') as HTMLTextAreaElement, 'bad-ticket');
@@ -288,73 +273,24 @@ describe('routes/ConnectFlow', () => {
       expect(testGatewayConnection).toHaveBeenCalledTimes(2);
     });
 
-    it('ssh happy path: test probes the host, existing vault picked, commit calls sshConnectGateway', async () => {
-      testGatewayConnection.mockResolvedValue({
-        ok: true,
-        stages: [{ id: 'ssh', label: 'Host reachable', status: 'pass' }],
-        vaults: [{ name: 'Remote space', vaultId: 'r1' }],
-      });
-      sshConnectGateway.mockResolvedValue({
-        gatewayId: 'gwssh',
-        ok: true,
-        vaultId: 'r1',
-        vaultName: 'Remote space',
-      });
-      const onDone = vi.fn<ConnectFlowProps['onDone']>();
-      const el = mount({
-        context: 'switcher',
-        methods: ['gateway', 'ssh'],
-        onDone,
-      });
-      click(radios(el, 'Over SSH')[0]);
-      await flush();
-      typeInto(el.querySelector('input[placeholder="user@host"]') as HTMLInputElement, 'me@box');
-      click([...el.querySelectorAll('button')].find((b) => b.textContent === 'Continue'));
-      await flush(3);
-      expect(testGatewayConnection).toHaveBeenCalledWith({
-        dataDir: undefined,
-        destination: 'me@box',
-        kind: 'ssh',
-      });
-
-      click([...el.querySelectorAll('button')].find((b) => b.textContent === 'Continue'));
-      await flush();
-      const remoteRow = radios(el, 'Remote space')[0];
-      click(remoteRow);
-      click([...el.querySelectorAll('button')].find((b) => b.textContent === 'Connect'));
-      await flush(3);
-      expect(sshConnectGateway).toHaveBeenCalledWith({
-        dataDir: undefined,
-        destination: 'me@box',
-        label: undefined,
-        rememberDevice: false,
-        vault: { kind: 'existing', vaultId: 'r1' },
-      });
-      expect(onDone).toHaveBeenCalledWith({
-        displayLabel: 'Remote space',
-        gatewayId: 'gwssh',
-        vaultId: 'r1',
-      });
-    });
-
     it('a failed commit lands on the error step with a Retry that re-attempts', async () => {
-      testGatewayConnection.mockResolvedValue({
-        ok: true,
-        stages: [],
-        vaults: [{ name: 'A', vaultId: 'a' }],
-      });
-      sshConnectGateway.mockRejectedValueOnce(new Error('host unreachable'));
-      sshConnectGateway.mockResolvedValueOnce({
+      redeemGatewayPairing.mockRejectedValueOnce(new Error('host unreachable'));
+      redeemGatewayPairing.mockResolvedValueOnce({
         gatewayId: 'gw',
         ok: true,
         vaultId: 'a',
         vaultName: 'A',
       });
-      const onDone = vi.fn<ConnectFlowProps['onDone']>();
-      const el = mount({ context: 'switcher', methods: ['ssh'], onDone });
-      click(radios(el, 'Over SSH')[0]);
+      testGatewayConnection.mockResolvedValue({
+        ok: true,
+        stages: [],
+        ticket: { expiresAt: '', gatewayEndpointId: '', vaultName: 'A' },
+      });
+      const onDone = vi.fn<(...args: unknown[]) => unknown>();
+      const el = mount({ context: 'switcher', methods: ['gateway'], onDone });
+      click(radios(el, 'Existing gateway')[0]);
       await flush();
-      typeInto(el.querySelector('input[placeholder="user@host"]') as HTMLInputElement, 'me@box');
+      typeInto(el.querySelector('textarea') as HTMLTextAreaElement, 'a-ticket');
       click([...el.querySelectorAll('button')].find((b) => b.textContent === 'Continue'));
       await flush(3);
       click([...el.querySelectorAll('button')].find((b) => b.textContent === 'Continue'));
@@ -365,19 +301,15 @@ describe('routes/ConnectFlow', () => {
 
       click([...el.querySelectorAll('button')].find((b) => b.textContent === 'Retry'));
       await flush(3);
-      expect(onDone).toHaveBeenCalledWith({
-        displayLabel: 'A',
-        gatewayId: 'gw',
-        vaultId: 'a',
-      });
+      expect(onDone).toHaveBeenCalledWith({ displayLabel: 'A', gatewayId: 'gw', vaultId: 'a' });
     });
 
     it('"Start over" fires onCancel when supplied', () => {
-      const onCancel = vi.fn<NonNullable<ConnectFlowProps['onCancel']>>();
+      const onCancel = vi.fn<(...args: unknown[]) => unknown>();
       const el = mount({
         context: 'onboarding',
         onCancel,
-        onDone: vi.fn<ConnectFlowProps['onDone']>(),
+        onDone: vi.fn<(...args: unknown[]) => unknown>(),
       });
       click([...el.querySelectorAll('button')].find((b) => b.textContent === 'Start over'));
       expect(onCancel).toHaveBeenCalledOnce();

@@ -1,20 +1,18 @@
-import { spawn } from 'node:child_process';
-import crypto from 'node:crypto';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import url from 'node:url';
-
-import type { PrefsStore } from '@centraid/app-engine';
 import { tempDir } from '@centraid/test-kit/temp-dir';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-
+import { describe, afterEach, beforeEach, expect, test } from 'vitest';
+import { promises as fs } from 'node:fs';
+import { spawn } from 'node:child_process';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import url from 'node:url';
+import { validateConfig, DaemonConfigError } from './config.ts';
+import { buildPrefsPatch, seedRunnerPrefs } from './runner-prefs.ts';
+import type { PrefsStore } from '@centraid/app-engine';
+import { daemonLayoutFor } from './paths.ts';
+import { platformDefaultDataDir } from './data-dir.ts';
+import { isProcessMainModule, parseServeArgsPure, timingSafeTokenEqual } from './cli.ts';
 // Also name the pure helper module so cold-spot reachability is unambiguous.
 import { parseServeArgsPure as pureFromHelper } from './cli-serve-args.ts';
-import { isProcessMainModule, parseServeArgsPure, timingSafeTokenEqual } from './cli.ts';
-import { validateConfig, DaemonConfigError } from './config.ts';
-import { platformDefaultDataDir } from './data-dir.ts';
-import { daemonLayoutFor } from './paths.ts';
-import { buildPrefsPatch, seedRunnerPrefs } from './runner-prefs.ts';
 
 const here = import.meta.dirname;
 const CLI_TS = path.resolve(here, 'cli.ts');
@@ -22,7 +20,7 @@ const TSX_BIN = path.resolve(here, '..', '..', '..', 'node_modules', '.bin', 'ts
 
 let dataDir: string;
 
-describe('cli', () => {
+describe('cli scenarios', () => {
   beforeEach(async () => {
     dataDir = await tempDir(`centraid-gateway-${crypto.randomUUID()}-`);
   });
@@ -43,8 +41,6 @@ describe('cli', () => {
       'gateway.local',
       '--allowed-host',
       'other.local',
-      '--init-vault',
-      'Kit-less test vault',
       '--config',
       '/tmp/cfg.json',
     ]);
@@ -55,27 +51,18 @@ describe('cli', () => {
         host: '0.0.0.0',
         port: 8765,
         allowedHosts: ['gateway.local', 'other.local'],
-        initVaultName: 'Kit-less test vault',
         configPath: '/tmp/cfg.json',
       },
     });
   });
 
   test('platform default data dir stays outside app userData conventions', () => {
-    expect(
-      platformDefaultDataDir({
-        platform: 'darwin',
-        homeDir: '/Users/alice',
-        env: {},
-      }),
-    ).toBe('/Users/alice/Library/Application Support/centraid/gateway');
-    expect(
-      platformDefaultDataDir({
-        platform: 'linux',
-        homeDir: '/home/alice',
-        env: {},
-      }),
-    ).toBe('/home/alice/.local/share/centraid/gateway');
+    expect(platformDefaultDataDir({ platform: 'darwin', homeDir: '/Users/alice', env: {} })).toBe(
+      '/Users/alice/Library/Application Support/centraid/gateway',
+    );
+    expect(platformDefaultDataDir({ platform: 'linux', homeDir: '/home/alice', env: {} })).toBe(
+      '/home/alice/.local/share/centraid/gateway',
+    );
     expect(
       platformDefaultDataDir({
         platform: 'win32',
@@ -106,10 +93,7 @@ describe('cli', () => {
       message: 'unknown flag "--nope"',
       code: 2,
     });
-    expect(parseServeArgsPure(['--help'])).toStrictEqual({
-      ok: false,
-      help: true,
-    });
+    expect(parseServeArgsPure(['--help'])).toStrictEqual({ ok: false, help: true });
   });
 
   test('timingSafeTokenEqual matches equal secrets and rejects length/content mismatches', () => {
@@ -142,18 +126,12 @@ describe('cli', () => {
   });
 
   test('validateConfig accepts a minimal config and a fully populated one', () => {
-    expect(validateConfig({ dataDir: '/tmp/x' })).toStrictEqual({
-      dataDir: '/tmp/x',
-    });
+    expect(validateConfig({ dataDir: '/tmp/x' })).toStrictEqual({ dataDir: '/tmp/x' });
     const full = validateConfig({
       dataDir: '/tmp/x',
       host: '0.0.0.0',
       port: 8765,
-      runner: {
-        kind: 'codex',
-        binPath: '/opt/bin/codex',
-        extraArgs: ['--foo'],
-      },
+      runner: { kind: 'codex', binPath: '/opt/bin/codex', extraArgs: ['--foo'] },
     });
     expect(full.runner?.kind).toBe('codex');
     expect(full.runner?.binPath).toBe('/opt/bin/codex');
@@ -225,10 +203,7 @@ describe('cli', () => {
     const child = spawn(
       TSX_BIN,
       [CLI_TS, 'serve', '--data-dir', dataDir, '--host', '127.0.0.1', '--port', '0'],
-      {
-        stdio: ['ignore', 'pipe', 'pipe'],
-        env: { ...process.env, CENTRAID_GATEWAY_TOKEN: token },
-      },
+      { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, CENTRAID_GATEWAY_TOKEN: token } },
     );
     let stdout = '';
     let stderr = '';
@@ -250,7 +225,7 @@ describe('cli', () => {
         const urlMatch = stdout.match(/listening on (?<url>http:\/\/[^\s]+)/u);
         if (urlMatch) {
           clearTimeout(timer);
-          resolve(urlMatch[1]!);
+          resolve(urlMatch.groups!.url!);
         }
       };
       child.stdout.on('data', check);

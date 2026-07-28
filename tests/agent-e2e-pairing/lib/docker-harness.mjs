@@ -918,8 +918,7 @@ export async function runFlow(slug, fn) {
       'bash',
       '-c',
       `apt-get update -qq >/dev/null 2>&1 && apt-get install -y -qq git >/dev/null 2>&1 && ` +
-        `exec node ${GATEWAY_CLI_REL} serve --data-dir ${GW_DATA_DIR} ` +
-        `--init-vault 'Pairing E2E'`,
+        `exec node ${GATEWAY_CLI_REL} serve --data-dir ${GW_DATA_DIR}`,
     ]);
     state.gateway = await waitForGatewayReady(gwName, path.join(runDir, 'gateway.log'));
     console.log(

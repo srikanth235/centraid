@@ -1,57 +1,53 @@
+import { type JSX, useEffect, useReducer, useRef } from 'react';
 import type { IconName } from '@centraid/design-tokens';
 import { tileFinish } from '@centraid/design-tokens';
-import { type JSX, useEffect, useReducer, useRef } from 'react';
-
-import { cx } from '../../ui/cx.js';
 import Icon from '../../ui/Icon.js';
+import { cx } from '../../ui/cx.js';
+import buttonCss from '../../ui/Button.module.css';
+import a11y from '../../styles/a11y.module.css';
+import controlsCss from '../../styles/controls.module.css';
+import { PROFILE_COLORS } from './SpaceModal.js';
+import HandshakeLadder, { reportSummaryText } from './HandshakeLadder.js';
+import { GatewayDetailsStep } from './ConnectFlowDetailsStep.js';
+import { VaultStep } from './ConnectFlowVaultStep.js';
+import { commitConnectFlow, loadLocalVaults, runConnectivityTest } from './connectFlowIO.js';
 import {
   buildTestInput,
   connectFlowReducer,
   createInitialConnectFlowState,
   type ConnectFlowResult,
   type ConnectMethod,
-  type VaultChoice,
 } from './connectFlow-core.js';
-import { GatewayDetailsStep, SshDetailsStep } from './ConnectFlowDetailsStep.js';
-import { commitConnectFlow, loadLocalVaults, runConnectivityTest } from './connectFlowIO.js';
-import { VaultStep } from './ConnectFlowVaultStep.js';
-import HandshakeLadder, { reportSummaryText } from './HandshakeLadder.js';
-import { PROFILE_COLORS } from './SpaceModal.js';
-
-import a11y from '../../styles/a11y.module.css';
-import controlsCss from '../../styles/controls.module.css';
-import buttonCss from '../../ui/Button.module.css';
 import styles from './ConnectFlow.module.css';
 
-// The shared connect wizard (issue #382) — three top-level methods (This
-// Mac / Existing gateway / Over SSH), a connectivity-test "handshake ladder"
+// The shared connect wizard (issue #382) — two top-level methods (This Mac /
+// Existing gateway), a connectivity-test "handshake ladder"
 // (HandshakeLadder.tsx), then a vault pick/create step, then commit. Used
-// embedded in onboarding step 2 AND wrapped in a modal for the switcher's
-// "Add gateway" action (see ConnectFlowModal.tsx). All the state transitions
-// live in the pure `connectFlow-core.ts`; this component only dispatches
-// events and runs the IO (`connectFlowIO.ts`) the transitions ask for.
+// embedded in onboarding's ticket path AND wrapped in a modal for the
+// switcher's "Add gateway" action (see ConnectFlowModal.tsx). All the state
+// transitions live in the pure `connectFlow-core.ts`; this component only
+// dispatches events and runs the IO (`connectFlowIO.ts`) the transitions ask
+// for.
 
 export interface ConnectFlowProps {
-  /**
-   * 'onboarding': choosing "This Mac" with 0-or-1 existing local vault
-   * completes immediately (no extra click) — the design doc's "'This Mac'
-   * completes immediately (existing default vault)" requirement, since a
-   * fresh install always has exactly one. 'switcher': the vault step always
-   * shows, since a returning user may have several local spaces to choose
-   * from or want to explicitly create one.
-   */
+  /** Only the commit button's copy ("Enter Centraid" vs "Connect") — the
+   *  steps themselves are identical. First run no longer auto-commits a local
+   *  connect (issue #603): a fresh gateway founds two vaults, so "which one"
+   *  is a real question and the desktop chooser answers it before we get
+   *  here. */
   context: 'onboarding' | 'switcher';
-  /** Method cards to offer. Defaults to all three; the switcher's "Add
-   *  gateway" passes `['gateway', 'ssh']` — 'local' is always already
-   *  registered there, so re-offering it wouldn't add a connection. */
+  /** Method cards to offer. Defaults to both; the switcher's "Add gateway"
+   *  passes `['gateway']` — 'local' is always already registered there, so
+   *  re-offering it wouldn't add a connection. */
   methods?: readonly ConnectMethod[];
+  /** Skip the method grid and open straight into this method's first step —
+   *  for hosts that already made the choice (issue #603 first run). */
+  initialMethod?: ConnectMethod;
   onDone: (result: ConnectFlowResult) => void;
   /** Omit to hide the "Start over" affordance (the onboarding host renders
    *  its own back-to-identity step instead). */
   onCancel?: () => void;
 }
-
-const DEFAULT_CONNECT_METHODS: readonly ConnectMethod[] = ['local', 'gateway', 'ssh'];
 
 const METHOD_CARDS: ReadonlyArray<{
   method: ConnectMethod;
@@ -69,29 +65,28 @@ const METHOD_CARDS: ReadonlyArray<{
   },
   {
     color: PROFILE_COLORS[3]!,
-    desc: 'Paste a pairing ticket, or connect by URL.',
+    desc: 'Paste or scan a pair ticket.',
     icon: 'Wifi',
     method: 'gateway',
     title: 'Existing gateway',
   },
-  {
-    color: PROFILE_COLORS[7]!,
-    desc: 'Drive a centraid-gateway host over SSH.',
-    icon: 'Command',
-    method: 'ssh',
-    title: 'Over SSH',
-  },
 ];
+
+const DEFAULT_METHODS: ConnectFlowProps['methods'] = ['local', 'gateway'];
 
 export default function ConnectFlow({
   context,
-  methods = DEFAULT_CONNECT_METHODS,
+  methods = DEFAULT_METHODS,
+  initialMethod,
   onDone,
   onCancel,
 }: ConnectFlowProps): JSX.Element {
-  const [state, dispatch] = useReducer(connectFlowReducer, null, createInitialConnectFlowState);
+  const [state, dispatch] = useReducer(
+    connectFlowReducer,
+    initialMethod ?? null,
+    createInitialConnectFlowState,
+  );
   const ticketRef = useRef<HTMLTextAreaElement>(null);
-  const sshRef = useRef<HTMLInputElement>(null);
 
   // Run the connectivity test whenever `startTest` puts us in `testing`.
   useEffect(() => {
@@ -99,10 +94,7 @@ export default function ConnectFlow({
     let alive = true;
     const input = buildTestInput(state);
     if (!input) {
-      dispatch({
-        report: { error: 'invalid_input', ok: false, stages: [] },
-        type: 'testSettled',
-      });
+      dispatch({ report: { error: 'invalid_input', ok: false, stages: [] }, type: 'testSettled' });
       return;
     }
     void runConnectivityTest(input).then((report) => {
@@ -111,7 +103,7 @@ export default function ConnectFlow({
     return () => {
       alive = false;
     };
-  }, [state.step, state.testing, state]);
+  }, [state.step, state.testing]);
 
   // "This Mac" has no test step — load its existing vaults straight into
   // the same `report.vaults` shape the vault step already knows how to
@@ -119,27 +111,13 @@ export default function ConnectFlow({
   useEffect(() => {
     if (state.method !== 'local' || state.step !== 'vault' || state.report) return;
     let alive = true;
-    void loadLocalVaults().then((vaults) => {
-      if (alive) dispatch({ type: 'localVaultsLoaded', vaults: vaults ?? [] });
+    void loadLocalVaults().then((result) => {
+      if (alive) dispatch({ type: 'localVaultsLoaded', result });
     });
     return () => {
       alive = false;
     };
   }, [state.method, state.step, state.report]);
-
-  // Onboarding's "completes immediately" contract: a fresh install has
-  // exactly one (or zero) local vault, so once it's loaded, pick it (or
-  // "create default") and commit without waiting for a click.
-  useEffect(() => {
-    if (context !== 'onboarding' || state.method !== 'local' || state.step !== 'vault') return;
-    if (!state.report || state.vaultChoice) return;
-    const vaults = state.report.vaults ?? [];
-    if (vaults.length > 1) return;
-    const choice: VaultChoice =
-      vaults.length === 1 ? { kind: 'existing', vaultId: vaults[0]!.vaultId } : { kind: 'create' };
-    dispatch({ choice, type: 'selectVault' });
-    dispatch({ type: 'commit' });
-  }, [context, state.method, state.step, state.report, state.vaultChoice]);
 
   // Run the commit whenever a `commit` dispatch lands us in `committing`.
   useEffect(() => {
@@ -160,19 +138,15 @@ export default function ConnectFlow({
     return () => {
       alive = false;
     };
-  }, [state.step, state]);
+  }, [state.step]);
 
   useEffect(() => {
     if (state.step === 'done' && state.result) onDone(state.result);
-  }, [state.step, state.result, onDone]);
+  }, [state.step, state.result]);
 
   useEffect(() => {
     if (state.step === 'details' && state.method === 'gateway') {
       const id = requestAnimationFrame(() => ticketRef.current?.focus());
-      return () => cancelAnimationFrame(id);
-    }
-    if (state.step === 'details' && state.method === 'ssh') {
-      const id = requestAnimationFrame(() => sshRef.current?.focus());
       return () => cancelAnimationFrame(id);
     }
   }, [state.step, state.method]);
@@ -216,10 +190,6 @@ export default function ConnectFlow({
 
       {state.step === 'details' && state.method === 'gateway' ? (
         <GatewayDetailsStep state={state} dispatch={dispatch} ticketRef={ticketRef} />
-      ) : null}
-
-      {state.step === 'details' && state.method === 'ssh' ? (
-        <SshDetailsStep state={state} dispatch={dispatch} sshRef={sshRef} />
       ) : null}
 
       {state.step === 'test' ? (

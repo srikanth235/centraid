@@ -1,5 +1,5 @@
 /*
- * Host-possession authentication for the gateway's founding/control lane.
+ * Host-possession authentication for the gateway's loopback control lane.
  *
  * The daemon never persists a reusable HTTP token. Instead, the loopback
  * bearer is DERIVED from the gateway endpoint secret, which is already under

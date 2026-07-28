@@ -270,16 +270,6 @@ export interface CentraidGatewayProfile {
   relayHint?: string;
   /** Explicit pairing consent for durable replica, outbox, and media caches. */
   rememberDevice?: boolean;
-  /**
-   * SSH admin channel (issue #382) — present once this gateway has been
-   * reached over SSH (the ConnectFlow "Over SSH" method, or a prior
-   * ssh-routed vault create). Independent of `transport`. Its presence is
-   * the "can create a vault here" signal for a remote gateway: the
-   * switcher/ConnectFlow derive that capability as `kind === 'local' ||
-   * Boolean(ssh)` — a remote profile with no `ssh` block
-   * still refuses vault create/delete (server-side admin act only).
-   */
-  ssh?: { destination: string; dataDir?: string; remoteCli?: string };
   createdAt: string;
 }
 
@@ -320,18 +310,18 @@ export type CentraidListGatewayVaultsResult =
 
 /**
  * Input to `testGatewayConnection` (issue #382) — the ConnectFlow wizard's
- * "handshake ladder", one shape per connect method. `ssh` and `gateway`
- * never carry a bearer token (ssh auth rides the user's key; `gateway`
- * resolves the already-known profile's own credential).
+ * "handshake ladder", one shape per connect method. Neither carries a bearer
+ * token: `ticket` proves itself, `gateway` resolves the already-known
+ * profile's own credential. The `ssh` variant died with the SSH connect
+ * method (issue #603).
  */
 export type CentraidTestConnectionInput =
   | { kind: 'ticket'; ticket: string }
-  | { kind: 'ssh'; destination: string; dataDir?: string }
   | { kind: 'gateway'; gatewayId: string };
 
 /** One step of the connectivity-test "handshake ladder". */
 export interface CentraidConnectivityStage {
-  id: 'reach' | 'identify' | 'auth' | 'vaults' | 'ssh' | 'cli' | 'daemon' | 'decode';
+  id: 'reach' | 'identify' | 'auth' | 'vaults' | 'decode';
   label: string;
   status: 'pass' | 'fail' | 'skip';
   /** Human-actionable detail — always present on `fail`, sometimes on `pass`. */
@@ -343,8 +333,7 @@ export interface CentraidConnectivityStage {
  * failed stage with a human-actionable `detail`, plus a stable top-level
  * `error` code for the first failure. Stage set (and which of
  * `gateway`/`vaults`/`ticket` gets populated) depends on the input `kind`:
- * `url`/`gateway` run reach→identify→auth→vaults; `ticket` runs decode
- * only; `ssh` runs ssh→cli→daemon→vaults.
+ * `gateway` runs reach→identify→auth→vaults; `ticket` runs decode only.
  */
 export interface CentraidConnectivityReport {
   ok: boolean;
@@ -357,21 +346,11 @@ export interface CentraidConnectivityReport {
     instanceId: string;
     compatible: boolean;
   };
-  vaults?: Array<{
-    vaultId: string;
-    name: string;
-    color?: string;
-    icon?: string;
-  }>;
+  vaults?: Array<{ vaultId: string; name: string; color?: string; icon?: string }>;
   ticket?: { vaultName: string; expiresAt: string; gatewayEndpointId: string };
   /** Stable code for the FIRST failing stage — absent when `ok`. */
   error?: string;
 }
-
-/** Result of `sshConnectGateway` — the ConnectFlow "Over SSH" commit step. */
-export type CentraidSshConnectResult =
-  | { ok: true; gatewayId: string; vaultId: string; vaultName: string }
-  | { ok: false; error: string; message: string };
 
 /**
  * Which coding-agent CLIs are runnable on the GATEWAY host. Probed
@@ -641,7 +620,7 @@ export interface CentraidTemplateMeta {
   /** Gallery section header (e.g. 'Daily rhythm'). */
   category?: string;
   /** Trigger-style glyph picker on the card. */
-  triggerKind?: 'cron' | 'webhook' | 'data' | 'condition';
+  triggerKind?: 'cron' | 'webhook';
   /** Human-readable trigger label (e.g. 'Weekdays · 6:00 PM'). */
   triggerLabel?: string;
   /** Integration chip labels (e.g. ['Gmail', 'Slack']). */
@@ -857,21 +836,6 @@ interface CentraidApi {
     input: CentraidTestConnectionInput,
   ) => Promise<CentraidConnectivityReport>;
   /**
-   * ConnectFlow "Over SSH" commit step (issue #382): (optionally) create a
-   * vault on the remote box, mint a pairing ticket over ssh, and redeem it
-   * locally — same atomic "enroll + activate" `redeemGatewayPairing`
-   * always runs, so treat success like a combined `setActiveGateway` +
-   * `setActiveVault` and drop gateway/vault-scoped state; the same
-   * `onGatewayChanged`/`onVaultChanged` broadcasts fire. Never rejects.
-   */
-  sshConnectGateway: (input: {
-    destination: string;
-    dataDir?: string;
-    label?: string;
-    rememberDevice?: boolean;
-    vault: { kind: 'existing'; vaultId: string } | { kind: 'create'; name: string };
-  }) => Promise<CentraidSshConnectResult>;
-  /**
    * Latest gateway-runtime snapshot from the main-process heartbeat
    * monitor. Resolves immediately from the last poll (≤5s old); the first
    * call after launch may run a probe.
@@ -911,10 +875,12 @@ interface CentraidApi {
   /**
    * Create a vault on the active gateway (issue #289). Admin act: works for
    * the desktop's own LOCAL gateway (the desktop is its landlord); rejects
-   * for a remote gateway (its vault lifecycle is the server CLI over SSH).
+   * for a remote gateway (its vault lifecycle belongs to its own host's CLI).
    * The new vault does NOT become active implicitly — call `setActiveVault`.
+   * Optional: a host that cannot administer vaults (the web PWA) omits it,
+   * and callers gate on `typeof createVault === 'function'`.
    */
-  createVault: (input: { name?: string }) => Promise<{ vaultId: string }>;
+  createVault?: (input: { name?: string }) => Promise<{ vaultId: string }>;
   /**
    * Delete a vault on the active LOCAL gateway (issue #289). Rejects for a
    * remote gateway. Clears the client's active-vault pointer first if it
@@ -972,6 +938,14 @@ interface CentraidApi {
    * (`centraid-gateway service install`). Never silent; onboarding offers it.
    */
   installGatewayService?: () => Promise<{ ok: true } | { ok: false; error: string }>;
+
+  /**
+   * Whether the OS will show a keychain/keyring dialog on this host's first
+   * secret write (dev/unsigned macOS builds, some Linux keyrings — issue
+   * #603). Onboarding uses it to precede that write with a one-line note so
+   * the OS prompt is expected, not spooky. Desktop-only; web omits it.
+   */
+  keychainPromptExpected?: () => Promise<boolean>;
 
   // ----- "What's new" changelog -----
   /**
@@ -1406,11 +1380,7 @@ export type CentraidResourceKnobKey =
 export interface CentraidResourceProfile {
   class: 'constrained' | 'standard';
   mode: 'auto' | 'conserve' | 'balanced' | 'performance';
-  host: {
-    cores: number;
-    totalMemoryBytes: number;
-    storageFsyncMs: number | null;
-  };
+  host: { cores: number; totalMemoryBytes: number; storageFsyncMs: number | null };
   resolved: {
     workerMaxConcurrent: number;
     workerMaxOldGenerationMb: number;

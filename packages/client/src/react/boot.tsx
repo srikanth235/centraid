@@ -13,22 +13,17 @@ import '../theme-vars.js';
 import '../icons.js';
 import type { ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-
+import { Gallery } from './ui/index.js';
+import App from './shell/App.js';
+import ErrorBoundary from './shell/ErrorBoundary.js';
+import FirstRunGate from './screens/FirstRunGate.js';
+import { resetGatewayAuthCache } from '../gateway-client-core.js';
+import { updateVault } from '../gateway-client-vault.js';
+import { isWebHost } from './host-platform.js';
 import {
   consumeInitialAssistHandoff,
   installDesktopAssistHandoff,
 } from '../assist-oauth-handoff.js';
-import { resetGatewayAuthCache } from '../gateway-client-core.js';
-import {
-  getGatewayFoundingStatus,
-  initializeGatewayVault,
-  restoreGatewayVault,
-  verifyGatewayFoundingKit,
-} from '../gateway-client-founding.js';
-import FirstRunGate from './screens/FirstRunGate.js';
-import App from './shell/App.js';
-import ErrorBoundary from './shell/ErrorBoundary.js';
-import { Gallery } from './ui/index.js';
 
 // Install terminal replica cleanup before any AppFrame asks for a local read;
 // inactive gateway removal and vault switches must also reach dormant storage.
@@ -93,10 +88,10 @@ window.addEventListener('hashchange', sync);
 sync();
 
 // ── The shell (#325 flip) ────────────────────────────────────────────────
-// React now owns #root: one root on #root renders either the first-run gate or
-// the App shell, replacing the retired vanilla app.ts IIFE. An uninitialized
-// gateway offers Create / Restore; a founded gateway only offers device
-// onboarding. Both paths converge on the same persisted completion state.
+// React owns #root: one root on #root renders either the first-run gate or
+// the App shell, replacing the retired vanilla app.ts IIFE. First paint no
+// longer probes the gateway (issue #603 deleted the founding plane): the gate
+// decides on platform + the persisted onboarding stamp alone.
 void (async (): Promise<void> => {
   const shell = document.querySelector<HTMLElement>(SHELL_SELECTOR);
   if (!shell) return;
@@ -120,51 +115,46 @@ void (async (): Promise<void> => {
   void assistHandoffPromise.then((assistHandoff) => {
     if (assistHandoff.status === 'error') window.alert(assistHandoff.message);
   });
+  // Both throws are deliberate: OnboardingScreen catches whatever
+  // `onOnboardingComplete` rejects with and renders it inline, so a failed
+  // profile write or settings save shows up instead of silently stranding the
+  // user on a "completed" first run that never persisted.
   const enterApp = async (): Promise<void> => {
     resetGatewayAuthCache();
     await window.CentraidApi.saveSettings({
       onboardingCompletedAt: new Date().toISOString(),
-    }).catch(() => undefined);
+    });
     shellRoot.render(wrap(<App />));
   };
-  const renderFirstRun = (
-    gatewayStatus: 'uninitialized' | 'ready' | 'unreachable',
-    foundingPending = false,
-  ): void => {
-    shellRoot.render(
-      wrap(
-        <FirstRunGate
-          gatewayStatus={gatewayStatus}
-          foundingPending={foundingPending}
-          founding={{
-            initialize: initializeGatewayVault,
-            verify: verifyGatewayFoundingKit,
-            restore: restoreGatewayVault,
-          }}
-          onFoundingComplete={enterApp}
-          onOnboardingComplete={async ({ displayName, avatarColor, gatewayId }) => {
-            // Write metadata to the gateway ConnectFlow actually connected. If
-            // that gateway is still empty, continue into its founding ceremony
-            // before persisting onboarding completion.
-            await window.CentraidApi.updateProfileMetadata({
-              id: gatewayId || 'local',
-              displayName,
-              avatarColor,
-            }).catch(() => undefined);
-            resetGatewayAuthCache();
-            const founding = await getGatewayFoundingStatus().catch(() => undefined);
-            if (founding?.status === 'uninitialized') {
-              renderFirstRun('uninitialized', founding.foundingPending === true);
-              return;
-            }
-            await enterApp();
-          }}
-        />,
-      ),
-    );
-  };
-  const initial = await getGatewayFoundingStatus().catch(() => undefined);
-  renderFirstRun(initial?.status ?? 'unreachable', initial?.foundingPending === true);
+  shellRoot.render(
+    wrap(
+      <FirstRunGate
+        host={isWebHost() ? 'web' : 'desktop'}
+        onOnboardingComplete={async ({ displayName, avatarColor, gatewayId, vaultId, path }) => {
+          // Write metadata to the gateway this run actually connected.
+          await window.CentraidApi.updateProfileMetadata({
+            id: gatewayId || 'local',
+            displayName,
+            avatarColor,
+          });
+          resetGatewayAuthCache();
+          if (path === 'fresh' && vaultId) {
+            // The auto-founded owner vault ships as "Personal"; first run
+            // makes it theirs. Deliberately non-fatal — the user is already
+            // in, and a generically-named space is a cosmetic problem they
+            // can fix in Settings, not a reason to block onboarding. Logged
+            // rather than swallowed so it is diagnosable.
+            await updateVault({ vaultId, name: displayName, color: avatarColor }).catch(
+              (err: unknown) => {
+                console.error('[first-run] renaming the Personal vault failed', err);
+              },
+            );
+          }
+          await enterApp();
+        }}
+      />,
+    ),
+  );
 })();
 
 const READY_LOG = '[react] renderer ready — App on #root; open %s for the component gallery';

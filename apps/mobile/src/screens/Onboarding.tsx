@@ -1,35 +1,35 @@
-import { CameraView, useCameraPermissions } from 'expo-camera';
-import * as Haptics from 'expo-haptics';
-// governance: allow-repo-hygiene file-size-limit cohesive founding/onboarding ceremony — connection scan, create/restore peers, mandatory kit share + reselect proof, and terminal state share one state machine
 import React, { useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Svg, { Circle, Defs, Ellipse, G, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as Haptics from 'expo-haptics';
 
+import { BrandMark, DoneCheck, ForwardArrow, OrbitArt } from './onboarding-art';
 import { family } from '../kit/theme';
-import { isTunnelAvailable, pair, parsePairingInput } from '../lib/phone-link';
-import { BRAND_TEAL, setOnboarded, setProfileColor, setProfileName } from '../lib/profile';
-import { pickRecoveryKit, shareRecoveryKit } from '../lib/recovery-kit-files';
 import {
-  initializeMobileVault,
-  prepareMobileFounding,
-  rememberInitializedVault,
-  rememberRestoredVaults,
-  restoreMobileVaults,
-  verifyMobileFoundingKit,
-  type MobileFoundingSession,
-  type MobileInitializeResult,
-} from '../lib/vault-founding';
+  BRAND_TEAL,
+  PROFILE_COLORS,
+  initialsOf,
+  setOnboarded,
+  setProfileColor,
+  setProfileName,
+} from '../lib/profile';
+import { isTunnelAvailable, pair } from '../lib/phone-link';
 
 // First-run onboarding — a self-contained, always-dark flow rendered ahead of
-// the tab shell (App.tsx gates on `profile.onboarded`). It captures a display
-// name only after a real device enrollment exists. Ordinary pairing completes
-// directly. A zero-vault SSH ticket unlocks Create / Restore peer paths and no
-// route to Home exists until the server ceremony completes.
+// the tab shell (App.tsx gates on `profile.onboarded`).
+//
+// There is exactly one way in: a pair ticket (issue #603). A gateway founds
+// itself when it first starts, so the phone never creates or restores vaults —
+// it enrolls as a device and lands in the gateway's Shared vault by default.
+// Once the enrollment is real we collect the person's display name and accent
+// colour (the same fields Settings → You edits), then hand off to the shell.
 
-type Step = 'connect' | 'choice' | 'create' | 'verify' | 'restore' | 'done';
+type Step = 'connect' | 'profile' | 'done';
 
-// Always-dark onboarding palette (independent of the OS theme).
+// Always-dark onboarding palette (independent of the OS theme). Settings'
+// ColorSwatchRow resolves against the OS scheme, so onboarding renders its own
+// swatch row here over the shared PROFILE_COLORS set.
 const C = {
   bg: '#0b0e13',
   panel: 'rgba(255,255,255,.055)',
@@ -49,15 +49,18 @@ function defaultDeviceName(): string {
 
 export default function Onboarding({ onDone }: { onDone: () => void }): React.JSX.Element {
   const [step, setStep] = useState<Step>('connect');
-  const [name, setName] = useState(defaultDeviceName());
-  const [session, setSession] = useState<MobileFoundingSession>();
-  const [initialized, setInitialized] = useState<MobileInitializeResult>();
-  const [foundingPassword, setFoundingPassword] = useState('');
+  const [deviceName, setDeviceName] = useState(defaultDeviceName());
+  const [displayName, setDisplayName] = useState('');
+
+  const saveProfile = (name: string, color: string): void => {
+    setProfileName(name);
+    setProfileColor(color);
+    setOnboarded(true);
+    setDisplayName(name);
+    setStep('done');
+  };
 
   const enter = (): void => {
-    setProfileName(name);
-    setProfileColor(BRAND_TEAL);
-    setOnboarded(true);
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     onDone();
   };
@@ -82,85 +85,17 @@ export default function Onboarding({ onDone }: { onDone: () => void }): React.JS
 
         {step === 'connect' ? (
           <ConnectionStep
-            deviceName={name}
-            onDeviceName={setName}
-            onPaired={() => setStep('done')}
-            onFounding={(next) => {
-              setSession(next);
-              setStep('choice');
-            }}
+            deviceName={deviceName}
+            onDeviceName={setDeviceName}
+            onPaired={() => setStep('profile')}
           />
-        ) : step === 'choice' && session ? (
-          <FoundingChoice
-            onCreate={() => setStep('create')}
-            onRestore={() => setStep('restore')}
-            onBack={() => {
-              setSession(undefined);
-              setStep('connect');
-            }}
-          />
-        ) : step === 'create' && session ? (
-          <CreateVaultStep
-            session={session}
-            deviceName={name}
-            onCreated={(result, password) => {
-              setInitialized(result);
-              setFoundingPassword(password);
-              setStep('verify');
-            }}
-            onBack={() => setStep('choice')}
-          />
-        ) : step === 'verify' && session && initialized ? (
-          <VerifyKitStep
-            session={session}
-            initialized={initialized}
-            password={foundingPassword}
-            onComplete={() => setStep('done')}
-          />
-        ) : step === 'restore' && session ? (
-          <RestoreVaultStep
-            session={session}
-            deviceName={name}
-            onComplete={() => setStep('done')}
-            onBack={() => setStep('choice')}
-          />
+        ) : step === 'profile' ? (
+          <ProfileStep onSave={saveProfile} />
         ) : (
-          <Done name={name} onEnter={enter} />
+          <Done name={displayName} onEnter={enter} />
         )}
       </ScrollView>
     </SafeAreaView>
-  );
-}
-
-function FoundingChoice({
-  onCreate,
-  onRestore,
-  onBack,
-}: {
-  onCreate: () => void;
-  onRestore: () => void;
-  onBack: () => void;
-}): React.JSX.Element {
-  return (
-    <View>
-      <Text style={styles.h1}>
-        Found this <Text style={styles.h1Accent}>gateway</Text>.
-      </Text>
-      <Text style={styles.lede}>Starting fresh, or bringing a vault back from a backup?</Text>
-      <ChoiceCard
-        title="Create vault"
-        sub="Found a brand-new local-only vault and save its wrapped recovery kit."
-        onPress={onCreate}
-      />
-      <ChoiceCard
-        title="Restore vault"
-        sub="Restore backed-up vaults from a wrapped recovery kit."
-        onPress={onRestore}
-      />
-      <Pressable onPress={onBack} style={styles.textBtn}>
-        <Text style={styles.textBtnLabel}>Use another code</Text>
-      </Pressable>
-    </View>
   );
 }
 
@@ -168,12 +103,10 @@ function ConnectionStep({
   deviceName,
   onDeviceName,
   onPaired,
-  onFounding,
 }: {
   deviceName: string;
   onDeviceName: (value: string) => void;
   onPaired: () => void;
-  onFounding: (session: MobileFoundingSession) => void;
 }): React.JSX.Element {
   const available = isTunnelAvailable();
   const [scanning, setScanning] = useState(false);
@@ -195,16 +128,11 @@ function ConnectionStep({
     setScanning(false);
     setPairing(true);
     setError(undefined);
-    const parsed = parsePairingInput(payload);
     const run = async (): Promise<void> => {
       try {
-        if (parsed?.kind === 'centraid-gw-found') {
-          onFounding(await prepareMobileFounding(payload));
-        } else {
-          await pair(payload, deviceName);
-          onPaired();
-        }
+        await pair(payload, deviceName);
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        onPaired();
       } catch (err) {
         scannedRef.current = false;
         setError(err instanceof Error ? err.message : String(err));
@@ -240,8 +168,8 @@ function ConnectionStep({
         Connect your <Text style={styles.h1Accent}>gateway</Text>.
       </Text>
       <Text style={styles.lede}>
-        Scan an ordinary pairing code, or the founding ticket printed by{' '}
-        <Text style={styles.ledeStrong}>centraid-gateway init-ticket</Text> over SSH.
+        Scan the QR from your desktop&apos;s Connect phone screen, or paste the ticket printed by{' '}
+        <Text style={styles.ledeStrong}>centraid-gateway pair</Text>.
       </Text>
       <Text style={styles.fieldLabel}>DEVICE NAME</Text>
       <TextInput
@@ -250,7 +178,7 @@ function ConnectionStep({
         style={styles.input}
         maxLength={60}
       />
-      <Text style={[styles.fieldLabel, styles.fieldGap]}>PAIRING OR FOUNDING CODE</Text>
+      <Text style={[styles.fieldLabel, styles.fieldGap]}>PAIRING CODE</Text>
       <TextInput
         value={code}
         onChangeText={setCode}
@@ -266,8 +194,8 @@ function ConnectionStep({
       {error ? <Text style={styles.error}>{error}</Text> : null}
       {available ? null : (
         <Text style={styles.note}>
-          Pairing needs a development build — the tunnel isn't available in Expo Go. You can pair
-          later from Settings.
+          Pairing needs a development build — the tunnel isn&apos;t available in Expo Go. You can
+          pair later from Settings.
         </Text>
       )}
 
@@ -289,221 +217,83 @@ function ConnectionStep({
   );
 }
 
-function CreateVaultStep({
-  session,
-  deviceName,
-  onCreated,
-  onBack,
+/**
+ * Unified profile step (issue #603 D2) — the single place a new member says who
+ * they are. Same two fields, same palette, as Settings → You, so nothing has to
+ * be re-entered after onboarding.
+ */
+function ProfileStep({
+  onSave,
 }: {
-  session: MobileFoundingSession;
-  deviceName: string;
-  onCreated: (result: MobileInitializeResult, password: string) => void;
-  onBack: () => void;
+  onSave: (name: string, color: string) => void;
 }): React.JSX.Element {
-  const [vaultName, setVaultName] = useState('Personal');
-  const [password, setPassword] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [name, setName] = useState('');
+  const [color, setColor] = useState<string>(BRAND_TEAL);
   const [error, setError] = useState<string>();
-  const create = async (): Promise<void> => {
-    if (!password) return;
-    setBusy(true);
-    setError(undefined);
-    try {
-      const result = await initializeMobileVault(session, {
-        name: vaultName.trim() || 'Personal',
-        password,
-        deviceName,
-      });
-      await shareRecoveryKit(result.kit);
-      onCreated(result, password);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <View>
-      <Text style={styles.h1}>
-        Create your <Text style={styles.h1Accent}>vault</Text>.
-      </Text>
-      <Text style={styles.lede}>
-        Choose a password. The gateway will deliver a wrapped recovery kit through your system share
-        sheet; keep it off this phone.
-      </Text>
-      <Text style={styles.fieldLabel}>VAULT NAME</Text>
-      <TextInput value={vaultName} onChangeText={setVaultName} style={styles.input} />
-      <Text style={[styles.fieldLabel, styles.fieldGap]}>RECOVERY-KIT PASSWORD</Text>
-      <TextInput
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-        autoCapitalize="none"
-        style={styles.input}
-      />
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-      <PrimaryButton
-        label={busy ? 'Creating and sharing…' : 'Create and share wrapped kit'}
-        onPress={() => void create()}
-      />
-      <Pressable disabled={busy} onPress={onBack} style={styles.textBtn}>
-        <Text style={styles.textBtnLabel}>Back</Text>
-      </Pressable>
-    </View>
-  );
-}
 
-function VerifyKitStep({
-  session,
-  initialized,
-  password,
-  onComplete,
-}: {
-  session: MobileFoundingSession;
-  initialized: MobileInitializeResult;
-  password: string;
-  onComplete: () => void;
-}): React.JSX.Element {
-  const [kit, setKit] = useState<unknown>();
-  const [consent, setConsent] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
-  const choose = async (): Promise<void> => {
-    try {
-      setKit(await pickRecoveryKit());
-      setError(undefined);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+  const save = (): void => {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setError('Enter a name so the people you share with know who you are.');
+      return;
     }
-  };
-  const verify = async (): Promise<void> => {
-    if (kit === undefined || !consent) return;
-    setBusy(true);
     setError(undefined);
-    try {
-      await verifyMobileFoundingKit(session, {
-        kit,
-        password,
-        lossConsent: true,
-      });
-      await rememberInitializedVault(session, initialized);
-      onComplete();
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
-    } finally {
-      setBusy(false);
-    }
+    onSave(trimmed, color);
   };
+
   return (
     <View>
       <Text style={styles.h1}>
-        Verify the <Text style={styles.h1Accent}>saved kit</Text>.
+        Who&apos;s using <Text style={styles.h1Accent}>this phone</Text>?
       </Text>
       <Text style={styles.lede}>
-        Re-select the exact file you just shared. The gateway checks its fingerprint and password
-        before it lets you continue.
+        Your name and colour show on your avatar here and to anyone you share a space with. You can
+        change both later in Settings.
       </Text>
-      <PrimaryButton
-        label={kit === undefined ? 'Select saved recovery kit' : 'Recovery kit selected'}
-        onPress={() => void choose()}
-      />
-      <Pressable
-        accessibilityRole="checkbox"
-        accessibilityState={{ checked: consent }}
-        onPress={() => setConsent((value) => !value)}
-        style={styles.consent}
-      >
-        <View style={[styles.checkbox, consent && styles.checkboxChecked]}>
-          <Text style={styles.checkboxMark}>{consent ? '✓' : ''}</Text>
+
+      <View style={styles.identity}>
+        <View style={[styles.avatar, { backgroundColor: color }]}>
+          <Text style={styles.avatarInitial}>{initialsOf(name)}</Text>
         </View>
-        <Text style={styles.consentText}>
-          I understand that losing this file or password makes backed-up vaults unrecoverable.
-        </Text>
-      </Pressable>
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-      <PrimaryButton
-        label={busy ? 'Verifying…' : 'Verify and enter'}
-        onPress={() => void verify()}
-      />
-    </View>
-  );
-}
+        <TextInput
+          value={name}
+          onChangeText={setName}
+          placeholder="Your name"
+          placeholderTextColor={C.ink4}
+          style={[styles.input, styles.identityInput]}
+          autoCapitalize="words"
+          autoCorrect={false}
+          returnKeyType="done"
+          onSubmitEditing={save}
+          maxLength={60}
+        />
+      </View>
 
-function RestoreVaultStep({
-  session,
-  deviceName,
-  onComplete,
-  onBack,
-}: {
-  session: MobileFoundingSession;
-  deviceName: string;
-  onComplete: () => void;
-  onBack: () => void;
-}): React.JSX.Element {
-  const [kit, setKit] = useState<unknown>();
-  const [password, setPassword] = useState('');
-  const [apiKey, setApiKey] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
-  const restore = async (): Promise<void> => {
-    if (kit === undefined || !password || !apiKey) return;
-    setBusy(true);
-    setError(undefined);
-    try {
-      const result = await restoreMobileVaults(session, {
-        kit,
-        password,
-        apiKey,
-        deviceName,
-      });
-      await rememberRestoredVaults(session, result);
-      onComplete();
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <View>
-      <Text style={styles.h1}>
-        Restore your <Text style={styles.h1Accent}>vault</Text>.
-      </Text>
-      <Text style={styles.lede}>
-        Select the wrapped kit and provide the password plus a storage-provider key. Provider
-        credentials are not stored in the kit.
-      </Text>
-      <PrimaryButton
-        label={kit === undefined ? 'Select recovery kit' : 'Recovery kit selected'}
-        onPress={() =>
-          void pickRecoveryKit()
-            .then((selected) => setKit(selected))
-            .catch((reason: unknown) =>
-              setError(reason instanceof Error ? reason.message : String(reason)),
-            )
-        }
-      />
-      <Text style={[styles.fieldLabel, styles.fieldGap]}>RECOVERY-KIT PASSWORD</Text>
-      <TextInput
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-        autoCapitalize="none"
-        style={styles.input}
-      />
-      <Text style={[styles.fieldLabel, styles.fieldGap]}>STORAGE-PROVIDER KEY</Text>
-      <TextInput
-        value={apiKey}
-        onChangeText={setApiKey}
-        secureTextEntry
-        autoCapitalize="none"
-        style={styles.input}
-      />
+      <Text style={[styles.fieldLabel, styles.fieldGap]}>COLOUR</Text>
+      <View style={styles.swatchRow}>
+        {PROFILE_COLORS.map((hex) => {
+          const active = hex.toLowerCase() === color.toLowerCase();
+          return (
+            <Pressable
+              key={hex}
+              accessibilityRole="button"
+              accessibilityLabel={`Colour ${hex}`}
+              accessibilityState={{ selected: active }}
+              onPress={() => setColor(hex)}
+              style={({ pressed }) => [
+                styles.swatch,
+                { backgroundColor: hex, borderColor: active ? C.ink : 'transparent' },
+                pressed && styles.pressed,
+              ]}
+            >
+              <Text style={styles.swatchMark}>{active ? '✓' : ''}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      <PrimaryButton label={busy ? 'Restoring…' : 'Restore vault'} onPress={() => void restore()} />
-      <Pressable disabled={busy} onPress={onBack} style={styles.textBtn}>
-        <Text style={styles.textBtnLabel}>Back</Text>
-      </Pressable>
+      <PrimaryButton label="Continue" onPress={save} arrow />
     </View>
   );
 }
@@ -513,21 +303,13 @@ function Done({ name, onEnter }: { name: string; onEnter: () => void }): React.J
   return (
     <View style={styles.center}>
       <View style={styles.doneBadge}>
-        <Svg width={36} height={36} viewBox="0 0 24 24" fill="none">
-          <Path
-            d="M4 12l5 5 11-11"
-            stroke="#fff"
-            strokeWidth={2.4}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </Svg>
+        <DoneCheck />
       </View>
       <Text style={[styles.h1, styles.center]}>
         You&apos;re all set, <Text style={styles.h1Accent}>{greet}</Text>.
       </Text>
       <Text style={[styles.lede, styles.center]}>
-        Your vault is ready. Everything you build lands on your home screen — yours, on this phone.
+        Your space is ready. Everything you build lands on your home screen — yours, on this phone.
       </Text>
       <PrimaryButton label="Enter Centraid" onPress={onEnter} />
     </View>
@@ -535,37 +317,6 @@ function Done({ name, onEnter }: { name: string; onEnter: () => void }): React.J
 }
 
 // --- shared pieces ---
-
-function ChoiceCard({
-  title,
-  sub,
-  onPress,
-}: {
-  title: string;
-  sub: string;
-  onPress: () => void;
-}): React.JSX.Element {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [styles.choice, pressed && styles.pressed]}
-    >
-      <View style={styles.choiceHead}>
-        <Text style={styles.choiceTitle}>{title}</Text>
-        <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-          <Path
-            d="M9 6l6 6-6 6"
-            stroke={C.ink4}
-            strokeWidth={2}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </Svg>
-      </View>
-      <Text style={styles.choiceSub}>{sub}</Text>
-    </Pressable>
-  );
-}
 
 function PrimaryButton({
   label,
@@ -582,133 +333,24 @@ function PrimaryButton({
       style={({ pressed }) => [styles.primary, pressed && styles.pressed]}
     >
       <Text style={styles.primaryLabel}>{label}</Text>
-      {arrow ? (
-        <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-          <Path
-            d="M5 12h14M13 6l6 6-6 6"
-            stroke="#fff"
-            strokeWidth={2.2}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </Svg>
-      ) : null}
+      {arrow ? <ForwardArrow /> : null}
     </Pressable>
   );
 }
 
-function BrandMark({ size = 22 }: { size?: number }): React.JSX.Element {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Rect x={0} y={0} width={24} height={24} rx={7} fill={C.brand} />
-      <Circle cx={12} cy={12} r={7} stroke="#fff" strokeWidth={2} />
-      <Circle cx={12} cy={12} r={2.2} fill="#fff" />
-    </Svg>
-  );
-}
-
-// Simplified "Centraid orbit" hero — a glowing core with orbiting app tiles.
-function OrbitArt(): React.JSX.Element {
-  return (
-    <Svg width={280} height={200} viewBox="0 0 200 150" fill="none">
-      <Defs>
-        <RadialGradient id="core" cx="38%" cy="28%" r="80%">
-          <Stop offset="0%" stopColor="#63E2C6" />
-          <Stop offset="55%" stopColor="#22A78F" />
-          <Stop offset="100%" stopColor="#0E7B6C" />
-        </RadialGradient>
-        <RadialGradient id="glow" cx="50%" cy="50%" r="50%">
-          <Stop offset="0%" stopColor="#33B8A1" stopOpacity={0.45} />
-          <Stop offset="100%" stopColor="#33B8A1" stopOpacity={0} />
-        </RadialGradient>
-      </Defs>
-      <Ellipse cx={100} cy={76} rx={74} ry={62} fill="url(#glow)" />
-      <G transform="rotate(-16 100 76)">
-        <Ellipse
-          cx={100}
-          cy={76}
-          rx={46}
-          ry={30}
-          fill="none"
-          stroke="rgba(51,184,161,.45)"
-          strokeWidth={1.3}
-        />
-        <Ellipse
-          cx={100}
-          cy={76}
-          rx={72}
-          ry={47}
-          fill="none"
-          stroke="rgba(51,184,161,.26)"
-          strokeWidth={1.3}
-        />
-      </G>
-      <G transform="rotate(-10 46 52)">
-        <Rect x={39.5} y={45.5} width={13} height={13} rx={4} fill="#4E68DD" />
-      </G>
-      <G transform="rotate(9 150 46)">
-        <Rect x={143.5} y={39.5} width={13} height={13} rx={4} fill="#E55772" />
-      </G>
-      <G transform="rotate(-8 160 96)">
-        <Rect x={153.5} y={89.5} width={13} height={13} rx={4} fill="#E89A3C" />
-      </G>
-      <G transform="rotate(10 52 104)">
-        <Rect x={45.5} y={97.5} width={13} height={13} rx={4} fill="#5C8A4E" />
-      </G>
-      <Circle cx={100} cy={76} r={21} fill="url(#core)" />
-      <Circle cx={100} cy={76} r={7.6} stroke="#fff" strokeWidth={1.8} fill="none" />
-      <Circle cx={100} cy={76} r={2.4} fill="#fff" />
-    </Svg>
-  );
-}
+const AVATAR = 52;
+const SWATCH = 34;
 
 const styles = StyleSheet.create({
-  center: { alignItems: 'center' },
-  choice: {
-    backgroundColor: C.panel,
-    borderColor: C.panelLine,
-    borderRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    marginTop: 12,
-    padding: 17,
-  },
-  choiceHead: {
+  avatar: {
     alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  choiceSub: {
-    color: C.ink3,
-    fontFamily: family.sansRegular,
-    fontSize: 13,
-    lineHeight: 19,
-    marginTop: 5,
-  },
-  choiceTitle: { color: C.ink, fontFamily: family.sansBold, fontSize: 16 },
-  checkbox: {
-    alignItems: 'center',
-    borderColor: C.fieldLine,
-    borderRadius: 5,
-    borderWidth: 1,
-    height: 22,
+    borderRadius: AVATAR / 2,
+    height: AVATAR,
     justifyContent: 'center',
-    width: 22,
+    width: AVATAR,
   },
-  checkboxChecked: { backgroundColor: C.brand, borderColor: C.brand },
-  checkboxMark: { color: '#fff', fontFamily: family.sansBold, fontSize: 14 },
-  consent: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: 11,
-    marginTop: 22,
-  },
-  consentText: {
-    color: C.ink2,
-    flex: 1,
-    fontFamily: family.sansRegular,
-    fontSize: 13,
-    lineHeight: 19,
-  },
+  avatarInitial: { color: '#fff', fontFamily: family.sansBold, fontSize: 19 },
+  center: { alignItems: 'center' },
   doneBadge: {
     alignItems: 'center',
     backgroundColor: C.brand,
@@ -718,12 +360,7 @@ const styles = StyleSheet.create({
     marginBottom: 22,
     width: 76,
   },
-  error: {
-    color: '#E88',
-    fontFamily: family.sansRegular,
-    fontSize: 13,
-    marginTop: 14,
-  },
+  error: { color: '#E88', fontFamily: family.sansRegular, fontSize: 13, marginTop: 14 },
   fieldLabel: {
     color: C.ink4,
     fontFamily: family.monoMedium,
@@ -742,6 +379,8 @@ const styles = StyleSheet.create({
   },
   h1Accent: { color: C.brand },
   hero: { alignItems: 'center', justifyContent: 'center', paddingVertical: 18 },
+  identity: { alignItems: 'center', flexDirection: 'row', gap: 13 },
+  identityInput: { flex: 1 },
   input: {
     backgroundColor: C.fieldBg,
     borderColor: C.fieldLine,
@@ -801,29 +440,20 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     width: '100%',
   },
-  scroll: {
-    flexGrow: 1,
-    paddingHorizontal: 26,
-    paddingTop: 20,
-    paddingBottom: 34,
-  },
-  textBtn: {
+  scroll: { flexGrow: 1, paddingHorizontal: 26, paddingTop: 20, paddingBottom: 34 },
+  swatch: {
     alignItems: 'center',
-    height: 48,
+    borderRadius: SWATCH / 2,
+    borderWidth: 2,
+    height: SWATCH,
     justifyContent: 'center',
-    marginTop: 10,
+    width: SWATCH,
   },
+  swatchMark: { color: '#fff', fontFamily: family.sansBold, fontSize: 14 },
+  swatchRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  textBtn: { alignItems: 'center', height: 48, justifyContent: 'center', marginTop: 10 },
   textBtnLabel: { color: C.ink3, fontFamily: family.sansMedium, fontSize: 15 },
-  topRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
+  topRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
   wordmark: { alignItems: 'center', flexDirection: 'row', gap: 8 },
-  wordmarkText: {
-    color: C.ink3,
-    fontFamily: family.monoMedium,
-    fontSize: 11,
-    letterSpacing: 2,
-  },
+  wordmarkText: { color: C.ink3, fontFamily: family.monoMedium, fontSize: 11, letterSpacing: 2 },
 });

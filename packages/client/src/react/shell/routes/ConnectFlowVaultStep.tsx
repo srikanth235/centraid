@@ -29,9 +29,6 @@ export function VaultStep({
 }): JSX.Element {
   const cap = vaultCapability(state);
   const loading = !state.report;
-  // Onboarding's single-existing-vault case auto-commits before this ever
-  // paints (see the effect in ConnectFlow.tsx) — this branch only ever shows
-  // mid-flight or once there's a real choice to make.
   return (
     <div className={styles.panel}>
       {loading ? (
@@ -41,6 +38,13 @@ export function VaultStep({
           </span>
           Loading spaces…
         </div>
+      ) : state.vaultsError ? (
+        // Honest unreachable (issue #603 W4). A failed read is NOT an empty
+        // registry: offering "create a space" here would commit against a
+        // gateway we could not even talk to.
+        <div className={styles.errorBanner} role="alert">
+          {state.vaultsError}
+        </div>
       ) : cap.locked ? (
         <div className={styles.lockedVault}>
           <span className={styles.lockedIcon}>
@@ -49,7 +53,7 @@ export function VaultStep({
           <span className={styles.lockedName}>{cap.locked.vaultName}</span>
           <p className={styles.hint}>
             Fixed by the pairing ticket — connecting to a different space on this gateway needs a
-            new ticket or an SSH connection.
+            new ticket.
           </p>
         </div>
       ) : (
@@ -128,9 +132,7 @@ export function VaultStep({
               ) : null}
             </div>
           ) : cap.options.length > 0 ? (
-            <p className={styles.hint}>
-              Creating a new space here needs the host CLI or an SSH connection.
-            </p>
+            <p className={styles.hint}>Creating a new space here needs the gateway host's CLI.</p>
           ) : null}
         </div>
       )}

@@ -1,5 +1,5 @@
-import crypto from 'node:crypto';
-import { promises as fs } from 'node:fs';
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { forEachSequentially } from '@centraid/test-kit/sequential';
 /*
  * Device enrollment + pairing tickets (issue #289 phase 2).
  *
@@ -8,19 +8,18 @@ import { promises as fs } from 'node:fs';
  * gateway.db rows (admin CLI and daemon share one control plane), so
  * cross-handle visibility and burn-on-first-attempt are load-bearing.
  */
-import path from 'node:path';
 
-import { forEachSequentially } from '@centraid/test-kit/sequential';
-import { tempDir } from '@centraid/test-kit/temp-dir';
 import { describe, afterEach, expect, test, vi } from 'vitest';
-
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
 import { EnrollmentStore } from './enrollment-store.js';
-import { GatewayDatabase } from './gateway-db.js';
-import { MemberStore } from './member-store.js';
 import { PairingTicketStore, encodePairingTicket, parsePairingTicket } from './pairing-store.js';
+import { MemberStore } from './member-store.js';
+import { GatewayDatabase } from './gateway-db.js';
 
 const cleanups: Array<() => Promise<void> | void> = [];
-describe('device-plane suite', () => {
+describe('device-plane scenarios', () => {
   afterEach(async () => {
     vi.useRealTimers();
     await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
@@ -70,19 +69,11 @@ describe('device-plane suite', () => {
 
     // A second device for the SAME member inherits every grant with no
     // per-device authoring — this is the self-pair story.
-    store.enroll({
-      endpointId: 'ep-tablet',
-      label: 'tablet',
-      memberId: laptop.memberId,
-    });
+    store.enroll({ endpointId: 'ep-tablet', label: 'tablet', memberId: laptop.memberId });
     expect(store.vaultsFor('ep-tablet')).toStrictEqual(['v1', 'v2']);
 
     // Re-enrolling the same device refreshes, never duplicates.
-    store.enroll({
-      endpointId: 'ep-laptop',
-      vaultId: 'v1',
-      label: 'renamed laptop',
-    });
+    store.enroll({ endpointId: 'ep-laptop', vaultId: 'v1', label: 'renamed laptop' });
     expect(store.vaultsFor('ep-laptop')).toStrictEqual(['v1', 'v2']);
     expect(store.list().find((e) => e.enrollmentId === laptop.enrollmentId)?.label).toBe(
       'renamed laptop',
@@ -192,18 +183,14 @@ describe('device-plane suite', () => {
     // still visible and its effective role is `revoked` in every vault.
     expect(EnrollmentStore.open(file).get('ep-lost', 'v1')?.role).toBe('revoked');
     expect(EnrollmentStore.open(file).isEnrolled('ep-lost')).toBe(false);
-    await expect(fs.stat(`${file}.lock`)).rejects.toMatchObject({
-      code: 'ENOENT',
-    });
+    await expect(fs.stat(`${file}.lock`)).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
   test('enrollment: gateway.db replaces the old lock directory', async () => {
     const file = await tempFile('gateway.db');
     const store = EnrollmentStore.open(file);
     store.enroll({ endpointId: 'device', vaultId: 'v1', label: 'Laptop' });
-    await expect(fs.stat(`${file}.lock`)).rejects.toMatchObject({
-      code: 'ENOENT',
-    });
+    await expect(fs.stat(`${file}.lock`)).rejects.toMatchObject({ code: 'ENOENT' });
     expect(path.basename(store.gatewayDatabase.file)).toBe('gateway.db');
   });
 
@@ -233,11 +220,7 @@ describe('device-plane suite', () => {
       'tasks',
     ]);
     expect(
-      store.enroll({
-        endpointId: 'ep-default',
-        vaultId: 'v1',
-        label: 'default device',
-      }),
+      store.enroll({ endpointId: 'ep-default', vaultId: 'v1', label: 'default device' }),
     ).toMatchObject({ rememberDevice: false });
 
     // Re-pairing the same endpoint as a non-extension full client clears a sticky
@@ -270,9 +253,7 @@ describe('device-plane suite', () => {
     );
 
     expect(EnrollmentStore.open(file).get('legacy-key', 'v1')).toBeUndefined();
-    expect(JSON.parse(await fs.readFile(file, 'utf8'))).toMatchObject({
-      version: 1,
-    });
+    expect(JSON.parse(await fs.readFile(file, 'utf8'))).toMatchObject({ version: 1 });
   });
 
   test('pairing tickets: one-time, secret-checked, TTL-bound', async () => {
@@ -383,51 +364,6 @@ describe('device-plane suite', () => {
     expect(results.filter(Boolean)).toHaveLength(1);
   });
 
-  test('founding redemption rolls back on an injected crash and uses the deleted rowcount', async () => {
-    const file = await tempFile('gateway.db');
-    const gateway = GatewayDatabase.open(path.dirname(file));
-    cleanups.push(() => gateway.close());
-    const tickets = PairingTicketStore.open(gateway);
-    const enrollments = EnrollmentStore.open(gateway);
-    const founding = tickets.mintFounding()!;
-
-    expect(() =>
-      tickets.redeemFoundingAndEnroll(
-        founding.ticketId,
-        founding.secret,
-        enrollments,
-        { endpointId: 'founder', vaultId: 'v1', label: 'Founder' },
-        () => {
-          throw new Error('injected crash');
-        },
-      ),
-    ).toThrow('injected crash');
-    expect(tickets.hasOpenFoundingWindow()).toBe(true);
-    expect(enrollments.list()).toStrictEqual([]);
-
-    const raced = await Promise.all([
-      Promise.resolve().then(() =>
-        tickets.redeemFoundingAndEnroll(founding.ticketId, founding.secret, enrollments, {
-          endpointId: 'founder-a',
-          vaultId: 'v1',
-          label: 'Founder A',
-        }),
-      ),
-      Promise.resolve().then(() =>
-        tickets.redeemFoundingAndEnroll(founding.ticketId, founding.secret, enrollments, {
-          endpointId: 'founder-b',
-          vaultId: 'v1',
-          label: 'Founder B',
-        }),
-      ),
-    ]);
-    expect(raced.filter(Boolean)).toHaveLength(1);
-    const row = gateway.db
-      .prepare("SELECT COUNT(*) AS count FROM devices WHERE endpoint_id LIKE 'founder-%'")
-      .get() as { count: number };
-    expect(row.count).toBe(1);
-  });
-
   test('the pasteable ticket round-trips and rejects foreign payloads', () => {
     const token = encodePairingTicket({
       v: 1,
@@ -438,10 +374,7 @@ describe('device-plane suite', () => {
       vaultName: 'Family',
       exp: 123,
     });
-    expect(parsePairingTicket(token)).toMatchObject({
-      t: 'ticket-id',
-      vaultName: 'Family',
-    });
+    expect(parsePairingTicket(token)).toMatchObject({ t: 'ticket-id', vaultName: 'Family' });
     expect(parsePairingTicket('not-a-ticket')).toBeUndefined();
     expect(
       parsePairingTicket(

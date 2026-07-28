@@ -1,9 +1,9 @@
 import { describe, afterEach, expect, test } from 'vitest';
-
+import { forEachSequentially } from '@centraid/test-kit/sequential';
 import { hashControlToken } from '../serve/web-session-store.js';
 import { cleanupHarnesses, deviceHeaders, harness } from './devices-routes.test-fixtures.js';
 
-describe('devices-routes suite', () => {
+describe('devices-routes scenarios', () => {
   afterEach(cleanupHarnesses);
 
   test('roster requires a proved identity and exposes only enrolled iroh rows', async () => {
@@ -125,10 +125,7 @@ describe('devices-routes suite', () => {
     const invalid = await fetch(url, {
       method: 'PUT',
       headers: deviceHeaders(device.endpointId),
-      body: JSON.stringify({
-        contributeWhileCharging: true,
-        capabilities: { previews: true },
-      }),
+      body: JSON.stringify({ contributeWhileCharging: true, capabilities: { previews: true } }),
     });
     expect(invalid.status).toBe(400);
 
@@ -162,8 +159,8 @@ describe('devices-routes suite', () => {
    *
    * `devices-routes.test.ts` shrank from 18 tests to 5, leaving these live
    * branches unexercised: DELETE idempotency, the 405s, the foreign-vault 404,
-   * peer-delete 403, self-unpair by a non-owner, `vault_required`, the
-   * no-endpoint 409, and the `uninitialized` 409. Each is a refusal or a
+   * peer-delete 403, self-unpair by a non-owner, `vault_required`, and the
+   * no-endpoint 409. Each is a refusal or a
    * safe-default that would fail silently — every one returns a plausible-
    * looking status, so nothing downstream would notice a regression.
    */
@@ -184,17 +181,11 @@ describe('devices-routes suite', () => {
     });
     const url = `${f.base}/centraid/_gateway/devices/${encodeURIComponent(member.enrollmentId)}`;
 
-    const first = await fetch(url, {
-      method: 'DELETE',
-      headers: deviceHeaders('owner-key'),
-    });
+    const first = await fetch(url, { method: 'DELETE', headers: deviceHeaders('owner-key') });
     expect(first.status).toBe(200);
     // A client retrying after a dropped response must not see a 404 or a 500 —
     // the row is already gone and that IS the requested end state.
-    const again = await fetch(url, {
-      method: 'DELETE',
-      headers: deviceHeaders('owner-key'),
-    });
+    const again = await fetch(url, { method: 'DELETE', headers: deviceHeaders('owner-key') });
     expect(again.status).toBe(200);
     expect(f.enrollments.isEnrolled('member-key')).toBe(false);
   });
@@ -213,18 +204,14 @@ describe('devices-routes suite', () => {
       [`/centraid/_gateway/devices/${encodeURIComponent(owner.enrollmentId)}`, 'PATCH'],
       [`/centraid/_gateway/devices/${encodeURIComponent(owner.enrollmentId)}/compute`, 'POST'],
     ];
-    await Promise.all(
-      cases.map(async ([route, method]) => {
-        const response = await fetch(`${f.base}${route}`, {
-          method,
-          headers: deviceHeaders('owner-key'),
-        });
-        expect(response.status, `${method} ${route}`).toBe(405);
-        await expect(response.json()).resolves.toMatchObject({
-          error: 'method_not_allowed',
-        });
-      }),
-    );
+    await forEachSequentially(cases, async ([route, method]) => {
+      const response = await fetch(`${f.base}${route}`, {
+        method,
+        headers: deviceHeaders('owner-key'),
+      });
+      expect(response.status, `${method} ${route}`).toBe(405);
+      await expect(response.json()).resolves.toMatchObject({ error: 'method_not_allowed' });
+    });
   });
 
   test('an enrollment in a foreign vault 404s rather than leaking its existence', async () => {
@@ -241,18 +228,19 @@ describe('devices-routes suite', () => {
       label: 'Stranger',
       role: 'admin',
     });
-    await Promise.all(
+    await forEachSequentially(
       [
         `/centraid/_gateway/devices/${encodeURIComponent(foreign.enrollmentId)}`,
         `/centraid/_gateway/devices/${encodeURIComponent(foreign.enrollmentId)}/compute`,
-      ].map(async (route) => {
+      ],
+      async (route) => {
         const response = await fetch(`${f.base}${route}`, {
           method: route.endsWith('/compute') ? 'PUT' : 'DELETE',
           headers: deviceHeaders('owner-key'),
           ...(route.endsWith('/compute') ? { body: JSON.stringify({}) } : {}),
         });
         expect(response.status, route).toBe(404);
-      }),
+      },
     );
     expect(f.enrollments.isEnrolled('stranger-key')).toBe(true);
   });

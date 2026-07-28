@@ -1,31 +1,23 @@
 /// <reference lib="dom" />
 // @vitest-environment jsdom
 import React, { act } from 'react';
+import { forEachSequentially } from '@centraid/test-kit/sequential';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import Onboarding from './Onboarding';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const mocks = vi.hoisted(() => ({
-  initializeMobileVault: vi.fn<typeof import('../lib/vault-founding').initializeMobileVault>(),
-  notificationAsync: vi.fn<typeof import('expo-haptics').notificationAsync>(),
+  notificationAsync: vi.fn<(type?: unknown) => Promise<void>>(),
   onDone: vi.fn<() => void>(),
-  pair: vi.fn<typeof import('../lib/phone-link').pair>(),
-  pickRecoveryKit: vi.fn<typeof import('../lib/recovery-kit-files').pickRecoveryKit>(),
-  prepareMobileFounding: vi.fn<typeof import('../lib/vault-founding').prepareMobileFounding>(),
-  rememberInitializedVault:
-    vi.fn<typeof import('../lib/vault-founding').rememberInitializedVault>(),
-  rememberRestoredVaults: vi.fn<typeof import('../lib/vault-founding').rememberRestoredVaults>(),
-  requestPermission:
-    vi.fn<NonNullable<ReturnType<typeof import('expo-camera').useCameraPermissions>[1]>>(),
-  restoreMobileVaults: vi.fn<typeof import('../lib/vault-founding').restoreMobileVaults>(),
-  setOnboarded: vi.fn<typeof import('../lib/profile').setOnboarded>(),
-  setProfileColor: vi.fn<typeof import('../lib/profile').setProfileColor>(),
-  setProfileName: vi.fn<typeof import('../lib/profile').setProfileName>(),
-  shareRecoveryKit: vi.fn<typeof import('../lib/recovery-kit-files').shareRecoveryKit>(),
-  verifyMobileFoundingKit: vi.fn<typeof import('../lib/vault-founding').verifyMobileFoundingKit>(),
+  pair: vi.fn<
+    (ticket: string, deviceName: string) => Promise<{ desktopName: string; deviceId: string }>
+  >(),
+  requestPermission: vi.fn<() => Promise<unknown>>(),
+  setOnboarded: vi.fn<(value: boolean) => void>(),
+  setProfileColor: vi.fn<(value: string) => void>(),
+  setProfileName: vi.fn<(value: string) => void>(),
 }));
 
 vi.mock(import('react-native'), async () => {
@@ -38,15 +30,9 @@ vi.mock(import('react-native'), async () => {
     return ReactModule.createElement(tag, rest, children);
   };
   return {
-    // react-native's real `Platform`/`Pressable`/etc. types (per-platform
-    // statics, `ForwardRefExoticComponent`s with native-view members) are
-    // impractical to replicate in a DOM stand-in — this whole mock renders
-    // plain DOM elements instead, so each export below is asserted to its
-    // real type rather than the module being widened.
-    Platform: {
-      OS: 'ios',
-    } as unknown as typeof import('react-native').Platform,
-    Pressable: (({
+    Platform: { OS: 'ios' },
+    Pressable: ({
+      accessibilityLabel,
       accessibilityRole,
       accessibilityState,
       children,
@@ -54,8 +40,9 @@ vi.mock(import('react-native'), async () => {
       onPress,
       style,
     }: {
+      accessibilityLabel?: string;
       accessibilityRole?: string;
-      accessibilityState?: { checked?: boolean };
+      accessibilityState?: { checked?: boolean; selected?: boolean };
       children?: React.ReactNode;
       disabled?: boolean;
       onPress?: () => void;
@@ -63,32 +50,30 @@ vi.mock(import('react-native'), async () => {
     }) =>
       element('button', {
         'aria-checked': accessibilityState?.checked,
+        'aria-label': accessibilityLabel,
+        'aria-selected': accessibilityState?.selected,
         children,
         disabled,
         onClick: onPress,
         role: accessibilityRole,
         style: typeof style === 'function' ? undefined : style,
         type: 'button',
-      })) as unknown as typeof import('react-native').Pressable,
-    ScrollView: (({ children }: { children?: React.ReactNode }) =>
-      element('main', {
-        children,
-      })) as unknown as typeof import('react-native').ScrollView,
+      }),
+    ScrollView: ({ children }: { children?: React.ReactNode }) => element('main', { children }),
     StyleSheet: {
       absoluteFill: {},
       create: <T,>(styles: T): T => styles,
       hairlineWidth: 1,
-    } as unknown as typeof import('react-native').StyleSheet,
-    Text: (({ children }: { children?: React.ReactNode }) =>
-      element('span', {
-        children,
-      })) as unknown as typeof import('react-native').Text,
-    TextInput: (({
+    },
+    Text: ({ children }: { children?: React.ReactNode }) => element('span', { children }),
+    TextInput: ({
       autoCapitalize: _autoCapitalize,
       autoCorrect: _autoCorrect,
       multiline,
       onChangeText,
+      onSubmitEditing: _onSubmitEditing,
       placeholderTextColor: _placeholderTextColor,
+      returnKeyType: _returnKeyType,
       secureTextEntry,
       textAlignVertical: _textAlignVertical,
       ...props
@@ -103,25 +88,16 @@ vi.mock(import('react-native'), async () => {
         onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
           onChangeText?.((event.target as HTMLInputElement | HTMLTextAreaElement).value),
         type: !multiline && secureTextEntry ? 'password' : undefined,
-      })) as unknown as typeof import('react-native').TextInput,
-    View: (({ children }: { children?: React.ReactNode }) =>
-      element('div', {
-        children,
-      })) as unknown as typeof import('react-native').View,
+      }),
+    View: ({ children }: { children?: React.ReactNode }) => element('div', { children }),
   };
 });
 
 vi.mock(import('react-native-safe-area-context'), async () => {
   const ReactModule = await import('react');
   return {
-    // Real `SafeAreaView` is a `ForwardRefExoticComponent`; this DOM stand-in
-    // is a plain function component, so it's asserted to the real type.
-    SafeAreaView: (({ children }: { children?: React.ReactNode }) =>
-      ReactModule.createElement(
-        'section',
-        null,
-        children,
-      )) as unknown as typeof import('react-native-safe-area-context').SafeAreaView,
+    SafeAreaView: ({ children }: { children?: React.ReactNode }) =>
+      ReactModule.createElement('section', null, children),
   };
 });
 
@@ -134,86 +110,56 @@ vi.mock(import('react-native-svg'), async () => {
     return SvgMock;
   };
   return {
-    // react-native-svg's real components are class components with static
-    // members (e.g. `defaultProps`) this DOM stand-in doesn't implement, so
-    // every element mock below is asserted to its real type.
-    default: component('svg') as unknown as typeof import('react-native-svg').default,
-    Circle: component('circle') as unknown as typeof import('react-native-svg').Circle,
-    Defs: component('defs') as unknown as typeof import('react-native-svg').Defs,
-    Ellipse: component('ellipse') as unknown as typeof import('react-native-svg').Ellipse,
-    G: component('g') as unknown as typeof import('react-native-svg').G,
-    Path: component('path') as unknown as typeof import('react-native-svg').Path,
-    RadialGradient: component(
-      'radialGradient',
-    ) as unknown as typeof import('react-native-svg').RadialGradient,
-    Rect: component('rect') as unknown as typeof import('react-native-svg').Rect,
-    Stop: component('stop') as unknown as typeof import('react-native-svg').Stop,
+    default: component('svg'),
+    Circle: component('circle'),
+    Defs: component('defs'),
+    Ellipse: component('ellipse'),
+    G: component('g'),
+    Path: component('path'),
+    RadialGradient: component('radialGradient'),
+    Rect: component('rect'),
+    Stop: component('stop'),
   };
 });
 
 vi.mock(import('expo-camera'), async () => {
   const ReactModule = await import('react');
   return {
-    // Real `CameraView` is a native-backed `ForwardRefExoticComponent`; this
-    // DOM stand-in only fires `onBarcodeScanned` on click.
-    CameraView: (({ onBarcodeScanned }: { onBarcodeScanned: (event: { data: string }) => void }) =>
+    CameraView: ({ onBarcodeScanned }: { onBarcodeScanned: (event: { data: string }) => void }) =>
       ReactModule.createElement(
         'button',
         {
           'data-testid': 'camera',
-          onClick: () => onBarcodeScanned({ data: 'ordinary-from-camera' }),
+          onClick: () => onBarcodeScanned({ data: 'ticket-from-camera' }),
           type: 'button',
         },
         'camera',
-      )) as unknown as typeof import('expo-camera').CameraView,
-    // Onboarding.tsx only destructures `[permission, requestPermission]` and
-    // reads `permission.granted`/`.canAskAgain` — the real hook returns a
-    // 3-tuple with a full `PermissionResponse` (status, expires, …) in slot
-    // 0, none of which this test needs, so the return is asserted rather
-    // than fabricating unused fields/slots.
-    useCameraPermissions: (): ReturnType<typeof import('expo-camera').useCameraPermissions> =>
-      [{ canAskAgain: true, granted: true }, mocks.requestPermission] as unknown as ReturnType<
-        typeof import('expo-camera').useCameraPermissions
-      >,
+      ),
+    useCameraPermissions: () =>
+      [{ canAskAgain: true, granted: true }, mocks.requestPermission] as const,
   };
 });
 
 vi.mock(import('expo-haptics'), () => ({
-  // Real string-enum members are a distinct literal type per member — a
-  // plain string like `'success'` is never assignable to an enum-typed
-  // property without going through the actual enum.
-  NotificationFeedbackType: {
-    Success: 'success',
-  } as unknown as typeof import('expo-haptics').NotificationFeedbackType,
+  NotificationFeedbackType: { Success: 'success' },
   notificationAsync: mocks.notificationAsync,
 }));
 
 vi.mock(import('../kit/theme'), () => ({
-  // The real export's values are string-literal-typed consts, and this
-  // object needs every member (Partial is shallow) — restated verbatim
-  // (not behavior, just font-family name constants) with `as const` so the
-  // literal types match instead of widening to `string`.
   family: {
-    displayBold: 'SpaceGrotesk_600SemiBold',
-    displayMedium: 'SpaceGrotesk_500Medium',
-    monoBold: 'JetBrainsMono_600SemiBold',
-    monoMedium: 'JetBrainsMono_500Medium',
-    monoRegular: 'JetBrainsMono_400Regular',
-    sansBold: 'Geist_600SemiBold',
-    sansMedium: 'Geist_500Medium',
-    sansRegular: 'Geist_400Regular',
-    serif: 'PlayfairDisplay_600SemiBold',
-    serifItalic: 'PlayfairDisplay_600SemiBold_Italic',
-  } as const,
+    displayBold: 'display',
+    monoMedium: 'mono-medium',
+    monoRegular: 'mono',
+    sansBold: 'sans-bold',
+    sansMedium: 'sans-medium',
+    sansRegular: 'sans',
+  },
 }));
 
 vi.mock(import('../lib/profile'), () => ({
-  // Deliberately a different literal than the real `'#128A78'` const (see
-  // the `toHaveBeenCalledWith('#22a78f')` assertion below) — this test
-  // checks the value flows through unmodified, not the real brand color —
-  // so it's asserted to the real (disjoint-literal) type rather than
-  // changed to match production or the assertion weakened.
-  BRAND_TEAL: '#22a78f' as unknown as typeof import('../lib/profile').BRAND_TEAL,
+  BRAND_TEAL: '#22a78f',
+  PROFILE_COLORS: ['#22a78f', '#4e68dd', '#e55772'],
+  initialsOf: (name: string) => (name.trim() ? name.trim().slice(0, 1).toUpperCase() : '·'),
   setOnboarded: mocks.setOnboarded,
   setProfileColor: mocks.setProfileColor,
   setProfileName: mocks.setProfileName,
@@ -222,70 +168,16 @@ vi.mock(import('../lib/profile'), () => ({
 vi.mock(import('../lib/phone-link'), () => ({
   isTunnelAvailable: () => true,
   pair: mocks.pair,
-  // The real `PairingInput` discriminated-union members carry required
-  // fields (`gw`/`t`/`s`/`exp`, …) this test doesn't need — only the `kind`
-  // discriminant drives the behavior under test — so the return type is
-  // asserted rather than fabricating unused payload fields.
-  parsePairingInput: (payload: string) =>
-    (payload.startsWith('founding')
-      ? { kind: 'centraid-gw-found' }
-      : { kind: 'centraid-gw-pair' }) as ReturnType<
-      typeof import('../lib/phone-link').parsePairingInput
-    >,
-}));
-
-vi.mock(import('../lib/recovery-kit-files'), () => ({
-  pickRecoveryKit: mocks.pickRecoveryKit,
-  shareRecoveryKit: mocks.shareRecoveryKit,
-}));
-
-vi.mock(import('../lib/vault-founding'), () => ({
-  initializeMobileVault: mocks.initializeMobileVault,
-  prepareMobileFounding: mocks.prepareMobileFounding,
-  rememberInitializedVault: mocks.rememberInitializedVault,
-  rememberRestoredVaults: mocks.rememberRestoredVaults,
-  restoreMobileVaults: mocks.restoreMobileVaults,
-  verifyMobileFoundingKit: mocks.verifyMobileFoundingKit,
 }));
 
 let root: Root | undefined;
 let container: HTMLDivElement | undefined;
 
-describe('screens/Onboarding', () => {
+describe('Onboarding scenarios', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.initializeMobileVault.mockResolvedValue({
-      fingerprint: 'fingerprint',
-      kit: { wrapped: true },
-      vault: { name: 'Family', vaultId: 'vault-1' },
-      enrollment: { enrollmentId: 'enrollment-1' },
-      recoveryScope: 'vault-1',
-    });
     mocks.notificationAsync.mockResolvedValue(undefined);
-    mocks.pair.mockResolvedValue({
-      desktopName: 'Desktop',
-      deviceId: 'device-1',
-    });
-    mocks.pickRecoveryKit.mockResolvedValue({ wrapped: true });
-    mocks.prepareMobileFounding.mockResolvedValue({
-      gatewayId: 'gateway-1',
-      endpointHint: 'endpoint-ticket',
-      foundingTicket: 'founding-ticket',
-      baseUrl: 'http://127.0.0.1:49152',
-    });
-    mocks.rememberInitializedVault.mockResolvedValue(undefined);
-    mocks.rememberRestoredVaults.mockResolvedValue(undefined);
-    mocks.restoreMobileVaults.mockResolvedValue({
-      ok: true,
-      enrollments: [],
-      reports: [{ vaultId: 'restored-1' }],
-    });
-    mocks.shareRecoveryKit.mockResolvedValue(undefined);
-    mocks.verifyMobileFoundingKit.mockResolvedValue({
-      ok: true,
-      vaultId: 'vault-1',
-      fingerprint: 'fingerprint',
-    });
+    mocks.pair.mockResolvedValue({ desktopName: 'Gateway', deviceId: 'device-1' });
     container = document.createElement('div');
     document.body.appendChild(container);
     const handleDone = mocks.onDone;
@@ -310,6 +202,12 @@ describe('screens/Onboarding', () => {
     return match;
   }
 
+  function swatch(hex: string): HTMLButtonElement {
+    const match = container!.querySelector<HTMLButtonElement>(`button[aria-label="Colour ${hex}"]`);
+    if (!match) throw new Error(`swatch not found: ${hex}`);
+    return match;
+  }
+
   function click(target: Element): void {
     void act(() => target.dispatchEvent(new MouseEvent('click', { bubbles: true })));
   }
@@ -327,168 +225,79 @@ describe('screens/Onboarding', () => {
   }
 
   async function flush(times = 4): Promise<void> {
-    const flushNext = async (index: number): Promise<void> => {
-      if (index >= times) return;
-      await act(async () => {});
-      return flushNext(index + 1);
-    };
-    return flushNext(0);
+    await forEachSequentially(Array.from({ length: times }), async () => {
+      await act(async () => {
+        await Promise.resolve();
+      });
+    });
   }
 
-  async function openFoundingChoice(): Promise<void> {
-    typeValue(container!.querySelector('textarea')!, 'founding-ticket');
+  /** Paste a pair ticket and land on the profile step. */
+  async function pairWithPastedTicket(deviceName?: string): Promise<void> {
+    if (deviceName !== undefined) typeValue(container!.querySelector('input')!, deviceName);
+    typeValue(container!.querySelector('textarea')!, 'pair-ticket');
     click(button('Continue with pasted code'));
     await flush();
-    expect(container!.textContent).toContain('Starting fresh');
+    expect(container!.textContent).toContain("Who's using");
   }
 
-  describe('mobile founding onboarding', () => {
-    it('completes ordinary pasted pairing and persists the first-device profile', async () => {
-      typeValue(container!.querySelector('input')!, 'Ada Phone');
-      typeValue(container!.querySelector('textarea')!, 'ordinary-ticket');
-      click(button('Continue with pasted code'));
-      await flush();
+  describe('mobile ticket-only onboarding', () => {
+    it('pairs from a pasted ticket, then persists the profile from the unified step', async () => {
+      await pairWithPastedTicket('Ada Phone');
+      expect(mocks.pair).toHaveBeenCalledWith('pair-ticket', 'Ada Phone');
 
-      expect(mocks.pair).toHaveBeenCalledWith('ordinary-ticket', 'Ada Phone');
-      expect(container!.textContent).toContain("You're all set");
-      click(button('Enter Centraid'));
+      // Name is required — an empty profile cannot be saved.
+      click(button('Continue'));
+      expect(mocks.setProfileName).not.toHaveBeenCalled();
+      expect(container!.textContent).toContain('Enter a name');
 
-      expect(mocks.setProfileName).toHaveBeenCalledWith('Ada Phone');
-      expect(mocks.setProfileColor).toHaveBeenCalledWith('#22a78f');
+      typeValue(container!.querySelector('input')!, '  Ada Lovelace  ');
+      click(swatch('#e55772'));
+      click(button('Continue'));
+
+      expect(mocks.setProfileName).toHaveBeenCalledWith('Ada Lovelace');
+      expect(mocks.setProfileColor).toHaveBeenCalledWith('#e55772');
       expect(mocks.setOnboarded).toHaveBeenCalledWith(true);
+      expect(container!.textContent).toContain("You're all set, Ada");
+
+      click(button('Enter Centraid'));
       expect(mocks.notificationAsync).toHaveBeenCalledWith('success');
       expect(mocks.onDone).toHaveBeenCalledOnce();
     });
 
-    it('scans an ordinary ticket through the camera path', async () => {
+    it('defaults the profile colour to the brand teal when no swatch is tapped', async () => {
+      await pairWithPastedTicket();
+      typeValue(container!.querySelector('input')!, 'Grace');
+      click(button('Continue'));
+
+      expect(mocks.pair).toHaveBeenCalledWith('pair-ticket', 'iPhone');
+      expect(mocks.setProfileColor).toHaveBeenCalledWith('#22a78f');
+      expect(mocks.setProfileName).toHaveBeenCalledWith('Grace');
+    });
+
+    it('scans a pair ticket through the camera path', async () => {
       click(button('Scan QR instead'));
       expect(container!.textContent).toContain('Point at the code');
       click(container!.querySelector('[data-testid="camera"]')!);
       await flush();
 
-      expect(mocks.pair).toHaveBeenCalledWith('ordinary-from-camera', 'iPhone');
-      expect(container!.textContent).toContain("You're all set");
+      expect(mocks.pair).toHaveBeenCalledWith('ticket-from-camera', 'iPhone');
+      expect(container!.textContent).toContain("Who's using");
     });
 
-    it('creates a vault, shares and reselects its kit, verifies it, and enters', async () => {
-      await openFoundingChoice();
-      click(button('Create vault'));
-      expect(container!.textContent).toContain('Choose a password');
-
-      click(button('Create and share wrapped kit'));
-      expect(mocks.initializeMobileVault).not.toHaveBeenCalled();
-
-      const inputs = Array.from(container!.querySelectorAll('input'));
-      typeValue(inputs[0]!, 'Family');
-      typeValue(inputs[1]!, 'correct horse battery staple');
-      click(button('Create and share wrapped kit'));
-      await flush();
-
-      expect(mocks.initializeMobileVault).toHaveBeenCalledWith(
-        expect.objectContaining({ foundingTicket: 'founding-ticket' }),
-        {
-          deviceName: 'iPhone',
-          name: 'Family',
-          password: 'correct horse battery staple',
-        },
-      );
-      expect(mocks.shareRecoveryKit).toHaveBeenCalledWith({ wrapped: true });
-      expect(container!.textContent).toContain('Re-select the exact file');
-
-      click(button('Select saved recovery kit'));
-      await flush();
-      click(container!.querySelector('[role="checkbox"]')!);
-      click(button('Verify and enter'));
-      await flush();
-
-      expect(mocks.verifyMobileFoundingKit).toHaveBeenCalledWith(
-        expect.objectContaining({ foundingTicket: 'founding-ticket' }),
-        {
-          kit: { wrapped: true },
-          lossConsent: true,
-          password: 'correct horse battery staple',
-        },
-      );
-      expect(mocks.rememberInitializedVault).toHaveBeenCalledWith(
-        {
-          gatewayId: 'gateway-1',
-          endpointHint: 'endpoint-ticket',
-          foundingTicket: 'founding-ticket',
-          baseUrl: 'http://127.0.0.1:49152',
-        },
-        {
-          fingerprint: 'fingerprint',
-          kit: { wrapped: true },
-          vault: { name: 'Family', vaultId: 'vault-1' },
-          enrollment: { enrollmentId: 'enrollment-1' },
-          recoveryScope: 'vault-1',
-        },
-      );
-      expect(container!.textContent).toContain("You're all set");
-    });
-
-    it('surfaces a restore failure, retries, and remembers every restored vault', async () => {
-      mocks.restoreMobileVaults
-        .mockRejectedValueOnce(new Error('provider unavailable'))
-        .mockResolvedValueOnce({
-          ok: true,
-          enrollments: [],
-          reports: [{ vaultId: 'restored-1' }],
-        });
-      await openFoundingChoice();
-      click(button('Restore vault'));
-      expect(container!.textContent).toContain('storage-provider key');
-
-      click(button('Select recovery kit'));
-      await flush();
-      const inputs = Array.from(container!.querySelectorAll('input'));
-      typeValue(inputs[0]!, 'kit password');
-      typeValue(inputs[1]!, 'provider key');
-      click(button('Restore vault'));
-      await flush();
-      expect(container!.textContent).toContain('provider unavailable');
-
-      click(button('Restore vault'));
-      await flush();
-      expect(mocks.restoreMobileVaults).toHaveBeenLastCalledWith(
-        expect.objectContaining({ foundingTicket: 'founding-ticket' }),
-        {
-          apiKey: 'provider key',
-          deviceName: 'iPhone',
-          kit: { wrapped: true },
-          password: 'kit password',
-        },
-      );
-      expect(mocks.rememberRestoredVaults).toHaveBeenCalledWith(
-        {
-          gatewayId: 'gateway-1',
-          endpointHint: 'endpoint-ticket',
-          foundingTicket: 'founding-ticket',
-          baseUrl: 'http://127.0.0.1:49152',
-        },
-        {
-          ok: true,
-          enrollments: [],
-          reports: [{ vaultId: 'restored-1' }],
-        },
-      );
-      expect(container!.textContent).toContain("You're all set");
-    });
-
-    it('can abandon a founding ticket and reports pairing errors for retry', async () => {
-      await openFoundingChoice();
-      click(button('Use another code'));
-      expect(container!.textContent).toContain('PAIRING OR FOUNDING CODE');
-
-      mocks.pair.mockRejectedValueOnce('pairing failed');
-      typeValue(container!.querySelector('textarea')!, 'ordinary-ticket');
+    it('reports a pairing failure honestly and allows a retry', async () => {
+      mocks.pair.mockRejectedValueOnce(new Error('gateway refused the ticket'));
+      typeValue(container!.querySelector('textarea')!, 'pair-ticket');
       click(button('Continue with pasted code'));
       await flush();
-      expect(container!.textContent).toContain('pairing failed');
+
+      expect(container!.textContent).toContain('gateway refused the ticket');
+      expect(container!.textContent).toContain('PAIRING CODE');
+      expect(mocks.setOnboarded).not.toHaveBeenCalled();
 
       click(button('Continue with pasted code'));
       await flush();
-      expect(container!.textContent).toContain("You're all set");
+      expect(container!.textContent).toContain("Who's using");
     });
   });
 });

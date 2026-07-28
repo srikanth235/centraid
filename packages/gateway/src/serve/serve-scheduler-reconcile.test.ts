@@ -1,4 +1,5 @@
-import crypto from 'node:crypto';
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { forEachSequentially } from '@centraid/test-kit/sequential';
 /*
  * Scheduler-on-publish reconcile (issue #149). A publish over HTTP must
  * resync the in-process cron scheduler — `serve()` reconciles in onAppLive
@@ -6,15 +7,14 @@ import crypto from 'node:crypto';
  * git-store gateway with an injected spy scheduler and asserts a publish
  * triggers a reconcile carrying the scanned automation rows.
  */
+
+import { describe, afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-
+import crypto from 'node:crypto';
 import type * as automation from '@centraid/automation';
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-
-import type { GatewayPaths } from '../paths.ts';
 import { serve, type GatewayServeHandle } from './serve.ts';
+import type { GatewayPaths } from '../paths.ts';
 
 let dataDir: string;
 let handle: GatewayServeHandle;
@@ -105,13 +105,12 @@ const DATA_AUTOMATION_JSON = JSON.stringify({
   generated: { by: 'centraid-builder', at: '2026-01-01T00:00:00.000Z' },
 });
 
-describe('serve-scheduler-reconcile', () => {
+describe('serve-scheduler-reconcile scenarios', () => {
   beforeEach(async () => {
     dataDir = await tempDir(`gw-sched-${crypto.randomUUID()}-`);
     reconcileCalls = [];
     started = 0;
     handle = await serve({
-      initVaultName: "Owner's vault",
       paths: pathsUnder(dataDir),
       scheduler: stubScheduler(),
     });
@@ -124,13 +123,13 @@ describe('serve-scheduler-reconcile', () => {
 
   async function waitFor(pred: () => boolean | Promise<boolean>, ms = 3000): Promise<void> {
     const start = Date.now();
-    const poll = async (): Promise<void> => {
+    const waitForNext = async (): Promise<void> => {
       if (await pred()) return;
       if (Date.now() - start > ms) throw new Error('timeout waiting for condition');
       await new Promise((resolve) => setTimeout(resolve, 25));
-      return poll();
+      return waitForNext();
     };
-    return poll();
+    return waitForNext();
   }
 
   async function publishBrief(manifest = AUTOMATION_JSON, expectedStatus = 201): Promise<Response> {
@@ -139,7 +138,7 @@ describe('serve-scheduler-reconcile', () => {
       headers: { ...auth(), 'Content-Type': 'application/json' },
       body: JSON.stringify({ sessionId: 's1' }),
     });
-    await Promise.all(
+    await forEachSequentially(
       [
         ['app.json', APP_JSON],
         ['automations/brief/automation.json', manifest],
@@ -147,14 +146,15 @@ describe('serve-scheduler-reconcile', () => {
           'automations/brief/handler.js',
           'export default async () => ({ summary: "party change observed" });\n',
         ],
-      ].map(async ([rel, content]) => {
+      ] as const,
+      async ([rel, content]) => {
         const res = await fetch(`${handle.url}/centraid/_apps/brief/files/${rel}?sessionId=s1`, {
           method: 'PUT',
           headers: auth(),
           body: content,
         });
         expect(res.status).toBe(200);
-      }),
+      },
     );
     const pub = await fetch(`${handle.url}/centraid/_apps/brief/publish`, {
       method: 'POST',
@@ -184,7 +184,6 @@ describe('serve-scheduler-reconcile', () => {
   test('publish does not report ready when a data cursor bootstrap fails', async () => {
     await handle.close();
     handle = await serve({
-      initVaultName: "Owner's vault",
       paths: pathsUnder(dataDir),
       scheduler: bootstrapRejectingScheduler(),
     });
@@ -197,10 +196,7 @@ describe('serve-scheduler-reconcile', () => {
     // Exercise the real scheduler behind a live HTTP gateway, not the spy used
     // by the reconcile test above.
     await handle.close();
-    handle = await serve({
-      initVaultName: "Owner's vault",
-      paths: pathsUnder(dataDir),
-    });
+    handle = await serve({ paths: pathsUnder(dataDir) });
     await publishBrief(DATA_AUTOMATION_JSON);
 
     // Publishing awaits reconciliation, including the fresh watcher's
@@ -277,7 +273,6 @@ describe('serve-scheduler-reconcile', () => {
     // for the same persisted-cursor state.
     await handle.close();
     handle = await serve({
-      initVaultName: "Owner's vault",
       paths: pathsUnder(dataDir),
       scheduler: stubScheduler(),
     });
@@ -296,10 +291,7 @@ describe('serve-scheduler-reconcile', () => {
       .get() as { prov_id: string };
     await handle.close();
 
-    handle = await serve({
-      initVaultName: "Owner's vault",
-      paths: pathsUnder(dataDir),
-    });
+    handle = await serve({ paths: pathsUnder(dataDir) });
     await waitFor(async () => {
       await refreshRuns();
       return runs.length === 10 && runs.every((run) => run.endedAt !== undefined);

@@ -1,5 +1,4 @@
 import { test, expect } from '@playwright/test';
-
 import {
   appEntry,
   cleanupEnv,
@@ -7,7 +6,6 @@ import {
   closeApp,
   launchApp,
   makeEnv,
-  markOnboardingPending,
   markUserApp,
   openTile,
   openTileMenu,
@@ -39,8 +37,11 @@ test('1.1 — first launch shows onboarding with the CTA disabled until a name i
   await seedRemoteGateway(env, gateway, { onboarding: true });
   const { app, page } = await launchApp(env);
   try {
-    // A seeded remote vault is already founded, so this path begins at the
-    // device-local identity step rather than the zero-vault founding gate.
+    // Desktop first run is chooser-first (#603); either choice lands on the
+    // shared identity step, where the CTA gating under test lives.
+    const chooser = page.getByTestId('first-run-choice');
+    await chooser.waitFor({ state: 'visible' });
+    await chooser.getByRole('button', { name: /connect with a ticket/iu }).click();
     await page.getByTestId('onboarding-view').waitFor({ state: 'visible' });
     const cta = page.getByRole('button', { name: 'Continue' });
     const name = page.getByRole('textbox', { name: 'Your name' });
@@ -55,70 +56,27 @@ test('1.1 — first launch shows onboarding with the CTA disabled until a name i
   }
 });
 
-test('1.2 — completing onboarding persists the profile and lands on home', async () => {
-  // Found the isolated local gateway through the same non-skippable ceremony
-  // a real first launch uses. The founding completion enters Home, so reopen
-  // device onboarding afterwards to exercise identity + connection separately.
-  const founded = await launchApp(env);
-  try {
-    await founded.page.getByRole('button', { name: 'Create vault' }).click();
-    await founded.page.getByLabel('Recovery-kit password').fill('correct horse battery staple');
-    // Electron's Playwright transport does not surface renderer-created Blob
-    // downloads as Page "download" events. Capture the exact Blob bytes while
-    // leaving the real anchor/download path intact, then re-select those bytes.
-    await founded.page.evaluate(() => {
-      const createObjectURL = URL.createObjectURL.bind(URL);
-      URL.createObjectURL = (blob: Blob): string => {
-        void blob.text().then((text) => {
-          (
-            window as typeof window & {
-              __centraidE2eRecoveryKit?: string;
-            }
-          ).__centraidE2eRecoveryKit = text;
-        });
-        return createObjectURL(blob);
-      };
-    });
-    await founded.page.getByRole('button', { name: 'Create vault and download kit' }).click();
-    await expect
-      .poll(() =>
-        founded.page.evaluate(
-          () =>
-            (
-              window as typeof window & {
-                __centraidE2eRecoveryKit?: string;
-              }
-            ).__centraidE2eRecoveryKit ?? '',
-        ),
-      )
-      .not.toBe('');
-    const recoveryKit = await founded.page.evaluate(
-      () =>
-        (
-          window as typeof window & {
-            __centraidE2eRecoveryKit?: string;
-          }
-        ).__centraidE2eRecoveryKit ?? '',
-    );
-    await founded.page.locator('input[type="file"]').setInputFiles({
-      name: 'centraid-recovery-kit.json',
-      mimeType: 'application/json',
-      buffer: Buffer.from(recoveryKit),
-    });
-    await founded.page
-      .getByRole('checkbox', {
-        name: /losing this file or password makes backed-up vaults unrecoverable/iu,
-      })
-      .check();
-    await founded.page.getByRole('button', { name: 'Verify and enter' }).click();
-    await waitForHome(founded.page);
-  } finally {
-    await closeApp(founded.app);
-  }
-
-  await markOnboardingPending(env);
+test('1.2 — "Start fresh on this Mac" auto-founds Shared + Personal and lands on home', async () => {
+  // Issue #603 replaced the founding ceremony (create-vault + recovery-kit
+  // download + verify) with a two-option chooser. On a virgin install the
+  // desktop deliberately does NOT start its local gateway until the user picks
+  // "Start fresh on this Mac" — that start is what would otherwise pop an OS
+  // keychain prompt before any UI. The gateway then founds Shared + Personal
+  // itself; the profile step renames Personal to the user's display name.
   const { app, page } = await launchApp(env);
   try {
+    const chooser = page.getByTestId('first-run-choice');
+    await chooser.waitFor({ state: 'visible' });
+
+    // Lazy-start AC: nothing has resolved a local gateway URL yet, so no
+    // keychain write has happened.
+    const beforeConnect = (await page.evaluate(() => window.CentraidApi.getSettings())) as {
+      gatewayUrl?: string;
+    };
+    expect(beforeConnect.gatewayUrl ?? '').toBe('');
+
+    await chooser.getByRole('button', { name: /start fresh on this mac/iu }).click();
+
     const onboarding = page.getByTestId('onboarding-view');
     await onboarding.waitFor({ state: 'visible' });
     await page.getByRole('textbox', { name: 'Your name' }).fill('Ada Lovelace');
@@ -126,20 +84,30 @@ test('1.2 — completing onboarding persists the profile and lands on home', asy
     await onboarding.getByRole('radio').nth(2).click();
     await page.getByRole('button', { name: 'Continue' }).click();
 
-    // Realigned: onboarding is three steps when the host exposes
-    // installGatewayService (identity → "Where does your data live?" → H5 OS
-    // service offer — OnboardingScreen afterConnect). Picking "This Mac"
-    // auto-selects the local vault (ConnectFlow.tsx), then the H5 step appears.
-    // Decline with "Not now" (default off); accept is the opt-in path.
-    await page.getByRole('radio', { name: 'This Mac' }).click();
-    await page.getByTestId('onboarding-service-decline').click();
+    // The fresh/local path offers the H5 OS-service install before finishing;
+    // decline it — the offer step renders inside onboarding-view, so the view
+    // only detaches after this choice.
+    await page.getByTestId('onboarding-service-decline').click({ timeout: 60_000 });
 
     // Onboarding view gone, home shell present.
     await onboarding.waitFor({ state: 'detached' });
     await waitForHome(page);
-    // Persisted flag means a relaunch would skip onboarding.
-    const persisted = await page.evaluate(() => window.CentraidApi.getSettings());
-    expect((persisted as { onboardingCompletedAt?: string }).onboardingCompletedAt).toBeTruthy();
+
+    // Persisted flag means a relaunch would skip onboarding, and the local
+    // gateway is now really running.
+    const persisted = (await page.evaluate(() => window.CentraidApi.getSettings())) as {
+      onboardingCompletedAt?: string;
+      gatewayUrl?: string;
+    };
+    expect(persisted.onboardingCompletedAt).toBeTruthy();
+    expect(persisted.gatewayUrl ?? '').not.toBe('');
+
+    // Two auto-founded vaults, with Personal renamed to the display name.
+    const listed = (await page.evaluate(() =>
+      window.CentraidApi.listGatewayVaults({ gatewayId: 'local' }),
+    )) as { vaults?: Array<{ name: string }> };
+    const names = (listed.vaults ?? []).map((vault) => vault.name).sort();
+    expect(names).toEqual(['Ada Lovelace', 'Shared']);
   } finally {
     await closeApp(app);
   }
@@ -222,10 +190,7 @@ test('2.3 — renaming a tile via the context menu patches meta and shows a toas
     // Realigned: renaming is a prompt modal now, not an inline editable name
     // field — HomeRoute.tsx:176-195 (`openPrompt({ title: 'Rename app' })`),
     // shell/prompt.ts builds the role=dialog + text input + Rename button.
-    const dialog = page.getByRole('dialog', {
-      name: 'Rename app',
-      exact: true,
-    });
+    const dialog = page.getByRole('dialog', { name: 'Rename app', exact: true });
     await dialog.waitFor({ state: 'visible' });
     await dialog.getByRole('textbox').fill('New Name');
     await dialog.getByRole('button', { name: 'Rename', exact: true }).click();
@@ -308,10 +273,7 @@ test('2.8 — the command palette opens from the sidebar Search item', async () 
     // accessible name is "Search ⌘K" (Sidebar.tsx:354-360) — `gotoNav`'s exact
     // match doesn't fit.
     await page.getByRole('button', { name: /^Search\s*⌘K$/u }).click();
-    const palette = page.getByRole('dialog', {
-      name: 'Command palette',
-      exact: true,
-    });
+    const palette = page.getByRole('dialog', { name: 'Command palette', exact: true });
     await expect(palette).toBeVisible();
     await expect(palette.getByRole('textbox')).toBeVisible();
     await page.keyboard.press('Escape');

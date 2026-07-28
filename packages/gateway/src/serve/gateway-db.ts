@@ -3,12 +3,12 @@
  *
  * `gateway.db` is both the complete gateway-level state store and the
  * single-process lock. Vault existence is deliberately absent from this
- * schema: the filesystem registry remains authoritative, so the founding
- * gate cannot disagree with a second catalog.
+ * schema: the filesystem registry remains authoritative, so no second
+ * catalog can disagree with it.
  */
 
-import { spawnSync } from 'node:child_process';
 import { chmodSync, mkdirSync, statfsSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 
@@ -245,32 +245,16 @@ function installGatewaySchema(db: DatabaseSync): void {
     /*
      * A ticket is an INVITATION: which member the joining device binds to,
      * and the full grant list that member must hold once it redeems. One
-     * scan, many vaults, atomically. 'found' carries neither — the founding
-     * ceremony creates the vault and its owner member at redemption.
+     * scan, many vaults, atomically. There is only one kind of ticket since
+     * #603 retired the founding ceremony — a gateway founds itself.
      */
     CREATE TABLE IF NOT EXISTS tickets (
       ticket_id TEXT PRIMARY KEY,
-      kind TEXT NOT NULL CHECK (kind IN ('found', 'enroll')),
       secret_hash TEXT NOT NULL,
-      member_id TEXT REFERENCES members(member_id) ON DELETE CASCADE,
-      grants_json TEXT,
+      member_id TEXT NOT NULL REFERENCES members(member_id) ON DELETE CASCADE,
+      grants_json TEXT NOT NULL,
       created_at TEXT NOT NULL,
-      expires_at INTEGER NOT NULL,
-      CHECK (
-        (kind = 'found' AND member_id IS NULL AND grants_json IS NULL) OR
-        (kind = 'enroll' AND member_id IS NOT NULL AND grants_json IS NOT NULL)
-      )
-    ) STRICT;
-    CREATE UNIQUE INDEX IF NOT EXISTS one_founding_ticket
-      ON tickets(kind) WHERE kind = 'found';
-    CREATE TABLE IF NOT EXISTS founding_ticket_reservations (
-      ticket_id TEXT PRIMARY KEY,
-      reservation_id TEXT NOT NULL UNIQUE,
-      secret_hash TEXT NOT NULL,
-      reserved_at INTEGER NOT NULL,
-      reserved_until INTEGER NOT NULL,
-      pending_vault_ids_json TEXT,
-      FOREIGN KEY (ticket_id) REFERENCES tickets(ticket_id) ON DELETE CASCADE
+      expires_at INTEGER NOT NULL
     ) STRICT;
     CREATE TABLE IF NOT EXISTS erase_intents (
       vault_id TEXT PRIMARY KEY,
@@ -280,8 +264,7 @@ function installGatewaySchema(db: DatabaseSync): void {
       singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
       confirmed_at INTEGER,
       kit_fingerprint TEXT,
-      kit_confirmed INTEGER NOT NULL DEFAULT 0 CHECK (kit_confirmed IN (0, 1)),
-      founding_pending INTEGER NOT NULL DEFAULT 0 CHECK (founding_pending IN (0, 1))
+      kit_confirmed INTEGER NOT NULL DEFAULT 0 CHECK (kit_confirmed IN (0, 1))
     ) STRICT;
     CREATE TABLE IF NOT EXISTS backup_targets (
       target_id TEXT PRIMARY KEY,
@@ -311,29 +294,6 @@ function installGatewaySchema(db: DatabaseSync): void {
       journal_limit_bytes INTEGER
     ) STRICT;
   `);
-  const recoveryKitColumns = (
-    db.prepare('PRAGMA table_info(recovery_kit)').all() as Array<{
-      name: string;
-    }>
-  ).map((column) => column.name);
-  if (!recoveryKitColumns.includes('founding_pending')) {
-    db.exec(
-      `ALTER TABLE recovery_kit
-       ADD COLUMN founding_pending INTEGER NOT NULL DEFAULT 0
-      CHECK (founding_pending IN (0, 1));`,
-    );
-  }
-  const foundingReservationColumns = (
-    db.prepare('PRAGMA table_info(founding_ticket_reservations)').all() as Array<{
-      name: string;
-    }>
-  ).map((column) => column.name);
-  if (!foundingReservationColumns.includes('pending_vault_ids_json')) {
-    db.exec(
-      `ALTER TABLE founding_ticket_reservations
-       ADD COLUMN pending_vault_ids_json TEXT;`,
-    );
-  }
 }
 
 function isBusy(error: unknown): boolean {
@@ -386,10 +346,7 @@ export function darwinNetworkFileSystem(
 }
 
 function defaultMountTable(): string | undefined {
-  const result = spawnSync('/sbin/mount', [], {
-    encoding: 'utf8',
-    timeout: 2_000,
-  });
+  const result = spawnSync('/sbin/mount', [], { encoding: 'utf8', timeout: 2_000 });
   return result.status === 0 && typeof result.stdout === 'string' ? result.stdout : undefined;
 }
 
