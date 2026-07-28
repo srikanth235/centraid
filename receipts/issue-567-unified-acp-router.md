@@ -407,6 +407,19 @@ Observed live results:
 - Governance run
   [30299535212](https://github.com/srikanth235/centraid/actions/runs/30299535212)
   passed all 25 directives.
+- Post-review fix round (2026-07-28): repo-wide `bun run typecheck` passed all
+  32 tasks and every `check:pr:full` stage passed on this unrestricted host
+  (including the loopback HTTP/SSE suites the earlier Codex sandbox denied),
+  with diff coverage 90.8% ≥ 80%. One honest caveat: the full-parallel
+  `test:affected:full` run tripped the pre-existing `handler-pool.test.ts`
+  hung-handler timeout (untouched code; the documented `-c6` saturation
+  flake) and passed cleanly at `--concurrency=2` and in isolation.
+  Focused suites added/updated in the round: per-rung failover
+  hydration, no-resurrect consent + manifest-pin denial, breaker-gated fire
+  ladders, finalization-failure settlement, consent-flow client tests on two
+  surfaces, native mobile selection, probe/preflight cache behavior, and
+  classifier precedence.
+
 ## Audit
 
 PASS — A fresh-context adversarial audit found no acceptance, D1–D13,
