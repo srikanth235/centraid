@@ -89,7 +89,7 @@ export function inferAppVisual(prompt: string): {
     ['Mood', /\b(mood|feel|emotion|check[- ]?in)\b/],
   ];
   let iconKey: IconNameType =
-    ICON_KEYS_POOL[Math.floor(Math.random() * ICON_KEYS_POOL.length)] ?? 'Todo';
+    ICON_KEYS_POOL[Math.floor(Math.random() * ICON_KEYS_POOL.length)] ?? 'Todo'; // lgtm[js/insecure-randomness]
   for (const [k, re] of map) {
     if (re.test(p)) {
       iconKey = k;

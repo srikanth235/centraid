@@ -55,9 +55,15 @@ async function walk(root: string, rel: string, out: DraftFile[]): Promise<void> 
     if (!e.isFile()) continue;
     if (!EDITABLE_EXT.has(path.extname(e.name).toLowerCase())) continue;
     const abs = path.join(root, r);
-    const stat = await fs.stat(abs).catch(() => null);
-    if (!stat || stat.size > MAX_DRAFT_FILE_BYTES) continue;
-    out.push({ path: r, content: await fs.readFile(abs, 'utf8').catch(() => '') });
+    let content: string;
+    try {
+      const stat = await fs.stat(abs);
+      if (stat.size > MAX_DRAFT_FILE_BYTES) continue;
+      content = await fs.readFile(abs, 'utf8');
+    } catch {
+      continue;
+    }
+    out.push({ path: r, content });
   }
 }
 

@@ -983,7 +983,9 @@ function normalizedGatewayUrl(value: string): string {
     url.pathname = url.pathname.replace(/\/+$/, '') || '/';
     return `url:${url.toString()}`;
   } catch {
-    return `url:${value.replace(/\/+$/, '')}`;
+    let end = value.length;
+    while (end > 0 && value[end - 1] === '/') end--;
+    return `url:${value.slice(0, end)}`;
   }
 }
 

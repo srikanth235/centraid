@@ -177,7 +177,12 @@ export class Dispatcher {
 
   private async loadManifest(codeDir: string): Promise<Manifest> {
     const file = path.join(codeDir, APP_MANIFEST_FILE);
-    const stat = await fs.stat(file);
+    let stat: import('node:fs').Stats;
+    try {
+      stat = await fs.stat(file);
+    } catch {
+      throw new Error(`manifest not found: ${file}`);
+    }
     const cached = this.manifestCache.get(codeDir);
     if (cached && cached.mtimeMs === stat.mtimeMs) return cached.manifest;
     const text = await fs.readFile(file, 'utf8');

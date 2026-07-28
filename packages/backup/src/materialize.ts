@@ -100,7 +100,7 @@ export async function materializeSnapshotBlobs(
     const dest = path.join(opts.destDir, ...entry.path.split('/'));
     await fs.mkdir(path.dirname(dest), { recursive: true });
     const hash = createHash('sha256');
-    const handle = await fs.open(dest, 'w');
+    const handle = await fs.open(dest, 'w', 0o600);
     try {
       for (const id of entry.chunks) {
         // Unseal → unframe → recompute the keyed id: decompression happens

@@ -34,11 +34,12 @@ export const DESKTOP_ROOT = path.resolve(__dirname, '..', '..');
  */
 async function ensureSettingsSeed(userDataDir) {
   const settingsPath = path.join(userDataDir, 'centraid-settings.json');
-  const exists = await fs
-    .access(settingsPath)
-    .then(() => true)
-    .catch(() => false);
-  if (exists) return;
+  try {
+    await fs.access(settingsPath);
+    return; // file exists, nothing to do
+  } catch {
+    // not found — create it
+  }
   await fs.mkdir(userDataDir, { recursive: true });
   await fs.writeFile(
     settingsPath,

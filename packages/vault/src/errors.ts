@@ -23,7 +23,11 @@ export function isDiskFullError(err: unknown): boolean {
   // SQLITE_FULL is 13 (sqlite3.h) — probed directly against node 22's
   // node:sqlite via `PRAGMA max_page_count`, see db.test.ts.
   if (e.code === 'ERR_SQLITE_ERROR' && e.errcode === 13) return true;
-  if (typeof e.errstr === 'string' && /disk.*full|SQLITE_FULL/i.test(e.errstr)) return true;
+  if (typeof e.errstr === 'string') {
+    const s = e.errstr.toLowerCase();
+    if (s.includes('disk') && s.includes('full')) return true;
+    if (s.includes('sqlight_full')) return true;
+  }
   return false;
 }
 

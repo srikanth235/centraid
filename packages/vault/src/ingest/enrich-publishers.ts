@@ -61,13 +61,24 @@ function ensureConcept(
 
 /** Lowercase-slug notation for a machine tag label. */
 export function tagNotation(label: string): string {
-  return (
-    label
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .slice(0, 64) || 'untitled'
-  );
+  const lower = label.toLowerCase();
+  let result = '';
+  let lastWasDash = false;
+  for (const ch of lower) {
+    if ((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')) {
+      result += ch;
+      lastWasDash = false;
+    } else if (!lastWasDash && result.length > 0) {
+      result += '-';
+      lastWasDash = true;
+    }
+  }
+  // Trim leading/trailing dashes
+  let start = 0;
+  while (start < result.length && result[start] === '-') start++;
+  let end = result.length;
+  while (end > start && result[end - 1] === '-') end--;
+  return result.slice(start, end).slice(0, 64) || 'untitled';
 }
 
 // ── knowledge.annotation (captions, summaries) ──────────────────────────

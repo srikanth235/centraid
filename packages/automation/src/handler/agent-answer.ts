@@ -11,8 +11,17 @@
 export function coerceAgentAnswer(text: string, json: unknown): unknown {
   const trimmed = text.trim();
   if (!json) return trimmed;
-  const fenced = /```(?:json)?\s*([\s\S]*?)```/.exec(trimmed);
-  const candidate = fenced ? fenced[1]!.trim() : trimmed;
+  // Strip optional ```json ... ``` fence
+  let candidate = trimmed;
+  if (trimmed.startsWith('```')) {
+    let fenceEnd = trimmed.indexOf('\n');
+    if (fenceEnd < 0) fenceEnd = trimmed.length;
+    const afterOpen = fenceEnd + 1;
+    const closeIdx = trimmed.indexOf('\n```', afterOpen);
+    if (closeIdx >= 0) {
+      candidate = trimmed.slice(afterOpen, closeIdx).trim();
+    }
+  }
   try {
     return JSON.parse(candidate) as unknown;
   } catch (err) {

@@ -2,8 +2,12 @@ import { aesGcmKeyProtector, KeyStore, type KeyProtector } from '@centraid/vault
 import { createHash, randomBytes } from 'node:crypto';
 import {
   chmodSync,
+  closeSync,
   existsSync,
+  fchmodSync,
+  fstatSync,
   mkdirSync,
+  openSync,
   readFileSync,
   renameSync,
   statSync,
@@ -33,7 +37,7 @@ const warnedFallbacks = new Set<string>();
  * then failed to unwrap.
  */
 export function keychainAccountFor(keysDir: string, label = DEFAULT_LAUNCHD_LABEL): string {
-  const id = createHash('sha256').update(path.resolve(keysDir)).digest('hex').slice(0, 16);
+  const id = createHash('sha256').update(path.resolve(keysDir)).digest('hex').slice(0, 16); // lgtm[js/insufficient-password-hash]
   return `${label}.${id}`;
 }
 
@@ -107,7 +111,7 @@ export function headlessCredentialFile(
               'centraid',
               'credentials',
             ));
-  const id = createHash('sha256').update(path.resolve(keysDir)).digest('hex');
+  const id = createHash('sha256').update(path.resolve(keysDir)).digest('hex'); // lgtm[js/insufficient-password-hash]
   return path.join(root, `${id}.key`);
 }
 
@@ -133,7 +137,12 @@ function loadOrCreateFileCredential(file: string): Buffer {
       }
     }
   }
-  if ((statSync(file).mode & 0o777) !== 0o600) chmodSync(file, 0o600);
+  const fd = openSync(file, 'r');
+  try {
+    if ((fstatSync(fd).mode & 0o777) !== 0o600) fchmodSync(fd, 0o600);
+  } finally {
+    closeSync(fd);
+  }
   const key = Buffer.from(readFileSync(file, 'utf8').trim(), 'base64');
   if (key.length !== 32) {
     throw new Error(`KeyStore wrapping credential ${file} is not a base64-encoded 32-byte key`);

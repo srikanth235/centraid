@@ -106,7 +106,7 @@ export function payloadHash(payload: Record<string, unknown>): string {
       .sort()
       .map((k) => [k, payload[k]]),
   );
-  return createHash('sha256').update(canonical).digest('hex').slice(0, 32);
+  return createHash('sha256').update(canonical).digest('hex').slice(0, 32); // lgtm[js/insufficient-password-hash]
 }
 
 /** Find-or-create a connection. File drops key on (kind, label). */

@@ -52,10 +52,17 @@ export function parseAddress(raw: string | undefined): {
   email: string | null;
 } {
   if (!raw) return { name: null, email: null };
-  const angled = raw.match(/^(.*?)<([^>]+)>/);
-  if (angled) {
-    const name = angled[1]?.trim().replace(/^"|"$/g, '') ?? '';
-    return { name: name || null, email: (angled[2] ?? '').trim().toLowerCase() || null };
+  const ltIdx = raw.indexOf('<');
+  if (ltIdx >= 0) {
+    const gtIdx = raw.indexOf('>', ltIdx);
+    if (gtIdx > ltIdx) {
+      const name = raw.slice(0, ltIdx).trim().replace(/^"|"$/g, '');
+      const email = raw
+        .slice(ltIdx + 1, gtIdx)
+        .trim()
+        .toLowerCase();
+      return { name: name || null, email: email || null };
+    }
   }
   const bare = raw.trim();
   return bare.includes('@')
@@ -70,10 +77,26 @@ function isoDate(raw: string | undefined): string {
 
 /** Strip Re:/Fwd: chains and case — the thread grouping key. */
 export function threadKey(subject: string | null): string {
-  return (subject ?? '(no subject)')
-    .replace(/^(\s*(re|fwd?|aw)\s*:\s*)+/i, '')
-    .trim()
-    .toLowerCase();
+  let s = (subject ?? '(no subject)').trim().toLowerCase();
+  for (;;) {
+    const m = s.match(/^re\s*:\s*/i);
+    if (m) {
+      s = s.slice(m[0].length);
+      continue;
+    }
+    const fwd = s.match(/^fwd?\s*:\s*/i);
+    if (fwd) {
+      s = s.slice(fwd[0].length);
+      continue;
+    }
+    const aw = s.match(/^aw\s*:\s*/i);
+    if (aw) {
+      s = s.slice(aw[0].length);
+      continue;
+    }
+    break;
+  }
+  return s.trim();
 }
 
 /** `content-type: multipart/mixed; boundary="b1"` → `b1`, or null. */

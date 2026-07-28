@@ -99,15 +99,92 @@ function compressedStream(
 
 function textShowingParts(raw: string): string[] {
   const parts: string[] = [];
-  for (const match of raw.matchAll(/\(((?:\\.|[^\\)])*)\)\s*Tj/g)) {
-    parts.push(decodePdfString(match[1] ?? ''));
-    if (parts.length >= MAX_TEXT_PARTS) return parts;
-  }
-  for (const match of raw.matchAll(/\[((?:\((?:\\.|[^\\)])*\)|[^\]])*)\]\s*TJ/g)) {
-    for (const value of (match[1] ?? '').matchAll(/\(((?:\\.|[^\\)])*)\)/g)) {
-      parts.push(decodePdfString(value[1] ?? ''));
-      if (parts.length >= MAX_TEXT_PARTS) return parts;
+  let i = 0;
+  while (i < raw.length && parts.length < MAX_TEXT_PARTS) {
+    // Look for Tj string — (...)
+    if (raw[i] === '(') {
+      i++;
+      let depth = 1;
+      let escaped = false;
+      const start = i;
+      while (i < raw.length && depth > 0) {
+        if (escaped) {
+          escaped = false;
+        } else if (raw[i] === '\\') {
+          escaped = true;
+        } else if (raw[i] === '(') {
+          depth++;
+        } else if (raw[i] === ')') {
+          depth--;
+        }
+        if (depth > 0) i++;
+      }
+      if (depth === 0) {
+        const content = raw.slice(start, i);
+        i++;
+        // Skip optional whitespace then Tj
+        let j = i;
+        while (j < raw.length && (raw[j] === ' ' || raw[j] === '\t')) j++;
+        if (raw.slice(j, j + 2) === 'Tj') {
+          parts.push(decodePdfString(content));
+          i = j + 2;
+          continue;
+        }
+      }
+      continue;
     }
+    // Look for TJ array — [...]
+    if (raw[i] === '[') {
+      i++;
+      const arrStart = i;
+      let depth = 1;
+      while (i < raw.length && depth > 0) {
+        if (raw[i] === '[') depth++;
+        else if (raw[i] === ']') depth--;
+        if (depth > 0) i++;
+      }
+      if (depth === 0) {
+        const arrContent = raw.slice(arrStart, i);
+        i++;
+        // Skip optional whitespace then TJ
+        let j = i;
+        while (j < raw.length && (raw[j] === ' ' || raw[j] === '\t')) j++;
+        if (raw.slice(j, j + 2) === 'TJ') {
+          // Extract parenthesized strings from the array
+          let k = 0;
+          while (k < arrContent.length && parts.length < MAX_TEXT_PARTS) {
+            if (arrContent[k] === '(') {
+              k++;
+              let d2 = 1;
+              let esc2 = false;
+              const s2 = k;
+              while (k < arrContent.length && d2 > 0) {
+                if (esc2) {
+                  esc2 = false;
+                } else if (arrContent[k] === '\\') {
+                  esc2 = true;
+                } else if (arrContent[k] === '(') {
+                  d2++;
+                } else if (arrContent[k] === ')') {
+                  d2--;
+                }
+                if (d2 > 0) k++;
+              }
+              if (d2 === 0) {
+                parts.push(decodePdfString(arrContent.slice(s2, k)));
+                k++;
+              }
+            } else {
+              k++;
+            }
+          }
+          i = j + 2;
+          continue;
+        }
+      }
+      continue;
+    }
+    i++;
   }
   return parts;
 }

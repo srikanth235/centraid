@@ -273,9 +273,14 @@ for (let tick = 0; tick < DAY_TICKS; tick++) {
   }
   db.exec('COMMIT');
   tickMs += 60_000;
-  const head = statSync(walPath).size;
+  let buf;
+  try {
+    buf = readFileSync(walPath);
+  } catch {
+    continue;
+  }
+  const head = buf.length;
   if (head < 32 || head <= offset) continue;
-  const buf = readFileSync(walPath);
   pageSize ??= walPageSize(buf.subarray(0, 32));
   const boundary = lastCommitBoundary(buf.subarray(offset), offset, pageSize);
   if (boundary <= offset) continue;

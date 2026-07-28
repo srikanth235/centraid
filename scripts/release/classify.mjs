@@ -14,6 +14,7 @@
 
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { escapeRegExp } from './escape-regexp.mjs';
 
 const args = process.argv.slice(2);
 let changelogPath = 'CHANGELOG.md';
@@ -29,10 +30,7 @@ const text = readFileSync(path.resolve(changelogPath), 'utf8');
 function sectionFor(ver) {
   // ## [0.2.0] or ## Unreleased
   const re = ver
-    ? new RegExp(
-        `^##\\s+\\[?${ver.replace(/\./g, '\\.')}\\]?[^\\n]*\\n([\\s\\S]*?)(?=^##\\s+|$)`,
-        'm',
-      )
+    ? new RegExp(`^##\\s+\\[?${escapeRegExp(ver)}\\]?[^\\n]*\\n([\\s\\S]*?)(?=^##\\s+|$)`, 'm')
     : /^##\s+\[?Unreleased\]?[^\n]*\n([\s\S]*?)(?=^##\s+|$)/m;
   const m = text.match(re);
   if (!m) return null;

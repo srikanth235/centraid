@@ -143,7 +143,7 @@ export function recoveryKitFingerprint(document: RecoveryKitDocument): string {
       .sort((a, b) => a.epoch - b.epoch)
       .map((epoch) => ({
         epoch: epoch.epoch,
-        keyHash: createHash('sha256').update(Buffer.from(epoch.key, 'base64')).digest('hex'),
+        keyHash: createHash('sha256').update(Buffer.from(epoch.key, 'base64')).digest('hex'), // lgtm[js/insufficient-password-hash]
       })),
     targets: [...document.targets]
       .sort((a, b) => a.vaultId.localeCompare(b.vaultId) || a.targetId.localeCompare(b.targetId))
@@ -152,11 +152,11 @@ export function recoveryKitFingerprint(document: RecoveryKitDocument): string {
         targetId: target.targetId,
         vaultId: target.vaultId,
         sealkeyHash: target.sealKey
-          ? createHash('sha256').update(Buffer.from(target.sealKey, 'base64')).digest('hex')
+          ? createHash('sha256').update(Buffer.from(target.sealKey, 'base64')).digest('hex') // lgtm[js/insufficient-password-hash]
           : null,
       })),
   };
-  return createHash('sha256').update(canonicalJson(preimage)).digest('hex');
+  return createHash('sha256').update(canonicalJson(preimage)).digest('hex'); // lgtm[js/insufficient-password-hash]
 }
 
 /** Server-side password wrap; provider credentials never enter the document. */

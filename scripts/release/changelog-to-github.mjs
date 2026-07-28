@@ -6,6 +6,7 @@
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { escapeRegExp } from './escape-regexp.mjs';
 
 const args = process.argv.slice(2);
 let version = null;
@@ -20,7 +21,7 @@ if (!version) {
 }
 const text = readFileSync(path.resolve('CHANGELOG.md'), 'utf8');
 const re = new RegExp(
-  `^##\\s+\\[${version.replace(/\./g, '\\.')}\\][^\\n]*\\n([\\s\\S]*?)(?=^##\\s+|$)`,
+  `^##\\s+\\[${escapeRegExp(version)}\\][^\\n]*\\n([\\s\\S]*?)(?=^##\\s+|$)`,
   'm',
 );
 const m = text.match(re);
